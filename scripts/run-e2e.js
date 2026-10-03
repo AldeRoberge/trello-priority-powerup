@@ -1,8 +1,9 @@
 'use strict';
-/* Real-browser E2E: serves the repo statically, opens sandbox/e2e/assistant.html in
- * headless Edge/Chrome (no npm deps) and prints the in-page report.
- *   npm run test:e2e            headless run, exit 1 on failure
- *   npm run test:e2e -- --serve serve only, open http://localhost:4173/sandbox/e2e/assistant.html
+/* Real-browser E2E: serves the repo statically, opens the sandbox/e2e pages (Assistant chat,
+ * Documents view) in headless Edge/Chrome (no npm deps) and prints each in-page report.
+ *   npm run test:e2e                    headless run of every page, exit 1 on failure
+ *   npm run test:e2e -- --page=docs     only one page (assistant | docs | docs-unauth)
+ *   npm run test:e2e -- --serve         serve only (E2E_PORT=4180 to change the port), then open the printed URLs
  */
 const http = require('http');
 const fs = require('fs');
@@ -102,19 +103,15 @@ async function readReportViaCdp(port, url) {
   return last || 'no report found in page output';
 }
 
-async function main() {
-  const server = await serve();
-  const url = `http://127.0.0.1:${PORT}/sandbox/e2e/assistant.html`;
-  if (process.argv.includes('--serve')) {
-    console.log('Serving ' + url);
-    return;
-  }
-  const browser = findBrowser();
-  if (!browser) {
-    server.close();
-    console.error('No Edge/Chrome found. Set E2E_BROWSER to a Chromium-based browser path.');
-    process.exit(2);
-  }
+// Each page reports through #e2e-report ("PASS ..." / "FAIL ..." / "E2E DONE pass=N fail=M").
+const PAGES = [
+  { name: 'assistant', path: '/sandbox/e2e/assistant.html', size: '420,900' },
+  { name: 'docs', path: '/sandbox/e2e/docs.html?run', size: '1280,900' },
+  { name: 'docs-unauth', path: '/sandbox/e2e/docs.html?run&unauth', size: '1280,900' }
+];
+
+async function runPage(browser, page) {
+  const url = `http://127.0.0.1:${PORT}${page.path}`;
   const profile = fs.mkdtempSync(path.join(require('os').tmpdir(), 'e2e-'));
   const debugPort = 9300 + Math.floor(Math.random() * 500);
   const child = spawn(
@@ -125,7 +122,7 @@ async function main() {
       '--no-first-run',
       '--remote-debugging-port=' + debugPort,
       '--user-data-dir=' + profile,
-      '--window-size=420,900',
+      '--window-size=' + page.size,
       'about:blank'
     ],
     { stdio: 'ignore' }
@@ -137,16 +134,43 @@ async function main() {
     text = 'E2E runner error: ' + err.message;
   }
   child.kill();
-  server.close();
   setTimeout(() => {
     try {
       fs.rmSync(profile, { recursive: true, force: true });
     } catch (e) { /* ignore */ }
   }, 1000);
+  const done = /E2E DONE pass=(d+) fail=(d+)/.exec(text);
+  return { text, ok: !!(done && done[2] === '0') };
+}
 
-  console.log(text);
-  const done = /E2E DONE pass=(\d+) fail=(\d+)/.exec(text);
-  process.exit(done && done[2] === '0' ? 0 : 1);
+async function main() {
+  const server = await serve();
+  const only = (process.argv.find((a) => a.startsWith('--page=')) || '').slice(7);
+  const pages = PAGES.filter((p) => !only || p.name === only);
+  if (!pages.length) {
+    server.close();
+    console.error('Unknown --page=' + only + ' (use ' + PAGES.map((p) => p.name).join(' | ') + ')');
+    process.exit(2);
+  }
+  if (process.argv.includes('--serve')) {
+    pages.forEach((p) => console.log('Serving http://127.0.0.1:' + PORT + p.path));
+    return;
+  }
+  const browser = findBrowser();
+  if (!browser) {
+    server.close();
+    console.error('No Edge/Chrome found. Set E2E_BROWSER to a Chromium-based browser path.');
+    process.exit(2);
+  }
+  let allOk = true;
+  for (const page of pages) {
+    console.log('── ' + page.name + ' ──');
+    const res = await runPage(browser, page);
+    console.log(res.text);
+    allOk = allOk && res.ok;
+  }
+  server.close();
+  process.exit(allOk ? 0 : 1);
 }
 
 main().catch((err) => {

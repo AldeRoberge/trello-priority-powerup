@@ -1,4 +1,4 @@
-/* Project view tabs (Gantt / Tableau) — shared top strip. */
+/* Project view tabs (Gantt / Tableau / Documents) — shared top strip. */
 .vt-bar {
   flex: none;
   display: flex;

@@ -16,6 +16,8 @@ Static HTML/JS/CSS Power-Up — **no bundler**. Scripts load via `<script>` and 
 | `settings.html` | Board settings (statut, formula, goals, …) |
 | `profile.html` | Member preferences (`UserProfile`) |
 | `gantt.html` | Full-screen Gantt |
+| `table.html` | Full-screen spreadsheet-like Table (+ Google Sheet sync) |
+| `docs.html` | Full-screen Documents view (rich-text editor with @ mentions) |
 | `assistant.html` | Project-scope assistant window |
 | `memory-*.html` | Memory alignment surfaces |
 
@@ -44,6 +46,8 @@ AgentUI       →  PriorityAgent (LLM)          →  executeActions(bridge)
 | `components/gantt/gantt-ui.js` (~3.5k) | `GanttUI` | Timeline DOM + drag |
 | `components/completion/completion-trello.js` (~3k) | `CompletionTrello` | `cardCompletion`, estimates, dueComplete sync |
 | `components/shared/effects.js` (~2.3k) | `CelebrationEffects` | SFX + overlays |
+
+Documents view (`components/docs/`): `DocsModel` (pure: Markdown ⇄ editor HTML, mention search), `DocsTrello` (REST I/O; a document is an **archived card named `📄 Title`**, never pluginData), `DocsUI` (editor chrome). Tests: `test/docs-*.test.js` (Node) and `sandbox/e2e/docs-tests.js` (`npm run test:e2e -- --page=docs`).
 
 Other important globals: `StatutTrello`, `GanttModel`, `GanttTrello`, `AgentMemory`, `MemoryUI`, `AgentBlocks`, `CardHistory`, `UserProfile`, `People`, `PriorityMatrix`, `GoalsTrello` / `GoalsUI`, `OutlookSync` / `OutlookAuth` / `OutlookGraph`.
 

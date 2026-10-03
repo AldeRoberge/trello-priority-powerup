@@ -68,6 +68,8 @@ const UNIT_FILES = [
   'outlook-sync.test.js',
   'outlook-ics.test.js',
   'desc-meta.test.js',
+  'docs-model.test.js',
+  'docs-trello.test.js',
 ];
 
 function listTests() {

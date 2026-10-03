@@ -26,12 +26,22 @@ const VERBS = {
 const label = (key) => (COLUMNS[key] ? COLUMNS[key].header : key);
 
 /**
+ * Documents of the Power-Up's Document view are archived cards named "📄 Title" (see
+ * components/docs/docs-trello.js). They autosave a lot and are not tasks, so their webhook events
+ * must neither fill the Activities tab nor trigger a Sheet sync.
+ */
+export function isDocumentAction(payload) {
+  const card = payload && payload.action && payload.action.data && payload.action.data.card;
+  return !!(card && typeof card.name === 'string' && card.name.startsWith('📄'));
+}
+
+/**
  * @returns {{activities: object[], cardId: string|null}}  each activity:
  *   { user, origin:'Trello', action, card, cardId, field, fieldKey, before, after, ref, at }
  */
 export function describeAction(payload) {
   const action = payload && payload.action;
-  if (!action || !action.type) return { activities: [], cardId: null };
+  if (!action || !action.type || isDocumentAction(payload)) return { activities: [], cardId: null };
   const d = action.data || {};
   const card = d.card || {};
   const base = {

@@ -57,6 +57,7 @@ By getting a system that works for you, you’ll spend less time making lists an
 - **Tri par colonne** : menu `…` d'une liste → **Trier par…** → **Priorité** (Critique en haut, cartes sans priorité en bas)
 - **Tri automatique** (optionnel) : après chaque changement de priorité, la carte se réordonne dans sa liste (nécessite clé API + autorisation OAuth ; voir ci-dessous)
 - **Gantt** : vue chronologique du tableau (dates start/due), avec sync Outlook optionnelle (titre, description, dates)
+- **Documents** : éditeur façon Google Docs / ClickUp (titres, listes, cases à cocher, citations, code, liens) avec mentions `@` personne, `@@` tâche et `@@@` document ; enregistrement automatique dans le tableau Trello — voir [docs/documents.md](docs/documents.md)
 - **Profil** : préférences personnelles (identité, langue/ton de l’assistant, sections visibles dans l’éditeur), stockées en privé sur le compte Trello — accessibles via **Paramètres du Cerveau** → **Mon profil**
 
 ---
@@ -72,6 +73,7 @@ By getting a system that works for you, you’ll spend less time making lists an
 | `welcome.html` | Modal d'accueil à l'activation du Power-Up |
 | `outlook-power-automate.html` | Guide in-app : sync Trello → Outlook via Power Automate |
 | `gantt.html` | Vue Gantt plein écran (bouton tableau) |
+| `docs.html` | Vue Documents plein écran (bouton tableau, onglet à côté de Gantt et Tableau) |
 | `outlook-auth.html` | Retour popup MSAL (autorisation Outlook) |
 | `components/` | Modules par domaine (JS + CSS colocated) |
 | `components/shared/` | Thème Trello, version, REST config, utilitaires |
@@ -79,6 +81,7 @@ By getting a system that works for you, you’ll spend less time making lists an
 | `components/completion/` | Progrès / sous-tâches |
 | `components/statut/` | Mapping listes → catégories |
 | `components/gantt/` | Modèle, UI et connecteur Gantt |
+| `components/docs/` | Vue Documents : modèle (Markdown ⇄ éditeur, mentions), connecteur Trello, éditeur |
 | `components/outlook/` | Auth MSAL, Graph Calendar, sync bidirectionnelle |
 | `components/agent/` | Assistant, mémoire, UI chat |
 | `components/profile/` | Profil membre |

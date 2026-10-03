@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documents visual harness (mock Trello)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="/components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="/components/docs/docs-ui.css" />
+</head>
+<body class="tp-page tp-page--docs">
+  <div id="viewTabs"></div>
+  <div id="docsMount"></div>
+  <script src="/components/shared/brand.js"></script>
+  <script src="/components/shared/rest-config.js"></script>
+  <script src="/components/shared/debug-log.js"></script>
+  <script src="/components/shared/desc-meta.js"></script>
+  <script src="/components/priority/priority-matrix.js"></script>
+  <script src="/components/priority/priority-ui.js"></script>
+  <script src="/components/priority/priority-trello.js"></script>
+  <script src="/components/statut/statut-match.js"></script>
+  <script src="/components/statut/statut-trello.js"></script>
+  <script src="/components/completion/completion-trello.js"></script>
+  <script src="/components/completion/completion-ui.js"></script>
+  <script src="/components/gantt/gantt-model.js"></script>
+  <script src="/components/gantt/gantt-trello.js"></script>
+  <script src="/components/table/table-model.js"></script>
+  <script src="/components/sheets/sheets-trello.js"></script>
+  <script src="/components/profile/user-profile.js"></script>
+  <script src="/components/people/people.js"></script>
+  <script src="/components/shared/view-tabs.js"></script>
+  <script src="/components/docs/docs-model.js"></script>
+  <script src="/components/docs/docs-trello.js"></script>
+  <script src="/components/docs/docs-ui.js"></script>
+  <script src="/sandbox/e2e/fake-trello.js"></script>
+  <script>
+    // ---- an in-memory Trello behind the real DocsTrello / DocsUI (no network) ----
+    // ?dark switches the theme, ?unauth starts without a Trello token, ?empty starts with no document.
+    var q = location.search;
+    if (/[?&]dark\b/.test(q)) document.documentElement.setAttribute('data-color-mode', 'dark');
+    var seedDocs = /[?&]empty\b/.test(q) ? [] : [
+      { id: 'doc1', name: '📄 Compte rendu de lancement', closed: true, dateLastActivity: '2026-10-02T15:00:00Z',
+        desc: DocsModel.packDesc('# Compte rendu\n\nPrésents : [@Marie Tremblay](person:m1) et [@Éric Gagnon](person:m2).\n\n## Décisions\n\n- Valider la [@Refonte du tableau de bord](task:c2) cette semaine\n- [x] Réserver la salle\n- [ ] Envoyer l’invitation\n\n> Prochaine étape : voir le [@Plan de projet](doc:doc2).\n\nVoir aussi **le gras**, *l’italique*, ++le souligné++ et `du code`.', { rev: 3 }) },
+      { id: 'doc2', name: '📄 Plan de projet', closed: true, dateLastActivity: '2026-10-01T09:00:00Z',
+        desc: DocsModel.packDesc('# Plan de projet\n\n1. Cadrage\n2. Maquettes\n3. Livraison', { rev: 1 }) },
+    ];
+    window.fake = FakeTrello.create({
+      authorized: !/[?&]unauth\b/.test(q),
+      lists: [{ id: 'l1', name: 'À faire' }, { id: 'l2', name: 'En cours' }],
+      cards: [
+        { id: 'c1', name: 'Préparer la réunion de lancement', idList: 'l1' },
+        { id: 'c2', name: 'Refonte du tableau de bord', idList: 'l2' },
+        { id: 'c3', name: 'Publier la version 2', idList: 'l2', dueComplete: true },
+        { id: 'c4', name: 'Archiver les anciennes cartes', idList: 'l1' },
+      ].concat(seedDocs),
+      members: [
+        { id: 'm1', fullName: 'Marie Tremblay', username: 'marie_t', initials: 'MT' },
+        { id: 'm2', fullName: 'Éric Gagnon', username: 'eric', initials: 'ÉG' },
+        { id: 'm3', fullName: 'Julie Roy', username: 'julie', initials: 'JR' },
+      ],
+    });
+    SheetsTrello.trelloRest = fake.trelloRest;
+    PriorityTrello.isRestAuthorized = function () { return Promise.resolve(!/[?&]unauth\b/.test(q)); };
+    GanttTrello.ensureRestAuthorized = function () { fake.setAuthorized(true); PriorityTrello.isRestAuthorized = function () { return Promise.resolve(true); }; return Promise.resolve({ ok: true }); };
+    PriorityTrello.getBoardMembers = function () { return fake.t.board('members').then(function (b) { return b.members; }); };
+    PriorityTrello.pageUrl = function (p) { return p; };
+    People.load = function () { return Promise.resolve({ people: [{ id: 'person-1', name: 'Sophie Lavoie', relation: 'cliente', aliases: [], roles: [], email: 'sophie@example.com', phone: '514-555-0100' }] }); };
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'docs' });
+    window.ui = DocsUI.mount(document.getElementById('docsMount'), fake.t);
+
+    // ?run executes sandbox/e2e/docs-tests.js (report in #e2e-report); ?manual just mounts for poking by hand
+    if (/[?&](run|manual)\b/.test(q)) {
+      var pre = document.createElement('pre');
+      pre.id = 'e2e-report';
+      pre.style.cssText = 'position:fixed;right:0;bottom:0;max-width:45vw;max-height:45vh;overflow:auto;margin:0;padding:8px;background:#111;color:#7CFC00;font:11px/1.4 monospace;z-index:99999;white-space:pre-wrap';
+      document.body.appendChild(pre);
+      var s = document.createElement('script');
+      s.src = '/sandbox/e2e/docs-tests.js';
+      document.body.appendChild(s);
+    }
+  </script>
+</body>
+</html>

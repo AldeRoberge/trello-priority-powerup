@@ -326,6 +326,20 @@ describe('trello-sheet-sync worker logic', () => {
       assert.deepEqual(d('updateList', { list: { id: 'l' } }), []);
     });
 
+    it('ignores the cards of the Document view (archived "📄 Title" cards that autosave)', () => {
+      const save = { ...base, type: 'updateCard', data: { card: { id: 'd1', name: '📄 Plan de projet' }, old: { desc: 'avant' } } };
+      assert.equal(webhook.isDocumentAction({ action: save }), true);
+      assert.deepEqual(webhook.describeAction({ action: save }), { activities: [], cardId: null });
+      for (const type of ['createCard', 'updateCard', 'commentCard', 'deleteCard']) {
+        assert.equal(webhook.describeAction({ action: { ...base, type, data: { card: { id: 'd1', name: '📄 X' }, old: { closed: false } } } }).activities.length, 0, type);
+      }
+      // a normal task is still described, and so are list-level actions without a card
+      assert.equal(webhook.isDocumentAction({ action: { ...base, type: 'updateCard', data: { card: { id: 'c1', name: 'Tâche' } } } }), false);
+      assert.equal(webhook.isDocumentAction({ action: { ...base, type: 'updateList', data: { list: { id: 'l' } } } }), false);
+      assert.equal(webhook.isDocumentAction(null), false);
+      assert.equal(webhook.describeAction({ action: { ...base, type: 'updateCard', data: { card: { id: 'c1', name: 'Tâche' }, old: { name: 'Avant' } } } }).activities.length, 1);
+    });
+
     it('recognizes the echo of a Worker write, on the same card and field only', () => {
       const now = 1_000_000;
       const recent = [{ cardId: 'c1', field: 'name', at: now - 10_000 }];

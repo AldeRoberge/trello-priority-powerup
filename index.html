@@ -560,6 +560,18 @@
               });
             },
           },
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/file-text.svg',
+            text: 'Documents',
+            callback: function(t) {
+              return t.modal({
+                title: 'Documents',
+                url: PriorityTrello.pageUrl('./docs.html'),
+                fullscreen: true,
+                accentColor: '#22272B',
+              });
+            },
+          },
         ];
         }
         // Button label shows when the deployed build was last updated, so it is

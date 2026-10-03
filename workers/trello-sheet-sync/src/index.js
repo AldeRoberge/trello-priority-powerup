@@ -28,7 +28,7 @@ import {
   parseTheme,
   lastSync,
 } from './sync.js';
-import { describeAction } from './webhook.js';
+import { describeAction, isDocumentAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
 
 function corsHeaders(request, env) {
@@ -62,6 +62,7 @@ async function handleWebhook(request, env, ctx) {
   } catch {
     /* not JSON */
   }
+  if (isDocumentAction(payload)) return new Response('ok'); // Document view cards: nothing to sync
   ctx.waitUntil(
     (async () => {
       try {
