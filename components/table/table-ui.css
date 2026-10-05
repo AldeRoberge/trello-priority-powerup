@@ -544,6 +544,13 @@ tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
 .tb-prog.is-done .tb-prog-bar i {
   background: var(--tp-success, #22a06b);
 }
+.tb-cell--draggable {
+  cursor: ew-resize;
+  touch-action: pan-y;
+}
+.tb-cell--draggable.is-dragging {
+  user-select: none;
+}
 .tb-prog-num {
   min-width: 30px;
   text-align: right;
@@ -858,4 +865,10 @@ body.tb-resizing {
   .tb-grid tbody tr:hover td.tb-cell--name {
     background: linear-gradient(var(--tp-surface-hover), var(--tp-surface-hover)), var(--tp-surface);
   }
+}
+
+.tb-btn.is-active {
+  background: color-mix(in srgb, #579dff 18%, transparent);
+  border-color: color-mix(in srgb, #579dff 55%, transparent);
+  color: var(--text-primary, #fff);
 }

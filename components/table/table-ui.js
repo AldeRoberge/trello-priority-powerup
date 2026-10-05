@@ -47,7 +47,7 @@
     return h(
       'button',
       {
-        class: 'tb-btn' + (opts.primary ? ' tb-btn--primary' : '') + (label ? '' : ' tb-btn--icon'),
+        class: 'tb-btn' + (opts.primary ? ' tb-btn--primary' : '') + (opts.active ? ' is-active' : '') + (label ? '' : ' tb-btn--icon'),
         title: opts.title || label || null,
         onclick: opts.onclick,
       },
@@ -71,6 +71,10 @@
   }
 
   function mount(root, t) {
+    var HIDE_DONE_KEY = 'tp-table-hide-done';
+    function readHideDone() {
+      try { return global.localStorage.getItem(HIDE_DONE_KEY) === '1'; } catch (e) { return false; }
+    }
     var state = {
       lists: [],
       rows: [],
@@ -79,6 +83,7 @@
       sheetTheme: 'light',
       sort: null, // {key, dir}
       filter: '',
+      hideDone: readHideDone(),
       categoryFieldId: null,
       categoryAvailable: false,
       sheet: null,
@@ -176,11 +181,12 @@
     /* ── Helpers ───────────────────────────────────────────────────── */
     function visibleRows() {
       var rows = TM().filterRows(state.rows, state.filter);
+      if (state.hideDone) rows = rows.filter(function (r) { return r.statutKey !== 'completed'; });
       if (state.sort) rows = TM().sortRows(rows, state.sort.key, state.sort.dir, { lists: state.lists });
       return rows;
     }
     function canReorder() {
-      return !state.sort && !state.filter;
+      return !state.sort && !state.filter && !state.hideDone;
     }
     function findRow(id) {
       return state.rows.filter(function (r) { return r.id === id; })[0] || null;
@@ -271,6 +277,19 @@
           },
         }),
       ];
+      var doneCount = state.rows.filter(function (r) { return r.statutKey === 'completed'; }).length;
+      kids.push(
+        btn(state.hideDone ? 'eye-off' : 'eye', state.hideDone ? 'Terminées masquées' + (doneCount ? ' (' + doneCount + ')' : '') : 'Terminées', {
+          active: state.hideDone,
+          title: state.hideDone ? 'Afficher les cartes terminées' : 'Masquer les cartes terminées',
+          onclick: function () {
+            state.hideDone = !state.hideDone;
+            try { global.localStorage.setItem(HIDE_DONE_KEY, state.hideDone ? '1' : '0'); } catch (e) { /* ignore */ }
+            renderBar();
+            renderGrid();
+          },
+        })
+      );
       if (state.sort) {
         var sortSpec = TM().COLUMNS[state.sort.key];
         kids.push(btn(state.sort.dir === 'asc' ? 'sort-ascending' : 'sort-descending', 'Tri : ' + sortSpec.header, {
@@ -557,7 +576,7 @@
             h('span', {
               class: 'tb-handle' + (canReorder() ? '' : ' is-off'),
               draggable: canReorder() ? 'true' : null,
-              title: canReorder() ? 'Glisser pour réordonner' : 'Retirez le tri/filtre pour réordonner',
+              title: canReorder() ? 'Glisser pour réordonner' : 'Retirez le tri/filtre (et réaffichez les terminées) pour réordonner',
               ondragstart: function (e) {
                 state.dragId = row.id;
                 e.dataTransfer.effectAllowed = 'move';
@@ -692,6 +711,77 @@
       return null;
     }
 
+    /**
+     * Click-and-drag on the progress bar sets the % in place (a plain click still opens the popover).
+     * Saves on release the same way the mini editor does: master progress over subtasks, else card progress.
+     */
+    function bindProgressDrag(td, row, rich, setDragged) {
+      var bar = rich.querySelector('.tb-prog-bar');
+      var fill = bar && bar.firstChild;
+      var num = rich.querySelector('.tb-prog-num');
+      if (!bar || !fill || !num) return;
+      td.classList.add('tb-cell--draggable');
+      td.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        var startX = e.clientX;
+        var moved = false;
+        var pct = row.progress;
+        function pctAt(x) {
+          var r = bar.getBoundingClientRect();
+          return r.width ? Math.max(0, Math.min(100, Math.round(((x - r.left) / r.width) * 100))) : pct;
+        }
+        function paint() {
+          fill.style.width = pct + '%';
+          num.textContent = pct + '%';
+          rich.classList.toggle('is-done', pct >= 100);
+        }
+        function move(ev) {
+          if (!moved && Math.abs(ev.clientX - startX) < 4) return;
+          moved = true;
+          td.classList.add('is-dragging');
+          pct = pctAt(ev.clientX);
+          paint();
+        }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          document.removeEventListener('pointercancel', up);
+          td.classList.remove('is-dragging');
+          if (!moved) return;
+          setDragged(true);
+          setTimeout(function () { setDragged(false); }, 0);
+          saveProgress(row, pct);
+        }
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+      });
+    }
+
+    function saveProgress(row, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.getCardCompletionById !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
+      var prev = row.progress;
+      row.progress = pct;
+      CT.getCardCompletionById(t, row.id)
+        .then(function (data) {
+          data = CT.normalizeCompletionData(data || { items: [] });
+          var next = data.items && data.items.length
+            ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
+            : Object.assign({}, data, { progress: pct });
+          return CT.saveCardCompletionById(t, row.id, CT.normalizeCompletionData(next));
+        })
+        .then(function () {
+          setStatus('Enregistré', 'ok');
+          schedulePush();
+          reload({ quiet: true });
+        }, function (err) {
+          row.progress = prev;
+          renderGrid();
+          fail(err);
+        });
+    }
+
     /** Opens the shared CardFields editor of `kind` for a row, hanging from `anchor`. */
     function openEditor(row, kind, anchor) {
       if (!global.CardFields || !anchor) return false;
@@ -789,7 +879,10 @@
         td.textContent = TM().cellText(row, key);
         if (POP_KIND[key] && !td.textContent) td.appendChild(h('span', { class: 'tb-empty-hint', text: 'Définir' }));
       }
+      var dragged = false;
+      if (key === 'progress' && rich) bindProgressDrag(td, row, rich, function (d) { dragged = d; });
       td.addEventListener('click', function () {
+        if (dragged) { dragged = false; return; }
         state.selected = { rowId: row.id, key: key };
         if (POP_KIND[key] && openField(row, key, td)) return;
         if (key === 'category' && !state.categoryAvailable) setStatus('Champ personnalisé « Catégorie » absent de ce tableau Trello', 'error', 4000);
@@ -1066,7 +1159,19 @@
     }
 
     shell.addEventListener('contextmenu', function (e) {
-      if (e.target.closest('input,textarea')) return; // keep the native menu while typing
+      if (e.target.closest('input,textarea')) {
+        // While typing keep the field menu (undo/cut/copy/paste), plus "open card" for a cell editor.
+        var editTd = e.target.closest('td[data-row]');
+        var editRow = editTd && findRow(editTd.getAttribute('data-row'));
+        if (!editRow || !global.ContextMenu || !global.ContextMenu.buildGenericItems) return;
+        e.preventDefault();
+        var fieldItems = [
+          { icon: 'arrow-up-right', label: 'Ouvrir la carte en grand', action: function () { openCard(editRow); } },
+          { sep: true },
+        ].concat(global.ContextMenu.buildGenericItems(e.target, document));
+        MENU().show({ x: e.clientX, y: e.clientY }, fieldItems, { minWidth: 230 });
+        return;
+      }
       e.preventDefault();
       var pt = { x: e.clientX, y: e.clientY };
       var th = e.target.closest('th[data-key]');
