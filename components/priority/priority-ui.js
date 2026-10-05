@@ -8329,6 +8329,7 @@
     chrome.collapseBtn.addEventListener('click', function (event) {
       event.preventDefault();
       event.stopPropagation();
+      if (field.classList.contains('is-focus-locked')) return;
       setExpanded(!expanded);
     });
 
@@ -25895,6 +25896,15 @@
     });
 
     containerEl.appendChild(card);
+
+    // Single-section modal: its header already names the section, so the field
+    // can't be collapsed and doesn't repeat its title.
+    if (focusSection) {
+      var focusedField = card.querySelector(
+        '.field--' + (focusSection === 'due' ? 'due-date' : focusSection)
+      );
+      if (focusedField) focusedField.classList.add('is-focus-locked');
+    }
 
     var themeObserver = new MutationObserver(function () {
       repaint();

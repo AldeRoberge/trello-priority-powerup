@@ -4958,6 +4958,15 @@ button.pg-node-name:hover {
   color: var(--text-muted);
 }
 
+/* Focused single-section modal: header already names it; no collapse, no repeated title. */
+.field.is-focus-locked > .section-toggle-head {
+  justify-content: flex-end;
+}
+
+.field.is-focus-locked > .section-toggle-head > .section-collapse-btn {
+  display: none;
+}
+
 .section-collapse-btn {
   flex: 1 1 auto;
   min-width: 0;
