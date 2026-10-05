@@ -11046,9 +11046,10 @@
     // order kept inside each group; the title and open rows never move).
     var rowOrderSeq = 0;
     var sortingRows = false;
-    function sortEmptyRowsDown() {
+    function sortEmptyRowsDown(container) {
       if (sortingRows) return;
-      var rows = Array.prototype.filter.call(body.children, function (el) {
+      container = container || body;
+      var rows = Array.prototype.filter.call(container.children, function (el) {
         return el.classList && el.classList.contains('is-collapsible');
       });
       if (rows.length < 2) return;
@@ -11063,14 +11064,14 @@
       try {
         var marks = rows.map(function (r) {
           var m = document.createComment('');
-          body.insertBefore(m, r);
+          container.insertBefore(m, r);
           return m;
         });
         ordered.forEach(function (r, i) {
-          body.insertBefore(r, marks[i]);
+          container.insertBefore(r, marks[i]);
         });
         marks.forEach(function (m) {
-          body.removeChild(m);
+          container.removeChild(m);
         });
       } finally {
         sortingRows = false;
@@ -11095,7 +11096,7 @@
       function refresh() {
         if (!row.classList.contains('is-collapsed')) {
           row.dataset.rowEmpty = '0';
-          sortEmptyRowsDown();
+          sortEmptyRowsDown(row.parentNode);
           return;
         }
         var text = '';
@@ -11111,7 +11112,7 @@
         summary.classList.toggle('is-empty', !plain);
         summary.title = plain;
         row.dataset.rowEmpty = !plain && key !== 'title' ? '1' : '0';
-        sortEmptyRowsDown();
+        sortEmptyRowsDown(row.parentNode);
       }
 
       function setCollapsed(next, persist) {
@@ -11706,6 +11707,43 @@
       return richSummary(status || (pct ? 'Progrès' : ''), [
         pct ? pct[1] + ' %' : ''
       ]);
+    };
+    rowSummaries['task-types'] = function () {
+      return Array.prototype.map
+        .call(taskTypesEl.querySelectorAll('.info-task-type-name'), function (n) {
+          return (n.textContent || '').trim();
+        })
+        .filter(Boolean)
+        .join(', ');
+    };
+    rowSummaries.objectif = function () {
+      var names = Array.prototype.map
+        .call(
+          objectifMount.querySelectorAll('.objectif-breadcrumb .objectif-crumb'),
+          function (n) {
+            var c = n.cloneNode(true);
+            Array.prototype.forEach.call(c.querySelectorAll('.objectif-retired-tag'), function (t) {
+              t.remove();
+            });
+            return (c.textContent || '').replace(/\s+/g, ' ').trim();
+          }
+        )
+        .filter(function (t) {
+          return t && t !== '—';
+        });
+      return names.join(' → ');
+    };
+    rowSummaries.parent = function () {
+      return Array.prototype.map
+        .call(parentChipsEl.children, function (c) {
+          var clone = c.cloneNode(true);
+          Array.prototype.forEach.call(clone.querySelectorAll('button'), function (n) {
+            n.remove();
+          });
+          return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+        })
+        .filter(Boolean)
+        .join(', ');
     };
     rowSummaries.due = function () {
       return mountText(dueInline.mount, ['.due-summary-label']);
@@ -19652,7 +19690,8 @@
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
     applyMoreDetailsExpanded(moreDetailsExpanded, { silent: true });
-    sortEmptyRowsDown();
+    sortEmptyRowsDown(body);
+    sortEmptyRowsDown(moreBody);
     scheduleLabelSuggestions(false);
     scheduleTaskTypeSuggestions(false);
 

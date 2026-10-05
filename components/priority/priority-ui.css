@@ -10044,7 +10044,7 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 
 /* Folded rows: fixed label column so every summary shares one left edge. */
 .info-row.is-collapsible.is-collapsed > .info-row-label .info-row-label-text {
-  flex: 0 0 5.5rem;
+  flex: 0 0 8.25rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
