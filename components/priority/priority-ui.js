@@ -10981,7 +10981,6 @@
       if (
         options.collapsible !== false &&
         !options.interactive &&
-        key !== 'title' &&
         key !== 'creator' &&
         key !== 'more-details'
       ) {
@@ -11002,6 +11001,34 @@
         else global.localStorage.removeItem(storeKey);
       } catch (e) {}
       return !!next;
+    }
+
+    // Shown (italic) in the folded header when the row has no value yet;
+    // clicking it unfolds the row and starts the « add » gesture.
+    var ROW_EMPTY_PROMPTS = {
+      title: 'Cliquer pour nommer la carte',
+      desc: 'Cliquer pour ajouter une description',
+      members: 'Cliquer pour assigner quelqu’un',
+      places: 'Cliquer pour ajouter un lieu',
+      labels: 'Cliquer pour ajouter une étiquette',
+      'task-types': 'Cliquer pour choisir un type',
+      parent: 'Cliquer pour ajouter une tâche parente',
+      objectif: 'Cliquer pour choisir un objectif',
+      priority: 'Cliquer pour évaluer la priorité',
+      progress: 'Cliquer pour définir le progrès',
+      due: 'Cliquer pour définir une échéance'
+    };
+
+    function startRowEdit(value) {
+      var el = value.querySelector(
+        'textarea:not([hidden]), input:not([hidden]), [contenteditable="true"]'
+      );
+      if (!el) el = value.querySelector('button[class*="add"], [class*="-add-btn"]');
+      if (!el) return;
+      try {
+        if (el.tagName === 'BUTTON') el.click();
+        else el.focus();
+      } catch (e) {}
     }
 
     function genericRowSummary(value) {
@@ -11038,7 +11065,7 @@
           text = genericRowSummary(value);
         }
         text = String(text || '').trim();
-        summary.textContent = text || 'Vide';
+        summary.textContent = text || ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
         summary.classList.toggle('is-empty', !text);
         summary.title = text;
       }
@@ -11054,7 +11081,14 @@
 
       function toggle(event) {
         event.preventDefault();
-        setCollapsed(!row.classList.contains('is-collapsed'), true);
+        var wasCollapsed = row.classList.contains('is-collapsed');
+        var wasEmpty = summary.classList.contains('is-empty');
+        setCollapsed(!wasCollapsed, true);
+        if (wasCollapsed && wasEmpty) {
+          setTimeout(function () {
+            startRowEdit(value);
+          }, 0);
+        }
       }
       label.addEventListener('click', toggle);
       label.addEventListener('keydown', function (event) {
@@ -11583,6 +11617,13 @@
     placesRow.value.appendChild(placesWrap);
     body.appendChild(placesRow.row);
 
+    rowSummaries.title = function () {
+      return titleInput.classList.contains('is-loading') ? '' : titleInput.value;
+    };
+    rowSummaries.priority = function () {
+      var badge = priorityInline.mount.querySelector('.heat-badge');
+      return badge ? genericRowSummary(badge) : '';
+    };
     rowSummaries.desc = function () {
       var text = (descInput.value || '')
         .replace(/[#*_>`~\[\]()!-]+/g, ' ')
@@ -11611,7 +11652,7 @@
 
     // ── Inline feature mounts (Priorité / Progrès / Échéance) ───────────
     function makeInlineMountRow(key, labelText, icon) {
-      var row = makeRow(key, labelText, { icon: icon, collapsible: false });
+      var row = makeRow(key, labelText, { icon: icon });
       row.row.classList.add('info-row--inline-feature');
       row.row.hidden = true;
       var mount = document.createElement('div');
