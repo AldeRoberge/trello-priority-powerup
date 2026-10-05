@@ -772,6 +772,148 @@
       }
     }
 
+    /* ── History panel ────────────────────────────────────────────── */
+    var HP = null;
+    var baseDates = Object.create(null);
+
+    function record(e) {
+      return HP ? HP.record(e) : e;
+    }
+
+    function datesOf(src) {
+      src = src || {};
+      return {
+        startDate: src.startDate || '',
+        dueDate: src.dueDate || '',
+        startTime: src.startTime || '',
+        dueTime: src.dueTime || '',
+      };
+    }
+
+    function datesLabel(d) {
+      if (!d || (!d.startDate && !d.dueDate)) return 'Aucune date';
+      function one(date, time) {
+        return date ? date + (time ? ' ' + time : '') : '\u2026';
+      }
+      return one(d.startDate, d.startTime) + ' \u2192 ' + one(d.dueDate, d.dueTime);
+    }
+
+    function histChk(res, msg) {
+      if (res && res.ok === false && res.reason !== 'no-inputs') {
+        throw new Error(msg + (res.reason ? ' (' + res.reason + ')' : ''));
+      }
+      return res;
+    }
+
+    /** Runs the write that moves an entry back to its "before" state (`back`) or forward to its "after" state. */
+    function applyEntry(e, back) {
+      var val = back ? e.beforeVal : e.afterVal;
+      var api = global.PriorityTrello;
+      if (e.type === 'dates') {
+        return ganttTrello.saveCardDates(t, e.targetId, val).then(function (r) {
+          return histChk(r, 'Dates non enregistr\u00e9es');
+        });
+      }
+      if (e.type === 'archive') {
+        return api.restPutCard(t, e.targetId, { closed: !back }).then(function (r) {
+          return histChk(r, 'Archivage impossible');
+        });
+      }
+      if (e.type === 'move') {
+        return ganttTrello
+          .setCardBlocked(t, e.targetId, !!(val && val.blocked))
+          .then(function (r) {
+            histChk(r, 'Blocage impossible');
+            if (!val || !val.listId) return null;
+            return api
+              .restPutCard(t, e.targetId, { idList: String(val.listId), pos: 'bottom' })
+              .then(function (r2) {
+                return histChk(r2, 'D\u00e9placement impossible');
+              });
+          });
+      }
+      if (e.type === 'progress') {
+        return ganttTrello.setSubtaskDone(t, e.meta, !!val).then(function (r) {
+          return histChk(r, '\u00c9chec');
+        });
+      }
+      if (e.type === 'edit' && e.key === 'name') {
+        return ganttTrello.renameSubtask(t, e.meta, val).then(function (r) {
+          return histChk(r, '\u00c9chec renommage');
+        });
+      }
+      if (e.type === 'edit' && e.key === 'blocked') {
+        return ganttTrello.setCardBlocked(t, e.targetId, !!val).then(function (r) {
+          return histChk(r, 'Blocage impossible');
+        });
+      }
+      return Promise.reject(new Error('Cette modification ne peut pas \u00eatre annul\u00e9e'));
+    }
+
+    function histVerb(e) {
+      if (e.type === 'archive') return 'archiv\u00e9e';
+      if (e.type === 'delete') return e.label || 'supprim\u00e9e';
+      if (e.type === 'move') return 'd\u00e9plac\u00e9e';
+      if (e.type === 'dates') return 'dates modifi\u00e9es';
+      if (e.type === 'progress') return 't\u00e2che ' + (e.afterVal ? 'termin\u00e9e' : 'rouverte');
+      return (e.label || 'Champ') + ' modifi\u00e9';
+    }
+
+    /** Logs a finished removal: an archived card can be restored, a deleted subtask / removed link cannot. */
+    function recordRemoval(row, res) {
+      if (!res) return;
+      if (res.archived) {
+        record({ type: 'archive', targetId: row.cardId, title: row.name });
+      } else {
+        record({
+          type: 'delete',
+          targetId: row.itemId || row.cardId || '',
+          title: row.name,
+          label: res.unlinked ? 'lien retir\u00e9' : 'sous-t\u00e2che supprim\u00e9e',
+        });
+      }
+    }
+
+    function recordDone(row, nextDone) {
+      record({
+        type: 'progress',
+        targetId: row.cardId || row.itemId || '',
+        title: row.name,
+        meta: subtaskMeta(row),
+        before: nextDone ? '\u00c0 faire' : 'Termin\u00e9e',
+        after: nextDone ? 'Termin\u00e9e' : '\u00c0 faire',
+        beforeVal: !nextDone,
+        afterVal: !!nextDone,
+      });
+    }
+
+    var boardId = '';
+    try {
+      boardId = (t && typeof t.getContext === 'function' && t.getContext().board) || '';
+    } catch (ctxErr) {
+      /* no context */
+    }
+    if (global.HistoryPanel) {
+      HP = global.HistoryPanel.create({
+        key: 'tp-gantt-history:' + boardId,
+        apply: applyEntry,
+        verb: histVerb,
+        canToggle: function (e) {
+          return e.type !== 'field' && e.type !== 'delete';
+        },
+        after: function () {
+          return reload({ quiet: true });
+        },
+        onStatus: function (m) {
+          setStatus(m);
+        },
+        onError: function (err) {
+          setStatus('Erreur\u00a0: ' + (err && err.message ? err.message : String(err)), true);
+        },
+      });
+    }
+    var histBtn = HP ? HP.button(document.body) : null;
+
     function range() {
       return model.viewRange(state.viewMode, state.anchor);
     }
@@ -1221,6 +1363,7 @@
         reload();
       });
       filters.appendChild(refresh);
+      if (histBtn) filters.appendChild(histBtn);
       toolbar.appendChild(filters);
     }
 
@@ -1591,11 +1734,31 @@
       cardIds
         .reduce(function (p, cid) {
           return p.then(function (acc) {
+            var prevCard = state.cardsById[cid] || {};
+            var prevState = {
+              listId: prevCard.listId || null,
+              blocked: !!(prevCard.inputs && prevCard.inputs.enAttente),
+            };
             return ganttTrello
               .moveCardToStateSection(t, cid, sectionKey)
               .then(function (res) {
                 acc.results.push(res);
                 if (!res || !res.ok) acc.ok = false;
+                else {
+                  record({
+                    type: 'move',
+                    targetId: cid,
+                    title: prevCard.name || '',
+                    key: 'statut',
+                    before: prevCard.listName || (prevState.blocked ? 'Bloqu\u00e9' : ''),
+                    after: label,
+                    beforeVal: prevState,
+                    afterVal: {
+                      listId: res.listId || prevState.listId,
+                      blocked: sectionKey === 'blocked',
+                    },
+                  });
+                }
                 return acc;
               });
           });
@@ -2011,6 +2174,12 @@
         cardName: row.name,
         anchor: anchor,
         onSaved: function () {
+          record({
+            type: 'field',
+            label: FIELD_LABELS[kind][1].charAt(0).toUpperCase() + FIELD_LABELS[kind][1].slice(1),
+            targetId: row.cardId,
+            title: row.name,
+          });
           setStatus(FIELD_LABELS[kind][0]);
         },
         onError: function (m) {
@@ -2169,6 +2338,17 @@
             );
             return reload();
           }
+          record({
+            type: 'edit',
+            key: 'blocked',
+            label: 'Blocage',
+            targetId: row.cardId,
+            title: row.name,
+            before: nextBlocked ? 'Non' : 'Bloqu\u00e9',
+            after: nextBlocked ? 'Bloqu\u00e9' : 'Non',
+            beforeVal: !nextBlocked,
+            afterVal: nextBlocked,
+          });
           setStatus(nextBlocked ? 'Carte bloqu\u00e9e' : 'Carte d\u00e9bloqu\u00e9e');
           return reload();
         })
@@ -2296,6 +2476,7 @@
             );
             return reload();
           }
+          recordDone(row, true);
           playGanttUiSound('complete_all');
           setStatus('Sous-t\u00e2che termin\u00e9e');
           return reload();
@@ -2364,12 +2545,14 @@
             if (op === 'delete') {
               return ganttTrello.deleteSubtask(t, subtaskMeta(row)).then(function (res) {
                 if (!res || !res.ok) failed += 1;
+                else recordRemoval(row, res);
               });
             }
             return ganttTrello
               .setSubtaskDone(t, subtaskMeta(row), op === 'done')
               .then(function (res) {
                 if (!res || !res.ok) failed += 1;
+                else if (!!row.done !== (op === 'done')) recordDone(row, op === 'done');
               });
           });
         });
@@ -2531,6 +2714,7 @@
             );
             return reload();
           }
+          recordDone(row, nextDone);
           setStatus(nextDone ? 'Sous-t\u00e2che termin\u00e9e' : 'Sous-t\u00e2che rouverte');
           return reload();
         })
@@ -2574,6 +2758,7 @@
               return reload();
             }
             if (state.selected[row.id]) delete state.selected[row.id];
+            recordRemoval(row, res);
             playGanttUiSound('trash');
             setStatus(
               res.archived
@@ -2602,6 +2787,7 @@
         return;
       }
       if (state.saving || !canEditSubtask(row)) return;
+      var prevName = row.name || '';
       state.saving = true;
       setStatus('Renommage\u2026');
       ganttTrello
@@ -2617,6 +2803,18 @@
             return reload();
           }
           row.name = res.name || trimmed;
+          record({
+            type: 'edit',
+            key: 'name',
+            label: 'Nom',
+            targetId: row.cardId || row.itemId || '',
+            title: prevName,
+            meta: subtaskMeta(row),
+            before: prevName,
+            after: row.name,
+            beforeVal: prevName,
+            afterVal: row.name,
+          });
           setStatus('Sous-t\u00e2che renomm\u00e9e');
           return reload();
         })
@@ -2743,23 +2941,25 @@
       state.saving = true;
       var clearing = !row.startDate && !row.dueDate;
       setStatus(clearing ? 'Effacement des dates\u2026' : 'Enregistrement\u2026');
+      var parts = {
+        startDate: row.startDate || '',
+        dueDate: row.dueDate || '',
+        startTime: clearing
+          ? ''
+          : row.startTime ||
+            (state.cardsById[row.cardId] &&
+              state.cardsById[row.cardId].startTime) ||
+            '',
+        dueTime: clearing
+          ? ''
+          : row.dueTime ||
+            (state.cardsById[row.cardId] &&
+              state.cardsById[row.cardId].dueTime) ||
+            '',
+      };
+      var prevDates = baseDates[row.cardId];
       return ganttTrello
-        .saveCardDates(t, row.cardId, {
-          startDate: row.startDate || '',
-          dueDate: row.dueDate || '',
-          startTime: clearing
-            ? ''
-            : row.startTime ||
-              (state.cardsById[row.cardId] &&
-                state.cardsById[row.cardId].startTime) ||
-              '',
-          dueTime: clearing
-            ? ''
-            : row.dueTime ||
-              (state.cardsById[row.cardId] &&
-                state.cardsById[row.cardId].dueTime) ||
-              '',
-        })
+        .saveCardDates(t, row.cardId, parts)
         .then(function (res) {
           state.saving = false;
           if (!res || !res.ok) {
@@ -2773,6 +2973,18 @@
             }
             return reload();
           }
+          if (prevDates && JSON.stringify(prevDates) !== JSON.stringify(parts)) {
+            record({
+              type: 'dates',
+              targetId: row.cardId,
+              title: row.name,
+              before: datesLabel(prevDates),
+              after: datesLabel(parts),
+              beforeVal: prevDates,
+              afterVal: parts,
+            });
+          }
+          baseDates[row.cardId] = parts;
           setStatus(clearing ? 'Dates effac\u00e9es' : 'Dates enregistr\u00e9es');
           var outlookSync = OS();
           if (
@@ -4164,6 +4376,7 @@
           for (var i = 0; i < cards.length; i++) {
             if (cards[i] && cards[i].id) {
               state.cardsById[cards[i].id] = cards[i];
+              baseDates[cards[i].id] = datesOf(cards[i]);
             }
           }
           // Drop selections for rows that no longer exist.

@@ -1103,7 +1103,7 @@
           if (state.current) openDocMenu(more, state.current.id);
         },
       }, [icon('dots')]);
-      [side, icon('file-text', 'dc-head-icon'), els.headTitle, h('span', { class: 'dc-spacer' }), els.status, more].forEach(function (c) {
+      [side, icon('file-text', 'dc-head-icon'), els.headTitle, h('span', { class: 'dc-spacer' }), els.status, HP.button(shell), more].forEach(function (c) {
         els.head.appendChild(c);
       });
       [
@@ -1383,6 +1383,7 @@
           lastRange = range;
           restoreSel();
           insertMention({ type: 'doc', id: doc.id, label: doc.title });
+          record({ type: 'create', targetId: doc.id, title: doc.title });
           toast('Document « ' + doc.title + ' » créé.', 'ok');
         },
         function (err) {
@@ -1546,7 +1547,12 @@
         danger: true,
       }).then(function (yes) {
         if (!yes) return;
-        DT().deleteDoc(t, docId).then(
+        var snap = state.current && state.current.id === docId
+          ? Promise.resolve(lastDomMd())
+          : DT().loadDoc(t, docId).then(function (x) { return x.body; }, function () { return null; });
+        snap.then(function (snapBody) {
+          return DT().deleteDoc(t, docId).then(function () { histDeleted(d, snapBody); });
+        }).then(
           function () {
             var wasCurrent = state.current && state.current.id === docId;
             state.docs = state.docs.filter(function (x) { return x.id !== docId; });
@@ -1687,11 +1693,13 @@
 
       function load() {
         els.page.classList.add('is-loading');
+        histFlush();
         return DT().loadDoc(t, id).then(
           function (doc) {
             if (token !== loadToken) return;
             els.page.classList.remove('is-loading');
             state.current = doc;
+            histBase(doc);
             savedTitle = doc.title;
             els.title.value = doc.title === DM().UNTITLED ? '' : doc.title;
             els.conflict.hidden = true;
@@ -1730,6 +1738,7 @@
           function (doc) {
             setBusy('');
             toast('');
+            record({ type: 'create', targetId: doc.id, title: doc.title });
             state.docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt });
             sortDocs();
             state.filter = '';
@@ -1788,8 +1797,10 @@
       if (titleChanged) {
         chain = chain.then(function () {
           return DT().renameDoc(t, cur.id, want).then(function (r) {
+            var oldTitle = savedTitle;
             savedTitle = r.title;
             cur.title = r.title;
+            histRenamed(cur.id, oldTitle, r.title);
             touchListItem(cur.id, { title: r.title });
             rebuildIndex();
           });
@@ -1802,6 +1813,7 @@
             cur.updatedAt = res.updatedAt;
             cur.body = md;
             lastMd = md;
+            histBodySaved();
             touchListItem(cur.id, { updatedAt: res.updatedAt });
           });
         });
@@ -1886,6 +1898,7 @@
           if (doc.rev === state.current.rev) return;
           var top = els.scroll.scrollTop;
           state.current = doc;
+          histBase(doc);
           savedTitle = doc.title;
           els.title.value = doc.title === DM().UNTITLED ? '' : doc.title;
           buildEditor(doc);
@@ -1894,6 +1907,151 @@
         }, function () {});
       }, function () {});
     }
+
+    /* ── History panel (Historique) ──────────────────────────────── */
+
+    var HP = null;
+    var HIST_MAX_BODY = 6000; // bigger bodies are not kept in the history, so those entries are not undoable
+    var editBase = null; // {id, body}: the body as of the last recorded history entry (or load)
+    var histTimer = null;
+
+    function record(e) { return HP ? HP.record(e) : e; }
+
+    function histBase(doc) {
+      clearTimeout(histTimer);
+      editBase = { id: doc.id, body: doc.body || '' };
+    }
+
+    /** Autosaves are grouped: one "Contenu modifié" entry per editing burst (45 s idle, document switch, page close). */
+    function histBodySaved() {
+      clearTimeout(histTimer);
+      histTimer = setTimeout(histFlush, 45000);
+    }
+
+    function histSummary(a, b) {
+      var x = a.split('\n');
+      var y = b.split('\n');
+      var i = 0;
+      while (i < x.length && i < y.length && x[i] === y[i]) i++;
+      return { before: x[i] || '', after: y[i] || '' };
+    }
+
+    function histFlush() {
+      clearTimeout(histTimer);
+      if (!editBase || !state.current || state.current.id !== editBase.id) return;
+      var now = state.current.body || '';
+      if (now === editBase.body) return;
+      var s = histSummary(editBase.body, now);
+      var keep = editBase.body.length <= HIST_MAX_BODY && now.length <= HIST_MAX_BODY;
+      record({
+        type: 'edit', key: 'body', label: 'Contenu', targetId: state.current.id,
+        title: DM().cleanTitle(state.current.title) || DM().UNTITLED,
+        before: s.before, after: s.after,
+        beforeVal: keep ? editBase.body : null, afterVal: keep ? now : null,
+      });
+      editBase.body = now;
+    }
+
+    function histRenamed(id, oldTitle, newTitle) {
+      if (oldTitle === newTitle) return;
+      record({ type: 'edit', key: 'name', targetId: id, title: newTitle, before: oldTitle, after: newTitle, beforeVal: oldTitle, afterVal: newTitle });
+    }
+
+    function histDeleted(d, body) {
+      record({ type: 'delete', targetId: d.id, title: d.title, beforeBody: body != null && body.length <= HIST_MAX_BODY ? body : null });
+      if (editBase && editBase.id === d.id) editBase = null;
+    }
+
+    function histAddLocal(doc) {
+      state.docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt });
+      sortDocs();
+      paintList();
+      rebuildIndex();
+    }
+
+    function histDropLocal(id) {
+      var wasCurrent = state.current && state.current.id === id;
+      state.docs = state.docs.filter(function (x) { return x.id !== id; });
+      if (wasCurrent) {
+        clearTimeout(saveTimer);
+        state.current = null;
+        editBase = null;
+        remember(LAST_KEY, null);
+        showCurrent();
+        if (state.docs.length) openDoc(state.docs[0].id, { skipSave: true });
+      }
+      paintList();
+      rebuildIndex();
+    }
+
+    function histCanToggle(e) {
+      if (e.type === 'delete') return e.beforeBody != null;
+      if (e.type === 'edit' && e.key === 'body') return e.beforeVal != null && e.afterVal != null;
+      return e.type === 'create' || e.type === 'edit';
+    }
+
+    /** Runs the write that moves an entry back to its "before" state (`back`) or forward to its "after" state. */
+    function histApply(e, back) {
+      var val = back ? e.beforeVal : e.afterVal;
+      var id = e.targetId;
+      var isCur = !!(state.current && state.current.id === id);
+      if (e.type === 'create' || e.type === 'delete') {
+        var remove = e.type === 'create' ? back : !back;
+        if (remove) {
+          var snap = e.type === 'create'
+            ? (isCur ? Promise.resolve(lastDomMd()) : DT().loadDoc(t, id).then(function (d) { return d.body; }))
+            : Promise.resolve(null);
+          return snap.then(function (body) {
+            if (e.type === 'create') e.afterBody = body.length <= HIST_MAX_BODY ? body : '';
+            return DT().deleteDoc(t, id);
+          }).then(function () { histDropLocal(id); });
+        }
+        return DT().createDoc(t, e.title, (e.type === 'create' ? e.afterBody : e.beforeBody) || '').then(function (doc) {
+          e.targetId = doc.id;
+          histAddLocal(doc);
+        });
+      }
+      if (e.type === 'edit' && e.key === 'name') {
+        return DT().renameDoc(t, id, val).then(function (r) {
+          touchListItem(id, { title: r.title });
+          if (state.current && state.current.id === id) {
+            state.current.title = r.title;
+            savedTitle = r.title;
+            els.title.value = r.title === DM().UNTITLED ? '' : r.title;
+            paintHead();
+          }
+          rebuildIndex();
+        });
+      }
+      if (e.type === 'edit' && e.key === 'body') {
+        var pre = isCur ? saveNow().then(function () { histFlush(); }) : Promise.resolve();
+        return pre.then(function () { return DT().loadDoc(t, id); }).then(function (doc) {
+          return DT().saveDoc(t, { id: id, body: val, rev: doc.rev }, { force: true });
+        }).then(function (res) {
+          touchListItem(id, { updatedAt: res.updatedAt });
+          if (isCur) return openDoc(id, { reload: true, skipSave: true });
+        });
+      }
+      return Promise.reject(new Error('Cette modification ne peut pas être annulée'));
+    }
+
+    function histVerb(e) {
+      if (e.type === 'create') return 'créé';
+      if (e.type === 'delete') return 'supprimé';
+      if (e.key === 'name') return 'renommé';
+      return 'contenu modifié';
+    }
+
+    var histBoard = '';
+    try { histBoard = (t && typeof t.getContext === 'function' && t.getContext().board) || ''; } catch (e) { /* no context */ }
+    HP = global.HistoryPanel.create({
+      key: 'tp-docs-history:' + histBoard,
+      apply: histApply,
+      canToggle: histCanToggle,
+      verb: histVerb,
+      onStatus: function (m, kind) { toast(m, kind === 'ok' ? 'ok' : ''); },
+      onError: failure,
+    });
 
     /* ── 9. Boot ─────────────────────────────────────────────────── */
 
@@ -1949,6 +2107,7 @@
       else refreshRemote();
     });
     global.addEventListener('pagehide', function () {
+      histFlush();
       saveNow();
     });
 

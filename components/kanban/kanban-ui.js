@@ -69,6 +69,7 @@
       statusKind: '',
     };
     var statusTimer = null;
+    var HP = null;
 
     root.innerHTML = '';
     var els = {
@@ -124,6 +125,40 @@
       }, [icon('lock-open'), h('span', { text: 'Autoriser' })]));
     }
 
+    /* ── History panel ─────────────────────────────────────────────── */
+    function record(e) { return HP ? HP.record(e) : e; }
+
+    /** Runs the write that moves an entry back to its "before" state (`back`) or forward to its "after" state. */
+    function applyEntry(e, back) {
+      var val = back ? e.beforeVal : e.afterVal;
+      if (e.type === 'archive') return back ? TT().unarchiveCard(t, e.targetId) : TT().archiveCard(t, e.targetId);
+      if (e.type === 'create') return back ? TT().archiveCard(t, e.targetId) : TT().unarchiveCard(t, e.targetId);
+      if (e.type === 'move') return TT().moveCard(t, e.targetId, val, back ? e.beforePos : e.afterPos);
+      if (e.type === 'reorder') return TT().reorderCard(t, e.targetId, val);
+      return Promise.reject(new Error('Cette modification ne peut pas être annulée'));
+    }
+
+    function histVerb(e) {
+      if (e.type === 'archive') return 'archivée';
+      if (e.type === 'create') return 'créée' + (e.after ? ' dans « ' + e.after + ' »' : '');
+      if (e.type === 'move') return 'déplacée';
+      if (e.type === 'reorder') return 'réordonnée' + (e.after ? ' dans « ' + e.after + ' »' : '');
+      return (e.label || 'Champ') + ' modifié';
+    }
+
+    var boardId = '';
+    try { boardId = (t && typeof t.getContext === 'function' && t.getContext().board) || ''; } catch (e) { /* no context */ }
+    if (global.HistoryPanel) {
+      HP = global.HistoryPanel.create({
+        key: 'tp-kanban-history:' + boardId,
+        apply: applyEntry,
+        verb: histVerb,
+        after: function () { return reload({ quiet: true }); },
+        onStatus: function (m, kind) { setStatus(m, kind); },
+        onError: fail,
+      });
+    }
+
     /* ── Helpers ───────────────────────────────────────────────────── */
     function findRow(id) {
       return state.rows.filter(function (r) { return r.id === id; })[0] || null;
@@ -162,7 +197,10 @@
         cardId: row.id,
         cardName: row.name,
         anchor: anchor,
-        onSaved: function () { setStatus('Enregistré', 'ok'); },
+        onSaved: function () {
+          setStatus('Enregistré', 'ok');
+          record({ type: 'field', label: { priority: 'Urgence', due: 'Échéance', progress: 'Progrès' }[kind] || 'Champ', targetId: row.id, title: row.name });
+        },
         onError: function (m) { setStatus(m, 'error'); },
         onClose: function (changed) { if (changed) reload({ quiet: true }); },
       });
@@ -205,6 +243,7 @@
             renderBoard();
           },
         }),
+        HP ? HP.button(document.body) : null,
         h('span', { class: 'kb-status' }),
         h('span', { class: 'kb-spacer' }),
         h('span', { class: 'kb-count', 'aria-live': 'polite' }),
@@ -323,6 +362,7 @@
 
     function archiveRow(row) {
       TT().archiveCard(t, row.id).then(function () {
+        record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
         state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
         renderBoard();
         paintCount();
@@ -481,6 +521,7 @@
       else if (visible.length !== siblings.length) at = siblings.length;
       var pos = TM().dropPos(siblings, at);
       var listChanged = moved.listId !== listId;
+      var from = { listId: moved.listId, statut: moved.statut, pos: moved.pos };
       if (!listChanged && moved.pos === pos) return renderBoard();
       moved.pos = pos;
       moved.listId = listId;
@@ -492,6 +533,8 @@
       setStatus('Enregistrement…', 'busy');
       var op = listChanged ? TT().moveCard(t, id, listId, pos) : TT().reorderCard(t, id, pos);
       op.then(function () {
+        if (listChanged) record({ type: 'move', targetId: id, title: moved.name, key: 'statut', before: from.statut, after: list.name, beforeVal: from.listId, afterVal: listId, beforePos: from.pos, afterPos: pos });
+        else record({ type: 'reorder', targetId: id, title: moved.name, after: list.name, beforeVal: from.pos, afterVal: pos });
         setStatus(listChanged ? 'Carte déplacée dans « ' + list.name + ' »' : 'Ordre enregistré', 'ok');
       }, function (err) {
         fail(err);
@@ -502,6 +545,7 @@
     function createIn(list, name) {
       return TT().createRow(t, name, list.id).then(function (res) {
         var cardId = res && res.cardId;
+        if (cardId) record({ type: 'create', targetId: cardId, title: name, after: list.name });
         // Trello's client-side card cache can lag right after a REST create: retry before giving up.
         function present() { return !cardId || state.rows.some(function (r) { return r.id === cardId; }); }
         function again(attempt) {
