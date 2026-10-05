@@ -152,15 +152,19 @@
     var svg = s('svg', { class: 'mm-svg', width: '100%', height: '100%' });
     var defs = s('defs');
     ['depends', 'by', 'at', 'serves'].forEach(function (k) {
-      defs.appendChild(s('marker', { id: 'mm-arrow-' + k, viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' },
+      defs.appendChild(s('marker', { id: 'mm-arrow-' + k, viewBox: '0 0 10 10', refX: '9', refY: '5', markerUnits: 'userSpaceOnUse', markerWidth: '11', markerHeight: '11', orient: 'auto-start-reverse' },
         [s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mm-arrow mm-arrow--' + k })]));
     });
     svg.appendChild(defs);
     var gView = s('g', { class: 'mm-view' });
     var gEdges = s('g', { class: 'mm-edges' });
     var gNodes = s('g', { class: 'mm-nodes' });
+    var gBox = s('g', { class: 'mm-selbox' }); // bounding box of the multi-selection (behind the wires and cards)
+    var gTop = s('g', { class: 'mm-top' }); // rubber-band rectangle
+    gView.appendChild(gBox);
     gView.appendChild(gEdges);
     gView.appendChild(gNodes);
+    gView.appendChild(gTop);
     svg.appendChild(gView);
     els.canvas.appendChild(svg);
     els.canvas.appendChild(els.panel);
@@ -271,6 +275,12 @@
             renderBar();
           },
         }, [icon('grid-dots'), 'Grille']),
+        h('button', {
+          class: 'mm-btn' + (state.marqueeTool ? ' is-active' : ''),
+          'aria-pressed': state.marqueeTool ? 'true' : 'false',
+          title: 'Sélection rectangle : glisser sur le fond pour sélectionner plusieurs cartes (Maj/Ctrl + glisser fait la même chose, sans activer l’outil)',
+          onclick: function () { state.marqueeTool = !state.marqueeTool; root.classList.toggle('is-marquee', state.marqueeTool); renderBar(); },
+        }, [icon('square-dashed'), 'Sélection']),
         state.goalsAuth === false ? h('button', {
           class: 'mm-btn mm-btn--primary',
           title: 'Trello doit être autorisé pour lire et enregistrer les objectifs',
@@ -429,11 +439,14 @@
     }
 
     function wirePath(p1, p2) {
-      var dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-      var off = Math.max(30, Math.min(140, dist * 0.4));
+      // handle length follows the gap along each pin's own axis, so a wide sideways gap
+      // with a small vertical one no longer produces a loopy S-curve
+      var gap = function (p) { return p.nx ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y); };
+      var off1 = Math.max(18, Math.min(110, gap(p1) * 0.45));
+      var off2 = Math.max(18, Math.min(110, gap(p2) * 0.45));
       return 'M' + p1.x.toFixed(1) + ',' + p1.y.toFixed(1) +
-        ' C' + (p1.x + p1.nx * off).toFixed(1) + ',' + (p1.y + p1.ny * off).toFixed(1) +
-        ' ' + (p2.x + p2.nx * off).toFixed(1) + ',' + (p2.y + p2.ny * off).toFixed(1) +
+        ' C' + (p1.x + p1.nx * off1).toFixed(1) + ',' + (p1.y + p1.ny * off1).toFixed(1) +
+        ' ' + (p2.x + p2.nx * off2).toFixed(1) + ',' + (p2.y + p2.ny * off2).toFixed(1) +
         ' ' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1);
     }
 
@@ -593,6 +606,110 @@
         ref.glow.classList.toggle('is-selected', chosen);
         ref.label.classList.toggle('is-shown', (!!focus || chosen) && lit);
       });
+      drawSelectionBox();
+    }
+
+    /**
+     * Returns move(x, y, free) that puts `lead` at (x, y) (snapped to the grid unless `free`) and shifts every node of
+     * `nodes` by the same amount, then redraws their wires and the selection box.
+     */
+    function dragGroup(nodes, lead) {
+      var origin = nodes.map(function (m) { return { n: m, x: m.x, y: m.y }; });
+      var x0 = lead.x, y0 = lead.y;
+      var ids = {};
+      nodes.forEach(function (m) { ids[m.id] = true; });
+      return function (x, y, free) {
+        if (state.snap && !free) { x = Math.round(x / GRID) * GRID; y = Math.round(y / GRID) * GRID; }
+        var dx = x - x0, dy = y - y0;
+        origin.forEach(function (o) { o.n.x = o.x + dx; o.n.y = o.y + dy; positionNode(o.n); });
+        state.graph.edges.forEach(function (e) { if (ids[e.from] || ids[e.to]) positionEdge(e); });
+        drawSelectionBox();
+      };
+    }
+
+    /** Dashed frame around the multi-selection; dragging its background moves every selected card. */
+    function drawSelectionBox() {
+      gBox.textContent = '';
+      var nodes = pickedNodes();
+      if (nodes.length < 2) return;
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      nodes.forEach(function (n) {
+        var b = nodeBox(n);
+        x0 = Math.min(x0, n.x - b.w / 2); x1 = Math.max(x1, n.x + b.w / 2);
+        y0 = Math.min(y0, n.y - b.h / 2); y1 = Math.max(y1, n.y + b.h / 2);
+      });
+      var pad = 14;
+      var rect = s('rect', { class: 'mm-selbox-rect', x: (x0 - pad).toFixed(1), y: (y0 - pad).toFixed(1), width: (x1 - x0 + pad * 2).toFixed(1), height: (y1 - y0 + pad * 2).toFixed(1), rx: 8 });
+      rect.addEventListener('pointerdown', function (ev) {
+        if (ev.button || state.marqueeTool || ev.shiftKey || ev.ctrlKey || ev.metaKey) return; // let the canvas start a rectangle
+        ev.stopPropagation();
+        var lead = nodes[0];
+        var start = { x: ev.clientX, y: ev.clientY, nx: lead.x, ny: lead.y };
+        var drag = dragGroup(nodes, lead);
+        var moved = false;
+        try { rect.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+        function move(me) {
+          var dx = me.clientX - start.x, dy = me.clientY - start.y;
+          if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+          moved = true;
+          drag(start.nx + dx / state.view.k, start.ny + dy / state.view.k, me.altKey);
+        }
+        function up() {
+          rect.removeEventListener('pointermove', move);
+          rect.removeEventListener('pointerup', up);
+          rect.removeEventListener('pointercancel', up);
+          if (!moved) select(null);
+        }
+        rect.addEventListener('pointermove', move);
+        rect.addEventListener('pointerup', up);
+        rect.addEventListener('pointercancel', up);
+      });
+      gBox.appendChild(rect);
+      gBox.appendChild(s('text', { class: 'mm-selbox-label', x: (x0 - pad + 6).toFixed(1), y: (y0 - pad - 5).toFixed(1), text: nodes.length + ' sélectionnés · glisser pour déplacer' }));
+    }
+
+    /** Rubber-band selection on the empty canvas; Maj/Ctrl keeps the current selection and adds to it. */
+    function startMarquee(ev) {
+      var r = svg.getBoundingClientRect();
+      function toGraph(me) { return { x: (me.clientX - r.left - state.view.x) / state.view.k, y: (me.clientY - r.top - state.view.y) / state.view.k }; }
+      var additive = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+      var base = additive ? pickedNodes().reduce(function (o, n) { o[n.id] = true; return o; }, {}) : {};
+      var a = toGraph(ev);
+      var box = s('rect', { class: 'mm-marquee', x: a.x, y: a.y, width: 0, height: 0 });
+      gTop.appendChild(box);
+      var moved = false;
+      try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+      function move(me) {
+        var p = toGraph(me);
+        if (!moved && Math.abs(me.clientX - ev.clientX) + Math.abs(me.clientY - ev.clientY) < 4) return;
+        moved = true;
+        var x0 = Math.min(a.x, p.x), y0 = Math.min(a.y, p.y), x1 = Math.max(a.x, p.x), y1 = Math.max(a.y, p.y);
+        box.setAttribute('x', x0); box.setAttribute('y', y0); box.setAttribute('width', x1 - x0); box.setAttribute('height', y1 - y0);
+        var multi = Object.assign({}, base);
+        state.graph.nodes.forEach(function (n) {
+          if (n.kind !== 'task' && n.kind !== 'goal') return;
+          var b = nodeBox(n);
+          if (n.x + b.w / 2 >= x0 && n.x - b.w / 2 <= x1 && n.y + b.h / 2 >= y0 && n.y - b.h / 2 <= y1) multi[n.id] = true;
+        });
+        state.multi = multi;
+        state.selected = null;
+        state.selectedEdge = null;
+        applyFocus();
+        drawSelectionBox();
+      }
+      function up() {
+        svg.removeEventListener('pointermove', move);
+        svg.removeEventListener('pointerup', up);
+        svg.removeEventListener('pointercancel', up);
+        if (box.parentNode) box.parentNode.removeChild(box);
+        if (!moved) { if (!additive) select(null); return; }
+        renderPanel();
+        var count = Object.keys(state.multi).length;
+        setStatus(count + (count > 1 ? ' éléments sélectionnés' : ' élément sélectionné'), 'ok');
+      }
+      svg.addEventListener('pointermove', move);
+      svg.addEventListener('pointerup', up);
+      svg.addEventListener('pointercancel', up);
     }
 
     /* ── Interaction ──────────────────────────────────────────────── */
@@ -605,17 +722,16 @@
         moved = false;
         modKey = ev.ctrlKey || ev.metaKey || ev.shiftKey;
         var start = { x: ev.clientX, y: ev.clientY, nx: n.x, ny: n.y };
+        // a card of the multi-selection drags the whole selection with it
+        var group = !modKey && state.multi[n.id] && pickedNodes().length > 1 ? pickedNodes() : null;
+        var drag = dragGroup(group || [n], n);
         try { g.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
         function move(me) {
           var dx = me.clientX - start.x;
           var dy = me.clientY - start.y;
           if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
           moved = true;
-          n.x = start.nx + dx / state.view.k;
-          n.y = start.ny + dy / state.view.k;
-          if (state.snap && !me.altKey) { n.x = Math.round(n.x / GRID) * GRID; n.y = Math.round(n.y / GRID) * GRID; } // Alt = free move
-          positionNode(n);
-          state.graph.edges.forEach(function (e) { if (e.from === n.id || e.to === n.id) positionEdge(e); });
+          drag(start.nx + dx / state.view.k, start.ny + dy / state.view.k, me.altKey);
         }
         function up() {
           g.removeEventListener('pointermove', move);
@@ -1718,6 +1834,7 @@
     svg.addEventListener('pointerdown', function (ev) {
       if (ev.button !== 0 && ev.button !== 1) return;
       if (ev.button === 1) ev.preventDefault();
+      if (ev.button === 0 && (state.marqueeTool || ev.shiftKey || ev.ctrlKey || ev.metaKey) && !state.linkFrom && !state.relink) { ev.preventDefault(); return startMarquee(ev); }
       var start = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y };
       var moved = false;
       var edgeId = ev.target && ev.target.getAttribute ? ev.target.getAttribute('data-edge') : null; // pointer capture would retarget the click

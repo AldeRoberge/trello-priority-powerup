@@ -261,7 +261,7 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-arrow--serves { fill: var(--mm-serves); }
 .mm-swatch--serves { border-top: 2px solid var(--mm-serves); }
 .mm-edge.is-selected { stroke-width: 3.5; }
-.mm-edge-glow.is-selected { opacity: 0.45; stroke-width: 10; }
+.mm-edge-glow.is-selected { opacity: 0.35; stroke-width: 8; }
 .mm-level { letter-spacing: 0.06em; font-size: 10px; }
 .mm-node--goal .mm-pin-dot { stroke: var(--mm-serves); }
 .mm-node--goal:hover .mm-pin-dot { opacity: 0.65; }
