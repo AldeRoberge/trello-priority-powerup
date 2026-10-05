@@ -10008,3 +10008,69 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 .tg.is-moving .tg-node {
   transition: none;
 }
+
+.pg-node-swap {
+  font-size: 13px;
+}
+
+.pg-node-swap:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+/* Collapsible info rows */
+.info-row-toggle {
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+}
+
+.info-row-toggle:hover {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.info-row-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-primary) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.info-row-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.info-row-summary[hidden] {
+  display: none;
+}
+
+.info-row-summary.is-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.info-row-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+
+.info-row-summary:not([hidden]) + .info-row-chevron {
+  margin-left: 0;
+}
+
+.info-row.is-collapsed > .info-row-label .info-row-chevron {
+  transform: rotate(-90deg);
+}
+
+.info-row.is-collapsed > .info-row-value {
+  display: none;
+}

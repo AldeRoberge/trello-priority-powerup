@@ -515,12 +515,6 @@
       if (filterPanel) filterPanel.refresh();
       if (sortPanel) sortPanel.refresh();
       if (summaryBar) summaryBar.refresh();
-      var mine = root.querySelector('[data-gantt-mine]');
-      if (mine) {
-        var on = state.criteria.assignees.indexOf('me') !== -1;
-        mine.classList.toggle('is-active', on);
-        mine.setAttribute('aria-pressed', on ? 'true' : 'false');
-      }
     }
 
     /** Filters changed: save, redraw the rows, keep every control in sync. */
@@ -929,7 +923,7 @@
         return g;
       }
 
-      var viewGroup = tbGroup('Vue');
+      var viewGroup = tbGroup();
       var zoom = el('div', 'gantt-zoom gantt-segmented');
       [
         { mode: 'day', label: 'Jour', icon: 'ti-calendar' },
@@ -956,7 +950,7 @@
       viewGroup.appendChild(zoom);
       toolbar.appendChild(viewGroup);
 
-      var navGroup = tbGroup('Période');
+      var navGroup = tbGroup();
       var nav = el('div', 'gantt-nav gantt-segmented');
       var prev = el('button', 'gantt-btn', { type: 'button', text: '\u2039' });
       prev.title = 'Pr\u00e9c\u00e9dent';
@@ -1017,26 +1011,9 @@
       }
       toolbar.appendChild(title);
 
-      var displayGroup = tbGroup('Affichage');
+      var displayGroup = tbGroup();
       var GF = global.GanttFilters;
       var filters = el('div', 'gantt-filters');
-      var mineBtn = el('button', 'gantt-btn gantt-mine', { type: 'button' });
-      mineBtn.setAttribute('data-gantt-mine', '1');
-      mineBtn.appendChild(el('i', 'ti ti-user-check'));
-      mineBtn.appendChild(document.createTextNode('Mes tâches'));
-      mineBtn.title = 'Afficher seulement les tâches qui me sont assignées';
-      var mineOn = state.criteria.assignees.indexOf('me') !== -1;
-      mineBtn.classList.toggle('is-active', mineOn);
-      mineBtn.setAttribute('aria-pressed', mineOn ? 'true' : 'false');
-      mineBtn.addEventListener('click', function () {
-        var next = normalizeCriteriaUi(state.criteria);
-        var at = next.assignees.indexOf('me');
-        if (at === -1) next.assignees.push('me');
-        else next.assignees.splice(at, 1);
-        state.criteria = next;
-        onFiltersChanged();
-      });
-      displayGroup.appendChild(mineBtn);
 
       if (GF) {
         sortPanel = GF.createSortPanel({

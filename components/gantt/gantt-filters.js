@@ -1153,6 +1153,7 @@
     describeCriteria: describeCriteria,
     presetMatches: presetMatches,
     toggleIn: toggleIn,
+    createPopover: createPopover,
     createSortPanel: createSortPanel,
     createFilterPanel: createFilterPanel,
     createSummaryBar: createSummaryBar,

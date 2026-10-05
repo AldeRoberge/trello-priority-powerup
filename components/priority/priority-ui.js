@@ -10977,7 +10977,104 @@
         });
       }
 
+      if (
+        options.collapsible !== false &&
+        !options.interactive &&
+        key !== 'title' &&
+        key !== 'creator' &&
+        key !== 'more-details'
+      ) {
+        makeRowCollapsible(key, row, label, value);
+      }
+
       return { row: row, value: value };
+    }
+
+    // ── Collapsible rows: header click folds the row to a one-line summary ──
+    var rowSummaries = Object.create(null);
+
+    function rowCollapsedStore(key, next) {
+      var storeKey = 'tp-info-row-collapsed:' + key;
+      try {
+        if (next === undefined) return global.localStorage.getItem(storeKey) === '1';
+        if (next) global.localStorage.setItem(storeKey, '1');
+        else global.localStorage.removeItem(storeKey);
+      } catch (e) {}
+      return !!next;
+    }
+
+    function genericRowSummary(value) {
+      var clone = value.cloneNode(true);
+      Array.prototype.forEach.call(
+        clone.querySelectorAll('button, script, style, [hidden], textarea'),
+        function (n) {
+          n.remove();
+        }
+      );
+      return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function makeRowCollapsible(key, row, label, value) {
+      row.classList.add('is-collapsible');
+      var chevron = document.createElement('i');
+      chevron.className = 'ti ti-chevron-down info-row-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+      var summary = document.createElement('span');
+      summary.className = 'info-row-summary';
+      summary.hidden = true;
+      label.classList.add('info-row-toggle');
+      label.setAttribute('role', 'button');
+      label.tabIndex = 0;
+      label.appendChild(summary);
+      label.appendChild(chevron);
+
+      function refresh() {
+        if (!row.classList.contains('is-collapsed')) return;
+        var text = '';
+        try {
+          text = rowSummaries[key] ? rowSummaries[key]() : genericRowSummary(value);
+        } catch (e) {
+          text = genericRowSummary(value);
+        }
+        text = String(text || '').trim();
+        summary.textContent = text || 'Vide';
+        summary.classList.toggle('is-empty', !text);
+        summary.title = text;
+      }
+
+      function setCollapsed(next, persist) {
+        row.classList.toggle('is-collapsed', next);
+        label.setAttribute('aria-expanded', next ? 'false' : 'true');
+        summary.hidden = !next;
+        if (persist) rowCollapsedStore(key, next);
+        refresh();
+        onLayoutChangeSafe();
+      }
+
+      function toggle(event) {
+        event.preventDefault();
+        setCollapsed(!row.classList.contains('is-collapsed'), true);
+      }
+      label.addEventListener('click', toggle);
+      label.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') toggle(event);
+      });
+
+      if (typeof global.MutationObserver === 'function') {
+        var timer = null;
+        new global.MutationObserver(function () {
+          if (!row.classList.contains('is-collapsed')) return;
+          clearTimeout(timer);
+          timer = setTimeout(refresh, 80);
+        }).observe(value, { childList: true, subtree: true, characterData: true });
+      }
+      setCollapsed(rowCollapsedStore(key), false);
+    }
+
+    function onLayoutChangeSafe() {
+      try {
+        if (typeof onLayoutChange === 'function') onLayoutChange();
+      } catch (e) {}
     }
 
     // ── Title ──────────────────────────────────────────────────────────
@@ -11485,9 +11582,35 @@
     placesRow.value.appendChild(placesWrap);
     body.appendChild(placesRow.row);
 
+    rowSummaries.desc = function () {
+      var text = (descInput.value || '')
+        .replace(/[#*_>`~\[\]()!-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return text.length > 140 ? text.slice(0, 139) + '…' : text;
+    };
+    rowSummaries.members = function () {
+      var names = Array.prototype.map
+        .call(membersEl.children, function (c) {
+          return (c.textContent || '').replace(/\s+/g, ' ').trim();
+        })
+        .filter(Boolean);
+      return names.join(', ');
+    };
+    rowSummaries.places = function () {
+      var names = placeSeq(cardPlaces)
+        .map(placeDisplayName)
+        .filter(Boolean);
+      var line = names.join(' → ');
+      var acts = placeSeq(cardPlaces).filter(function (r) {
+        return r.do;
+      }).length;
+      return line && acts ? line + ' · ' + acts + ' action' + (acts > 1 ? 's' : '') : line;
+    };
+
     // ── Inline feature mounts (Priorité / Progrès / Échéance) ───────────
     function makeInlineMountRow(key, labelText, icon) {
-      var row = makeRow(key, labelText, { icon: icon });
+      var row = makeRow(key, labelText, { icon: icon, collapsible: false });
       row.row.classList.add('info-row--inline-feature');
       row.row.hidden = true;
       var mount = document.createElement('div');
@@ -12544,7 +12667,7 @@
      */
     function setPlacesPickerOpen(target) {
       var next = String(target || '');
-      if (next && !/^(at|from|ins:\d+)$/.test(next)) next = '';
+      if (next && !/^(at|from|ins:\d+|rep:\d+)$/.test(next)) next = '';
       // The click that follows releasing a pin must not dismiss what it opened.
       if (!next && Date.now() < pgIgnoreUntil) return;
       placesPickerSlot = next;
@@ -12820,6 +12943,20 @@
           : Promise.resolve(null);
       catalogPromise.then(function () {
         var ref = { id: draft.id, name: draft.name };
+        var swap = /^rep:(\d+)$/.exec(target);
+        if (swap) {
+          placesMutateSeq(function (refs) {
+            var idx = Number(swap[1]);
+            var prev = refs[idx];
+            if (!prev || prev.id === ref.id) return false;
+            // Keep what is done there and where the node was placed.
+            if (prev.do) ref.do = prev.do;
+            if (prev.x != null) ref.x = prev.x;
+            if (prev.y != null) ref.y = prev.y;
+            refs[idx] = ref;
+          });
+          return;
+        }
         var ins = /^ins:(\d+)$/.exec(target);
         if (ins) {
           placesMutateSeq(function (refs) {
@@ -13449,7 +13586,7 @@
         pgPan.y = 0;
         pgZoomMul = 1;
         placeEditKey = '';
-        if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+        if (/^(ins|rep):/.test(placesPickerSlot)) placesPickerSlot = '';
       }
       renderPlaces();
       onLayoutChange();
@@ -13630,7 +13767,7 @@
         m.moved = true;
         pgHost.classList.add('pg-moving');
         placeEditKey = '';
-        if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+        if (/^(ins|rep):/.test(placesPickerSlot)) placesPickerSlot = '';
       }
       pgLive[m.idx] = { x: pgSnap(m.x0 + dx / pgScale), y: pgSnap(m.y0 + dy / pgScale) };
       var p = pgStagePoint(e);
@@ -13789,6 +13926,22 @@
       titles.appendChild(nameEl);
       head.appendChild(titles);
       if (editable) {
+        var swapBtn = document.createElement('button');
+        swapBtn.type = 'button';
+        swapBtn.className = 'tg-node-clear pg-node-swap';
+        swapBtn.setAttribute('aria-label', 'Changer de lieu : ' + name);
+        swapBtn.title = 'Choisir un autre lieu';
+        swapBtn.innerHTML = '<i class="ti ti-replace" aria-hidden="true"></i>';
+        swapBtn.disabled = placesBusy;
+        swapBtn.addEventListener('pointerdown', function (event) {
+          event.stopPropagation();
+        });
+        swapBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          setPlacesPickerOpen(placesPickerSlot === 'rep:' + i ? '' : 'rep:' + i);
+        });
+        head.appendChild(swapBtn);
         var clearBtn = document.createElement('button');
         clearBtn.type = 'button';
         clearBtn.className = 'tg-node-clear';
@@ -14099,12 +14252,18 @@
       pgPop.replaceChildren();
       var editMatch = /^stop:(\d+)$/.exec(placeEditKey);
       var insMatch = /^ins:(\d+)$/.exec(placesPickerSlot);
+      var repMatch = /^rep:(\d+)$/.exec(placesPickerSlot);
       if (editMatch && onPlaceDirectorySave && stops[Number(editMatch[1])]) {
         var ei = Number(editMatch[1]);
         var eb = shifted[ei];
         pgEditor.hidden = false;
         pgEditor.appendChild(buildPlaceEditor(stops[ei].ref));
         if (eb) pgPlacePopover(pgEditor, eb.x + eb.w / 2, eb.y + eb.h + 8, 300);
+      } else if (repMatch && editable && shifted[Number(repMatch[1])]) {
+        var rb = shifted[Number(repMatch[1])];
+        pgPop.hidden = false;
+        pgPop.appendChild(buildPlacesPicker(placesPickerSlot));
+        pgPlacePopover(pgPop, rb.x + rb.w / 2, rb.y + rb.h + 8, 272);
       } else if (insMatch && editable) {
         pgPop.hidden = false;
         pgPop.appendChild(buildPlacesPicker(placesPickerSlot));
@@ -14127,18 +14286,18 @@
         !event.target.closest('.tg-wire-hit') &&
         !event.target.closest('.pg-node-name')
       ) {
-        if (placeEditKey || /^ins:/.test(placesPickerSlot)) {
+        if (placeEditKey || /^(ins|rep):/.test(placesPickerSlot)) {
           placeEditKey = '';
-          if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+          if (/^(ins|rep):/.test(placesPickerSlot)) placesPickerSlot = '';
           renderPlaces();
           onLayoutChange();
         }
       }
     });
     pgHost.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && (placeEditKey || /^ins:/.test(placesPickerSlot))) {
+      if (event.key === 'Escape' && (placeEditKey || /^(ins|rep):/.test(placesPickerSlot))) {
         placeEditKey = '';
-        if (/^ins:/.test(placesPickerSlot)) placesPickerSlot = '';
+        if (/^(ins|rep):/.test(placesPickerSlot)) placesPickerSlot = '';
         renderPlaces();
         onLayoutChange();
       }
