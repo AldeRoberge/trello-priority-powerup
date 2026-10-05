@@ -1958,23 +1958,40 @@
       var n = onNode && nodeById(onNode.getAttribute('data-id'));
       if (n && (n.kind === 'task' || n.kind === 'goal') && !state.multi[n.id]) select(n.id);
       var count = pickedNodes().length;
+      var ICONS = {
+        copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+        cut: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
+        paste: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+        trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
+        alignH: '<path d="M3 12h18"/><rect x="5" y="6" width="4" height="12" rx="1"/><rect x="15" y="8" width="4" height="8" rx="1"/>',
+        alignV: '<path d="M12 3v18"/><rect x="6" y="5" width="12" height="4" rx="1"/><rect x="8" y="15" width="8" height="4" rx="1"/>',
+        distH: '<path d="M3 4v16M21 4v16"/><rect x="9" y="7" width="6" height="10" rx="1"/>',
+        distV: '<path d="M4 3h16M4 21h16"/><rect x="7" y="9" width="10" height="6" rx="1"/>',
+        selectAll: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1"/>',
+        layout: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'
+      };
+      function icon(name) {
+        var s = h('span', { class: 'mm-menu-ico' });
+        s.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
+        return s;
+      }
       var items = [];
       if (count) {
-        items.push(['Copier', 'Ctrl+C', copySelection], ['Couper', 'Ctrl+X', function () { if (copySelection()) deleteSelection({ force: true }); }]);
+        items.push(['Copier', 'Ctrl+C', copySelection, false, 'copy'], ['Couper', 'Ctrl+X', function () { if (copySelection()) deleteSelection({ force: true }); }, false, 'cut']);
       }
-      items.push(['Coller', 'Ctrl+V', pasteClip, !state.clip]);
-      if (count) items.push(['Supprimer', 'Suppr', deleteSelection]);
+      items.push(['Coller', 'Ctrl+V', pasteClip, !state.clip, 'paste']);
+      if (count) items.push(['Supprimer', 'Suppr', deleteSelection, false, 'trash']);
       items.push(null);
-      items.push(['Aligner horizontalement', '', function () { alignNodes('y'); }, count < 2]);
-      items.push(['Aligner verticalement', '', function () { alignNodes('x'); }, count < 2]);
-      items.push(['Répartir horizontalement', '', function () { distributeNodes('x'); }, count < 3]);
-      items.push(['Répartir verticalement', '', function () { distributeNodes('y'); }, count < 3]);
+      items.push(['Aligner horizontalement', '', function () { alignNodes('y'); }, count < 2, 'alignH']);
+      items.push(['Aligner verticalement', '', function () { alignNodes('x'); }, count < 2, 'alignV']);
+      items.push(['Répartir horizontalement', '', function () { distributeNodes('x'); }, count < 3, 'distH']);
+      items.push(['Répartir verticalement', '', function () { distributeNodes('y'); }, count < 3, 'distV']);
       items.push(null);
-      items.push(['Tout sélectionner', 'Ctrl+A', selectAll]);
-      items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }]);
+      items.push(['Tout sélectionner', 'Ctrl+A', selectAll, false, 'selectAll']);
+      items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }, false, 'layout']);
       var menu = h('div', { class: 'mm-menu', role: 'menu' }, items.map(function (it) {
         if (!it) return h('div', { class: 'mm-menu-sep' });
-        var b = h('button', { class: 'mm-menu-item', type: 'button', role: 'menuitem', disabled: !!it[3] }, [h('span', { text: it[0] }), h('kbd', { text: it[1] })]);
+        var b = h('button', { class: 'mm-menu-item', type: 'button', role: 'menuitem', disabled: !!it[3] }, [icon(it[4]), h('span', { class: 'mm-menu-label', text: it[0] }), h('kbd', { text: it[1] })]);
         b.addEventListener('click', function () { closeMenu(); it[2](); });
         return b;
       }));
