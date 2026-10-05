@@ -79,7 +79,7 @@
       '- "update" = modifier une carte existante (cardId obligatoire, pris dans les données fournies).',
       '- desc (update) = la description COMPLÈTE qui remplace l’ancienne, en Markdown. Conserve ce qui est encore vrai et utile, intègre la nouvelle information (ex. : une ligne « ' + (o.today || '') + ' : en attente de la réponse de … »). Pour « définir la tâche », écris objectif, étapes concrètes et critère de réussite, brièvement. N’inclus desc que si elle change.',
       '- progress = entier 0–100, seulement si le message dit ou implique clairement un changement d’avancement. Ne mets 100 que si la tâche est clairement terminée. Une mise en attente ne change pas le progrès par elle-même.',
-      '- waiting = true quand l’utilisateur attend quelqu’un ou quelque chose (réponse, livraison, décision) ou met la tâche en pause ; waitingReason = motif court (qui / quoi on attend). waiting = false quand l’attente est levée.',
+      '- waiting = true quand l’utilisateur attend quelqu’un ou quelque chose (réponse, livraison, décision) ou met la tâche en pause ; waitingReason = motif court (qui / quoi on attend), UNIQUEMENT si l’utilisateur le dit ; sinon omets waitingReason (n’invente jamais de motif, pas de « en attente de rien »). waiting = false quand l’attente est levée.',
       '- list = id de liste seulement si l’utilisateur demande clairement de déplacer / démarrer / terminer la carte (pas pour une mise en attente, c’est géré par waiting).',
       '- Pas d’invention : si l’instruction est floue ou ne correspond à rien, renvoie actions [] et pose la question dans message.',
       '- message : une ou deux phrases, dans la langue de l’utilisateur (français par défaut), sans tiret cadratin.',
