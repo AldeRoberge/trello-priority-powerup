@@ -294,7 +294,8 @@
       els.side.appendChild(listBox);
       els.side.appendChild(
         h('div', { class: 'en-side-foot' }, [
-          h('button', { class: 'en-btn en-btn--primary', onclick: newEntity }, [icon('plus'), 'Nouvelle entité']),
+          h('button', { class: 'en-btn en-btn--primary', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer']),
+          h('button', { class: 'en-btn', title: 'Créer une entité vide', onclick: newEntity }, [icon('plus'), 'Vide']),
           h(
             'button',
             {
@@ -309,6 +310,31 @@
           ),
         ])
       );
+    }
+
+    /** Opens the guided interview; what it creates (and any new type) is saved like any other edit. */
+    function openComposer(opts) {
+      if (!global.EntitiesComposerUI) return newEntity();
+      global.EntitiesComposerUI.open({
+        schema: state.schema,
+        entities: state.entities,
+        initialText: opts && opts.text,
+        initialTypes: (opts && opts.types) || (state.typeFilter ? [state.typeFilter] : []),
+        onDone: function (res) {
+          state.schema = res.schema;
+          state.entities = res.entities;
+          state.selId = res.rootId;
+          state.mode = 'entity';
+          state.query = '';
+          queryInput.value = '';
+          scheduleSave();
+          buildSide.fillTypes();
+          paintList();
+          paintMain();
+          toast(res.created.length > 1 ? res.created.length + ' entités créées et liées.' : 'Entité créée.');
+          if (res.again) openComposer({ types: res.types });
+        },
+      });
     }
 
     function newEntity() {
@@ -583,6 +609,7 @@
       var box = h('div', { class: 'en-empty' }, [
         icon('stack-2'),
         h('p', { text: 'Choisissez une entité, ou créez-en une.' }),
+        h('button', { class: 'en-btn en-btn--primary', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
         h('p', {
           class: 'en-hint',
           text: 'Une entité est un objet nommé (« Ficus », « Hôtel de Ville ») avec des types, des propriétés, des liens et un historique. L’assistant s’en sert pour comprendre « arroser mes plantes au travail ».',
@@ -1024,7 +1051,7 @@
 
     boot();
 
-    return { state: state, saveNow: saveNow, reload: boot };
+    return { state: state, saveNow: saveNow, reload: boot, openComposer: openComposer };
   }
 
   global.EntitiesUI = { mount: mount };

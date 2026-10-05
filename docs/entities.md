@@ -18,6 +18,18 @@ Les **liens** sont de deux sortes : les champs « lien » (ex. lieu d'une plante
 
 L'**historique** garde les 40 derniers changements de chaque entité ; chacun peut être annulé (l'annulation s'ajoute à l'historique, rien n'est effacé).
 
+## Composer (assistant de création)
+
+Le bouton **Composer** (colonne de gauche, ou l'état vide) ouvre un dialogue qui pose les questions pour créer une entité et tout ce qu'elle entraîne, puis crée le tout lié en une seule fois.
+
+- **Quoi ?** Une phrase libre : « Palmier, une plante au travail » donne le nom, le type *Plante* et le lieu dont l'alias est « travail » (via le champ lien du type, sinon une relation « lié à »). Sans virgule, tout le texte est le nom. On peut aussi cocher des types, ou en **définir un nouveau en une ligne** : `État (choix: neuf/usé), Achat (date), Lieu (lien: Lieu)`.
+- **Nom** : nom et alias (puces), avec avertissement de doublon ou d'alias ambigu.
+- **Un écran par composant** des types choisis (composition : l'union des composants). Chaque champ est une question ; tout est facultatif. Suggestions intelligentes tirées des entités du même type : les lieux les plus utilisés, « Souvent : 7 », raccourcis de date.
+- **Créer à la volée** : une question de lien propose « Créer « Salon » » ; ça ouvre une mini-interview (fil d'Ariane), puis on revient à la question avec le lien posé. Rien n'est écrit avant le dernier écran.
+- **Liens** (relations libres, avec les types déjà utilisés) puis **Résumé** : « Créer N entités » ou « Créer et en ajouter une autre ». Un aperçu en direct est affiché à droite pendant tout le parcours.
+
+Logique pure et testée : `components/entities/entities-composer.js` (`readIntent`, `stepsFor`, `suggest`, `issues`, `defineType`, `finalize`) ; interface : `entities-composer-ui.js` + `.css`. Test : `test/entities-composer.test.js`.
+
 ## Résolution d'une phrase
 
 `EntitiesModel.resolveText(schema, entities, texte)` cherche dans la phrase : les noms/alias de **types** (pluriel ignoré, accents ignorés), les noms/alias d'**entités** (le plus long gagne : « Hôtel de Ville » avant « Hôtel »), et les valeurs de champs à **choix** (« mortes »). Résultat : un filtre `{types, refersTo, where}` et les entités correspondantes. Les possessifs (mon, mes, my) et les verbes sont ignorés. Une entité nommée qui a déjà le type demandé est un choix direct (« tailler le ficus »).
@@ -39,7 +51,8 @@ Comme les Documents : le stockage Power-Up est limité à 4 096 caractères, tro
 - `components/entities/entities-trello.js` : lecture/écriture Trello (`load`, `commit`, cache 30 s)
 - `components/entities/entities-ui.js` + `.css`, `entities.html` : la vue
 - `components/agent/agent.js` : `getEntities` (contexte) et lignes de prompt ; `assistant-mount.js` fournit les entités
-- Tests : `test/entities-model.test.js`, `test/entities-trello.test.js`, `test/agent-entities.test.js` ; page de test visuel : `sandbox/e2e/entities.html` (serveur : `npm run test:e2e -- --serve`)
+- `components/entities/entities-composer*.js` : l'assistant de création (voir plus haut)
+- Tests : `test/entities-composer.test.js`, `test/entities-model.test.js`, `test/entities-trello.test.js`, `test/agent-entities.test.js` ; page de test visuel : `sandbox/e2e/entities.html` (serveur : `npm run test:e2e -- --serve`)
 
 ## Pas encore fait
 
