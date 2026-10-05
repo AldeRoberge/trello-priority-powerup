@@ -610,3 +610,46 @@
   font-size: 12px;
   color: inherit;
 }
+
+/* ── "Plus" menu (synchronisation, export) ───────────────────────────── */
+.gantt-pop--menu {
+  width: 320px;
+  padding-bottom: 6px;
+}
+.gantt-menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gantt-menu-item:hover:not(:disabled),
+.gantt-menu-item:focus-visible {
+  background: var(--tp-surface-subtle);
+}
+.gantt-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gantt-menu-item .ti {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-size: 17px;
+  color: var(--tp-primary);
+}
+.gantt-menu-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gantt-menu-hint {
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}

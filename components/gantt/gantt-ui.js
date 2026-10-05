@@ -1058,7 +1058,7 @@
       toolbar.appendChild(displayGroup);
       renderSummaryBar();
 
-      filters = tbGroup('Outils');
+      filters = tbGroup();
       filters.classList.add('gantt-tb-group--tools');
       // Only offered while Trello is not authorized (saving dates needs it); otherwise it is just clutter.
       var authBtn = makeIconBtn('gantt-btn is-active', 'ti-key', 'Autoriser Trello', function () {
@@ -1081,42 +1081,42 @@
         'Requis pour enregistrer les dates (glisser les barres)';
       if (state.restAuthorized === false || state.authHint) filters.appendChild(authBtn);
 
+      // Secondary actions live in one "Plus" menu, grouped by purpose, instead of five loose icons.
       var outlookAuth = OA();
       var outlookSync = OS();
+      var menuSections = [];
+
+      var syncItems = [];
       if (outlookAuth && outlookSync) {
-        if (
-          typeof outlookAuth.isConfigured === 'function' &&
-          !outlookAuth.isConfigured()
-        ) {
-          var outlookHint = makeIconBtn(
-            'gantt-btn gantt-btn--icon',
-            'ti-alert-triangle',
-            'Outlook (config)',
-            function () {
+        if (typeof outlookAuth.isConfigured === 'function' && !outlookAuth.isConfigured()) {
+          syncItems.push({
+            icon: 'ti-alert-triangle',
+            label: 'Outlook (configuration requise)',
+            hint: 'Déployez OutlookConfig.clientId (Entra SPA) pour activer la sync',
+            onClick: function () {
               setStatus(
                 'Outlook non configuré : déployez clientId dans outlook-config.js (Pages), puis rechargez le Gantt.',
                 true
               );
-            }
-          );
-          outlookHint.title =
-            'Déployez OutlookConfig.clientId (Entra SPA) pour activer la sync';
-          filters.appendChild(outlookHint);
+            },
+          });
         } else {
-          var outlookConnect = makeIconBtn(
-            'gantt-btn gantt-btn--icon',
-            state.outlookConnected ? 'ti-plug-connected-x' : 'ti-plug-connected',
-            state.outlookConnected ? 'D\u00e9connecter Outlook' : 'Connecter Outlook',
-            function () {
+          syncItems.push({
+            icon: state.outlookConnected ? 'ti-plug-connected-x' : 'ti-plug-connected',
+            label: state.outlookConnected ? 'Déconnecter Outlook' : 'Connecter Outlook',
+            hint: state.outlookConnected
+              ? 'Déconnecter le compte Microsoft'
+              : 'Autoriser Outlook Calendar (Microsoft Graph)',
+            onClick: function () {
               if (state.outlookConnected) {
-                setStatus('D\u00e9connexion Outlook\u2026');
+                setStatus('Déconnexion Outlook…');
                 outlookAuth.disconnect().then(function (res) {
                   state.outlookConnected = false;
                   if (res && res.ok) {
-                    setStatus('Outlook d\u00e9connect\u00e9');
+                    setStatus('Outlook déconnecté');
                   } else {
                     setStatus(
-                      'D\u00e9connexion Outlook \u00e9chou\u00e9e' +
+                      'Déconnexion Outlook échouée' +
                         (res && res.reason ? ' (' + res.reason + ')' : ''),
                       true
                     );
@@ -1125,67 +1125,97 @@
                 });
                 return;
               }
-              setStatus('Connexion Outlook\u2026');
+              setStatus('Connexion Outlook…');
               outlookAuth.connect().then(function (res) {
                 if (res && res.ok) {
                   state.outlookConnected = true;
-                  setStatus('Outlook connect\u00e9');
+                  setStatus('Outlook connecté');
                   renderToolbar();
                   runOutlookSync();
                 } else {
                   state.outlookConnected = false;
                   setStatus(
-                    'Connexion Outlook refus\u00e9e' +
+                    'Connexion Outlook refusée' +
                       (res && res.reason ? ' (' + res.reason + ')' : ''),
                     true
                   );
                   renderToolbar();
                 }
               });
-            }
-          );
-          outlookConnect.title = state.outlookConnected
-            ? 'D\u00e9connecter le compte Microsoft'
-            : 'Autoriser Outlook Calendar (Microsoft Graph)';
-          filters.appendChild(outlookConnect);
-
+            },
+          });
           if (state.outlookConnected) {
-            var outlookSyncBtn = makeIconBtn(
-              'gantt-btn gantt-btn--icon',
-              'ti-refresh',
-              state.outlookSyncing ? 'Sync\u2026' : 'Sync Outlook',
-              function () {
+            syncItems.push({
+              icon: 'ti-refresh',
+              label: state.outlookSyncing ? 'Sync Outlook…' : 'Synchroniser Outlook',
+              hint: 'Titres, descriptions et dates',
+              disabled: !!state.outlookSyncing,
+              onClick: function () {
                 runOutlookSync();
-              }
-            );
-            outlookSyncBtn.disabled = !!state.outlookSyncing;
-            outlookSyncBtn.title =
-              'Synchroniser titres, descriptions et dates avec Outlook';
-            filters.appendChild(outlookSyncBtn);
+              },
+            });
           }
         }
       }
-
-      var icsBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-download', 'Exporter .ics', function () {
-        exportIcsCalendar();
+      syncItems.push({
+        icon: 'ti-table',
+        label: 'Google Sheets',
+        hint: 'Synchroniser ce tableau avec une feuille (deux sens)',
+        onClick: openGoogleSheetsSync,
       });
-      icsBtn.title =
-        'T\u00e9l\u00e9charger un calendrier (.ics) pour Outlook — sans compte Entra';
-      filters.appendChild(icsBtn);
-
-      var paBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-bolt', 'Power Automate', function () {
-        openPowerAutomateGuide();
+      syncItems.push({
+        icon: 'ti-bolt',
+        label: 'Power Automate',
+        hint: 'Guide : Trello → Outlook automatiquement, sans hébergement',
+        onClick: openPowerAutomateGuide,
       });
-      paBtn.title =
-        'Guide : synchroniser Trello \u2192 Outlook automatiquement (cloud Microsoft, sans h\u00e9bergement)';
-      filters.appendChild(paBtn);
+      menuSections.push({ title: 'Synchronisation', items: syncItems });
 
-      var sheetsBtn = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-table', 'Google Sheets', function () {
-        openGoogleSheetsSync();
+      menuSections.push({
+        title: 'Exporter',
+        items: [
+          {
+            icon: 'ti-download',
+            label: 'Calendrier (.ics)',
+            hint: 'Pour Outlook, sans compte Entra',
+            onClick: exportIcsCalendar,
+          },
+        ],
       });
-      sheetsBtn.title =
-        'Synchroniser ce tableau avec une feuille Google Sheets (deux sens, immédiat)';
-      filters.appendChild(sheetsBtn);
+
+      if (GF && typeof GF.createPopover === 'function') {
+        var toolsPop = GF.createPopover({
+          className: 'gantt-pop--menu',
+          ariaLabel: 'Plus d’options',
+        });
+        toolsPop.pop.setAttribute('role', 'menu');
+        toolsPop.button.setAttribute('aria-haspopup', 'menu');
+        toolsPop.button.title = 'Synchronisation et export';
+        toolsPop.button.setAttribute('aria-label', 'Plus d’options');
+        toolsPop.button.appendChild(el('i', 'ti ti-dots'));
+        toolsPop.button.classList.add('gantt-btn--icon');
+        menuSections.forEach(function (sec) {
+          var secEl = el('section', 'gantt-pop-section gantt-menu-section');
+          secEl.appendChild(el('div', 'gantt-pop-caption', { text: sec.title }));
+          sec.items.forEach(function (item) {
+            var row = el('button', 'gantt-menu-item', { type: 'button' });
+            row.setAttribute('role', 'menuitem');
+            if (item.disabled) row.disabled = true;
+            row.appendChild(el('i', 'ti ' + item.icon));
+            var txt = el('span', 'gantt-menu-text');
+            txt.appendChild(el('span', 'gantt-menu-label', { text: item.label }));
+            if (item.hint) txt.appendChild(el('span', 'gantt-menu-hint', { text: item.hint }));
+            row.appendChild(txt);
+            row.addEventListener('click', function () {
+              toolsPop.close();
+              item.onClick();
+            });
+            secEl.appendChild(row);
+          });
+          toolsPop.pop.appendChild(secEl);
+        });
+        filters.appendChild(toolsPop.wrap);
+      }
 
       var refresh = makeIconBtn('gantt-btn gantt-btn--icon', 'ti-reload', 'Actualiser', function () {
         reload();
