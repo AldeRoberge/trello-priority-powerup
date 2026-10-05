@@ -13430,13 +13430,9 @@
       pgFrame.addEventListener('pointercancel', end);
     });
     pgFrame.addEventListener('dblclick', function (event) {
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse')) return;
-      pgPan.x = 0;
-      pgPan.y = 0;
-      pgZoomMul = 1;
-      pgScale = Math.max(0.25, pgFit);
-      pgApplyTransform();
-      clearPlacePositions();
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, button, input')) return;
+      if (!onPlacesChange || placesBusy) return;
+      pgOpenInsert(pgState ? pgState.nodes.length : 0, pgStagePoint(event));
     });
     pgAutoBtn.addEventListener('click', function (event) {
       event.preventDefault();
@@ -14026,7 +14022,7 @@
       pgFit = available > 0 && stageW > available ? Math.max(0.55, available / stageW) : 1;
       pgScale = Math.max(0.25, pgFit * pgZoomMul);
       pgApplyTransform();
-      pgFrame.style.height = Math.ceil(stageH * pgFit) + 'px';
+      pgFrame.style.height = Math.max(320, Math.ceil(stageH * pgFit)) + 'px';
 
       var defs = pgSvg('defs');
       var marker = pgSvg('marker', {
@@ -14871,7 +14867,7 @@
     tgFrame.addEventListener('pointercancel', tgEndMove);
 
     function tgApplyFrameHeight() {
-      tgFrame.style.height = Math.max(tgAutoH, tgCanvasH) + 'px';
+      tgFrame.style.height = Math.max(tgAutoH, tgCanvasH, 320) + 'px';
       tgExpandBtn.innerHTML =
         '<i class="ti ' + (tgCanvasH ? 'ti-arrows-minimize' : 'ti-arrows-maximize') + '" aria-hidden="true"></i>';
       tgExpandBtn.title = tgCanvasH ? 'R\u00e9duire la hauteur' : 'Agrandir la hauteur';
@@ -14976,17 +14972,8 @@
       tgFrame.addEventListener('pointercancel', end);
     });
     tgFrame.addEventListener('dblclick', function (event) {
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .info-member-roles-picker-host')) return;
-      tgPan.x = 0;
-      tgPan.y = 0;
-      tgZoomMul = 1;
-      tgScale = Math.max(0.25, tgFit);
-      tgApplyTransform();
-      if (Object.keys(tgPositions).length) {
-        tgPositions = {};
-        tgSavePositions();
-        renderTeamGraph();
-      }
+      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-create, .tg-collapse, .tg-zoom-btn, .tg-resize, .info-member-roles-picker-host, button, input')) return;
+      tgOpenCreatePerson(tgStagePoint(event));
     });
 
     // Right-click on the map: create a person right where the click happened,
