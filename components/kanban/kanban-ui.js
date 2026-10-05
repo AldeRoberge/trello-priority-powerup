@@ -354,7 +354,7 @@
         body.appendChild(h('div', { class: 'kb-empty', text: col.hidden ? col.total + ' masquée' + (col.total > 1 ? 's' : '') : state.filter ? 'Aucune carte' : 'Déposer une carte ici' }));
       }
       var colEl = h('section', {
-        class: 'kb-col',
+        class: 'kb-col' + (KM().isClosedKey(list.category) ? ' is-closed' : ''),
         'data-list': list.id,
         style: '--kb-accent:' + list.color,
         ondragover: function (e) {
