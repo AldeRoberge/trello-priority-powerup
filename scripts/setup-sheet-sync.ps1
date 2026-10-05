@@ -294,9 +294,13 @@ Invoke-Step "trello" "3/7 Trello token + board" {
     $url = "https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&name=Trello%20Cerveau%20Sheet%20Sync&key=$appKey"
     Write-Info "Opening Trello - click Allow, then copy the token shown on the page."
     Start-Process $url
-    $secure = Read-Host "  Paste the Trello token" -AsSecureString
-    $token = [System.Net.NetworkCredential]::new("", $secure).Password.Trim()
-    if ($token.Length -lt 32) { throw "That doesn't look like a Trello token." }
+    # Visible prompt (a hidden one shows nothing when pasting, so a paste looks like it was ignored).
+    # The token is only valid for this board; revoke it at https://trello.com/my/account if it leaks.
+    while ($true) {
+      $token = (Read-Host "  Paste the Trello token (it will be visible)").Trim().Trim('"').Trim("'")
+      if ($token -match '^[A-Za-z0-9]{32,}$') { break }
+      Write-Host "  That is not a Trello token (letters and digits only, 32+ characters, often starting with ATTA). Copy the token shown on the Trello page and try again." -ForegroundColor Yellow
+    }
     $vars['TRELLO_KEY'] = $appKey
     $vars['TRELLO_TOKEN'] = $token
     Write-DevVars $vars
