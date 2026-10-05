@@ -192,6 +192,16 @@
     return Object.keys(out).length ? out : null;
   }
 
+  /** Ids of the cards this card depends on (Mindmap "Dépend de"): unique non-empty strings, capped. */
+  function normalizeDependsOn(raw) {
+    var out = [];
+    (Array.isArray(raw) ? raw : []).forEach(function (v) {
+      var id = typeof v === 'string' ? v.trim() : '';
+      if (id && out.indexOf(id) < 0 && out.length < 30) out.push(id);
+    });
+    return out;
+  }
+
   function normalizeInputs(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var impact = asNumber(raw.impact);
@@ -514,6 +524,9 @@
       normalized.places = places;
     }
 
+    var dependsOn = normalizeDependsOn(raw.dependsOn);
+    if (dependsOn.length) normalized.dependsOn = dependsOn;
+
     return normalized;
   }
 
@@ -598,6 +611,9 @@
         (inputs.places.via && inputs.places.via.length))
     ) {
       cleared.places = inputs.places;
+    }
+    if (Array.isArray(inputs.dependsOn) && inputs.dependsOn.length) {
+      cleared.dependsOn = inputs.dependsOn.slice();
     }
     return cleared;
   }
@@ -3471,6 +3487,14 @@
     if (Object.prototype.hasOwnProperty.call(patch, 'recurrence')) {
       if (patch.recurrence) base.recurrence = patch.recurrence;
       else delete base.recurrence;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'dependsOn')) {
+      var deps = normalizeDependsOn(patch.dependsOn).filter(function (d) {
+        return d !== id;
+      });
+      if (deps.length) base.dependsOn = deps;
+      else delete base.dependsOn;
     }
 
     var normalized = normalizeInputs(base);

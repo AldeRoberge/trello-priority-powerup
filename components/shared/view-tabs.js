@@ -12,6 +12,7 @@
     { key: 'gantt', label: 'Gantt', icon: 'timeline', page: './gantt.html' },
     { key: 'table', label: 'Tableau', icon: 'table', page: './table.html' },
     { key: 'kanban', label: 'Kanban', icon: 'layout-kanban', page: './kanban.html' },
+    { key: 'mindmap', label: 'Mindmap', icon: 'hierarchy-2', page: './mindmap.html' },
     { key: 'docs', label: 'Documents', icon: 'file-text', page: './docs.html' },
     { key: 'entities', label: 'Entités', icon: 'stack-2', page: './entities.html' },
   ];
