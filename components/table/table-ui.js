@@ -701,7 +701,7 @@
           if (e.key !== 'Enter') return;
           var name = e.target.value.trim();
           if (!name || !state.lists.length) return;
-          createIn(state.lists[0], name, e.target);
+          createIn(newCardList(), name, e.target);
         },
       });
       body.appendChild(
@@ -717,6 +717,15 @@
       els.wrap.scrollLeft = scrollLeft;
       var ae = document.activeElement;
       if (!state.editing && (!ae || ae === document.body)) shell.focus({ preventScroll: true });
+    }
+
+    /** Where new cards land: the first "À faire" list, never a Bloqué / Terminé / Annulé one just because it comes first. */
+    function newCardList() {
+      var lists = state.lists || [];
+      function by(cat) { return lists.filter(function (l) { return l.category === cat; })[0]; }
+      return by('unstarted') || by('backlog') || by('triage') || lists.filter(function (l) {
+        return l.category !== 'blocked' && l.category !== 'completed' && l.category !== 'canceled';
+      })[0] || lists[0];
     }
 
     /**
@@ -1216,7 +1225,7 @@
     function generalItems() {
       var connected = SH().isConnected(state.sheet);
       var items = [
-        { icon: 'plus', label: 'Nouvelle carte', hint: state.lists[0] ? state.lists[0].name : '', action: function () {
+        { icon: 'plus', label: 'Nouvelle carte', hint: newCardList() ? newCardList().name : '', action: function () {
           var a = document.getElementById('tbAdd');
           if (a) { a.scrollIntoView({ block: 'nearest' }); a.focus(); }
         } },
