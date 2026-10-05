@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/shared/effects.css" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css" />
+  <link rel="stylesheet" href="./components/shared/markdown-dom.css?v=md-1" />
+  <link rel="stylesheet" href="./components/agent/agent-ui.css?v=md-1" />
+  <link rel="stylesheet" href="./components/agent/agent-blocks.css?v=blocks-flush-1" />
+  <link rel="stylesheet" href="./components/agent/memory-ui.css" />
+  <link rel="stylesheet" href="./components/agent/agent-stats.css?v=stats-1" />
+  <link rel="stylesheet" href="./components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="./components/shared/card-fields.css" />
+  <link rel="stylesheet" href="./components/kanban/kanban-ui.css" />
+  <script src="./components/shared/brand.js"></script>
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/shared/effects.js"></script>
+  <script src="./components/shared/desc-meta.js"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js"></script>
+  <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/statut/statut-match.js"></script>
+  <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/completion/completion-ui.js"></script>
+  <script src="./components/gantt/gantt-model.js"></script>
+  <script src="./components/gantt/gantt-trello.js"></script>
+  <script src="./components/table/table-model.js"></script>
+  <script src="./components/sheets/sheets-trello.js"></script>
+  <script src="./components/table/table-trello.js"></script>
+  <script src="./components/table/table-menu.js"></script>
+  <script src="./components/shared/tab-autocomplete.js"></script>
+  <script src="./components/agent/agent.js"></script>
+  <script src="./components/shared/markdown-dom.js?v=md-1"></script>
+  <script src="./components/agent/agent-blocks.js?v=blocks-flush-1"></script>
+  <script src="./components/agent/agent-memory.js"></script>
+  <script src="./components/profile/user-profile.js"></script>
+  <script src="./components/people/people.js"></script>
+  <script src="./components/places/places.js"></script>
+  <script src="./components/agent/memory-ui.js"></script>
+  <script src="./components/agent/agent-stats.js?v=stats-1"></script>
+  <script src="./components/agent/agent-ui.js?v=ask-buttons-1"></script>
+  <script src="./components/agent/assistant-mount.js"></script>
+  <script src="./components/shared/view-tabs.js"></script>
+  <script src="./components/shared/card-fields.js"></script>
+  <script src="./components/kanban/kanban-model.js"></script>
+  <script src="./components/kanban/kanban-ui.js"></script>
+  <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-5" />
+  <script src="./components/shared/context-menu.js?v=ctx-menu-5"></script>
+</head>
+<body class="tp-page tp-page--kanban">
+  <div id="viewTabs"></div>
+  <div id="kanbanMount">
+    <div class="kb-root" aria-busy="true"><div class="kb-board"><script>document.currentScript.parentNode.innerHTML = KanbanUI.skeletonCols();</script></div></div>
+  </div>
+

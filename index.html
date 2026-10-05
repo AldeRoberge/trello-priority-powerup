@@ -561,6 +561,18 @@
             },
           },
           {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/kanban.svg',
+            text: 'Kanban',
+            callback: function(t) {
+              return t.modal({
+                title: 'Kanban',
+                url: PriorityTrello.pageUrl('./kanban.html'),
+                fullscreen: true,
+                accentColor: '#22272B',
+              });
+            },
+          },
+          {
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/file-text.svg',
             text: 'Documents',
             callback: function(t) {

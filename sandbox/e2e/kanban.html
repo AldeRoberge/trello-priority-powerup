@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban visual harness (mock Trello)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="/components/shared/effects.css" />
+  <link rel="stylesheet" href="/components/priority/priority-ui.css" />
+  <link rel="stylesheet" href="/components/shared/markdown-dom.css" />
+  <link rel="stylesheet" href="/components/agent/agent-ui.css" />
+  <link rel="stylesheet" href="/components/agent/agent-blocks.css" />
+  <link rel="stylesheet" href="/components/agent/memory-ui.css" />
+  <link rel="stylesheet" href="/components/agent/agent-stats.css" />
+  <link rel="stylesheet" href="/components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="/components/shared/card-fields.css" />
+  <link rel="stylesheet" href="/components/kanban/kanban-ui.css" />
+  <link rel="stylesheet" href="/components/shared/context-menu.css" />
+</head>
+<body class="tp-page tp-page--kanban">
+  <div id="viewTabs"></div>
+  <div id="kanbanMount"></div>
+  <script src="/components/shared/brand.js"></script>
+  <script src="/components/shared/rest-config.js"></script>
+  <script src="/components/shared/debug-log.js"></script>
+  <script src="/components/shared/effects.js"></script>
+  <script src="/components/shared/desc-meta.js"></script>
+  <script src="/components/priority/priority-matrix.js"></script>
+  <script src="/components/priority/priority-ui.js"></script>
+  <script src="/components/priority/priority-trello.js"></script>
+  <script src="/components/statut/statut-match.js"></script>
+  <script src="/components/statut/statut-trello.js"></script>
+  <script src="/components/completion/completion-trello.js"></script>
+  <script src="/components/completion/completion-ui.js"></script>
+  <script src="/components/gantt/gantt-model.js"></script>
+  <script src="/components/gantt/gantt-trello.js"></script>
+  <script src="/components/table/table-model.js"></script>
+  <script src="/components/sheets/sheets-trello.js"></script>
+  <script src="/components/table/table-trello.js"></script>
+  <script src="/components/table/table-menu.js"></script>
+  <script src="/components/shared/tab-autocomplete.js"></script>
+  <script src="/components/agent/agent.js"></script>
+  <script src="/components/shared/markdown-dom.js"></script>
+  <script src="/components/agent/agent-blocks.js"></script>
+  <script src="/components/agent/agent-memory.js"></script>
+  <script src="/components/profile/user-profile.js"></script>
+  <script src="/components/people/people.js"></script>
+  <script src="/components/places/places.js"></script>
+  <script src="/components/agent/memory-ui.js"></script>
+  <script src="/components/agent/agent-stats.js"></script>
+  <script src="/components/agent/agent-ui.js"></script>
+  <script src="/components/agent/assistant-mount.js"></script>
+  <script src="/components/shared/view-tabs.js"></script>
+  <script src="/components/shared/card-fields.js"></script>
+  <script src="/components/table/table-menu.js"></script>
+  <script src="/components/kanban/kanban-model.js"></script>
+  <script src="/components/kanban/kanban-ui.js"></script>
+  <script src="/components/shared/context-menu.js"></script>
+  <script>
+    // ---- mock Trello data (no network) ----
+    var recs = [
+      { id: 'c1', name: 'Préparer la réunion de lancement', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 1, progress: 0, priorityScore: 7.4, priorityLabel: 'Haute', inputs: { empressement: 'vite', impact: 8 }, dueDate: '2026-09-01', desc: 'Inviter **tout le monde**\n- ordre du jour\n- salle', url: 'https://trello.com/c/1' },
+      { id: 'c2', name: 'Refonte du tableau de bord', listId: 'l2', listName: 'En cours', category: 'started', color: '#1d7afc', pos: 2, progress: 45, priorityScore: 5.1, priorityLabel: 'Moyenne', inputs: { empressement: 'assez-vite', impact: 6 }, dueDate: '2026-11-20', desc: 'Nouvelle maquette', url: 'https://trello.com/c/2' },
+      { id: 'c3', name: 'Publier la version 2', listId: 'l2', listName: 'En cours', category: 'started', color: '#1d7afc', pos: 3, progress: 100, priorityScore: 9.2, priorityLabel: 'Critique', inputs: { empressement: 'au-plus-vite', impact: 9 }, dueDate: '2026-10-05', desc: '', url: 'https://trello.com/c/3' },
+      { id: 'c4', name: 'Archiver les anciennes cartes', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 4, progress: 10, priorityScore: 2.0, priorityLabel: 'Basse', inputs: { empressement: 'aucun', impact: 2 }, dueDate: '', desc: 'Rien de spécial', url: 'https://trello.com/c/4' },
+    ];
+    var lists = [{ id: 'l0', name: 'Idées', category: 'backlog', color: '#8270db', icon: 'hourglass' }, { id: 'l1', name: 'À faire', category: 'unstarted', color: '#626f86', icon: 'circle' }, { id: 'l2', name: 'En cours', category: 'started', color: '#1d7afc', icon: 'player-play-filled' }, { id: 'l3', name: 'Terminé', category: 'completed', color: '#22a06b', icon: 'circle-check' }];
+    TableTrello.load = function () {
+      return new Promise(function (r) {
+        setTimeout(function () {
+          r({ lists: lists, rows: recs.map(function (x) { return TableModel.rowFromRecord(x, 'Projet'); }), categoryFieldId: null, categoryAvailable: false });
+        }, window.__delay == null ? 1500 : window.__delay);
+      });
+    };
+    TableTrello.moveCard = TableTrello.reorderCard = function () { return Promise.resolve(); };
+    TableTrello.getTableSettings = function () { return Promise.resolve({ columns: TableModel.DEFAULT_COLUMNS.slice() }); };
+    SheetsTrello.getSettings = function () { return Promise.resolve({}); };
+    PriorityTrello.isRestAuthorized = function () { return Promise.resolve(true); };
+    var store = {};
+    var t = {
+      get: function (a, b, k) { return Promise.resolve(store[k] || null); },
+      set: function (a, b, k, v) { store[k] = v; return Promise.resolve(); },
+      board: function () { return Promise.resolve({ id: 'b1' }); },
+      render: function (fn) { fn(); },
+      sizeTo: function () {},
+    };
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'kanban' });
+    KanbanUI.mount(document.getElementById('kanbanMount'), t);
+  </script>
+</body>
+</html>

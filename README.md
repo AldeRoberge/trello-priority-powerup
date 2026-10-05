@@ -73,6 +73,7 @@ By getting a system that works for you, you’ll spend less time making lists an
 | `welcome.html` | Modal d'accueil à l'activation du Power-Up |
 | `outlook-power-automate.html` | Guide in-app : sync Trello → Outlook via Power Automate |
 | `gantt.html` | Vue Gantt plein écran (bouton tableau) |
+| `kanban.html` | Vue Kanban plein écran (listes en colonnes, glisser-déposer des cartes, onglet à côté de Gantt et Tableau) |
 | `docs.html` | Vue Documents plein écran (bouton tableau, onglet à côté de Gantt et Tableau) |
 | `outlook-auth.html` | Retour popup MSAL (autorisation Outlook) |
 | `components/` | Modules par domaine (JS + CSS colocated) |

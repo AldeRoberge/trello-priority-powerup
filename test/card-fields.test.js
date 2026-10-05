@@ -56,5 +56,5 @@ test('formatLines numbers lists and only touches the selected lines', () => {
 test('ViewTabs.hrefFor keeps the Trello iframe context (search + hash)', () => {
   const loc = { href: 'https://x.github.io/app/table.html?a=1#%7B%22ctx%22%3A1%7D', search: '?a=1', hash: '#%7B%22ctx%22%3A1%7D' };
   assert.equal(VT.hrefFor('./gantt.html', loc), 'https://x.github.io/app/gantt.html?a=1#%7B%22ctx%22%3A1%7D');
-  assert.deepEqual([...VT.VIEWS.map((v) => v.key)], ['gantt', 'table', 'docs']);
+  assert.deepEqual([...VT.VIEWS.map((v) => v.key)], ['gantt', 'table', 'kanban', 'docs']);
 });
