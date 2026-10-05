@@ -202,6 +202,24 @@
     return out;
   }
 
+  // Kind of a task → task link ("depends" is the default and is not stored).
+  var DEP_TYPES = ['needs', 'after', 'parts'];
+
+  /** { depId: type } kept only for ids still in dependsOn and for known non-default types. */
+  function normalizeDepTypes(raw, dependsOn) {
+    var out = {};
+    var n = 0;
+    if (raw && typeof raw === 'object') {
+      dependsOn.forEach(function (id) {
+        if (DEP_TYPES.indexOf(raw[id]) >= 0) {
+          out[id] = raw[id];
+          n++;
+        }
+      });
+    }
+    return n ? out : null;
+  }
+
   function normalizeInputs(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var impact = asNumber(raw.impact);
@@ -526,6 +544,8 @@
 
     var dependsOn = normalizeDependsOn(raw.dependsOn);
     if (dependsOn.length) normalized.dependsOn = dependsOn;
+    var depTypes = normalizeDepTypes(raw.depTypes, dependsOn);
+    if (depTypes) normalized.depTypes = depTypes;
 
     return normalized;
   }
@@ -614,6 +634,7 @@
     }
     if (Array.isArray(inputs.dependsOn) && inputs.dependsOn.length) {
       cleared.dependsOn = inputs.dependsOn.slice();
+      if (inputs.depTypes) cleared.depTypes = Object.assign({}, inputs.depTypes);
     }
     return cleared;
   }
@@ -3495,6 +3516,15 @@
       });
       if (deps.length) base.dependsOn = deps;
       else delete base.dependsOn;
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(patch, 'dependsOn') ||
+      Object.prototype.hasOwnProperty.call(patch, 'depTypes')
+    ) {
+      var typeSrc = Object.prototype.hasOwnProperty.call(patch, 'depTypes') ? patch.depTypes : base.depTypes;
+      var kept = normalizeDepTypes(typeSrc, base.dependsOn || []);
+      if (kept) base.depTypes = kept;
+      else delete base.depTypes;
     }
 
     var normalized = normalizeInputs(base);

@@ -149,4 +149,16 @@ describe('MindmapModel', () => {
       assert.ok(r('t:b') > r('t:a'));
     });
   });
+
+  it('keeps the kind of a task link (depTypes), defaulting to depends', () => {
+    const recs = [
+      { id: 'a', name: 'A', category: 'started', inputs: { dependsOn: ['b', 'c'], depTypes: { b: 'needs', c: 'bogus' } } },
+      { id: 'b', name: 'B', category: 'started' },
+      { id: 'c', name: 'C', category: 'started' },
+    ];
+    const g = MM.buildGraph(recs, {});
+    const dep = (to) => g.edges.find((e) => e.to === 't:' + to).dep;
+    assert.equal(dep('b'), 'needs');
+    assert.equal(dep('c'), undefined);
+  });
 });

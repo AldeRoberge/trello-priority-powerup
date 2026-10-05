@@ -1,7 +1,7 @@
 /*
  * Role: UI of the Mindmap view — tasks, people, places and the goal hierarchy as one graph (SVG), with the links
  * "Dépend de" (task → task), "Est fait par" (task → person), "Est fait à" (task → place) and
- * "Contribue à" (task → unit of work → goal → mission → vision, any level may be skipped).
+ * "Contribue à" (task → project → objective → goal → mission → vision, any level may be skipped).
  * Data: GanttTrello.loadBoard (same records as the Gantt / Table / Kanban); graph and layout come from
  * MindmapModel. Editable here: the dependency links (card inputs.dependsOn, saved with
  * PriorityTrello.saveCardInputsById) and the goal levels + their links (MindmapGoalsTrello); people and
@@ -10,7 +10,7 @@
  *  - drag from a pin (card side) onto another node to link it (task → task: dependency; otherwise "Contribue à")
  *  - click a node to focus it: its neighbours stay lit and the side panel lists its links
  *  - click a link to select it: delete, reverse or re-target it from the panel (Suppr also deletes it)
- *  - "Ajouter" creates a vision / mission / goal / unit of work; "Hiérarchie" lays the graph out from the center
+ *  - "Ajouter" creates a vision / mission / goal / objective / project; "Hiérarchie" lays the graph out from the center
  *  - "Dépend de…" / "Contribue à…" (panel) or the Relier button: click another node to add / remove the link
  * Icons: Tabler webfont.
  */
@@ -248,13 +248,13 @@
         }, [icon('link'), 'Relier']),
         h('button', {
           class: 'mm-btn',
-          title: 'Créer une vision, une mission, un objectif ou une unité de travail',
+          title: 'Créer une vision, une mission, un but, un objectif ou un projet',
           onclick: function () { openComposer(); },
         }, [icon('plus'), 'Ajouter']),
         h('button', {
           class: 'mm-btn' + (state.layout === 'tree' ? ' is-active' : ''),
           'aria-pressed': state.layout === 'tree' ? 'true' : 'false',
-          title: 'Disposer du centre (vision, mission) vers l’extérieur (objectifs, unités de travail, tâches)',
+          title: 'Disposer du centre (vision, mission) vers l’extérieur (buts, objectifs, projets, tâches)',
           onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
         }, [icon('hierarchy-3'), 'Hiérarchie']),
         h('button', {
@@ -443,10 +443,10 @@
         var glow = s('path', { class: 'mm-edge-glow mm-edge-glow--' + cls });
         var line = s('path', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : ''), 'marker-end': 'url(#mm-arrow-' + cls + ')' });
         var title = s('title');
-        title.textContent = MM().EDGE_LABELS[e.kind] || e.kind;
+        title.textContent = edgeLabel(e);
         line.appendChild(title);
         var label = s('text', { class: 'mm-edge-label', 'text-anchor': 'middle' });
-        label.textContent = MM().EDGE_LABELS[e.kind] || e.kind;
+        label.textContent = edgeLabel(e);
         var wrapG = s('g', { class: 'mm-wire-group' }, [glow, line, label]);
         // wide invisible stroke so any link is easy to click (select / delete / change it)
         var hit = s('path', { class: 'mm-edge-hit', 'data-edge': e.id });
@@ -853,7 +853,7 @@
         return Promise.resolve();
       }
       return setDependency(e.from.slice(2), e.to.slice(2), false).then(function () {
-        return setDependency(e.to.slice(2), e.from.slice(2), true);
+        return setDependency(e.to.slice(2), e.from.slice(2), true, e.dep);
       }).then(function () { selectEdge('depends:' + e.to + '>' + e.from); });
     }
 
@@ -868,7 +868,7 @@
           return Promise.resolve();
         }
         return setDependency(e.from.slice(2), e.to.slice(2), false).then(function () {
-          return setDependency(e.from.slice(2), n.id.slice(2), true);
+          return setDependency(e.from.slice(2), n.id.slice(2), true, e.dep);
         }).then(function () { selectEdge('depends:' + e.from + '>' + n.id); });
       }
       if (e.kind === 'serves') {
@@ -1052,7 +1052,7 @@
     }
 
     /** Sets or clears one dependency ("cardId depends on depId"); nothing happens when it is already so. */
-    function setDependency(cardId, depId, on) {
+    function setDependency(cardId, depId, on, type) {
       var rec = recById(cardId);
       if (!rec) return Promise.resolve();
       var current = ((rec.inputs && rec.inputs.dependsOn) || []).slice();
@@ -1060,19 +1060,34 @@
       if (on && at < 0) current.push(depId);
       else if (!on && at >= 0) current.splice(at, 1);
       else return Promise.resolve();
-      return saveDependsOn(rec, current);
+      return saveDependsOn(rec, current, on && type && type !== 'depends' ? one(depId, type) : null);
     }
 
-    function saveDependsOn(rec, list) {
+    function one(k, v) { var o = {}; o[k] = v; return o; }
+
+    function edgeLabel(e) {
+      return (e.kind === 'depends' && MM().DEP_LABELS[e.dep]) || MM().EDGE_LABELS[e.kind] || e.kind;
+    }
+
+    /** Changes what a task → task link means (stored as inputs.depTypes next to dependsOn). */
+    function setEdgeType(e, type) {
+      var rec = recById(e.from.slice(2));
+      if (!rec) return Promise.resolve();
+      var current = ((rec.inputs && rec.inputs.dependsOn) || []).slice();
+      return saveDependsOn(rec, current, one(e.to.slice(2), type === 'depends' ? null : type)).then(function () { selectEdge(e.id); });
+    }
+
+    function saveDependsOn(rec, list, typeChange) {
       var pt = global.PriorityTrello;
       if (!pt || typeof pt.saveCardInputsById !== 'function') {
         setStatus('Enregistrement indisponible', 'error');
         return Promise.resolve();
       }
       setStatus('Enregistrement…');
-      return pt.saveCardInputsById(t, rec.id, { dependsOn: list }).then(function (saved) {
+      return pt.saveCardInputsById(t, rec.id, { dependsOn: list, depTypes: Object.assign({}, rec.inputs && rec.inputs.depTypes, typeChange || {}) }).then(function (saved) {
         rec.inputs = Object.assign({}, rec.inputs || {}, saved || {});
         if (!list.length) delete rec.inputs.dependsOn;
+        if (!saved || !saved.depTypes) delete rec.inputs.depTypes;
         setStatus('Enregistré', 'ok');
         rebuild({ keepView: true });
       }).catch(function (err) {
@@ -1129,7 +1144,7 @@
       var b = nodeById(e.to);
       els.panel.appendChild(h('div', { class: 'mm-panel-head' }, [
         h('div', { class: 'mm-panel-kind', text: 'Lien' }),
-        h('h3', { text: MM().EDGE_LABELS[e.kind] || e.kind }),
+        h('h3', { text: edgeLabel(e) }),
         h('button', { class: 'mm-x mm-panel-close', 'aria-label': 'Fermer', onclick: function () { select(null); } }, [icon('x')]),
       ]));
       els.panel.appendChild(section('De', [linkRow('', a)]));
@@ -1138,6 +1153,14 @@
       var actions = h('div', { class: 'mm-actions' });
       if (e.kind === 'depends') {
         actions.appendChild(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { reverseEdge(e); } }, [icon('arrows-exchange'), 'Inverser le sens']));
+      }
+      if (e.kind === 'depends') {
+        var typeSel = h('select', { class: 'mm-input', 'aria-label': 'Nature du lien' }, Object.keys(MM().DEP_LABELS).map(function (k) {
+          return h('option', { value: k, text: MM().DEP_LABELS[k] });
+        }));
+        typeSel.value = e.dep || 'depends';
+        typeSel.addEventListener('change', function () { setEdgeType(e, typeSel.value); });
+        els.panel.appendChild(h('label', { class: 'mm-field' }, [h('span', { text: 'Nature du lien' }), typeSel]));
       }
       if (editable) {
         actions.appendChild(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startRelink(e.id); } }, [icon('replace'), 'Changer la cible…']));
@@ -1198,6 +1221,29 @@
       els.panel.appendChild(h('button', { class: 'mm-btn mm-btn--primary mm-open', onclick: function () { openCard(rec); } }, [icon('external-link'), 'Ouvrir la carte']));
     }
 
+    /** Breadcrumb Vision / … / Projet above the node (bottom-up) plus what is missing above it (never blocking). */
+    function contextBlock(n) {
+      if (n.kind !== 'task' && n.kind !== 'goal') return null;
+      var chain = MM().ancestors(state.graph.edges, n.id).reverse().map(nodeById).filter(Boolean);
+      var flags = MM().contextFlags(state.graph, n.id);
+      if (!chain.length && !flags.length) return null;
+      var crumbs = [];
+      chain.forEach(function (a) {
+        if (crumbs.length) crumbs.push(h('span', { class: 'mm-crumb-sep', text: '/' }));
+        crumbs.push(h('button', {
+          class: 'mm-crumb',
+          title: kindLabel(a),
+          onclick: function () { select(a.id); },
+        }, [h('span', { class: 'mm-crumb-kind', text: kindLabel(a) }), a.label]));
+      });
+      return h('div', { class: 'mm-sec mm-context' }, [
+        crumbs.length ? h('div', { class: 'mm-crumbs', 'aria-label': 'Contexte' }, crumbs) : null,
+        flags.length ? h('div', { class: 'mm-panel-meta' }, flags.map(function (fl) {
+          return h('span', { class: 'mm-chip mm-chip--warn', text: fl.label });
+        })) : null,
+      ]);
+    }
+
     function renderPanel() {
       els.panel.textContent = '';
       var edge = state.selectedEdge && edgeById(state.selectedEdge);
@@ -1212,6 +1258,8 @@
         h('button', { class: 'mm-x mm-panel-close', 'aria-label': 'Fermer', onclick: function () { select(null); } }, [icon('x')]),
       ]);
       els.panel.appendChild(head);
+      var context = contextBlock(n);
+      if (context) els.panel.appendChild(context);
       var rec = n.kind === 'task' ? n.rec : null;
       if (rec) {
         var tab = state.panelTab === 'props' ? 'props' : 'info';

@@ -23,17 +23,27 @@
     via: 'Passe par',
     to: 'Arrivée à',
   };
-  var PLACE_EDGES = ['at', 'from', 'via', 'to'];
+  // What a task → task link means ("depends" is the default; the others are stored in inputs.depTypes).
+  var DEP_LABELS = {
+    depends: 'Dépend de',
+    needs: 'Nécessite',
+    after: 'Vient après',
+    parts: 'Est composée de',
+  };
+  var PLACE_EDGES =['at', 'from', 'via', 'to'];
 
   // Goal hierarchy, highest to smallest. A task is the last level. "serves" edges point from the
-  // smaller thing to the bigger one it contributes to (task → unit of work → goal → mission → vision).
+  // smaller thing to the bigger one it contributes to (task → project → objective → goal → mission → vision).
   EDGE_LABELS.serves = 'Contribue à';
   var LEVELS = [
     { id: 'vision', label: 'Vision', icon: 'eye', hue: 275 },
     { id: 'mission', label: 'Mission', icon: 'flag-3', hue: 330 },
-    { id: 'goal', label: 'Objectif', icon: 'target-arrow', hue: 25 },
-    { id: 'work', label: 'Unité de travail', icon: 'stack-2', hue: 45 },
+    { id: 'goal', label: 'But', icon: 'target-arrow', hue: 25 },
+    { id: 'objective', label: 'Objectif', icon: 'ruler', hue: 160 },
+    { id: 'project', label: 'Projet', icon: 'stack-2', hue: 45 },
   ];
+  // Data stored before the Objective / Project split used 'work' (unit of work) for a project.
+  var LEVEL_ALIASES = { work: 'project' };
   var TASK_RANK = LEVELS.length;
 
   function levelById(id) {
@@ -41,7 +51,7 @@
     return null;
   }
 
-  /** 0 (vision) … 3 (unit of work), 4 for a task, -1 for people / places. */
+  /** 0 (vision) … 4 (project), 5 for a task, -1 for people / places. */
   function rankOf(node) {
     if (!node) return -1;
     if (node.kind === 'task') return TASK_RANK;
@@ -58,9 +68,10 @@
     var ids = Object.create(null);
     (Array.isArray(src.nodes) ? src.nodes : []).forEach(function (n) {
       var name = n && typeof n.name === 'string' ? n.name.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
-      if (!name || !n.id || ids[n.id] || !levelById(n.level)) return;
+      var level = n && LEVEL_ALIASES[n.level] ? LEVEL_ALIASES[n.level] : n && n.level;
+      if (!name || !n.id || ids[n.id] || !levelById(level)) return;
       ids[n.id] = true;
-      nodes.push({ id: String(n.id), level: n.level, name: name });
+      nodes.push({ id: String(n.id), level: level, name: name });
     });
     var links = [];
     var seen = Object.create(null);
@@ -85,6 +96,54 @@
     if (ra === TASK_RANK && rb === TASK_RANK) return { kind: 'depends', from: a.id, to: b.id };
     if (ra === rb) return { error: 'Reliez deux niveaux différents (ex. Mission → Objectif)' };
     return ra > rb ? { kind: 'serves', from: a.id, to: b.id } : { kind: 'serves', from: b.id, to: a.id };
+  }
+
+  function levelRank(id) {
+    for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return i;
+    return -1;
+  }
+
+  /**
+   * Where a node belongs: its chain of 'serves' parents (first parent at each step), nearest first,
+   * up to the vision. Node ids, not including the node itself.
+   */
+  function ancestors(edges, id) {
+    var parent = Object.create(null);
+    (edges || []).forEach(function (e) {
+      if (e.kind === 'serves' && !parent[e.from]) parent[e.from] = e.to;
+    });
+    var out = [];
+    var seen = Object.create(null);
+    seen[id] = true;
+    for (var p = parent[id]; p && !seen[p]; p = parent[p]) {
+      seen[p] = true;
+      out.push(p);
+    }
+    return out;
+  }
+
+  /**
+   * Context gaps of a node as [{ id, label }]. Never blocking, standalone work stays legitimate: a task
+   * should sit in a project, a project serve an objective, an objective a goal / mission / vision.
+   * `graph` is a buildGraph result with the goal nodes shown.
+   */
+  function contextFlags(graph, id) {
+    var byId = Object.create(null);
+    graph.nodes.forEach(function (n) {
+      byId[n.id] = n;
+    });
+    var node = byId[id];
+    if (!node) return [];
+    var rank = rankOf(node);
+    var above = ancestors(graph.edges, id).map(function (a) {
+      return rankOf(byId[a]);
+    });
+    var projectRank = levelRank('project');
+    var objectiveRank = levelRank('objective');
+    if (rank === TASK_RANK && above.indexOf(projectRank) < 0) return [{ id: 'no-project', label: 'Sans projet' }];
+    if (rank === projectRank && above.indexOf(objectiveRank) < 0) return [{ id: 'no-objective', label: 'Sans objectif' }];
+    if (rank === objectiveRank && !above.length) return [{ id: 'no-goal', label: 'Sans but ni mission' }];
+    return [];
   }
 
   function isClosed(rec) {
@@ -142,11 +201,13 @@
       nodes.push(n);
       return n;
     }
-    function addEdge(kind, from, to) {
+    function addEdge(kind, from, to, dep) {
       var id = kind + ':' + from + '>' + to;
       if (edgeSeen[id] || !nodeById[from] || !nodeById[to]) return;
       edgeSeen[id] = true;
-      edges.push({ id: id, kind: kind, from: from, to: to });
+      var edge = { id: id, kind: kind, from: from, to: to };
+      if (dep) edge.dep = dep;
+      edges.push(edge);
       nodeById[from].degree++;
       nodeById[to].degree++;
     }
@@ -172,8 +233,9 @@
       var from = 't:' + r.id;
       if (show.depends) {
         var deps = (r.inputs && r.inputs.dependsOn) || [];
+        var types = (r.inputs && r.inputs.depTypes) || {};
         deps.forEach(function (d) {
-          if (d !== r.id && taskIds[d]) addEdge('depends', from, 't:' + d);
+          if (d !== r.id && taskIds[d]) addEdge('depends', from, 't:' + d, DEP_LABELS[types[d]] ? types[d] : null);
         });
       }
       if (show.by) {
@@ -371,7 +433,7 @@
 
   /**
    * Radial "from the center" layout of the goal hierarchy: the vision(s) in the middle, then missions,
-   * goals, units of work and tasks on rings further out; every node sits in the angular wedge of its
+   * goals, objectives, projects and tasks on rings further out; every node sits in the angular wedge of its
    * first parent (wedges are proportional to the number of leaves below). Tasks with no goal, people and
    * places go on the outermost ring. Mutates and returns the nodes (x / y); sizes via opts.cardW / cardGap.
    */
@@ -468,9 +530,12 @@
     levelById: levelById,
     rankOf: rankOf,
     normalizeGoals: normalizeGoals,
+    ancestors: ancestors,
+    contextFlags: contextFlags,
     linkBetween: linkBetween,
     layoutHierarchy: layoutHierarchy,
     EDGE_LABELS: EDGE_LABELS,
+    DEP_LABELS: DEP_LABELS,
     PLACE_EDGES: PLACE_EDGES,
     buildGraph: buildGraph,
     isClosed: isClosed,
