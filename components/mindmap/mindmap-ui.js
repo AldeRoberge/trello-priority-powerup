@@ -862,7 +862,15 @@
         var depCard = dependsOnSrc ? newId : src.rec.id;
         var depId = dependsOnSrc ? src.rec.id : newId;
         var existing = dependsOnSrc ? [] : ((src.rec.inputs && src.rec.inputs.dependsOn) || []).slice();
-        return pt.saveCardInputsById(t, depCard, { dependsOn: existing.concat([depId]) });
+        // The card was just made over REST: Trello's client may not know it yet ("Card not found or not on current board").
+        var attempt = 0;
+        var save = function () {
+          return pt.saveCardInputsById(t, depCard, { dependsOn: existing.concat([depId]) }).catch(function (err) {
+            if (++attempt >= 8 || !/not found|not on current board/i.test((err && err.message) || '')) throw err;
+            return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(save);
+          });
+        };
+        return save();
       }).then(function () {
         return global.GanttTrello.loadBoard(t);
       }).then(function (board) {
