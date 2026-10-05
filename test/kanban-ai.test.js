@@ -101,6 +101,33 @@ describe('KanbanAI', () => {
     });
   });
 
+  describe('suggestions', () => {
+    it('picks a helpful, runnable sentence from the card state', () => {
+      const row = (o) => Object.assign({ id: 'x', name: 'T', statutKey: 'started', progress: 0, desc: 'd' }, o);
+      assert.match(AI.heuristicSuggestion(row({ statutKey: 'blocked' })), /réponse/);
+      assert.match(AI.heuristicSuggestion(row({ progress: 100 })), /terminé/);
+      assert.match(AI.heuristicSuggestion(row({ desc: '' })), /Définis/);
+      assert.match(AI.heuristicSuggestion(row({ progress: 57 })), /70/);
+      assert.match(AI.heuristicSuggestion(row({ statutKey: 'unstarted' })), /commence/);
+      assert.match(AI.heuristicSuggestion(row({ progress: 95 })), /100/);
+    });
+    it('suggest() caches a model suggestion and rejects placeholders', async () => {
+      let n = 0;
+      global.PriorityAgent = {
+        getProvider: async () => ({ apiKey: 'k' }),
+        isConfigured: () => true,
+        chatCompletions: async () => ({ content: JSON.stringify({ suggestion: ++n === 1 ? 'Appeler le vendeur demain' : 'Écrire à …' }) }),
+      };
+      const row = { id: 's1', name: 'Achat', statutKey: 'started', progress: 10, desc: 'x' };
+      assert.equal(await AI.suggest({}, row), 'Appeler le vendeur demain');
+      assert.equal(AI.cachedSuggestion(row), 'Appeler le vendeur demain');
+      assert.equal(await AI.suggest({}, row), 'Appeler le vendeur demain');
+      assert.equal(n, 1);
+      const other = { id: 's2', name: 'Autre', statutKey: 'started', progress: 10, desc: 'x' };
+      assert.equal(await AI.suggest({}, other), '');
+    });
+  });
+
   describe('run (mocked provider and Trello)', () => {
     let calls;
     beforeEach(() => {

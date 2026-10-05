@@ -282,7 +282,8 @@
       });
     }
 
-    function askInput(cls, placeholder, target) {
+    /** `getSuggestion` (optional): Tab on an empty field fills that sentence in and sends it. */
+    function askInput(cls, placeholder, target, getSuggestion) {
       var input = h('input', {
         class: cls,
         type: 'text',
@@ -291,7 +292,9 @@
         spellcheck: 'false',
         onkeydown: function (e) {
           e.stopPropagation();
-          if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); askAI(input.value, target, input); }
+          var sug = getSuggestion && !input.value ? getSuggestion() : '';
+          if (e.key === 'Tab' && !e.shiftKey && sug) { e.preventDefault(); input.value = sug; askAI(sug, target, input); }
+          else if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); askAI(input.value, target, input); }
           else if (e.key === 'Escape') { input.value = ''; input.blur(); }
         },
         onclick: function (e) { e.stopPropagation(); },
@@ -300,10 +303,22 @@
     }
 
     function askBox(row) {
-      var input = askInput('kb-ai-input', 'Demander à l’IA…', row);
-      var box = h('div', { class: 'kb-ai', onclick: function (e) { e.stopPropagation(); } }, [icon('sparkles'), input]);
+      var sug = AI().cachedSuggestion(row);
+      var input = askInput('kb-ai-input', sug, row, function () { return sug; });
+      var box = h('div', { class: 'kb-ai', onclick: function (e) { e.stopPropagation(); } }, [
+        icon('sparkles'),
+        input,
+        h('kbd', { class: 'kb-ai-hint', text: 'Tab' }),
+      ]);
       // A draggable ancestor would turn text selection in the input into a card drag.
-      input.addEventListener('focus', function () { var c = box.closest('.kb-card'); if (c) c.draggable = false; });
+      input.addEventListener('focus', function () {
+        var c = box.closest('.kb-card');
+        if (c) c.draggable = false;
+        // Upgrade the instant suggestion with a model-written one (cached per card state).
+        AI().suggest(t, row).then(function (better) {
+          if (better && better !== sug) { sug = better; input.placeholder = better; }
+        });
+      });
       input.addEventListener('blur', function () { var c = box.closest('.kb-card'); if (c) c.draggable = true; });
       return box;
     }
