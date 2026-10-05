@@ -703,6 +703,15 @@ body.tb-resizing .tb-resizer:active {
   background: var(--tp-primary);
   opacity: 0.55;
 }
+.tb-th.is-col-dragging {
+  opacity: 0.45;
+}
+.tb-th.is-col-drop-before {
+  box-shadow: inset 3px 0 0 var(--tp-primary);
+}
+.tb-th.is-col-drop-after {
+  box-shadow: inset -3px 0 0 var(--tp-primary);
+}
 body.tb-resizing {
   cursor: col-resize;
   user-select: none;

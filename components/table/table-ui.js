@@ -541,10 +541,7 @@
             document.body.classList.remove('tb-resizing');
             saveWidths();
           }
-          pct = pctAt(e.clientX);
-        td.classList.add('is-dragging');
-        paint();
-        document.addEventListener('pointermove', move);
+          document.addEventListener('pointermove', move);
           document.addEventListener('pointerup', up);
         },
       });
@@ -581,8 +578,44 @@
             style: 'min-width:' + width + 'px;width:' + width + 'px',
             title: 'Cliquer pour trier · Maj+clic pour ajouter un niveau de tri',
             tabindex: '0',
+            draggable: 'true',
             'aria-sort': active ? (cur.dir === 'asc' ? 'ascending' : 'descending') : null,
             onclick: toggleSort,
+            ondragstart: function (e) {
+              state.dragCol = key;
+              e.dataTransfer.effectAllowed = 'move';
+              try { e.dataTransfer.setData('text/plain', key); } catch (err) { /* ignore */ }
+              e.currentTarget.classList.add('is-col-dragging');
+            },
+            ondragend: function () {
+              state.dragCol = null;
+              head.querySelectorAll('.is-col-dragging,.is-col-drop-before,.is-col-drop-after').forEach(function (el) {
+                el.classList.remove('is-col-dragging', 'is-col-drop-before', 'is-col-drop-after');
+              });
+            },
+            ondragover: function (e) {
+              if (!state.dragCol || state.dragCol === key) return;
+              e.preventDefault();
+              var th = e.currentTarget;
+              var before = e.offsetX < th.offsetWidth / 2;
+              th.classList.toggle('is-col-drop-before', before);
+              th.classList.toggle('is-col-drop-after', !before);
+            },
+            ondragleave: function (e) {
+              e.currentTarget.classList.remove('is-col-drop-before', 'is-col-drop-after');
+            },
+            ondrop: function (e) {
+              if (!state.dragCol || state.dragCol === key) return;
+              e.preventDefault();
+              var before = e.currentTarget.classList.contains('is-col-drop-before');
+              var from = state.dragCol;
+              state.dragCol = null;
+              var next = state.columns.filter(function (k) { return k !== from; });
+              var at = next.indexOf(key) + (before ? 0 : 1);
+              next.splice(at, 0, from);
+              if (next.join() !== state.columns.join()) applyColumns(next);
+              else renderGrid();
+            },
             onkeydown: function (e) {
               if (e.key !== 'Enter' && e.key !== ' ') return;
               e.preventDefault();
