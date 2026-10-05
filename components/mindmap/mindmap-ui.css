@@ -307,3 +307,11 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-suggest { margin: 0; padding: 4px; list-style: none; border-radius: 6px; background: var(--tp-surface); box-shadow: 0 0 0 1px var(--tp-border), 0 6px 18px rgba(0,0,0,.35); }
 .mm-suggest-item { padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--tp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mm-suggest-item.is-active { background: var(--tp-primary); color: #fff; }
+
+.mm-node.is-multi .mm-shape { stroke: var(--tp-primary); stroke-width: 2.5; stroke-dasharray: 6 3; }
+.mm-menu { position: absolute; z-index: 20; min-width: 230px; padding: 4px; border-radius: 8px; background: var(--tp-surface); box-shadow: 0 0 0 1px var(--tp-border), 0 8px 24px rgba(0,0,0,.4); }
+.mm-menu-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 18px; padding: 6px 10px; border: 0; border-radius: 5px; background: none; color: var(--tp-text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.mm-menu-item:hover:not(:disabled) { background: var(--tp-primary); color: #fff; }
+.mm-menu-item:disabled { opacity: .4; cursor: default; }
+.mm-menu-item kbd { font: inherit; font-size: 11px; opacity: .6; }
+.mm-menu-sep { height: 1px; margin: 4px 2px; background: var(--tp-border); }

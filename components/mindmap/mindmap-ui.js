@@ -124,6 +124,10 @@
       cycles: {},
       selected: null,
       selectedEdge: null,
+      multi: {}, // node id → true: cards / goals picked with Ctrl+A or Ctrl/Maj+click
+      clip: null, // internal clipboard (Ctrl+C / Ctrl+X) pasted by Ctrl+V
+      pasteN: 0,
+      confirmDeleteAt: 0,
       snap: (function () { try { return localStorage.getItem('tp-mindmap-snap') !== '0'; } catch (e) { return true; } })(),
       dropPos: {}, // node id → graph position chosen for a task just created from the canvas
       relink: null, // edge id whose target is being replaced
@@ -326,6 +330,7 @@
       MM().findCycles(g.edges).forEach(function (id) { state.cycles[id] = true; });
       if (state.selected && !nodeById(state.selected)) state.selected = null;
       if (state.selectedEdge && !edgeById(state.selectedEdge)) state.selectedEdge = null;
+      Object.keys(state.multi).forEach(function (id) { if (!nodeById(id)) delete state.multi[id]; });
       if (state.relink && !edgeById(state.relink)) state.relink = null;
       if (state.linkFrom && !nodeById(state.linkFrom)) state.linkFrom = null;
       renderBar();
@@ -573,6 +578,7 @@
         var lit = selEdge ? n.id === selEdge.from || n.id === selEdge.to : !focus || n.id === focus || near[n.id];
         g.classList.toggle('is-dim', !lit);
         g.classList.toggle('is-selected', n.id === focus);
+        g.classList.toggle('is-multi', !!state.multi[n.id]);
         g.classList.toggle('is-linking', n.id === state.linkFrom);
         g.classList.toggle('is-cycle', !!state.cycles[n.id]);
       });
@@ -592,10 +598,12 @@
     /* ── Interaction ──────────────────────────────────────────────── */
     function attachNodeEvents(g, n) {
       var moved = false;
+      var modKey = false;
       g.addEventListener('pointerdown', function (ev) {
         if (ev.button) return;
         ev.stopPropagation();
         moved = false;
+        modKey = ev.ctrlKey || ev.metaKey || ev.shiftKey;
         var start = { x: ev.clientX, y: ev.clientY, nx: n.x, ny: n.y };
         try { g.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
         function move(me) {
@@ -613,7 +621,7 @@
           g.removeEventListener('pointermove', move);
           g.removeEventListener('pointerup', up);
           g.removeEventListener('pointercancel', up);
-          if (!moved) onNodeClick(n);
+          if (!moved) { if (modKey && !state.relink && !state.linkFrom) toggleMulti(n); else onNodeClick(n); }
         }
         g.addEventListener('pointermove', move);
         g.addEventListener('pointerup', up);
@@ -711,6 +719,7 @@
     }
 
     function select(id) {
+      state.multi = {};
       state.selected = id;
       state.selectedEdge = null;
       state.confirmDelete = null;
@@ -719,11 +728,182 @@
     }
 
     function selectEdge(id) {
+      state.multi = {};
       state.selectedEdge = id;
       state.selected = null;
       state.confirmDelete = null;
       applyFocus();
       renderPanel();
+    }
+
+    /* ── Multi-selection: Ctrl+A, Suppr, Ctrl+C / X / V ───────────────── */
+    function pickedNodes() {
+      var ids = Object.keys(state.multi);
+      if (!ids.length && state.selected) ids = [state.selected];
+      return ids.map(nodeById).filter(function (n) { return n && (n.kind === 'task' || n.kind === 'goal'); });
+    }
+
+    function toggleMulti(n) {
+      if (n.kind !== 'task' && n.kind !== 'goal') return;
+      if (!Object.keys(state.multi).length && state.selected && state.selected !== n.id) state.multi[state.selected] = true;
+      state.selected = null;
+      state.selectedEdge = null;
+      if (state.multi[n.id]) delete state.multi[n.id]; else state.multi[n.id] = true;
+      applyFocus();
+      renderPanel();
+    }
+
+    function selectAll() {
+      state.multi = {};
+      state.graph.nodes.forEach(function (n) { if (n.kind === 'task' || n.kind === 'goal') state.multi[n.id] = true; });
+      state.selected = null;
+      state.selectedEdge = null;
+      state.confirmDelete = null;
+      applyFocus();
+      renderPanel();
+      setStatus(Object.keys(state.multi).length + ' éléments sélectionnés', 'ok');
+    }
+
+    function copySelection() {
+      var nodes = pickedNodes();
+      if (!nodes.length) return false;
+      var ids = {};
+      nodes.forEach(function (n) { ids[n.id] = true; });
+      var clip = { tasks: [], goals: [], depends: [], serves: [] };
+      nodes.forEach(function (n) {
+        if (n.kind === 'task' && n.rec) clip.tasks.push({ id: n.id, name: n.rec.name || n.label, listId: n.rec.listId, x: n.x, y: n.y });
+        else if (n.kind === 'goal') clip.goals.push({ id: n.id, level: n.level, name: n.label, x: n.x, y: n.y });
+      });
+      state.graph.edges.forEach(function (e) {
+        if (!ids[e.from] || !ids[e.to]) return;
+        if (e.kind === 'depends') clip.depends.push({ from: e.from, to: e.to, dep: e.dep });
+        else if (e.kind === 'serves') clip.serves.push({ from: e.from, to: e.to });
+      });
+      state.clip = clip;
+      state.pasteN = 0;
+      try { navigator.clipboard.writeText(nodes.map(function (n) { return n.label; }).join('\n')); } catch (e) { /* the internal clipboard is enough */ }
+      setStatus(nodes.length + (nodes.length > 1 ? ' éléments copiés' : ' élément copié'), 'ok');
+      return true;
+    }
+
+    /** Tasks are archived (recoverable in Trello); goals are removed from the stored hierarchy. */
+    function deleteSelection(opts) {
+      var nodes = pickedNodes();
+      if (!nodes.length) return Promise.resolve();
+      var key = nodes.map(function (n) { return n.id; }).sort().join('|');
+      if (!(opts && opts.force) && !(state.confirmDeleteKey === key && Date.now() - state.confirmDeleteAt < 4000)) {
+        state.confirmDeleteKey = key;
+        state.confirmDeleteAt = Date.now();
+        setStatus('Appuyez encore sur Suppr pour supprimer ' + nodes.length + (nodes.length > 1 ? ' éléments' : ' élément'), 'ok');
+        return Promise.resolve();
+      }
+      state.confirmDeleteKey = null;
+      var tasks = nodes.filter(function (n) { return n.kind === 'task' && n.rec; });
+      var goals = nodes.filter(function (n) { return n.kind === 'goal'; });
+      var gone = {};
+      nodes.forEach(function (n) { gone[n.id] = true; });
+      var pt = global.PriorityTrello;
+      select(null);
+      setStatus('Suppression…');
+      var step = Promise.resolve();
+      if (tasks.length) {
+        step = global.GanttTrello.ensureRestAuthorized(t).then(function (auth) {
+          if (!auth || !auth.ok) throw new Error('Trello n’est pas autorisé');
+          return Promise.all(tasks.map(function (n) {
+            return pt.restPutCard(t, n.rec.id, { closed: true }).then(function (r) {
+              if (r && r.ok === false) throw new Error(r.reason || 'erreur');
+            });
+          }));
+        });
+      }
+      return step.then(function () {
+        var drop = state.goals.links.filter(function (l) { return gone[l.from] || gone[l.to]; }).map(function (l) { return l.from + '>' + l.to; });
+        if (goals.length && goalsEditable()) {
+          return saveGoals(goalsWith({ nodes: state.goals.nodes.filter(function (g) { return !gone[g.id]; }), unlink: drop }));
+        }
+        if (tasks.length && drop.length && state.goalsLoaded) return saveGoals(goalsWith({ unlink: drop }));
+        return null;
+      }).then(function () {
+        if (!tasks.length) return null;
+        return global.GanttTrello.loadBoard(t).then(function (board) {
+          state.records = board.cards || [];
+          rebuild({ keepView: true });
+          setStatus(nodes.length + (nodes.length > 1 ? ' éléments supprimés' : ' élément supprimé'), 'ok');
+        });
+      }).catch(function (err) {
+        setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error');
+      });
+    }
+
+    /** Pastes the internal clipboard as new cards / goals (offset a little), keeping the links between the copied items. */
+    function pasteClip() {
+      var clip = state.clip;
+      var pt = global.PriorityTrello;
+      if (!clip || (!clip.tasks.length && !clip.goals.length)) { setStatus('Rien à coller : copiez d’abord (Ctrl+C)', 'error'); return Promise.resolve(); }
+      if (clip.goals.length && !goalsEditable()) return Promise.resolve();
+      state.pasteN++;
+      var off = 40 * state.pasteN;
+      var map = {};
+      var added = [];
+      setStatus('Collage…');
+      var chain = Promise.resolve();
+      clip.tasks.forEach(function (c) {
+        chain = chain.then(function () {
+          return pt.createCard(t, { name: c.name, idList: c.listId }).then(function (res) {
+            if (!res || !res.ok) throw new Error((res && res.reason) || 'erreur');
+            map[c.id] = 't:' + res.cardId;
+            state.dropPos['t:' + res.cardId] = { x: c.x + off, y: c.y + off };
+            added.push('t:' + res.cardId);
+          });
+        });
+      });
+      return chain.then(function () {
+        // The cards were just made over REST: Trello's client may not know them yet.
+        var jobs = clip.tasks.map(function (c) {
+          var deps = clip.depends.filter(function (d) { return d.from === c.id; });
+          if (!deps.length) return null;
+          var cardId = map[c.id].slice(2);
+          var list = deps.map(function (d) { return map[d.to].slice(2); });
+          var types = {};
+          deps.forEach(function (d) { if (d.dep && d.dep !== 'depends') types[map[d.to].slice(2)] = d.dep; });
+          var attempt = 0;
+          var save = function () {
+            return pt.saveCardInputsById(t, cardId, { dependsOn: list, depTypes: types }).catch(function (err) {
+              if (++attempt >= 8 || !/not found|not on current board/i.test((err && err.message) || '')) throw err;
+              return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(save);
+            });
+          };
+          return save();
+        }).filter(Boolean);
+        return Promise.all(jobs);
+      }).then(function () {
+        if (!clip.goals.length && !clip.serves.length) return null;
+        var GG = global.MindmapGoalsTrello;
+        var newGoals = clip.goals.map(function (g) {
+          var id = GG.newId();
+          map[g.id] = id;
+          state.dropPos[id] = { x: g.x + off, y: g.y + off };
+          added.push(id);
+          return { id: id, level: g.level, name: g.name };
+        });
+        var links = clip.serves.filter(function (l) { return map[l.from] && map[l.to]; }).map(function (l) { return { from: map[l.from], to: map[l.to] }; });
+        if (!newGoals.length && !links.length) return null;
+        if (!state.goalsLoaded) return null;
+        return saveGoals(goalsWith({ nodes: state.goals.nodes.concat(newGoals), link: links }));
+      }).then(function () {
+        return global.GanttTrello.loadBoard(t);
+      }).then(function (board) {
+        state.records = board.cards || [];
+        rebuild({ keepView: true });
+        state.multi = {};
+        added.forEach(function (id) { if (nodeById(id)) state.multi[id] = true; });
+        state.selected = null;
+        applyFocus();
+        renderPanel();
+        setStatus(added.length + (added.length > 1 ? ' éléments collés' : ' élément collé'), 'ok');
+      }).catch(function (err) {
+        setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error');
+      });
     }
 
     function showHint(text) {
@@ -1469,6 +1649,107 @@
         removeEdge(edgeById(state.selectedEdge));
       }
     });
+    document.addEventListener('keydown', function (ev) {
+      var tag = ev.target && ev.target.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (ev.target && ev.target.isContentEditable)) return;
+      var mod = ev.ctrlKey || ev.metaKey;
+      var k = String(ev.key || '').toLowerCase();
+      if (mod && k === 'a') { ev.preventDefault(); selectAll(); }
+      else if (mod && k === 'c') { if (copySelection()) ev.preventDefault(); }
+      else if (mod && k === 'x') { if (copySelection()) { ev.preventDefault(); deleteSelection({ force: true }); } }
+      else if (mod && k === 'v') { ev.preventDefault(); pasteClip(); }
+      else if ((ev.key === 'Delete' || ev.key === 'Backspace') && !state.selectedEdge && pickedNodes().length) { ev.preventDefault(); deleteSelection(); }
+    });
+    /* ── Right-click menu (align / distribute / reorganize, like Canva) ── */
+    var menuEl = null;
+    function closeMenu() {
+      if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl);
+      menuEl = null;
+    }
+
+    function moveNodes(nodes, apply) {
+      apply();
+      var ids = {};
+      nodes.forEach(function (n) { ids[n.id] = true; positionNode(n); });
+      state.graph.edges.forEach(function (e) { if (ids[e.from] || ids[e.to]) positionEdge(e); });
+    }
+
+    /** axis 'y': one row (same height); axis 'x': one column. Items keep their order and are kept from overlapping. */
+    function alignNodes(axis) {
+      var nodes = pickedNodes();
+      if (nodes.length < 2) return;
+      var gap = 24;
+      moveNodes(nodes, function () {
+        var avg = nodes.reduce(function (a, n) { return a + n[axis]; }, 0) / nodes.length;
+        var other = axis === 'y' ? 'x' : 'y';
+        var size = axis === 'y' ? 'w' : 'h';
+        nodes.sort(function (a, b) { return a[other] - b[other]; });
+        nodes.forEach(function (n) { n[axis] = avg; });
+        for (var i = 1; i < nodes.length; i++) {
+          var min = nodes[i - 1][other] + (nodes[i - 1][size] + nodes[i][size]) / 2 + gap;
+          if (nodes[i][other] < min) nodes[i][other] = min;
+        }
+      });
+      setStatus(axis === 'y' ? 'Alignés horizontalement' : 'Alignés verticalement', 'ok');
+    }
+
+    /** Even spacing between the cards along an axis, first and last staying where they are. */
+    function distributeNodes(axis) {
+      var nodes = pickedNodes();
+      if (nodes.length < 3) return;
+      var size = axis === 'x' ? 'w' : 'h';
+      moveNodes(nodes, function () {
+        nodes.sort(function (a, b) { return a[axis] - b[axis]; });
+        var first = nodes[0];
+        var last = nodes[nodes.length - 1];
+        var span = (last[axis] - last[size] / 2) - (first[axis] + first[size] / 2);
+        var total = nodes.slice(1, -1).reduce(function (a, n) { return a + n[size]; }, 0);
+        var gap = (span - total) / (nodes.length - 1);
+        var cursor = first[axis] + first[size] / 2;
+        for (var i = 1; i < nodes.length - 1; i++) {
+          cursor += gap;
+          nodes[i][axis] = cursor + nodes[i][size] / 2;
+          cursor += nodes[i][size];
+        }
+      });
+    }
+
+    function openMenu(ev) {
+      ev.preventDefault();
+      closeMenu();
+      var onNode = ev.target.closest && ev.target.closest('.mm-node');
+      var n = onNode && nodeById(onNode.getAttribute('data-id'));
+      if (n && (n.kind === 'task' || n.kind === 'goal') && !state.multi[n.id]) select(n.id);
+      var count = pickedNodes().length;
+      var items = [];
+      if (count) {
+        items.push(['Copier', 'Ctrl+C', copySelection], ['Couper', 'Ctrl+X', function () { if (copySelection()) deleteSelection({ force: true }); }]);
+      }
+      items.push(['Coller', 'Ctrl+V', pasteClip, !state.clip]);
+      if (count) items.push(['Supprimer', 'Suppr', deleteSelection]);
+      items.push(null);
+      items.push(['Aligner horizontalement', '', function () { alignNodes('y'); }, count < 2]);
+      items.push(['Aligner verticalement', '', function () { alignNodes('x'); }, count < 2]);
+      items.push(['Répartir horizontalement', '', function () { distributeNodes('x'); }, count < 3]);
+      items.push(['Répartir verticalement', '', function () { distributeNodes('y'); }, count < 3]);
+      items.push(null);
+      items.push(['Tout sélectionner', 'Ctrl+A', selectAll]);
+      items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }]);
+      var menu = h('div', { class: 'mm-menu', role: 'menu' }, items.map(function (it) {
+        if (!it) return h('div', { class: 'mm-menu-sep' });
+        var b = h('button', { class: 'mm-menu-item', type: 'button', role: 'menuitem', disabled: !!it[3] }, [h('span', { text: it[0] }), h('kbd', { text: it[1] })]);
+        b.addEventListener('click', function () { closeMenu(); it[2](); });
+        return b;
+      }));
+      var r = els.canvas.getBoundingClientRect();
+      menu.style.left = Math.max(4, Math.min(ev.clientX - r.left, r.width - 250)) + 'px';
+      menu.style.top = Math.max(4, Math.min(ev.clientY - r.top, r.height - items.length * 30)) + 'px';
+      els.canvas.appendChild(menu);
+      menuEl = menu;
+    }
+    svg.addEventListener('contextmenu', openMenu);
+    document.addEventListener('pointerdown', function (ev) { if (menuEl && !menuEl.contains(ev.target)) closeMenu(); }, true);
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeMenu(); });
     global.addEventListener('resize', function () { if (!state.graph.nodes.length) fit(); });
 
     /* ── Loading ───────────────────────────────────────────────────── */
