@@ -451,4 +451,100 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       assert.equal(r2.relations.length, 0, 'Montréal is itself a city: it is a direct pick, not an anchor');
     });
   });
+  describe('archetype = predefined model (components + defaults); entity = instance with overrides', () => {
+    function plantSchema() {
+      let s = M.upsertComponent(M.defaultSchema(), {
+        id: 'entretien',
+        name: 'Entretien',
+        fields: [
+          { key: 'every', label: 'Tous les (jours)', kind: 'number' },
+          { key: 'health', label: 'Santé', kind: 'choice', options: ['bonne', 'fragile'] },
+        ],
+      });
+      s = M.upsertComponent(s, { id: 'note', name: 'Note', fields: [{ key: 'txt', label: 'Texte', kind: 'longtext' }] });
+      s = M.upsertType(s, { id: 'plante', name: 'Plante', components: ['entretien'] });
+      s = M.upsertType(s, { id: 'cactus', name: 'Cactus', parents: ['plante'], components: [] });
+      s = M.setTypeDefault(s, 'plante', 'entretien.every', '7');
+      s = M.setTypeDefault(s, 'plante', 'entretien.health', 'bonne');
+      return s;
+    }
+
+    it('defaults are coerced, validated, inherited by child archetypes and overridable', () => {
+      let s = plantSchema();
+      assert.deepEqual(M.findById(s.types, 'plante').defaults, { 'entretien.every': 7, 'entretien.health': 'bonne' });
+      s = M.setTypeDefault(s, 'cactus', 'entretien.every', 30);
+      assert.deepEqual(M.archetypeDefaults(s, ['cactus']), { entretien: { every: 30, health: 'bonne' } });
+      assert.throws(() => M.setTypeDefault(s, 'plante', 'nope.x', 1), /unknown-field/);
+      assert.throws(() => M.setTypeDefault(s, 'ghost', 'entretien.every', 1), /unknown-type/);
+      s = M.setTypeDefault(s, 'plante', 'entretien.health', '');
+      assert.equal(M.findById(s.types, 'plante').defaults['entretien.health'], undefined);
+      // an invalid default in a stored schema is dropped on load
+      const loaded = M.normalizeSchema({ components: s.components, types: [{ id: 'p', name: 'P', defaults: { 'entretien.health': 'zombie', 'entretien.every': '5' } }] });
+      assert.deepEqual(loaded.types[0].defaults, { 'entretien.every': 5 });
+    });
+
+    it('an entity stores only overrides; effective values, origin and queries see the defaults', () => {
+      const s = plantSchema();
+      let e = M.createEntity(s, { name: 'Ficus', types: ['plante'] });
+      assert.deepEqual(e.data, {});
+      assert.equal(M.effectiveValue([e], e, 'entretien.every', s), 7);
+      assert.equal(M.effectiveValue([e], e, 'entretien.every'), undefined, 'without a schema only own values');
+      assert.equal(M.originOf([e], e, 'entretien.every', s), 'archetype');
+      e = M.setValue(s, e, 'entretien.every', 3);
+      assert.equal(M.effectiveValue([e], e, 'entretien.every', s), 3);
+      assert.equal(M.originOf([e], e, 'entretien.every', s), 'own');
+      assert.deepEqual(e.data, { entretien: { every: 3 } });
+      const other = M.createEntity(s, { name: 'Lierre', types: ['plante'] });
+      assert.equal(M.query(s, [e, other], { where: [{ path: 'entretien.health', op: 'eq', value: 'bonne' }] }).length, 2);
+      assert.equal(M.query(s, [e, other], { where: [{ path: 'entretien.every', op: 'eq', value: 7 }] })[0].name, 'Lierre');
+      assert.ok(M.describeEntity(s, [e, other], other).includes('Tous les (jours): 7'));
+    });
+
+    it('an entity can carry extra components, with history and undo', () => {
+      const s = plantSchema();
+      let e = M.createEntity(s, { name: 'Ficus', types: ['plante'] });
+      assert.deepEqual(M.componentIdsOf(s, e), ['entretien']);
+      e = M.setComponents(s, e, ['note', 'ghost']);
+      assert.deepEqual(e.components, ['note']);
+      assert.deepEqual(M.componentIdsOf(s, e), ['entretien', 'note']);
+      e = M.setValue(s, e, 'note.txt', 'à tailler en mars');
+      assert.equal(M.getValue(e, 'note.txt'), 'à tailler en mars');
+      assert.match(M.describeEntry(s, [e], e.history.find((h) => h.op === 'components')), /Composants ajoutés : Note/);
+      const entry = e.history.find((h) => h.op === 'components');
+      assert.equal(M.isRevertable(entry), true);
+      const back = M.revertEntry(s, e, entry.id);
+      assert.deepEqual(back.components, []);
+      assert.equal(M.normalizeEntity(Object.assign({}, e, { components: ['note', 'ghost'] }), s).components.length, 1);
+    });
+
+    it('composer: defaultFor, extra components and the archetype list', () => {
+      const s = plantSchema();
+      let d = C.toggleType(s, C.newDraft({ name: 'Ficus' }), 'plante', true);
+      assert.deepEqual(C.defaultFor(s, [], d, 'entretien.every'), { value: 7, source: 'archetype', from: 'Plante' });
+      assert.equal(C.defaultFor(s, [], d, 'note.txt'), null);
+      assert.deepEqual(C.componentsAvailable(s, d).map((c) => c.id), ['location', 'note']);
+      d = C.toggleComponent(s, d, 'note', true);
+      d = C.setAnswer(d, 'note.txt', 'ok');
+      assert.deepEqual(C.componentsAvailable(s, d).map((c) => c.id), ['location']);
+      const done = C.finalize(s, [], [d]);
+      assert.deepEqual(done.created[0].components, ['note']);
+      assert.deepEqual(done.created[0].data, { note: { txt: 'ok' } }, 'defaults are not copied into the entity');
+      d = C.toggleComponent(s, d, 'note', false);
+      assert.equal(d.answers['note.txt'], undefined);
+      const choices = C.archetypeChoices(s, L);
+      assert.ok(choices.some((c) => c.id === 'plante' && c.installed));
+      assert.ok(choices.some((c) => c.id === 'ville' && !c.installed));
+      assert.ok(!choices.some((c) => c.id === 'place' && !c.installed), 'installed presets are not offered twice');
+      const r = C.defineComponent(s, 'Poids', 'Masse (nombre: kg)');
+      assert.equal(r.componentId, 'poids');
+      assert.equal(C.defineComponent(s, '', 'x').error, 'name-required');
+      assert.equal(C.defineComponent(s, 'Vide', '').error, 'fields-required');
+    });
+
+    it('a sentence whose tail means nothing stays whole as the name', () => {
+      const s = plantSchema();
+      assert.equal(C.readIntent(s, [], 'Crème, mains').name, 'Crème, mains');
+      assert.equal(C.readIntent(s, [], 'Ficus, une plante').name, 'Ficus');
+    });
+  });
 });

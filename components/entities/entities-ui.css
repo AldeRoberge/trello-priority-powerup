@@ -439,3 +439,21 @@ html[data-color-mode] .tp-page--entities {
   padding: 2px 8px;
   font-size: 12px;
 }
+
+/* ── Archetype defaults, extra components ────────────────────────── */
+.en-defaults {
+  margin: 8px 0;
+}
+.en-defaults > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--tp-text-subtle);
+}
+.en-defaults .en-field-row {
+  margin-top: 6px;
+}
+.en-h .en-link {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 400;
+}

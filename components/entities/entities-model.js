@@ -2,6 +2,10 @@
  * Role: pure Entity-Component model ("Entités"): rich things the user names once ("Ficus", "Hôtel de
  * Ville") and the assistant can then filter ("mes plantes au travail"). No Trello, no DOM.
  *
+ * In the UI: an ARCHETYPE (internally a "type") is a predefined model: a bundle of components plus default
+ * values. An ENTITY is an instance of one or more archetypes and stores only its OVERRIDES (what differs
+ * from the defaults); it may also carry extra components of its own (entity.components).
+ *
  * Vocabulary (ECS):
  *   Component  a named group of typed fields ("location" {place: ref}, "care" {interval_days: number}).
  *   Type       an archetype that bundles components ("plant" = location + care). An entity may have
@@ -54,6 +58,7 @@
   var MAX_UNIT = 12;
   var MAX_DESCRIPTION = 200;
   var MAX_CUSTOM_RELATIONS = 20;
+  var MAX_DEFAULTS = 40;
   var RELATION_CATEGORIES = ['spatial', 'mereological', 'composition', 'production', 'social', 'taxonomic', 'grounding', 'causal', 'temporal', 'conceptual', 'generic'];
   /** The description card of the schema holds 16 384 chars; stay well under it. */
   var MAX_SCHEMA_CHARS = 15000;
@@ -190,6 +195,7 @@
       parents: uniqueStrings(t.parents, 6, MAX_NAME).map(slug).filter(Boolean),
       role: t.role === true,
       description: str(t.description, MAX_DESCRIPTION),
+      defaults: t.defaults && typeof t.defaults === 'object' && !Array.isArray(t.defaults) ? clone(t.defaults) : {},
       components: uniqueStrings(t.components, MAX_COMPONENTS, MAX_NAME).map(slug).filter(Boolean),
     };
   }
@@ -236,6 +242,18 @@
       t.parents = t.parents.filter(function (p) {
         return p !== t.id && !!byId[p] && !lineageHas(byId, p, t.id);
       });
+    });
+    // archetype defaults: only "component.field" paths that exist, coerced like any value
+    var shell = { components: components };
+    types.forEach(function (t) {
+      var clean = {};
+      Object.keys(t.defaults).slice(0, MAX_DEFAULTS).forEach(function (path) {
+        var fd = fieldOf(shell, path);
+        var v = fd ? coerceValue(fd.field, t.defaults[path]) : undefined;
+        if (v !== undefined) clean[path] = v;
+      });
+      if (Object.keys(clean).length) t.defaults = clean;
+      else delete t.defaults;
     });
     var out = { version: VERSION, components: components.slice(0, MAX_COMPONENTS), types: types };
     if (relations.length) out.relations = relations;
@@ -380,7 +398,29 @@
         });
       });
     });
+    // components the entity added on its own, beyond its archetypes
+    (entity.components || []).forEach(function (cid) {
+      if (out.indexOf(cid) < 0 && findById(schema.components, cid)) out.push(cid);
+    });
     return out;
+  }
+
+  /**
+   * Default values the archetypes give ({component:{field:value}}): parent archetypes first, so a child
+   * overrides its parent, and later archetypes of the entity override earlier ones.
+   */
+  function archetypeDefaults(schema, typeIds) {
+    var data = {};
+    (typeIds || []).forEach(function (tid) {
+      typeLineage(schema, tid).forEach(function (t) {
+        Object.keys(t.defaults || {}).forEach(function (path) {
+          var p = path.split('.');
+          data[p[0]] = data[p[0]] || {};
+          data[p[0]][p[1]] = t.defaults[path];
+        });
+      });
+    });
+    return data;
   }
 
   // ---------------------------------------------------------------- 2b natures and type lineage
@@ -554,6 +594,9 @@
         return !!findById(schema.types, t);
       });
     }
+    var extra = uniqueStrings(raw.components, MAX_COMPONENTS, MAX_NAME).map(slug).filter(function (c) {
+      return !!c && (!schema || !!findById(schema.components, c));
+    });
     var data = {};
     var src = raw.data && typeof raw.data === 'object' ? raw.data : {};
     Object.keys(src).forEach(function (cid) {
@@ -591,6 +634,7 @@
       base: raw.base && String(raw.base) !== String(raw.id) ? String(raw.base) : '',
       aliases: uniqueStrings(raw.aliases, MAX_ALIASES, MAX_ALIAS),
       types: types,
+      components: extra,
       data: data,
       relations: relations.slice(0, MAX_RELATIONS),
       history: history,
@@ -623,9 +667,13 @@
   }
 
   /** Own overrides laid over the archetype chain: what the entity "has" once inheritance is applied. */
-  function effectiveData(entities, entity) {
+  function effectiveData(entities, entity, schema) {
     var chain = chainOf(entities, entity);
-    var data = {};
+    // with a schema, the archetypes' default values sit underneath everything else
+    var data = schema ? archetypeDefaults(schema, entity.types) : {};
+    Object.keys(data).forEach(function (cid) {
+      data[cid] = Object.assign({}, data[cid]);
+    });
     for (var i = chain.length - 1; i >= 0; i--) {
       Object.keys(chain[i].data || {}).forEach(function (cid) {
         data[cid] = Object.assign({}, data[cid], chain[i].data[cid]);
@@ -634,27 +682,38 @@
     return data;
   }
 
-  function effectiveValue(entities, entity, path) {
+  function effectiveValue(entities, entity, path, schema) {
     var p = String(path || '').split('.');
-    var c = effectiveData(entities, entity)[p[0]];
+    var c = effectiveData(entities, entity, schema)[p[0]];
     return c ? c[p[1]] : undefined;
   }
 
   /**
-   * Where a field's value comes from: 'own' (override), an archetype's entity id (inherited), or ''
-   * (no value anywhere).
+   * Where a field's value comes from: 'own' (override), a model entity's id (inherited), 'archetype' (the
+   * archetype's default, needs `schema`), or '' (no value anywhere).
    */
-  function originOf(entities, entity, path) {
+  function originOf(entities, entity, path, schema) {
     var chain = chainOf(entities, entity);
     for (var i = 0; i < chain.length; i++) {
       if (getValue(chain[i], path) !== undefined) return i === 0 ? 'own' : chain[i].id;
+    }
+    if (schema) {
+      var d = archetypeDefaults(schema, entity.types);
+      var p = path.split('.');
+      if (d[p[0]] && d[p[0]][p[1]] !== undefined) return 'archetype';
     }
     return '';
   }
 
   /** Entities with inheritance applied (same ids; data merged). Cheap when nobody has a base. */
-  function flatten(entities) {
+  function flatten(entities, schema) {
+    var hasDefaults =
+      !!schema &&
+      schema.types.some(function (t) {
+        return t.defaults;
+      });
     if (
+      !hasDefaults &&
       !entities.some(function (e) {
         return e.base;
       })
@@ -662,7 +721,7 @@
       return entities;
     }
     return entities.map(function (e) {
-      return e.base ? Object.assign({}, e, { data: effectiveData(entities, e) }) : e;
+      return e.base || hasDefaults ? Object.assign({}, e, { data: effectiveData(entities, e, schema) }) : e;
     });
   }
 
@@ -722,6 +781,7 @@
         base: init && init.base,
         aliases: init && init.aliases,
         types: init && init.types,
+        components: init && init.components,
         data: init && init.data,
         relations: init && init.relations,
         createdAt: now,
@@ -763,6 +823,33 @@
     pushHistory(next, { op: 'types', before: entity.types, after: list }, opts);
     next.types = list;
     return next;
+  }
+
+  /** The extra components an entity carries beyond its archetypes (what the user added to it). */
+  function setComponents(schema, entity, ids, opts) {
+    var list = uniqueStrings(ids, MAX_COMPONENTS, MAX_NAME)
+      .map(slug)
+      .filter(function (c) {
+        return !!findById(schema.components, c);
+      });
+    if (JSON.stringify(list) === JSON.stringify(entity.components || [])) return entity;
+    var next = clone(entity);
+    pushHistory(next, { op: 'components', before: entity.components || [], after: list }, opts);
+    next.components = list;
+    return next;
+  }
+
+  /** Sets (or clears with undefined) the default of "component.field" on an archetype. Returns the new schema. */
+  function setTypeDefault(schema, typeId, path, value) {
+    var t = findById(schema.types, typeId);
+    if (!t) throw new Error('unknown-type');
+    var fd = fieldOf(schema, path);
+    if (!fd) throw new Error('unknown-field:' + path);
+    var v = coerceValue(fd.field, value);
+    var defaults = Object.assign({}, t.defaults || {});
+    if (v === undefined) delete defaults[path];
+    else defaults[path] = v;
+    return upsertType(schema, Object.assign({}, t, { defaults: defaults }));
   }
 
   /** Sets (or clears, with undefined/''/null) one "component.field" value. Unknown paths throw. */
@@ -808,8 +895,8 @@
     return createEntity(
       schema,
       opts.detach
-        ? { name: name, types: src.types, data: effectiveData(entities, src), relations: src.relations }
-        : { name: name, types: src.types, base: src.id },
+        ? { name: name, types: src.types, data: effectiveData(entities, src, schema), relations: src.relations, components: src.components }
+        : { name: name, types: src.types, components: src.components, base: src.id },
       opts
     );
   }
@@ -840,7 +927,7 @@
 
   /** Can this history entry be undone from the entity alone? (base changes need the other entities.) */
   function isRevertable(entry) {
-    return !!entry && !entry.undoOf && ['set', 'rename', 'aliases', 'types', 'relate', 'unrelate'].indexOf(entry.op) >= 0;
+    return !!entry && !entry.undoOf && ['set', 'rename', 'aliases', 'types', 'components', 'relate', 'unrelate'].indexOf(entry.op) >= 0;
   }
 
   // ---------------------------------------------------------------- 5 relations
@@ -873,7 +960,7 @@
   /** Every link touching `id`: outgoing relations, then incoming relations and ref fields. */
   function linksOf(schema, rawEntities, id) {
     var out = [];
-    var entities = flatten(rawEntities);
+    var entities = flatten(rawEntities, schema);
     var self = findById(entities, id);
     if (!self) return out;
     self.relations.forEach(function (r) {
@@ -1085,7 +1172,7 @@
   /** @returns {{parents:Object<string,string[]>, children:Object<string,string[]>}} the containment graph */
   function hierarchy(schema, entities) {
     var idx = { parents: {}, children: {} };
-    flatten(entities).forEach(function (e) {
+    flatten(entities, schema).forEach(function (e) {
       factsOf(schema, e).forEach(function (f) {
         if (!f.def.up || f.subject === f.object) return;
         addUnique(idx.parents, f.subject, f.object);
@@ -1167,7 +1254,7 @@
    * @returns {{grounded:boolean, base:string, path:string[]}} path = ids from the entity to its base
    */
   function groundingOf(schema, entities, id) {
-    var flat = flatten(entities);
+    var flat = flatten(entities, schema);
     var byId = {};
     var adj = {};
     flat.forEach(function (e) {
@@ -1291,6 +1378,9 @@
       case 'types':
         next = setTypes(schema, entity, h.before, opts);
         break;
+      case 'components':
+        next = setComponents(schema, entity, h.before, opts);
+        break;
       case 'relate':
         next = removeRelation(entity, h.after.type, h.after.to, opts);
         break;
@@ -1332,7 +1422,18 @@
       case 'aliases':
         return prefix + 'Alias : ' + ((h.after || []).join(', ') || '(aucun)');
       case 'types':
-        return prefix + 'Types : ' + names(h.after);
+        return prefix + 'Archétypes : ' + names(h.after);
+      case 'components':
+        return (
+          prefix +
+          'Composants ajoutés : ' +
+          ((h.after || [])
+            .map(function (c) {
+              var x = findById(schema.components, c);
+              return x ? x.name : c;
+            })
+            .join(', ') || '(aucun)')
+        );
       case 'base': {
         var bn = function (bid) {
           var x = findById(entities, bid);
@@ -1435,7 +1536,7 @@
   }
 
   function query(schema, entities, filter) {
-    var flat = flatten(entities);
+    var flat = flatten(entities, schema);
     var ctx = null;
     if (filter && filter.refersTo && filter.refersTo.length) {
       var idx = hierarchy(schema, entities);
@@ -1557,7 +1658,7 @@
       })
       .join('/');
     var parts = [];
-    var data = effectiveData(entities, entity);
+    var data = effectiveData(entities, entity, schema);
     var baseEntity = entity.base ? findById(entities, entity.base) : null;
     if (baseEntity) parts.push('variante de ' + baseEntity.name);
     Object.keys(data).forEach(function (cid) {
@@ -1649,6 +1750,9 @@
     removeComponent: removeComponent,
     removeType: removeType,
     componentIdsOf: componentIdsOf,
+    archetypeDefaults: archetypeDefaults,
+    setComponents: setComponents,
+    setTypeDefault: setTypeDefault,
     natureById: natureById,
     typeLineage: typeLineage,
     typeClosure: typeClosure,

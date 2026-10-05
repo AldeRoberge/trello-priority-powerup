@@ -3,8 +3,9 @@
  * questions needed to create an entity, and the ones it drags along (a new place, a new type), then
  * creates everything linked in one go. No Trello, no DOM (the UI is entities-composer-ui.js).
  *
- * Model
- *   draft   an entity being composed: { id, name, aliases[], types[], answers{ "comp.field": value },
+ * Model (UI words: an ARCHETYPE is a type = a bundle of components + default values; an entity is an
+ * instance that stores only overrides, and may add components of its own)
+ *   draft   an entity being composed: { id, name, aliases[], types[], components[] (extra), answers{ "comp.field": value },
  *           relations[{type,to}], intent, seen{} }. Ids are assigned up front, so a draft can be the
  *           target of another draft's link ("Ficus" -> place "Salon" that does not exist yet) and
  *           everything is created together by finalize().
@@ -222,6 +223,7 @@
       name: trim(opts.name),
       aliases: (opts.aliases || []).slice(),
       types: (opts.types || []).slice(),
+      components: (opts.components || []).slice(),
       base: opts.base || '',
       answers: Object.assign({}, opts.answers),
       relations: (opts.relations || []).slice(),
@@ -267,6 +269,83 @@
     next.types = next.types.filter(function (t) { return t !== typeId; });
     if (on && EM().findById(schema.types, typeId)) next.types.push(typeId);
     return next;
+  }
+
+  /** Adds or removes a component the entity carries on its own (beyond its archetypes). */
+  function toggleComponent(schema, draft, cid, on) {
+    var next = clone(draft);
+    next.components = (next.components || []).filter(function (c) { return c !== cid; });
+    if (on && EM().findById(schema.components, cid)) next.components.push(cid);
+    return on ? next : pruneAnswers(schema, next);
+  }
+
+  /** Components not carried yet (neither by the archetypes nor added): what "+ Composant" can offer. */
+  function componentsAvailable(schema, draft) {
+    var have = EM().componentIdsOf(schema, draft);
+    return schema.components.filter(function (c) { return have.indexOf(c.id) < 0; });
+  }
+
+  /**
+   * Creates a component from a one-line spec ("Poids (nombre: kg), Notes (texte-long)") and returns the
+   * new schema. @returns {{schema:object, componentId?:string, error?:string}}
+   */
+  function defineComponent(schema, name, fieldsText) {
+    var label = trim(name);
+    var fields = parseFieldSpec(fieldsText, schema);
+    if (!label) return { schema: schema, error: 'name-required' };
+    if (!fields.length) return { schema: schema, error: 'fields-required' };
+    var id = uniqueId(EM().slug(label) || 'composant', schema.components.map(function (x) { return x.id; }));
+    var next = EM().upsertComponent(schema, { id: id, name: label, fields: fields });
+    if (!EM().findById(next.components, id)) return { schema: schema, error: 'too-many-components' };
+    return { schema: next, componentId: id };
+  }
+
+  /**
+   * What a field gets when the user leaves it empty: the archetype's default, or the value of the model
+   * entity the draft is a variant of. null when there is none.
+   * @returns {{value:*, source:'archetype'|'model', from:string}|null}
+   */
+  function defaultFor(schema, entities, draft, path) {
+    var model = inheritedValue(entities, draft, path);
+    if (model !== undefined) {
+      var b = EM().findById(entities, draft.base);
+      return { value: model, source: 'model', from: b ? b.name : '' };
+    }
+    var p = path.split('.');
+    var d = EM().archetypeDefaults(schema, draft.types);
+    if (d[p[0]] && d[p[0]][p[1]] !== undefined) {
+      var owner = '';
+      draft.types.forEach(function (tid) {
+        EM().typeLineage(schema, tid).forEach(function (t) {
+          if (t.defaults && t.defaults[path] !== undefined) owner = t.name;
+        });
+      });
+      return { value: d[p[0]][p[1]], source: 'archetype', from: owner };
+    }
+    return null;
+  }
+
+  /**
+   * Every archetype the user can pick, in nature order: the schema's types, then (library given) the ready-made
+   * ones not installed yet. [{id, name, icon, nature, description, installed, role}]
+   */
+  function archetypeChoices(schema, library) {
+    var order = EM().NATURES.map(function (n) { return n.id; });
+    var rank = function (n) { var i = order.indexOf(n); return i < 0 ? order.length : i; };
+    var out = schema.types.map(function (t) {
+      var nature = EM().natureOfType(schema, t.id);
+      return { id: t.id, name: t.name, icon: t.icon || 'stack-2', nature: nature, description: t.description || '', installed: true, role: !!t.role };
+    });
+    if (library) {
+      library.TYPES.forEach(function (p) {
+        if (library.installedAs(schema, p.id)) return;
+        out.push({ id: p.id, name: p.name, icon: p.icon || 'plus', nature: p.nature, description: p.description || '', installed: false, role: !!p.role });
+      });
+    }
+    return out
+      .map(function (x, i) { return { x: x, i: i }; })
+      .sort(function (a, b) { return rank(a.x.nature) - rank(b.x.nature) || a.i - b.i; })
+      .map(function (o) { return o.x; });
   }
 
   /** Answers for fields whose component is no longer carried (type unticked) are dropped. */
@@ -365,6 +444,11 @@
         else out.relations.push({ type: relationFor(schema, out.types, e), to: e.id });
       }
     });
+    // nothing after the separator meant anything: it was part of the name ("Crème, mains")
+    if (!out.types.length && !Object.keys(out.answers).length && !out.relations.length) {
+      out.name = raw;
+      out.mentions = [];
+    }
     return out;
   }
 
@@ -711,6 +795,7 @@
           base: d.base && EM().findById(entities, d.base) ? d.base : '',
           aliases: d.aliases,
           types: d.types,
+          components: (d.components || []).filter(function (c) { return !!EM().findById(schema.components, c); }),
           data: data,
           relations: d.relations.filter(function (r) { return known[r.to]; }),
         },
@@ -730,6 +815,11 @@
     withDraft: withDraft,
     setAnswer: setAnswer,
     toggleType: toggleType,
+    toggleComponent: toggleComponent,
+    componentsAvailable: componentsAvailable,
+    defineComponent: defineComponent,
+    defaultFor: defaultFor,
+    archetypeChoices: archetypeChoices,
     setBase: setBase,
     inheritedValue: inheritedValue,
     pruneAnswers: pruneAnswers,

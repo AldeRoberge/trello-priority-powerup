@@ -9,8 +9,8 @@ Exemple : « Arroser mes plantes au travail » devient le filtre *type Plante* +
 | Notion | Rôle | Exemple |
 | --- | --- | --- |
 | **Composant** | groupe de champs typés | *Entretien* : fréquence (nombre), dernier arrosage (date), santé (choix) |
-| **Type** | regroupe des composants | *Plante* = Lieu + Entretien |
-| **Entité** | id, nom, alias, types, valeurs, liens, historique | *Ficus*, alias « arbre », lieu = Hôtel de Ville |
+| **Archétype** (le « type ») | modèle prédéfini : des composants, des **valeurs par défaut**, une nature, des archétypes parents | *Plante* = Lieu + Entretien, arrosage par défaut 7 jours |
+| **Entité** | instance d'un ou plusieurs archétypes : ne stocke que ses **surcharges** (ce qui diffère du défaut), peut ajouter des composants à elle seule, a des alias, des liens, un historique | *Ficus*, lieu = Hôtel de Ville, arrosage = 3 jours |
 
 Types de champ : texte, nombre, date, oui/non, choix, lien vers une entité, liens vers plusieurs entités. Un lieu est simplement une entité de type *Lieu* (fourni par défaut, avec le composant *Lieu*) ; donnez-lui des alias (`travail, work, bureau`) pour que « au travail » le retrouve.
 
@@ -22,27 +22,31 @@ L'**historique** garde les 40 derniers changements de chaque entité ; chacun pe
 
 Le modèle distingue la **nature** des choses (matière, vivant, agent, lieu, événement, fait social, abstrait), les **types parents** (une Ville est un Lieu), les **rôles**, des relations typées avec inverse (« situé dans » / « abrite »), une hiérarchie de contenance transitive et un contrôle d'**ancrage matériel** des abstraits. Une **bibliothèque** installe en un clic des types prêts (crème pour les mains, région, pays, ville, bâtiment, personne, travailleur, concept…). Étude et détails : [entities-ontologie.md](entities-ontologie.md).
 
-## Composer (assistant de création)
+## Composer (création en une page)
 
-Le bouton **Composer** (colonne de gauche, ou l'état vide) ouvre un dialogue qui pose les questions pour créer une entité et tout ce qu'elle entraîne, puis crée le tout lié en une seule fois.
+Le bouton **Composer** ouvre une seule page (plus d'étapes) :
 
-- **Nom et type** (un seul écran) : une phrase libre (« Palmier, une plante au travail » donne le nom, le type *Plante* et le lieu dont l'alias est « travail », via le champ lien du type, sinon une relation « situé dans » ou « lié à »), le nom (rempli d'après la phrase) et ses alias (puces, avec avertissement de doublon ou d'alias ambigu), puis la nature et le type. Sans virgule, tout le texte est le nom. On peut cocher des types, en installer depuis la bibliothèque, ou **en définir un nouveau en une ligne** : `État (choix: neuf/usé), Achat (date), Lieu (lien: Lieu)`.
-- **Un écran par composant** des types choisis (composition : l'union des composants). Chaque champ est une question ; tout est facultatif. Suggestions intelligentes tirées des entités du même type : les lieux les plus utilisés, « Souvent : 7 », raccourcis de date.
-- **Créer à la volée** : une question de lien propose « Créer « Salon » » ; ça ouvre une mini-interview (fil d'Ariane), puis on revient à la question avec le lien posé. Rien n'est écrit avant le dernier écran.
-- **Liens** (relations libres, avec les types déjà utilisés) puis **Résumé** : « Créer N entités » ou « Créer et en ajouter une autre ». Un aperçu en direct est affiché à droite pendant tout le parcours.
+1. **Nom** : un champ. « Palmier, une plante au travail » est compris : nom, archétype *Plante*, lieu dont l'alias est « travail » (champ lien de l'archétype, sinon relation « situé dans » / « lié à »). Une virgule dont la suite ne veut rien dire reste dans le nom. Alias en puces dessous, avec avertissement de doublon.
+2. **Archétype** : pastilles rangées par nature. Celles de la bibliothèque non installées portent un « + » (un clic les installe avec leurs parents). On peut en **combiner** plusieurs, ou en **définir un nouveau** (nature, parents, rôle, champs en une ligne). Une fois choisi, la liste se replie.
+3. **Composants** : une carte par composant des archétypes, remplie en place ; tout est facultatif et un champ vide prend la valeur **par défaut** de l'archétype (affichée « par défaut : … »). **Ajouter un composant** : un existant, ou un nouveau décrit en une ligne (`Poids (nombre: kg), Notes (texte-long)`).
+4. **Liens** : relations proposées selon ce qu'on crée (voir [entities-ontologie.md](entities-ontologie.md)), avec l'inverse affiché.
 
-Logique pure et testée : `components/entities/entities-composer.js` (`readIntent`, `stepsFor`, `suggest`, `issues`, `defineType`, `finalize`) ; interface : `entities-composer-ui.js` + `.css`. Test : `test/entities-composer.test.js`.
+**Créer à la volée** : une question de lien propose « Créer « Salon » » ; la même page s'ouvre pour lui (fil d'Ariane), puis « Ajouter et revenir ». Rien n'est écrit avant « Créer » (ou « Créer et en ajouter une autre »). Un aperçu en direct est affiché à droite.
 
-## Archétypes et surcharges
+Logique pure et testée : `components/entities/entities-composer.js` (`readIntent`, `suggest`, `defaultFor`, `archetypeChoices`, `toggleComponent`, `defineComponent`, `defineType`, `issues`, `finalize`) ; interface : `entities-composer-ui.js` + `.css`. Tests : `test/entities-composer.test.js`, `test/entities-ontology.test.js`.
 
-Une entité peut être **basée sur** une autre (son archétype). Elle hérite de toutes ses valeurs et ne stocke que ses **surcharges** :
+Dans l'éditeur de **Schéma**, chaque archétype a une section « Valeurs par défaut » (champs hors liens). Sur la page d'une entité, un champ affiche sa provenance (« par défaut », « modifié » avec **Réinitialiser**) et « Composer davantage » ajoute un composant à cette entité seulement.
+
+## Variantes (une entité comme modèle)
+
+En plus de l'archétype (le type), une entité peut être une **variante** d'une autre entité (son modèle). Elle hérite de toutes ses valeurs et ne stocke que ses **surcharges** :
 
 - Modifier une variante écrit une valeur propre ; l'archétype et les autres variantes ne bougent jamais.
 - Modifier l'archétype se répercute sur les variantes, sauf sur les champs qu'elles ont surchargés.
 - Chaque champ indique sa provenance (« hérité de Ficus » / « modifié ») ; **Réinitialiser** supprime la surcharge et revient à la valeur du modèle.
 - **Créer une variante** (hérite), **Copie indépendante** (valeurs copiées, aucun lien) et **Détacher du modèle** (garde les valeurs actuelles, ne suit plus) sont dans la carte « Modèle et variantes ». Les chaînes (variante d'une variante) fonctionnent ; les boucles sont refusées.
 - Supprimer un archétype fige les valeurs héritées de ses variantes. Alias, types et liens libres ne sont pas hérités ; les recherches (« mes plantes au travail ») et l'assistant voient les valeurs héritées.
-- Dans le Composer : « Modèle (archétype) » à l'écran *Quoi ?* ; chaque question affiche la valeur héritée et laisser vide la conserve.
+- Cela se fait depuis la page de l'entité (« Variantes ») ; le Composer ne le propose plus.
 
 ## Résolution d'une phrase
 

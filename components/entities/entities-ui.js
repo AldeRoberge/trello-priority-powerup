@@ -259,7 +259,7 @@
 
     function rowSummary(e) {
       var parts = [];
-      var data = EM().effectiveData(state.entities, e);
+      var data = EM().effectiveData(state.entities, e, state.schema);
       Object.keys(data).forEach(function (cid) {
         Object.keys(data[cid]).forEach(function (key) {
           var f = EM().fieldOf(state.schema, cid + '.' + key);
@@ -282,7 +282,7 @@
       });
       function fillTypes() {
         typeSel.textContent = '';
-        typeSel.appendChild(h('option', { value: '', text: 'Tous les types' }));
+        typeSel.appendChild(h('option', { value: '', text: 'Tous les archétypes' }));
         state.schema.types.forEach(function (ty) {
           typeSel.appendChild(h('option', { value: ty.id, text: (ty.parents.length ? '↳ ' : '') + ty.name }));
         });
@@ -433,13 +433,13 @@
 
     function fieldInput(e, comp, field) {
       var path = comp.id + '.' + field.key;
-      var val = EM().effectiveValue(state.entities, e, path);
+      var val = EM().effectiveValue(state.entities, e, path, state.schema);
       function commit(v) {
         applyEntity(
           function (cur) {
             return EM().setValue(state.schema, cur, path, v);
           },
-          { rebuild: !!e.base }
+          { rebuild: !!e.base || hasDefaults(e) }
         );
       }
       var aria = comp.name + ' : ' + field.label;
@@ -543,13 +543,48 @@
       return field.unit ? h('div', { class: 'en-unit' }, [inp, h('span', { class: 'en-unit-sfx', text: field.unit })]) : inp;
     }
 
+    /** Do this entity's archetypes give any default value? (then editing a field changes its provenance badge) */
+    function hasDefaults(e) {
+      return Object.keys(EM().archetypeDefaults(state.schema, e.types)).length > 0;
+    }
+
     /** Label of a field with its provenance: inherited from the archetype, or overridden here (resettable). */
     function fieldLabel(e, comp, f) {
       var path = comp.id + '.' + f.key;
       var row = h('div', { class: 'en-flabel' }, [h('label', { text: f.label })]);
-      if (!e.base) return row;
-      var origin = EM().originOf(state.entities, e, path);
-      var base = EM().findById(state.entities, e.base);
+      var origin = EM().originOf(state.entities, e, path, state.schema);
+      var base = e.base ? EM().findById(state.entities, e.base) : null;
+      var archDefault = EM().archetypeDefaults(state.schema, e.types);
+      var hasArch = !!(archDefault[comp.id] && archDefault[comp.id][f.key] !== undefined);
+      function resetButton(title) {
+        return h(
+          'button',
+          {
+            class: 'en-link',
+            title: title,
+            onclick: function () {
+              applyEntity(
+                function (cur) {
+                  return EM().setValue(state.schema, cur, path, undefined);
+                },
+                { rebuild: true }
+              );
+            },
+          },
+          [icon('arrow-back-up'), 'Réinitialiser']
+        );
+      }
+      if (origin === 'archetype') {
+        row.appendChild(h('span', { class: 'en-badge en-badge--inherited', title: 'Valeur par défaut de l’archétype : modifier ici crée une valeur propre' }, [icon('sparkles'), 'par défaut']));
+        return row;
+      }
+      if (!base) {
+        if (origin === 'own' && hasArch) {
+          row.appendChild(h('span', { class: 'en-badge en-badge--own' }, ['modifié']));
+          row.appendChild(resetButton('Revenir à la valeur par défaut de l’archétype'));
+        }
+        return row;
+      }
       if (origin && origin !== 'own') {
         row.appendChild(h('span', { class: 'en-badge en-badge--inherited', title: 'Suit le modèle : modifier ici crée une valeur propre' }, [icon('git-fork'), 'hérité de ' + (EM().findById(state.entities, origin) || { name: '?' }).name]));
       } else if (origin === 'own' && base && EM().effectiveValue(state.entities, base, path) !== undefined) {
@@ -581,7 +616,7 @@
     /** Archetype selector, clone buttons and the list of variants. */
     function archetypeCard(e) {
       var base = e.base ? EM().findById(state.entities, e.base) : null;
-      var sel = h('select', { class: 'en-input', 'aria-label': 'Modèle (archétype)' });
+      var sel = h('select', { class: 'en-input', 'aria-label': 'Variante de (modèle)' });
       sel.appendChild(h('option', { value: '', text: 'Aucun (entité indépendante)' }));
       state.entities.forEach(function (x) {
         if (x.id === e.id || EM().wouldCycle(state.entities, e.id, x.id)) return;
@@ -598,13 +633,13 @@
       });
       var variants = EM().variantsOf(state.entities, e.id);
       var card = h('div', { class: 'en-card' }, [
-        h('h3', { class: 'en-h', text: 'Modèle et variantes' }),
-        h('div', { class: 'en-field' }, [h('label', { text: 'Basé sur' }), sel]),
+        h('h3', { class: 'en-h', text: 'Variantes' }),
+        h('div', { class: 'en-field' }, [h('label', { text: 'Variante de' }), sel]),
         h('p', {
           class: 'en-hint',
           text: base
             ? 'Les valeurs non modifiées ici suivent « ' + base.name + ' » ; ce que vous changez ici n’affecte jamais « ' + base.name + ' » ni ses autres variantes.'
-            : 'Choisissez un modèle pour hériter de ses valeurs et ne stocker que vos différences.',
+            : 'Optionnel : prendre une autre entité pour modèle, hériter de ses valeurs et ne stocker que vos différences.',
         }),
       ]);
       var actions = h('div', { class: 'en-actions' }, [
@@ -736,7 +771,7 @@
         h('div', { class: 'en-card' }, [
           h('div', { class: 'en-field' }, [h('label', { text: 'Nom' }), nameInput]),
           h('div', { class: 'en-field' }, [h('label', { text: 'Alias (séparés par des virgules)' }), aliasInput]),
-          h('div', { class: 'en-field' }, [h('label', { text: 'Types' }), typeBox]),
+          h('div', { class: 'en-field' }, [h('label', { text: 'Archétypes' }), typeBox]),
         ])
       );
       els.main.appendChild(ontologyCard(e));
@@ -746,13 +781,37 @@
         .forEach(function (cid) {
           var comp = EM().findById(state.schema.components, cid);
           if (!comp) return;
-          var card = h('div', { class: 'en-card' }, [h('h3', { class: 'en-h', text: comp.name })]);
+          var own = EM().componentIdsOf(state.schema, { types: e.types }).indexOf(cid) < 0;
+          var card = h('div', { class: 'en-card' }, [
+            h('h3', { class: 'en-h' }, [
+              comp.name,
+              own
+                ? h(
+                    'button',
+                    {
+                      class: 'en-link',
+                      title: 'Retirer ce composant de l’entité (les valeurs saisies restent en mémoire)',
+                      onclick: function () {
+                        applyEntity(
+                          function (cur) {
+                            return EM().setComponents(state.schema, cur, (cur.components || []).filter(function (x) { return x !== cid; }));
+                          },
+                          { rebuild: true }
+                        );
+                      },
+                    },
+                    [icon('x'), 'Retirer']
+                  )
+                : null,
+            ]),
+          ]);
           if (!comp.fields.length) card.appendChild(h('p', { class: 'en-hint', text: 'Ce composant n’a aucun champ (voir Schéma).' }));
           comp.fields.forEach(function (f) {
             card.appendChild(h('div', { class: 'en-field' }, [fieldLabel(e, comp, f), fieldInput(e, comp, f)]));
           });
           els.main.appendChild(card);
         });
+      els.main.appendChild(addComponentCard(e));
       els.main.appendChild(linksCard(e));
       els.main.appendChild(
         h('div', { class: 'en-card' }, [historyBox])
@@ -782,6 +841,41 @@
           ),
         ])
       );
+    }
+
+    /** Composition: an entity can carry components beyond its archetypes. */
+    function addComponentCard(e) {
+      var have = EM().componentIdsOf(state.schema, e);
+      var avail = state.schema.components.filter(function (c) {
+        return have.indexOf(c.id) < 0 && c.fields.length;
+      });
+      if (!avail.length) return h('div', { hidden: true });
+      var sel = h('select', { class: 'en-input', 'aria-label': 'Composant à ajouter' });
+      avail.forEach(function (c) {
+        sel.appendChild(h('option', { value: c.id, text: c.name + ' (' + c.fields.map(function (x) { return x.label; }).join(', ') + ')' }));
+      });
+      return h('div', { class: 'en-card en-addcomp' }, [
+        h('h3', { class: 'en-h', text: 'Composer davantage' }),
+        h('p', { class: 'en-hint', text: 'Ajoutez un composant à cette entité seulement, sans changer son archétype.' }),
+        h('div', { class: 'en-link-add' }, [
+          sel,
+          h(
+            'button',
+            {
+              class: 'en-btn',
+              onclick: function () {
+                applyEntity(
+                  function (cur) {
+                    return EM().setComponents(state.schema, cur, (cur.components || []).concat([sel.value]));
+                  },
+                  { rebuild: true }
+                );
+              },
+            },
+            [icon('plus'), 'Ajouter le composant']
+          ),
+        ]),
+      ]);
     }
 
     function openEntity(id) {
@@ -1020,7 +1114,7 @@
       );
       if (global.EntitiesLibrary) main.appendChild(libraryCard());
       main.appendChild(relationsCard());
-      main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Types' }));
+      main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Archétypes' }));
       state.schema.types.forEach(function (ty) {
         main.appendChild(typeCard(ty));
       });
@@ -1034,7 +1128,7 @@
               setSchema(EM().upsertType(state.schema, { name: 'Type ' + n, components: [] }));
             },
           },
-          [icon('plus'), 'Nouveau type']
+          [icon('plus'), 'Nouvel archétype']
         )
       );
       main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Composants' }));
@@ -1171,9 +1265,56 @@
       return card;
     }
 
+    /** Default values of an archetype: what an entity gets for a field it leaves empty (links excluded). */
+    function defaultsEditor(ty) {
+      var defaults = ty.defaults || {};
+      var box = h('details', { class: 'en-defaults' }, [h('summary', { text: 'Valeurs par défaut (' + Object.keys(defaults).length + ')' })]);
+      if (state.openDefaults === ty.id) box.setAttribute('open', '');
+      var any = false;
+      ty.components.forEach(function (cid) {
+        var comp = EM().findById(state.schema.components, cid);
+        if (!comp) return;
+        comp.fields.forEach(function (fd) {
+          if (fd.kind === 'ref' || fd.kind === 'refs') return;
+          any = true;
+          var path = cid + '.' + fd.key;
+          var cur = defaults[path];
+          var ctl;
+          if (fd.kind === 'bool' || fd.kind === 'choice') {
+            ctl = h('select', { class: 'en-input', 'aria-label': 'Défaut : ' + fd.label });
+            ctl.appendChild(h('option', { value: '', text: '—' }));
+            (fd.kind === 'bool' ? ['oui', 'non'] : fd.options || []).forEach(function (o) {
+              ctl.appendChild(h('option', { value: o, text: o }));
+            });
+            ctl.value = fd.kind === 'bool' ? (cur === true ? 'oui' : cur === false ? 'non' : '') : cur || '';
+          } else {
+            ctl = h('input', {
+              class: 'en-input',
+              type: fd.kind === 'number' ? 'number' : fd.kind === 'date' ? 'date' : 'text',
+              step: fd.kind === 'number' ? 'any' : null,
+              'aria-label': 'Défaut : ' + fd.label,
+              value: Array.isArray(cur) ? cur.join(', ') : cur == null ? '' : String(cur),
+            });
+          }
+          ctl.addEventListener('change', function () {
+            state.openDefaults = ty.id;
+            var v = fd.kind === 'multi' ? splitList(ctl.value) : ctl.value;
+            try {
+              setSchema(EM().setTypeDefault(state.schema, ty.id, path, v));
+            } catch (err) {
+              toast('Valeur refusée : ' + (err && err.message), 'error');
+            }
+          });
+          box.appendChild(h('div', { class: 'en-field-row' }, [h('label', { text: comp.name + ' : ' + fd.label + (fd.unit ? ' (' + fd.unit + ')' : '') }), ctl]));
+        });
+      });
+      if (!any) box.appendChild(h('p', { class: 'en-hint', text: 'Cet archétype n’a pas de composant propre avec des champs à préremplir.' }));
+      return box;
+    }
+
     function typeCard(ty) {
-      var name = h('input', { class: 'en-input', value: ty.name, 'aria-label': 'Nom du type' });
-      var aliases = h('input', { class: 'en-input', value: ty.aliases.join(', '), placeholder: 'alias : plant, verdure', 'aria-label': 'Alias du type' });
+      var name = h('input', { class: 'en-input', value: ty.name, 'aria-label': 'Nom de l’archétype' });
+      var aliases = h('input', { class: 'en-input', value: ty.aliases.join(', '), placeholder: 'alias : plant, verdure', 'aria-label': 'Alias de l’archétype' });
       var checks = h('div', { class: 'en-checks' });
       var chosen = ty.components.slice();
       var nature = h('select', { class: 'en-input', 'aria-label': 'Nature du type' });
@@ -1216,6 +1357,7 @@
             role: role.checked,
             description: desc.value,
             parents: parents,
+            defaults: ty.defaults,
             components: chosen,
           })
         );
@@ -1251,7 +1393,8 @@
         h('div', { class: 'en-field' }, [h('label', { text: 'Nature' }), nature]),
         h('div', { class: 'en-field' }, [h('label', { class: 'en-check' }, [role, 'Rôle (une entité l’est dans un contexte, pas par nature)'])]),
         ty.parents.length || state.schema.types.length > 1 ? h('div', { class: 'en-field' }, [h('label', { text: 'Est une sorte de' }), parentBox]) : null,
-        h('div', { class: 'en-field' }, [h('label', { text: 'Composants (les types parents apportent les leurs)' }), checks]),
+        h('div', { class: 'en-field' }, [h('label', { text: 'Composants (les archétypes parents apportent les leurs)' }), checks]),
+        defaultsEditor(ty),
         h(
           'button',
           {
@@ -1266,7 +1409,7 @@
               setSchema(EM().removeType(state.schema, ty.id));
             },
           },
-          [icon('trash'), state.confirm === delId ? 'Confirmer (les entités perdent ce type)' : 'Supprimer le type']
+          [icon('trash'), state.confirm === delId ? 'Confirmer (les entités perdent cet archétype)' : 'Supprimer l’archétype']
         ),
       ]);
     }

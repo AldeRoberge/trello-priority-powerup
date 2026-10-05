@@ -1,24 +1,20 @@
 /*
- * Role: UI of the Entity composer: a dialog that interviews the user to create an entity (and what it
- * needs: a new place, a new type) and creates everything linked in one go. Logic: EntitiesComposer.
- *
- *   header   title, breadcrumb of the entities being composed (nested), close
- *   rail     the steps for the current entity (Nom et type, one per component, Liens, Résumé)
- *   main     the questions of the current step
- *   aside    live preview card (name, types, answers, links, what will be created too)
- *   footer   Retour | Passer/Suivant | Créer
- *
- * Nesting: a link question can "Créer « Salon »": that pushes a sub-interview for the place; finishing
- * it returns to the question with the link set. Nothing is written until the final "Créer".
+ * Role: UI of the Entity composer: ONE page to create an entity. An ARCHETYPE is a predefined model (a bundle of
+ * components with default values); an ENTITY is an instance of it that stores only its overrides. The page:
+ *   1. Name      one field ("Ficus, une plante au travail" is understood: name, archetype, place) + aliases
+ *   2. Archetype pills grouped by nature (installed ones, ready-made library ones with a "+", a new one);
+ *                several can be combined
+ *   3. Components one card per component the archetypes bring, filled in place; "+ Composant" adds more
+ *                (existing ones, or a new one written in a line)
+ *   4. Links     relations to other entities, with the relations that fit what is being created
+ * Fields left empty take the archetype's default (shown as "par défaut"). Linking to something that does not
+ * exist offers "Créer « Salon »": the same page opens for it and comes back. Nothing is written until the
+ * final "Créer". Logic: EntitiesComposer.
  *
  * Usage: EntitiesComposerUI.open({ schema, entities, initialText?, initialTypes?, onDone(result) })
- *   result = { schema, entities, created, rootId, again }
+ *   result = { schema, entities, created, rootId, again, types }
  *
- * The first step starts from what the thing IS (matter, living, agent, place, event, social fact, idea):
- * it filters the types and offers the ready-made ones of the library; the Links step asks the question that
- * fits (what embodies an idea, what contains a place...) and proposes the matching relations.
- *
- * Contents: 1 helpers | 2 open: state | 3 steps | 4 field controls | 5 chrome | 6 flow
+ * Contents: 1 helpers | 2 open: state | 3 page | 4 field controls | 5 links | 6 chrome | 7 flow
  */
 (function (global) {
   'use strict';
@@ -83,19 +79,20 @@
       entities: ctx.entities,
       drafts: {},
       order: [],
-      stack: [], // frames: { id, step, from: {id, kind, path, relType}|null }
+      stack: [], // frames: { id, from: {id, kind, path, relType}|null }
       rootId: '',
       confirmClose: false,
       newType: null, // { name, aliases, comps:[], fieldsText, nature, parents:[], role, error } while the inline form is open
-      nature: '', // nature chosen on the first step (filters the types); '' = all
+      newComp: null, // { name, fieldsText, error } while the "new component" form is open
+      filter: '', // archetype search
       libMsg: '', // outcome of the last library install
-      shake: false,
+      focusName: true,
+      pillsOpen: null, // archetype list expanded? null = open until an archetype is chosen
     };
 
     var els = {
       overlay: h('div', { class: 'cp-overlay' }),
       header: h('header', { class: 'cp-head' }),
-      rail: h('nav', { class: 'cp-rail', 'aria-label': 'Étapes' }),
       main: h('section', { class: 'cp-main' }),
       aside: h('aside', { class: 'cp-aside', 'aria-label': 'Aperçu' }),
       footer: h('footer', { class: 'cp-foot' }),
@@ -103,7 +100,7 @@
     var dialog = h(
       'div',
       { class: 'cp-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Composer une entité' },
-      [els.header, h('div', { class: 'cp-body' }, [els.rail, els.main, els.aside]), els.footer]
+      [els.header, h('div', { class: 'cp-body' }, [els.main, els.aside]), els.footer]
     );
     els.overlay.appendChild(dialog);
 
@@ -119,7 +116,7 @@
       st.drafts[d.id] = d;
     }
     function isSub() {
-      return st.stack.length > 1 || (frame() && frame().from);
+      return st.stack.length > 1;
     }
 
     function pseudoOf(d) {
@@ -152,258 +149,297 @@
       var t = d.types.length ? EM().findById(st.schema.types, d.types[0]) : null;
       return (t && t.icon) || 'stack-2';
     }
-    function steps() {
-      var all = EC().stepsFor(st.schema, draft());
-      var sub = isSub();
-      var preset = !!draft().preset;
-      return all
-        .filter(function (s) {
-          if (sub && (s.kind === 'links' || s.kind === 'review')) return false;
-          if (preset && s.kind === 'start') return false;
-          if (!preset && s.kind === 'identity') return false; // merged into the first step
-          return true;
-        })
-        .map(function (s) {
-          return s.kind === 'start' ? Object.assign({}, s, { title: 'Nom et type' }) : s;
-        });
-    }
-    function stepIndex() {
-      var list = steps();
-      for (var i = 0; i < list.length; i++) if (list[i].key === frame().step) return i;
-      return 0;
-    }
-
-    function addDraft(d, from, step) {
+    function addDraft(d, from) {
       setDraft(d);
       st.order.push(d.id);
-      st.stack.push({ id: d.id, step: step || 'start', from: from || null });
+      st.stack.push({ id: d.id, from: from || null });
     }
 
-    /* ── 3. Steps ─────────────────────────────────────────────────── */
+    function otherDrafts() {
+      return st.order
+        .filter(function (id) {
+          return id !== frame().id;
+        })
+        .map(function (id) {
+          return st.drafts[id];
+        });
+    }
 
-    function renderStart(box) {
+    /* ── 3. Page ──────────────────────────────────────────────────── */
+
+    /** Reads the typed text as a sentence once (name, archetypes, answers, links) and keeps only the name in the field. */
+    function commitIntent() {
       var d = draft();
+      var text = (d.intent || '').trim();
+      if (!text || d.intentApplied === text) return false;
+      var r = EC().readIntent(st.schema, st.entities, text);
+      var structured = r.types.length || Object.keys(r.answers).length || r.relations.length;
+      var nd = EC().pruneAnswers(st.schema, EC().applyIntent(st.schema, Object.assign({}, d, { name: '' }), r));
+      nd.name = r.name || d.name;
+      nd.intent = nd.name;
+      nd.intentApplied = nd.name;
+      setDraft(nd);
+      return !!structured;
+    }
+
+    function nameBlock() {
+      var sec = h('div', { class: 'cp-sec cp-sec--name' });
+      var understood = h('div', { class: 'cp-understood', 'aria-live': 'polite' });
+      var issuesBox = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
       var input = h('input', {
         class: 'cp-input cp-input--big',
-        'aria-label': 'Décrivez ce que vous ajoutez',
-        placeholder: 'Ex. : Ficus, une plante au travail',
-        value: d.intent || '',
-        'data-autofocus': '1',
+        placeholder: 'Nom : Ficus, ou Ficus, une plante au travail',
+        'aria-label': 'Nom',
+        'data-name': '1',
         'data-noenter': '1',
+        value: draft().intent || draft().name || '',
         oninput: function () {
-          setDraft(Object.assign({}, draft(), { intent: input.value }));
-          paintUnderstood();
-          refresh(); // the footer's Suivant enables as soon as a sentence is typed
-        },
-        onblur: function () {
-          applyIntentNow();
+          var text = input.value;
+          var r = EC().readIntent(st.schema, st.entities, text);
+          setDraft(Object.assign({}, draft(), { intent: text, name: r.name || '' }));
+          paintUnderstood(r);
+          paintIssues();
           refresh();
         },
+        onblur: function () {
+          if (commitIntent()) {
+            renderMain();
+            refresh();
+          }
+        },
         onkeydown: function (ev) {
-          if (ev.key === 'Enter') {
-            ev.preventDefault();
-            next();
+          if (ev.key !== 'Enter') return;
+          ev.preventDefault();
+          if (commitIntent()) {
+            renderMain();
+            refresh();
           }
         },
       });
-      var understood = h('div', { class: 'cp-understood', 'aria-live': 'polite' });
-      function paintUnderstood() {
+      function paintUnderstood(r) {
         understood.textContent = '';
-        var text = draft().intent || '';
-        if (!text.trim()) {
-          understood.appendChild(
-            h('span', { class: 'cp-hint', text: 'Écrivez un nom, puis (après une virgule) ce que c’est et où : je remplis le reste.' })
-          );
-          return;
-        }
-        var r = EC().readIntent(st.schema, st.entities, text);
-        var chips = [];
-        if (r.name) chips.push(['tag', 'Nom : ' + r.name]);
+        r = r || EC().readIntent(st.schema, st.entities, draft().intent || '');
+        if (r.name === (draft().intent || '').trim() && !r.types.length) return;
         r.types.forEach(function (t) {
-          chips.push(['category', 'Type : ' + typeName(t)]);
+          understood.appendChild(h('span', { class: 'cp-chip cp-chip--ok' }, [icon('category'), typeName(t)]));
         });
         Object.keys(r.answers).forEach(function (p) {
           var f = EM().fieldOf(st.schema, p);
-          if (f) chips.push(['link', f.field.label + ' : ' + EM().formatValue(f.field, r.answers[p], st.entities)]);
+          if (f) understood.appendChild(h('span', { class: 'cp-chip cp-chip--ok' }, [icon('link'), f.field.label + ' : ' + EM().formatValue(f.field, r.answers[p], st.entities)]));
         });
         r.relations.forEach(function (x) {
-          chips.push(['link', x.type + ' ' + nameOf(x.to)]);
+          understood.appendChild(h('span', { class: 'cp-chip cp-chip--ok' }, [icon('link'), x.type + ' ' + nameOf(x.to)]));
         });
-        chips.forEach(function (c) {
-          understood.appendChild(h('span', { class: 'cp-chip cp-chip--ok' }, [icon(c[0]), c[1]]));
-        });
-        if (r.name !== text && !r.types.length && !Object.keys(r.answers).length && !r.relations.length) {
-          understood.appendChild(h('span', { class: 'cp-hint', text: 'Aucun type reconnu : choisissez-en un ci-dessous.' }));
-        }
       }
+      function paintIssues() {
+        issuesBox.textContent = '';
+        EC()
+          .issues(st.schema, st.entities, draft(), otherDrafts())
+          .forEach(function (i) {
+            if (i.code !== 'duplicate-name' && i.code !== 'alias-clash') return;
+            issuesBox.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
+          });
+      }
+      var aliasBox = h('div', { class: 'cp-chipedit' });
+      var aliasIn = h('input', {
+        class: 'cp-chipedit-in',
+        placeholder: '+ alias (travail, work, bureau…)',
+        'aria-label': 'Alias',
+        'data-noenter': '1',
+        onkeydown: function (ev) {
+          if (ev.key === 'Enter' || ev.key === ',') {
+            ev.preventDefault();
+            addAlias(aliasIn.value);
+          } else if (ev.key === 'Backspace' && !aliasIn.value && draft().aliases.length) {
+            setAliases(draft().aliases.slice(0, -1));
+          }
+        },
+        onblur: function () {
+          addAlias(aliasIn.value);
+        },
+      });
+      function setAliases(list) {
+        setDraft(Object.assign({}, draft(), { aliases: list }));
+        paintAliases();
+        paintIssues();
+        refresh();
+        aliasIn.focus();
+      }
+      function addAlias(v) {
+        var cur = draft().aliases;
+        splitList(v).forEach(function (a) {
+          var key = EM().normKey(a);
+          if (key && !cur.some(function (x) { return EM().normKey(x) === key; })) cur = cur.concat([a]);
+        });
+        aliasIn.value = '';
+        setDraft(Object.assign({}, draft(), { aliases: cur }));
+        paintAliases();
+        paintIssues();
+        refresh();
+      }
+      function paintAliases() {
+        aliasBox.textContent = '';
+        draft().aliases.forEach(function (a, i) {
+          aliasBox.appendChild(
+            h('span', { class: 'cp-chip' }, [
+              a,
+              h('button', { class: 'cp-x', type: 'button', 'aria-label': 'Retirer l’alias ' + a, onclick: function () { setAliases(draft().aliases.filter(function (_x, j) { return j !== i; })); } }, [icon('x')]),
+            ])
+          );
+        });
+        aliasBox.appendChild(aliasIn);
+      }
+      paintAliases();
       paintUnderstood();
-
-      var natureRow = h('div', { class: 'cp-natures', role: 'group', 'aria-label': 'Nature' });
-      [{ id: '', name: 'Tout', icon: 'apps', hint: 'Tous les types' }].concat(EM().NATURES).forEach(function (n) {
-        var on = st.nature === n.id;
-        natureRow.appendChild(
-          h(
-            'button',
-            {
-              class: 'cp-nature' + (on ? ' is-on' : ''),
-              type: 'button',
-              'aria-pressed': on ? 'true' : 'false',
-              title: n.hint,
-              onclick: function () {
-                applyIntentNow();
-                st.nature = n.id;
-                st.libMsg = '';
-                renderMain();
-              },
-            },
-            [icon(n.icon), h('span', { text: n.name })]
-          )
-        );
-      });
-      var natureInfo = EM().natureById(st.nature);
-      var grid = h('div', { class: 'cp-types', role: 'group', 'aria-label': 'Types' });
-      EC()
-        .typesOfNature(st.schema, st.nature)
-        .forEach(function (ty) {
-        var on = draft().types.indexOf(ty.id) >= 0;
-        var count = st.entities.filter(function (e) {
-          return e.types.indexOf(ty.id) >= 0;
-        }).length;
-        var comps = EM()
-          .componentIdsOf(st.schema, { types: [ty.id] })
-          .map(function (cid) {
-            var c = EM().findById(st.schema.components, cid);
-            return c ? c.name : cid;
-          })
-          .join(' + ');
-        var lineage = ty.parents.length ? 'sorte de ' + ty.parents.map(typeName).join(' + ') + ' · ' : '';
-        grid.appendChild(
-          h(
-            'button',
-            {
-              class: 'cp-type' + (on ? ' is-on' : ''),
-              type: 'button',
-              'aria-pressed': on ? 'true' : 'false',
-              onclick: function () {
-                applyIntentNow();
-                var nd = EC().pruneAnswers(st.schema, EC().toggleType(st.schema, draft(), ty.id, !on));
-                setDraft(nd);
-                renderMain();
-                refresh();
-              },
-            },
-            [
-              icon(ty.icon || 'stack-2'),
-              h('span', { class: 'cp-type-name', text: ty.name }),
-              h('span', { class: 'cp-type-sub', text: lineage + (comps || 'aucun composant') + ' · ' + count }),
-              ty.role ? h('span', { class: 'cp-type-role', text: 'rôle', title: 'Ce que l’entité est dans un contexte, pas par nature' }) : null,
-            ]
-          )
-        );
-      });
-      grid.appendChild(
-        h(
-          'button',
-          {
-            class: 'cp-type cp-type--new',
-            type: 'button',
-            onclick: function () {
-              st.newType = st.newType || { name: '', aliases: '', comps: [], fieldsText: '', nature: st.nature, parents: [], role: false, error: '' };
-              renderMain();
-            },
-          },
-          [icon('plus'), h('span', { class: 'cp-type-name', text: 'Nouveau type' }), h('span', { class: 'cp-type-sub', text: 'Définir en une ligne' })]
-        )
-      );
-      box.appendChild(h('h2', { class: 'cp-q', text: 'Que voulez-vous ajouter ?' }));
-      box.appendChild(input);
-      box.appendChild(understood);
-      // (the name and aliases follow: this step replaces the old separate "Nom" step)
-      renderIdentity(box, true);
-      box.appendChild(h('h3', { class: 'cp-sub', text: 'Qu’est-ce que c’est ?' }));
-      box.appendChild(natureRow);
-      if (natureInfo) box.appendChild(h('p', { class: 'cp-hint', text: natureInfo.hint }));
-      box.appendChild(h('h3', { class: 'cp-sub', text: 'Type' }));
-      box.appendChild(grid);
-      var lib = libraryBox();
-      if (lib) box.appendChild(lib);
-      if (st.newType) box.appendChild(newTypeForm());
-      if (st.entities.length) {
-        var baseSel = h('select', {
-          class: 'cp-input',
-          'aria-label': 'Partir d’un modèle',
-          onchange: function () {
-            applyIntentNow();
-            setDraft(EC().setBase(st.schema, st.entities, draft(), baseSel.value));
-            renderMain();
-            refresh();
-          },
-        });
-        baseSel.appendChild(h('option', { value: '', text: 'Aucun : partir de zéro' }));
-        st.entities.forEach(function (e) {
-          baseSel.appendChild(h('option', { value: e.id, text: e.name + (e.types.length ? ' (' + e.types.map(typeName).join(', ') + ')' : '') }));
-        });
-        baseSel.value = draft().base || '';
-        box.appendChild(h('h3', { class: 'cp-sub', text: 'Modèle (archétype)' }));
-        box.appendChild(
-          h('p', {
-            class: 'cp-hint',
-            text: draft().base
-              ? 'Hérite de « ' + nameOf(draft().base) + ' » : seules vos réponses deviennent des valeurs propres ; le reste suit le modèle.'
-              : 'Optionnel : partir d’une entité existante. Elle hérite de ses valeurs, et ne garde que ce que vous changez.',
-          })
-        );
-        box.appendChild(baseSel);
-      }
+      paintIssues();
+      sec.appendChild(input);
+      sec.appendChild(understood);
+      sec.appendChild(aliasBox);
+      sec.appendChild(issuesBox);
+      return sec;
     }
 
-    /** Ready-made types of the library that are not in the schema yet (for the chosen nature). */
-    function libraryBox() {
-      var EL = global.EntitiesLibrary;
-      if (!EL) return null;
-      var list = EL.listFor(st.schema, st.nature ? { nature: st.nature } : null).filter(function (x) {
-        return !x.installed;
-      });
-      if (!list.length && !st.libMsg) return null;
-      var box = h('div', { class: 'cp-lib' }, [h('span', { class: 'cp-hint', text: list.length ? 'Bibliothèque, un clic pour ajouter :' : '' })]);
-      list.slice(0, 12).forEach(function (x) {
-        box.appendChild(
-          h(
-            'button',
-            { class: 'cp-pick cp-pick--new', type: 'button', title: x.preset.description, onclick: function () { installPreset(x.preset.id); } },
-            [icon(x.preset.icon || 'plus'), x.preset.name]
-          )
-        );
-      });
-      if (st.libMsg) box.appendChild(h('p', { class: 'cp-hint', role: 'status', text: st.libMsg }));
-      return box;
-    }
+    /* Archetypes ------------------------------------------------------ */
 
     function installPreset(pid) {
-      applyIntentNow();
+      commitIntent();
       var r = global.EntitiesLibrary.install(st.schema, pid);
       if (r.error) {
-        st.libMsg = 'Le schéma est trop grand pour ajouter ce type : retirez des types ou composants inutilisés.';
+        st.libMsg = 'Le schéma est trop grand pour ajouter cet archétype : retirez des archétypes ou composants inutilisés.';
         renderMain();
         return;
       }
       st.schema = r.schema;
-      st.libMsg = r.added.types.length ? 'Ajouté : ' + r.added.types.join(', ') + '.' : '';
+      st.libMsg = r.added.types.length > 1 ? 'Ajouté aussi : ' + r.added.types.filter(function (n) { return n !== (global.EntitiesLibrary.presetType(pid) || {}).name; }).join(', ') + '.' : '';
       var tid = r.typeIds[pid];
       if (tid) setDraft(EC().pruneAnswers(st.schema, EC().toggleType(st.schema, draft(), tid, true)));
       renderMain();
       refresh();
     }
 
+    function archetypeBlock() {
+      var sec = h('div', { class: 'cp-sec' });
+      var d = draft();
+      sec.appendChild(
+        h('div', { class: 'cp-sec-head' }, [
+          h('h3', { class: 'cp-sec-title', text: 'Archétype' }),
+          h('span', { class: 'cp-hint', text: 'Un modèle prêt : ses composants et ses valeurs par défaut. Combinez-en plusieurs.' }),
+        ])
+      );
+      var search = h('input', {
+        class: 'cp-input cp-input--small',
+        type: 'search',
+        placeholder: 'Chercher un archétype…',
+        'aria-label': 'Chercher un archétype',
+        'data-noenter': '1',
+        value: st.filter,
+        oninput: function () {
+          st.filter = search.value;
+          paintPills();
+        },
+      });
+      var expanded = st.pillsOpen === null ? !d.types.length : st.pillsOpen;
+      var pills = h('div', { class: 'cp-pgroups' });
+      function paintPills() {
+        pills.textContent = '';
+        var q = EM().normKey(st.filter);
+        var list = EC()
+          .archetypeChoices(st.schema, global.EntitiesLibrary)
+          .filter(function (c) {
+            if (!expanded) return c.installed && d.types.indexOf(c.id) >= 0;
+            return !q || EM().normKey(c.name).indexOf(q) >= 0;
+          });
+        var groups = {};
+        var order = [];
+        list.forEach(function (c) {
+          var k = c.nature || '';
+          if (!groups[k]) {
+            groups[k] = [];
+            order.push(k);
+          }
+          groups[k].push(c);
+        });
+        order.forEach(function (k) {
+          var nat = EM().natureById(k);
+          var row = h('div', { class: 'cp-pills' });
+          groups[k].forEach(function (c) {
+            var on = d.types.indexOf(c.id) >= 0;
+            row.appendChild(
+              h(
+                'button',
+                {
+                  class: 'cp-pill' + (on ? ' is-on' : '') + (c.installed ? '' : ' is-lib'),
+                  type: 'button',
+                  'aria-pressed': c.installed ? (on ? 'true' : 'false') : null,
+                  title: c.description || null,
+                  onclick: function () {
+                    commitIntent();
+                    if (st.pillsOpen === null) st.pillsOpen = false;
+                    if (!c.installed) return installPreset(c.id);
+                    var cur = draft().types.indexOf(c.id) >= 0;
+                    setDraft(EC().pruneAnswers(st.schema, EC().toggleType(st.schema, draft(), c.id, !cur)));
+                    renderMain();
+                    refresh();
+                  },
+                },
+                [icon(c.installed ? c.icon : 'plus'), c.name, c.role ? h('em', { text: ' rôle' }) : null]
+              )
+            );
+          });
+          pills.appendChild(
+            h('div', { class: 'cp-pgroup' }, [h('span', { class: 'cp-pgroup-name' }, [nat ? icon(nat.icon) : null, nat ? nat.name : 'Autre']), row])
+          );
+        });
+        if (!list.length) pills.appendChild(h('span', { class: 'cp-hint', text: 'Aucun archétype ne correspond.' }));
+      }
+      paintPills();
+      if (expanded) sec.appendChild(search);
+      sec.appendChild(pills);
+      var tools = h('div', { class: 'cp-row' }, [
+        h(
+          'button',
+          {
+            class: 'cp-pill cp-pill--new',
+            type: 'button',
+            onclick: function () {
+              st.pillsOpen = !expanded;
+              renderMain();
+            },
+          },
+          [icon(expanded ? 'chevron-up' : 'plus'), expanded ? 'Réduire' : d.types.length ? 'Changer ou combiner' : 'Choisir un archétype']
+        ),
+      ]);
+      if (expanded) {
+        tools.appendChild(
+          h(
+            'button',
+            {
+              class: 'cp-pill cp-pill--new',
+              type: 'button',
+              onclick: function () {
+                st.newType = st.newType || { name: '', aliases: '', comps: [], fieldsText: '', nature: '', parents: [], role: false, error: '' };
+                renderMain();
+              },
+            },
+            [icon('plus'), 'Nouvel archétype']
+          )
+        );
+      }
+      sec.appendChild(tools);
+      if (st.libMsg) sec.appendChild(h('p', { class: 'cp-hint', role: 'status', text: st.libMsg }));
+      if (st.newType) sec.appendChild(newTypeForm());
+      return sec;
+    }
+
     function newTypeForm() {
       var nt = st.newType;
-      var nameIn = h('input', { class: 'cp-input', placeholder: 'Ex. : Outil', value: nt.name, 'aria-label': 'Nom du type', 'data-noenter': '1' });
-      var aliasIn = h('input', { class: 'cp-input', placeholder: 'alias : tool, équipement', value: nt.aliases, 'aria-label': 'Alias du type', 'data-noenter': '1' });
+      var nameIn = h('input', { class: 'cp-input', placeholder: 'Ex. : Outil', value: nt.name, 'aria-label': 'Nom de l’archétype', 'data-noenter': '1' });
+      var aliasIn = h('input', { class: 'cp-input', placeholder: 'alias : tool, équipement', value: nt.aliases, 'aria-label': 'Alias de l’archétype', 'data-noenter': '1' });
       var fieldsIn = h('input', {
         class: 'cp-input',
         placeholder: 'Ex. : État (choix: neuf/usé), Achat (date), Lieu (lien: Lieu), Prix (nombre)',
         value: nt.fieldsText,
-        'aria-label': 'Champs du type',
+        'aria-label': 'Champs de l’archétype',
         'data-noenter': '1',
       });
       var preview = h('div', { class: 'cp-understood' });
@@ -450,7 +486,7 @@
       });
       var natureSel = h('select', {
         class: 'cp-input',
-        'aria-label': 'Nature du type',
+        'aria-label': 'Nature de l’archétype',
         onchange: function () { nt.nature = natureSel.value; },
       });
       natureSel.appendChild(h('option', { value: '', text: 'Je ne sais pas / autre' }));
@@ -476,12 +512,12 @@
       });
       var roleIn = h('input', { type: 'checkbox', checked: nt.role ? true : null, onchange: function (ev) { nt.role = ev.target.checked; } });
       return h('div', { class: 'cp-card' }, [
-        h('h3', { class: 'cp-sub', text: 'Nouveau type' }),
+        h('h3', { class: 'cp-sub', text: 'Nouvel archétype' }),
         h('label', { class: 'cp-label', text: 'Nom' }),
         nameIn,
         h('label', { class: 'cp-label', text: 'Nature : qu’est-ce que c’est, au fond ?' }),
         natureSel,
-        st.schema.types.length ? h('label', { class: 'cp-label', text: 'Est une sorte de… (reprend ses composants et se retrouve avec lui)' }) : null,
+        st.schema.types.length ? h('label', { class: 'cp-label', text: 'Est une sorte de… (reprend ses composants et ses valeurs par défaut)' }) : null,
         st.schema.types.length ? parentBox : null,
         h('label', { class: 'cp-check' }, [roleIn, 'C’est un rôle : une entité l’est dans un contexte (Travailleur, Client), pas par nature']),
         h('label', { class: 'cp-label', text: 'Alias (séparés par des virgules)' }),
@@ -512,7 +548,7 @@
                 });
                 if (r.error) {
                   nt.error =
-                    r.error === 'type-exists' ? 'Un type porte déjà ce nom (ou cet alias).' : r.error === 'name-required' ? 'Donnez un nom au type.' : 'Impossible de créer le type.';
+                    r.error === 'type-exists' ? 'Un archétype porte déjà ce nom (ou cet alias).' : r.error === 'name-required' ? 'Donnez un nom à l’archétype.' : 'Impossible de créer l’archétype.';
                   renderMain();
                   return;
                 }
@@ -524,7 +560,7 @@
                 refresh();
               },
             },
-            [icon('check'), 'Créer le type et le choisir']
+            [icon('check'), 'Créer l’archétype et le choisir']
           ),
           h(
             'button',
@@ -542,159 +578,181 @@
       ]);
     }
 
-    function applyIntentNow() {
-      var d = draft();
-      var text = (d.intent || '').trim();
-      if (!text || d.intentApplied === text) return;
-      // a name taken from an earlier version of the sentence is replaced by the new one
-      var base = d.autoName && d.name === d.autoName ? Object.assign({}, d, { name: '' }) : d;
-      var r = EC().readIntent(st.schema, st.entities, text);
-      var nd = EC().applyIntent(st.schema, base, r);
-      nd.autoName = !base.name && nd.name ? nd.name : d.autoName;
-      nd.intentApplied = text;
-      setDraft(nd);
-      var nameField = els.main.querySelector('[data-name]');
-      if (nameField && nameField.value !== nd.name) nameField.value = nd.name;
-    }
+    /* Components ------------------------------------------------------ */
 
-    function renderIdentity(box, embedded) {
+    function componentCard(cid) {
+      var comp = EM().findById(st.schema.components, cid);
+      if (!comp || !comp.fields.length) return null;
       var d = draft();
-      var issuesBox = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
-      var nameIn = h('input', {
-        class: 'cp-input cp-input--big',
-        placeholder: embedded ? 'Rempli d’après la phrase, ou tapez-le' : 'Ex. : Ficus',
-        value: d.name,
-        'aria-label': 'Nom',
-        'data-name': '1',
-        'data-autofocus': embedded ? null : '1',
-        oninput: function () {
-          setDraft(Object.assign({}, draft(), { name: nameIn.value }));
-          refresh();
-          paintIssues();
-        },
-      });
-      function paintIssues() {
-        issuesBox.textContent = '';
-        EC()
-          .issues(st.schema, st.entities, draft(), otherDrafts())
-          .forEach(function (i) {
-            if (i.code === 'name-required' || i.code === 'no-type' || i.code === 'floating') return;
-            issuesBox.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
-          });
-      }
-      paintIssues();
-      var aliasBox = h('div', { class: 'cp-chipedit' });
-      var aliasIn = h('input', {
-        class: 'cp-chipedit-in',
-        placeholder: 'Ajouter un alias puis Entrée (ex. travail, work, bureau)',
-        'aria-label': 'Alias',
-        'data-noenter': '1',
-        onkeydown: function (ev) {
-          if (ev.key === 'Enter' || ev.key === ',') {
-            ev.preventDefault();
-            addAlias(aliasIn.value);
-          } else if (ev.key === 'Backspace' && !aliasIn.value && draft().aliases.length) {
-            setAliases(draft().aliases.slice(0, -1));
-          }
-        },
-        onblur: function () {
-          addAlias(aliasIn.value);
-        },
-      });
-      function setAliases(list) {
-        setDraft(Object.assign({}, draft(), { aliases: list }));
-        paintAliases();
-        paintIssues();
-        refresh();
-        aliasIn.focus();
-      }
-      function addAlias(v) {
-        splitList(v).forEach(function (a) {
-          var cur = draft().aliases;
-          var key = EM().normKey(a);
-          if (key && !cur.some(function (x) { return EM().normKey(x) === key; })) cur = cur.concat([a]);
-          setDraft(Object.assign({}, draft(), { aliases: cur }));
-        });
-        aliasIn.value = '';
-        paintAliases();
-        paintIssues();
-        refresh();
-      }
-      function paintAliases() {
-        aliasBox.textContent = '';
-        draft().aliases.forEach(function (a, i) {
-          aliasBox.appendChild(
-            h('span', { class: 'cp-chip' }, [
-              a,
-              h(
-                'button',
-                {
-                  class: 'cp-x',
-                  type: 'button',
-                  'aria-label': 'Retirer l’alias ' + a,
-                  onclick: function () {
-                    setAliases(
-                      draft().aliases.filter(function (_x, j) {
-                        return j !== i;
-                      })
-                    );
-                  },
-                },
-                [icon('x')]
-              ),
-            ])
-          );
-        });
-        aliasBox.appendChild(aliasIn);
-      }
-      paintAliases();
-      box.appendChild(embedded ? h('h3', { class: 'cp-sub', text: 'Comment l’appelle-t-on ?' }) : h('h2', { class: 'cp-q', text: 'Comment l’appelle-t-on ?' }));
-      box.appendChild(nameIn);
-      box.appendChild(issuesBox);
-      box.appendChild(h('h3', { class: 'cp-sub', text: 'Alias (facultatif)' }));
-      box.appendChild(h('p', { class: 'cp-hint', text: 'Les autres façons de le nommer : l’assistant retrouvera l’entité dans « arroser au travail » grâce à l’alias « travail ».' }));
-      box.appendChild(aliasBox);
-    }
-
-    function otherDrafts() {
-      return st.order
-        .filter(function (id) {
-          return id !== frame().id;
+      var owners = d.types
+        .filter(function (tid) {
+          return EM()
+            .typeLineage(st.schema, tid)
+            .some(function (t) {
+              return t.components.indexOf(cid) >= 0;
+            });
         })
-        .map(function (id) {
-          return st.drafts[id];
-        });
-    }
-
-    function renderComponent(box, step) {
-      var comp = EM().findById(st.schema.components, step.componentId);
-      if (!comp) return;
-      var d = draft();
-      box.appendChild(h('h2', { class: 'cp-q', text: comp.name }));
-      box.appendChild(h('p', { class: 'cp-hint', text: d.name ? 'Parlons de « ' + d.name + ' ». Tout est facultatif.' : 'Tout est facultatif.' }));
+        .map(typeName);
+      var head = h('div', { class: 'cp-ccard-head' }, [
+        h('strong', { text: comp.name }),
+        h('span', { class: 'cp-chip', text: owners.length ? owners.join(' + ') : 'ajouté' }),
+      ]);
+      if (!owners.length) {
+        head.appendChild(
+          h(
+            'button',
+            {
+              class: 'cp-x',
+              type: 'button',
+              'aria-label': 'Retirer le composant ' + comp.name,
+              onclick: function () {
+                setDraft(EC().toggleComponent(st.schema, draft(), cid, false));
+                renderMain();
+                refresh();
+              },
+            },
+            [icon('x')]
+          )
+        );
+      }
+      var grid = h('div', { class: 'cp-fields' });
       comp.fields.forEach(function (f) {
-        var path = comp.id + '.' + f.key;
-        var q = EC().questionFor(comp, f, d);
-        box.appendChild(
-          h('div', { class: 'cp-ask' }, [
-            h('label', { class: 'cp-ask-q', text: q.text }),
-            h('span', { class: 'cp-hint', text: q.hint }),
-            inheritedLine(path, f),
+        var path = cid + '.' + f.key;
+        var wide = f.kind === 'longtext' || f.kind === 'refs' || f.kind === 'ref' || f.kind === 'multi' || f.kind === 'choice';
+        grid.appendChild(
+          h('div', { class: 'cp-field' + (wide ? ' cp-field--wide' : '') }, [
+            h('label', { class: 'cp-field-label', text: f.label }),
             fieldControl(path, f),
+            defaultLine(path, f),
           ])
         );
       });
+      return h('div', { class: 'cp-ccard' }, [head, grid]);
+    }
+
+    function componentsBlock() {
+      var sec = h('div', { class: 'cp-sec' });
+      var d = draft();
+      var ids = EM().componentIdsOf(st.schema, d);
+      sec.appendChild(
+        h('div', { class: 'cp-sec-head' }, [
+          h('h3', { class: 'cp-sec-title', text: 'Composants' }),
+          h('span', { class: 'cp-hint', text: ids.length ? 'Tout est facultatif : un champ vide prend la valeur par défaut.' : 'Choisissez un archétype, ou ajoutez des composants un à un.' }),
+        ])
+      );
+      ids.forEach(function (cid) {
+        var card = componentCard(cid);
+        if (card) sec.appendChild(card);
+      });
+      var more = h('div', { class: 'cp-pills' });
+      EC()
+        .componentsAvailable(st.schema, d)
+        .forEach(function (c) {
+          more.appendChild(
+            h(
+              'button',
+              {
+                class: 'cp-pill cp-pill--comp',
+                type: 'button',
+                title: c.fields.map(function (x) { return x.label; }).join(', '),
+                onclick: function () {
+                  setDraft(EC().toggleComponent(st.schema, draft(), c.id, true));
+                  renderMain();
+                  refresh();
+                },
+              },
+              [icon('plus'), c.name]
+            )
+          );
+        });
+      more.appendChild(
+        h(
+          'button',
+          {
+            class: 'cp-pill cp-pill--new',
+            type: 'button',
+            onclick: function () {
+              st.newComp = st.newComp || { name: '', fieldsText: '', error: '' };
+              renderMain();
+            },
+          },
+          [icon('plus'), 'Nouveau composant']
+        )
+      );
+      sec.appendChild(h('div', { class: 'cp-addcomp' }, [h('span', { class: 'cp-pgroup-name', text: 'Ajouter un composant' }), more]));
+      if (st.newComp) sec.appendChild(newComponentForm());
+      return sec;
+    }
+
+    function newComponentForm() {
+      var nc = st.newComp;
+      var nameIn = h('input', { class: 'cp-input', placeholder: 'Nom : Entretien', value: nc.name, 'aria-label': 'Nom du composant', 'data-noenter': '1' });
+      var fieldsIn = h('input', {
+        class: 'cp-input',
+        placeholder: 'Champs : Arrosage tous les (nombre: jours), Dernier arrosage (date), Santé (choix: bonne/fragile)',
+        value: nc.fieldsText,
+        'aria-label': 'Champs du composant',
+        'data-noenter': '1',
+      });
+      var preview = h('div', { class: 'cp-understood' });
+      var err = h('p', { class: 'cp-error', role: 'alert', hidden: nc.error ? null : true, text: nc.error });
+      var kindName = { text: 'texte', number: 'nombre', date: 'date', bool: 'oui/non', choice: 'choix', ref: 'lien', refs: 'liens', multi: 'choix multiple', longtext: 'texte long', geo: 'coordonnées', url: 'lien web' };
+      function sync() {
+        nc.name = nameIn.value;
+        nc.fieldsText = fieldsIn.value;
+        preview.textContent = '';
+        EC()
+          .parseFieldSpec(nc.fieldsText, st.schema)
+          .forEach(function (f) {
+            preview.appendChild(h('span', { class: 'cp-chip' }, [f.label, h('em', { text: ' ' + kindName[f.kind] })]));
+          });
+      }
+      nameIn.addEventListener('input', sync);
+      fieldsIn.addEventListener('input', sync);
+      sync();
+      return h('div', { class: 'cp-card' }, [
+        h('h3', { class: 'cp-sub', text: 'Nouveau composant' }),
+        nameIn,
+        fieldsIn,
+        preview,
+        h('p', { class: 'cp-hint', text: 'Genres : texte, texte-long, nombre (ex. nombre: kg), date, oui-non, choix: a/b/c, choix-multiple: a/b, geo, url, lien: Archétype, liens: Archétype.' }),
+        err,
+        h('div', { class: 'cp-row' }, [
+          h(
+            'button',
+            {
+              class: 'cp-btn cp-btn--primary',
+              type: 'button',
+              onclick: function () {
+                sync();
+                var r = EC().defineComponent(st.schema, nc.name, nc.fieldsText);
+                if (r.error) {
+                  nc.error = r.error === 'name-required' ? 'Donnez un nom au composant.' : r.error === 'fields-required' ? 'Décrivez au moins un champ.' : 'Impossible de créer le composant.';
+                  renderMain();
+                  return;
+                }
+                st.schema = r.schema;
+                st.newComp = null;
+                setDraft(EC().toggleComponent(st.schema, draft(), r.componentId, true));
+                renderMain();
+                refresh();
+              },
+            },
+            [icon('check'), 'Créer et ajouter']
+          ),
+          h('button', { class: 'cp-btn', type: 'button', onclick: function () { st.newComp = null; renderMain(); } }, ['Annuler']),
+        ]),
+      ]);
     }
 
     /* ── 4. Field controls ────────────────────────────────────────── */
 
-    function inheritedLine(path, f) {
-      var v = EC().inheritedValue(st.entities, draft(), path);
-      if (v === undefined) return null;
-      return h('span', { class: 'cp-inherit' }, [
-        icon('git-fork'),
-        'Hérité de « ' + nameOf(draft().base) + ' » : ' + valueText(f, v) + ' (laissez vide pour le garder)',
-      ]);
+    /** "par défaut : X (Plante)": what the field gets when left empty (archetype default or model entity). */
+    function defaultLine(path, f) {
+      if (draft().answers[path] !== undefined) return null;
+      var df = EC().defaultFor(st.schema, st.entities, draft(), path);
+      if (!df) return null;
+      return h('span', { class: 'cp-inherit' }, [icon(df.source === 'model' ? 'git-fork' : 'sparkles'), 'par défaut : ' + valueText(f, df.value) + (df.from ? ' (' + df.from + ')' : '')]);
     }
 
     function answer(path, v) {
@@ -862,7 +920,7 @@
         });
         var nd = EC().newDraft({ name: name, types: types });
         nd.preset = types.length > 0;
-        addDraft(nd, { id: draft().id, kind: multi ? 'answers' : 'answer', path: path }, nd.preset ? 'identity' : 'start');
+        addDraft(nd, { id: draft().id, kind: multi ? 'answers' : 'answer', path: path });
         render();
       }
       function paintPicked() {
@@ -883,7 +941,7 @@
         });
       }
       function edit(id) {
-        st.stack.push({ id: id, step: st.drafts[id].preset ? 'identity' : 'start', from: null });
+        st.stack.push({ id: id, from: null });
         render();
       }
       function paintOptions() {
@@ -940,10 +998,12 @@
       return wrap;
     }
 
+    /* ── 5. Links ─────────────────────────────────────────────────── */
+
     function renderLinks(box) {
       var d = draft();
       var ask = EC().linksPrompt(st.schema, d);
-      box.appendChild(h('h2', { class: 'cp-q', text: ask.title }));
+      box.appendChild(h('h3', { class: 'cp-sec-title', text: ask.title }));
       box.appendChild(h('p', { class: 'cp-hint', text: ask.hint }));
       var remarks = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
       var linkError = h('p', { class: 'cp-error', role: 'alert', hidden: true });
@@ -1061,7 +1121,7 @@
                 type: 'button',
                 onclick: function () {
                   var nd = EC().newDraft({ name: raw });
-                  addDraft(nd, { id: draft().id, kind: 'relation', relType: relType.value }, 'start');
+                  addDraft(nd, { id: draft().id, kind: 'relation', relType: relType.value });
                   render();
                 },
               },
@@ -1084,69 +1144,45 @@
       box.appendChild(options);
     }
 
-    function renderReview(box) {
-      box.appendChild(h('h2', { class: 'cp-q', text: 'Tout est bon ?' }));
-      var all = st.order.map(function (id) { return st.drafts[id]; });
-      all.forEach(function (d) {
-        var list = EC().issues(st.schema, st.entities, d, all.filter(function (o) { return o !== d; }));
-        var comp = EC().completeness(st.schema, d);
-        var card = h('div', { class: 'cp-card' }, [
-          h('div', { class: 'cp-card-head' }, [
-            icon(typeIcon(d)),
-            h('strong', { text: d.name || 'Sans nom' }),
-            d.id === st.rootId ? null : h('span', { class: 'cp-chip cp-chip--ok', text: 'créé aussi' }),
-            h(
-              'button',
-              {
-                class: 'cp-link',
-                type: 'button',
-                onclick: function () {
-                  if (d.id === frame().id) {
-                    frame().step = d.preset ? 'identity' : 'start';
-                  } else {
-                    st.stack.push({ id: d.id, step: d.preset ? 'identity' : 'start', from: null });
-                  }
-                  render();
-                },
-              },
-              [icon('pencil'), 'Modifier']
-            ),
-          ]),
-          h('p', {
-            class: 'cp-hint',
-            text:
-              (d.types.map(typeName).join(', ') || 'Sans type') +
-              (comp.total ? ' · ' + comp.answered + '/' + comp.total + ' réponses' : '') +
-              (d.relations.length ? ' · ' + d.relations.length + ' lien' + (d.relations.length > 1 ? 's' : '') : ''),
-          }),
-        ]);
-        list.forEach(function (i) {
-          card.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
+    function linksBlock() {
+      var sec = h('div', { class: 'cp-sec' });
+      renderLinks(sec);
+      return sec;
+    }
+
+    /** Remarks about the draft that are not about its name: odd relations, floating concepts, loops. */
+    function remarksBlock() {
+      var list = EC()
+        .issues(st.schema, st.entities, draft(), otherDrafts())
+        .filter(function (i) {
+          return i.code === 'relation-nature' || i.code === 'cycle' || i.code === 'floating' || i.code === 'too-many';
         });
-        box.appendChild(card);
+      if (!list.length) return null;
+      var box = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
+      list.forEach(function (i) {
+        box.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
       });
+      return box;
     }
 
     function renderMain() {
+      var keep = els.main.scrollTop;
       els.main.textContent = '';
-      var step = steps()[stepIndex()];
-      var box = els.main;
-      if (step.kind === 'start') renderStart(box);
-      else if (step.kind === 'identity') renderIdentity(box);
-      else if (step.kind === 'component') renderComponent(box, step);
-      else if (step.kind === 'links') renderLinks(box);
-      else renderReview(box);
-      var auto = box.querySelector('[data-autofocus]');
-      if (auto && !els.main.querySelector(':focus')) {
-        try {
-          auto.focus();
-        } catch (e) {
-          /* detached in tests */
-        }
+      els.main.appendChild(nameBlock());
+      els.main.appendChild(archetypeBlock());
+      els.main.appendChild(componentsBlock());
+      els.main.appendChild(linksBlock());
+      var remarks = remarksBlock();
+      if (remarks) els.main.appendChild(remarks);
+      els.main.scrollTop = keep;
+      if (st.focusName) {
+        st.focusName = false;
+        var n = els.main.querySelector('[data-name]');
+        if (n) n.focus();
       }
     }
 
-    /* ── 5. Chrome: header, rail, aside, footer ───────────────────── */
+    /* ── 6. Chrome: header, aside, footer ─────────────────────────── */
 
     function renderHeader() {
       els.header.textContent = '';
@@ -1172,32 +1208,6 @@
       }
     }
 
-    function renderRail() {
-      els.rail.textContent = '';
-      var list = steps();
-      var idx = stepIndex();
-      var hasName = !!draft().name.trim();
-      list.forEach(function (s, i) {
-        var state = i < idx ? 'done' : i === idx ? 'on' : 'todo';
-        var allowed = i <= 1 || hasName;
-        els.rail.appendChild(
-          h(
-            'button',
-            {
-              class: 'cp-step cp-step--' + state,
-              type: 'button',
-              disabled: allowed ? null : true,
-              'aria-current': state === 'on' ? 'step' : null,
-              onclick: function () {
-                goTo(s.key);
-              },
-            },
-            [h('span', { class: 'cp-dot' }, [state === 'done' ? icon('check') : String(i + 1)]), h('span', { class: 'cp-step-name', text: s.title })]
-          )
-        );
-      });
-    }
-
     function valueText(f, v) {
       if (f.kind === 'ref') return nameOf(v);
       if (f.kind === 'refs') return v.map(nameOf).join(', ');
@@ -1214,7 +1224,7 @@
           h('span', { class: 'cp-pv-icon' }, [icon(typeIcon(d))]),
           h('div', {}, [
             h('div', { class: 'cp-pv-name' + (d.name ? '' : ' is-empty'), text: d.name || 'Sans nom' }),
-            h('div', { class: 'cp-pv-types' }, d.types.length ? d.types.map(function (t) { return h('span', { class: 'cp-chip', text: typeName(t) }); }) : [h('span', { class: 'cp-hint', text: 'Sans type' })]),
+            h('div', { class: 'cp-pv-types' }, d.types.length ? d.types.map(function (t) { return h('span', { class: 'cp-chip', text: typeName(t) }); }) : [h('span', { class: 'cp-hint', text: 'Sans archétype' })]),
             EC().naturesOfDraft(st.schema, d).length
               ? h('div', { class: 'cp-pv-natures' }, EC().naturesOfDraft(st.schema, d).map(function (n) {
                   var nat = EM().natureById(n);
@@ -1276,59 +1286,34 @@
       els.aside.appendChild(card);
     }
 
-    function stepHasAnswer(step) {
-      if (step.kind !== 'component') return true;
-      var comp = EM().findById(st.schema.components, step.componentId);
-      return comp.fields.some(function (f) { return draft().answers[comp.id + '.' + f.key] !== undefined; });
-    }
-
     function renderFooter() {
       els.footer.textContent = '';
-      var list = steps();
-      var idx = stepIndex();
-      var step = list[idx];
-      var last = idx === list.length - 1;
       var sub = isSub();
-      var canBack = idx > 0 || (sub && !!frame().from);
-      var backLabel = idx > 0 ? 'Retour' : sub && frame().from ? 'Annuler cet ajout' : 'Retour';
-      els.footer.appendChild(
-        h('button', { class: 'cp-btn', type: 'button', disabled: canBack || sub ? null : true, onclick: back }, [icon('arrow-left'), backLabel])
-      );
+      var all = st.order.map(function (id) { return st.drafts[id]; });
+      var blocked = all.some(function (x) {
+        return EC().hasError(EC().issues(st.schema, st.entities, x, all.filter(function (o) { return o !== x; })).filter(function (i) { return i.code !== 'name-required'; }));
+      });
+      var noName = all.some(function (x) { return !x.name.trim(); });
+      if (sub) {
+        els.footer.appendChild(h('button', { class: 'cp-btn', type: 'button', onclick: back }, [icon('arrow-left'), 'Annuler cet ajout']));
+      }
       els.footer.appendChild(h('span', { class: 'cp-spacer' }));
-      var nameMissing = !draft().name.trim() && step.kind !== 'start' && step.kind !== 'identity';
-      if (step.kind === 'review') {
-        var allDrafts = st.order.map(function (id) { return st.drafts[id]; });
-        var blocked = allDrafts.some(function (d) {
-          return EC().hasError(EC().issues(st.schema, st.entities, d, allDrafts.filter(function (o) { return o !== d; })));
-        });
+      if (sub) {
         els.footer.appendChild(
-          h('button', { class: 'cp-btn', type: 'button', disabled: blocked ? true : null, onclick: function () { finish(true); } }, [icon('plus'), 'Créer et en ajouter une autre'])
-        );
-        els.footer.appendChild(
-          h(
-            'button',
-            { class: 'cp-btn cp-btn--primary', type: 'button', disabled: blocked ? true : null, onclick: function () { finish(false); } },
-            [icon('check'), 'Créer ' + allDrafts.length + (allDrafts.length > 1 ? ' entités' : ' l’entité')]
-          )
+          h('button', { class: 'cp-btn cp-btn--primary', type: 'button', disabled: !draft().name.trim() ? true : null, onclick: returnToParent }, [icon('corner-down-left'), 'Ajouter et revenir'])
         );
         return;
       }
-      var label = last && sub ? 'Ajouter et revenir' : !stepHasAnswer(step) ? 'Passer' : 'Suivant';
-      // on the first step a typed sentence counts: it becomes the name when Suivant is pressed
-      var blockedNext = !draft().name.trim() && (step.kind === 'identity' || (step.kind === 'start' && !(draft().intent || '').trim()));
+      var off = blocked || noName ? true : null;
+      els.footer.appendChild(h('button', { class: 'cp-btn', type: 'button', disabled: off, onclick: function () { finish(true); } }, [icon('plus'), 'Créer et en ajouter une autre']));
       els.footer.appendChild(
-        h(
-          'button',
-          { class: 'cp-btn cp-btn--primary', type: 'button', disabled: blockedNext || nameMissing ? true : null, onclick: next },
-          [label, icon(last && sub ? 'corner-down-left' : 'arrow-right')]
-        )
+        h('button', { class: 'cp-btn cp-btn--primary', type: 'button', disabled: off, onclick: function () { finish(false); } }, [icon('check'), 'Créer ' + (all.length > 1 ? all.length + ' entités' : 'l’entité')])
       );
     }
 
     function refresh() {
       gc();
       renderHeader();
-      renderRail();
       renderAside();
       renderFooter();
     }
@@ -1360,52 +1345,22 @@
       });
     }
 
-    /* ── 6. Flow ──────────────────────────────────────────────────── */
+    /* ── 7. Flow ──────────────────────────────────────────────────── */
 
-    function goTo(key) {
-      if (frame().step === key) return;
-      if (frame().step === 'start') applyIntentNow();
-      frame().step = key;
-      render();
-    }
-
-    function next() {
-      var list = steps();
-      var idx = stepIndex();
-      var step = list[idx];
-      if (step.kind === 'start') applyIntentNow();
-      if ((step.kind === 'identity' || step.kind === 'start') && !draft().name.trim()) {
-        var n = els.main.querySelector('[data-name]');
-        if (n) n.focus();
-        return;
-      }
-      if (step.kind === 'review') return;
-      if (idx === list.length - 1) return returnToParent();
-      // the type picked on "start" may have changed the steps: recompute from the new list
-      frame().step = steps()[Math.min(idx + 1, steps().length - 1)].key;
-      render();
-    }
-
+    /** Leaves a sub-page without keeping it (the link question it came from stays as it was). */
     function back() {
-      var idx = stepIndex();
-      if (idx > 0) {
-        frame().step = steps()[idx - 1].key;
-        render();
-        return;
+      if (st.stack.length < 2) return;
+      var fr = st.stack.pop();
+      if (fr.from) {
+        delete st.drafts[fr.id];
+        st.order = st.order.filter(function (id) { return id !== fr.id; });
       }
-      if (st.stack.length > 1) {
-        var fr = st.stack.pop();
-        if (fr.from) {
-          // cancelled sub-interview: the draft disappears
-          delete st.drafts[fr.id];
-          st.order = st.order.filter(function (id) { return id !== fr.id; });
-        }
-        render();
-      }
+      render();
     }
 
     /** End of a sub-interview: link the new entity into the question it came from, and go back there. */
     function returnToParent() {
+      commitIntent();
       var fr = st.stack.pop();
       var from = fr.from;
       if (from) {
@@ -1481,14 +1436,6 @@
           ev.preventDefault();
           first.focus();
         }
-        return;
-      }
-      if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
-        var tg = ev.target;
-        if (tg && tg.tagName === 'INPUT' && tg.type !== 'checkbox' && !tg.hasAttribute('data-noenter')) {
-          ev.preventDefault();
-          next();
-        }
       }
     }
 
@@ -1496,8 +1443,8 @@
     var root = EC().newDraft({ types: (ctx.initialTypes || []).filter(function (t) { return !!EM().findById(st.schema.types, t); }) });
     root.intent = ctx.initialText || '';
     st.rootId = root.id;
-    addDraft(root, null, 'start');
-    if (root.intent) applyIntentNow();
+    addDraft(root, null);
+    commitIntent();
     document.addEventListener('keydown', onKey, true);
     els.overlay.addEventListener('mousedown', function (ev) {
       if (ev.target === els.overlay) requestClose();
@@ -1505,7 +1452,7 @@
     document.body.appendChild(els.overlay);
     render();
 
-    return { close: close, state: st, els: els, next: next, back: back, finish: finish, render: render };
+    return { close: close, state: st, els: els, back: back, finish: finish, render: render };
   }
 
   global.EntitiesComposerUI = { open: open };
