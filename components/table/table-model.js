@@ -23,14 +23,15 @@
 
   // Tabler icons (webfont, "ti-" prefix) per Statut category; colors come from StatutMatch.
   var STATUT_ICONS = {
-    triage: 'inbox',
-    backlog: 'hourglass',
+    // All outlined circles so the picker reads as one family.
+    triage: 'circle-arrow-down',
+    backlog: 'circle-dashed',
     unstarted: 'circle',
-    started: 'player-play-filled',
+    started: 'circle-half-2',
     blocked: 'ban',
     completed: 'circle-check',
     canceled: 'circle-x',
-    _none: 'point',
+    _none: 'circle-dotted',
   };
 
   function statutIcon(key) {

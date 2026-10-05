@@ -152,11 +152,11 @@ describe('TableModel', () => {
 
   it('maps Statut categories to icons and enriches lists with colors', () => {
     assert.equal(TM.statutIcon('completed'), 'circle-check');
-    assert.equal(TM.statutIcon('nope'), 'point');
+    assert.equal(TM.statutIcon('nope'), 'circle-dotted');
     const sm = { categoryStyle: (c) => ({ color: c === 'started' ? '#0c66e4' : '#626f86' }), applyStateColors() {} };
     const lists = TM.enrichLists([{ id: 'l1', name: 'Doing' }, { id: 'l2', name: 'Autre' }], { listCategories: { l1: 'started' } }, sm);
-    assert.deepEqual(lists[0], { id: 'l1', name: 'Doing', category: 'started', color: '#0c66e4', icon: 'player-play-filled' });
-    assert.equal(lists[1].icon, 'point');
+    assert.deepEqual(lists[0], { id: 'l1', name: 'Doing', category: 'started', color: '#0c66e4', icon: 'circle-half-2' });
+    assert.equal(lists[1].icon, 'circle-dotted');
   });
 
   it('carries the Statut category and color on rows', () => {
