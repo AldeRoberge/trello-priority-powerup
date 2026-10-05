@@ -82,13 +82,19 @@
     pop.style.visibility = 'hidden';
     pop.style.left = '0px';
     pop.style.top = '0px';
-    var pw = pop.offsetWidth || 320;
-    var ph = pop.offsetHeight || 200;
     var vw = document.documentElement.clientWidth;
     var vh = document.documentElement.clientHeight;
+    // Let the popover use the whole viewport height so tall editors are not cropped.
+    pop.style.maxHeight = Math.max(160, vh - margin * 2) + 'px';
+    var pw = pop.offsetWidth || 320;
+    var ph = pop.offsetHeight || 200;
     var left = Math.min(Math.max(margin, r.left), Math.max(margin, vw - pw - margin));
     var top = r.bottom + 6;
-    if (top + ph > vh - margin) top = Math.max(margin, r.top - ph - 6);
+    if (top + ph > vh - margin) {
+      var above = r.top - ph - 6;
+      // Flip above the anchor when it fits there, otherwise slide up just enough to fit.
+      top = above >= margin ? above : Math.max(margin, vh - margin - ph);
+    }
     pop.style.left = Math.round(left) + 'px';
     pop.style.top = Math.round(top) + 'px';
     pop.style.visibility = '';
