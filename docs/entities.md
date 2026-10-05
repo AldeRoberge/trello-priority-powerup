@@ -18,6 +18,10 @@ Les **liens** sont de deux sortes : les champs « lien » (ex. lieu d'une plante
 
 L'**historique** garde les 40 derniers changements de chaque entité ; chacun peut être annulé (l'annulation s'ajoute à l'historique, rien n'est effacé).
 
+## Ontologie
+
+Le modèle distingue la **nature** des choses (matière, vivant, agent, lieu, événement, fait social, abstrait), les **types parents** (une Ville est un Lieu), les **rôles**, des relations typées avec inverse (« situé dans » / « abrite »), une hiérarchie de contenance transitive et un contrôle d'**ancrage matériel** des abstraits. Une **bibliothèque** installe en un clic des types prêts (crème pour les mains, région, pays, ville, bâtiment, personne, travailleur, concept…). Étude et détails : [entities-ontologie.md](entities-ontologie.md).
+
 ## Composer (assistant de création)
 
 Le bouton **Composer** (colonne de gauche, ou l'état vide) ouvre un dialogue qui pose les questions pour créer une entité et tout ce qu'elle entraîne, puis crée le tout lié en une seule fois.
@@ -62,6 +66,7 @@ Comme les Documents : le stockage Power-Up est limité à 4 096 caractères, tro
 - `components/entities/entities-trello.js` : lecture/écriture Trello (`load`, `commit`, cache 30 s)
 - `components/entities/entities-ui.js` + `.css`, `entities.html` : la vue
 - `components/agent/agent.js` : `getEntities` (contexte) et lignes de prompt ; `assistant-mount.js` fournit les entités
+- `components/entities/entities-library.js` : bibliothèque d'ontologie (types et composants prêts à installer) ; test : `test/entities-ontology.test.js`
 - `components/entities/entities-composer*.js` : l'assistant de création (voir plus haut)
 - Tests : `test/entities-composer.test.js`, `test/entities-model.test.js`, `test/entities-trello.test.js`, `test/agent-entities.test.js` ; page de test visuel : `sandbox/e2e/entities.html` (serveur : `npm run test:e2e -- --serve`)
 

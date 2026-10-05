@@ -74,6 +74,7 @@ const UNIT_FILES = [
   'entities-trello.test.js',
   'entities-composer.test.js',
   'entities-archetype.test.js',
+  'entities-ontology.test.js',
   'agent-entities.test.js',
 ];
 

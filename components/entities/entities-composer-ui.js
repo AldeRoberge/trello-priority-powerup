@@ -14,6 +14,10 @@
  * Usage: EntitiesComposerUI.open({ schema, entities, initialText?, initialTypes?, onDone(result) })
  *   result = { schema, entities, created, rootId, again }
  *
+ * The first step starts from what the thing IS (matter, living, agent, place, event, social fact, idea):
+ * it filters the types and offers the ready-made ones of the library; the Links step asks the question that
+ * fits (what embodies an idea, what contains a place...) and proposes the matching relations.
+ *
  * Contents: 1 helpers | 2 open: state | 3 steps | 4 field controls | 5 chrome | 6 flow
  */
 (function (global) {
@@ -58,6 +62,10 @@
       .filter(Boolean);
   }
 
+  function issueIcon(level) {
+    return icon(level === 'error' ? 'alert-circle' : level === 'info' ? 'info-circle' : 'alert-triangle');
+  }
+
   function isoDay(offsetDays) {
     var d = new Date();
     d.setDate(d.getDate() + (offsetDays || 0));
@@ -78,7 +86,9 @@
       stack: [], // frames: { id, step, from: {id, kind, path, relType}|null }
       rootId: '',
       confirmClose: false,
-      newType: null, // { name, aliases, comps:[], fieldsText, error } while the inline form is open
+      newType: null, // { name, aliases, comps:[], fieldsText, nature, parents:[], role, error } while the inline form is open
+      nature: '', // nature chosen on the first step (filters the types); '' = all
+      libMsg: '', // outcome of the last library install
       shake: false,
     };
 
@@ -221,18 +231,45 @@
       }
       paintUnderstood();
 
+      var natureRow = h('div', { class: 'cp-natures', role: 'group', 'aria-label': 'Nature' });
+      [{ id: '', name: 'Tout', icon: 'apps', hint: 'Tous les types' }].concat(EM().NATURES).forEach(function (n) {
+        var on = st.nature === n.id;
+        natureRow.appendChild(
+          h(
+            'button',
+            {
+              class: 'cp-nature' + (on ? ' is-on' : ''),
+              type: 'button',
+              'aria-pressed': on ? 'true' : 'false',
+              title: n.hint,
+              onclick: function () {
+                applyIntentNow();
+                st.nature = n.id;
+                st.libMsg = '';
+                renderMain();
+              },
+            },
+            [icon(n.icon), h('span', { text: n.name })]
+          )
+        );
+      });
+      var natureInfo = EM().natureById(st.nature);
       var grid = h('div', { class: 'cp-types', role: 'group', 'aria-label': 'Types' });
-      st.schema.types.forEach(function (ty) {
+      EC()
+        .typesOfNature(st.schema, st.nature)
+        .forEach(function (ty) {
         var on = draft().types.indexOf(ty.id) >= 0;
         var count = st.entities.filter(function (e) {
           return e.types.indexOf(ty.id) >= 0;
         }).length;
-        var comps = ty.components
+        var comps = EM()
+          .componentIdsOf(st.schema, { types: [ty.id] })
           .map(function (cid) {
             var c = EM().findById(st.schema.components, cid);
             return c ? c.name : cid;
           })
           .join(' + ');
+        var lineage = ty.parents.length ? 'sorte de ' + ty.parents.map(typeName).join(' + ') + ' · ' : '';
         grid.appendChild(
           h(
             'button',
@@ -251,7 +288,8 @@
             [
               icon(ty.icon || 'stack-2'),
               h('span', { class: 'cp-type-name', text: ty.name }),
-              h('span', { class: 'cp-type-sub', text: (comps || 'aucun composant') + ' · ' + count }),
+              h('span', { class: 'cp-type-sub', text: lineage + (comps || 'aucun composant') + ' · ' + count }),
+              ty.role ? h('span', { class: 'cp-type-role', text: 'rôle', title: 'Ce que l’entité est dans un contexte, pas par nature' }) : null,
             ]
           )
         );
@@ -263,7 +301,7 @@
             class: 'cp-type cp-type--new',
             type: 'button',
             onclick: function () {
-              st.newType = st.newType || { name: '', aliases: '', comps: [], fieldsText: '', error: '' };
+              st.newType = st.newType || { name: '', aliases: '', comps: [], fieldsText: '', nature: st.nature, parents: [], role: false, error: '' };
               renderMain();
             },
           },
@@ -273,8 +311,13 @@
       box.appendChild(h('h2', { class: 'cp-q', text: 'Que voulez-vous ajouter ?' }));
       box.appendChild(input);
       box.appendChild(understood);
+      box.appendChild(h('h3', { class: 'cp-sub', text: 'Qu’est-ce que c’est ?' }));
+      box.appendChild(natureRow);
+      if (natureInfo) box.appendChild(h('p', { class: 'cp-hint', text: natureInfo.hint }));
       box.appendChild(h('h3', { class: 'cp-sub', text: 'Type' }));
       box.appendChild(grid);
+      var lib = libraryBox();
+      if (lib) box.appendChild(lib);
       if (st.newType) box.appendChild(newTypeForm());
       if (st.entities.length) {
         var baseSel = h('select', {
@@ -305,6 +348,44 @@
       }
     }
 
+    /** Ready-made types of the library that are not in the schema yet (for the chosen nature). */
+    function libraryBox() {
+      var EL = global.EntitiesLibrary;
+      if (!EL) return null;
+      var list = EL.listFor(st.schema, st.nature ? { nature: st.nature } : null).filter(function (x) {
+        return !x.installed;
+      });
+      if (!list.length && !st.libMsg) return null;
+      var box = h('div', { class: 'cp-lib' }, [h('span', { class: 'cp-hint', text: list.length ? 'Bibliothèque, un clic pour ajouter :' : '' })]);
+      list.slice(0, 12).forEach(function (x) {
+        box.appendChild(
+          h(
+            'button',
+            { class: 'cp-pick cp-pick--new', type: 'button', title: x.preset.description, onclick: function () { installPreset(x.preset.id); } },
+            [icon(x.preset.icon || 'plus'), x.preset.name]
+          )
+        );
+      });
+      if (st.libMsg) box.appendChild(h('p', { class: 'cp-hint', role: 'status', text: st.libMsg }));
+      return box;
+    }
+
+    function installPreset(pid) {
+      applyIntentNow();
+      var r = global.EntitiesLibrary.install(st.schema, pid);
+      if (r.error) {
+        st.libMsg = 'Le schéma est trop grand pour ajouter ce type : retirez des types ou composants inutilisés.';
+        renderMain();
+        return;
+      }
+      st.schema = r.schema;
+      st.libMsg = r.added.types.length ? 'Ajouté : ' + r.added.types.join(', ') + '.' : '';
+      var tid = r.typeIds[pid];
+      if (tid) setDraft(EC().pruneAnswers(st.schema, EC().toggleType(st.schema, draft(), tid, true)));
+      renderMain();
+      refresh();
+    }
+
     function newTypeForm() {
       var nt = st.newType;
       var nameIn = h('input', { class: 'cp-input', placeholder: 'Ex. : Outil', value: nt.name, 'aria-label': 'Nom du type', 'data-noenter': '1' });
@@ -323,7 +404,10 @@
         EC()
           .parseFieldSpec(fieldsIn.value, st.schema)
           .forEach(function (f) {
-            var kind = { text: 'texte', number: 'nombre', date: 'date', bool: 'oui/non', choice: 'choix', ref: 'lien', refs: 'liens' }[f.kind];
+            var kind = {
+              text: 'texte', number: 'nombre', date: 'date', bool: 'oui/non', choice: 'choix', ref: 'lien', refs: 'liens',
+              multi: 'choix multiple', longtext: 'texte long', geo: 'coordonnées', url: 'lien web',
+            }[f.kind];
             preview.appendChild(h('span', { class: 'cp-chip' }, [f.label, h('em', { text: ' ' + kind })]));
           });
       }
@@ -355,10 +439,42 @@
           ])
         );
       });
+      var natureSel = h('select', {
+        class: 'cp-input',
+        'aria-label': 'Nature du type',
+        onchange: function () { nt.nature = natureSel.value; },
+      });
+      natureSel.appendChild(h('option', { value: '', text: 'Je ne sais pas / autre' }));
+      EM().NATURES.forEach(function (n) {
+        natureSel.appendChild(h('option', { value: n.id, text: n.name + ' : ' + n.hint }));
+      });
+      natureSel.value = nt.nature || '';
+      var parentBox = h('div', { class: 'cp-checks' });
+      st.schema.types.forEach(function (ty) {
+        parentBox.appendChild(
+          h('label', { class: 'cp-check' }, [
+            h('input', {
+              type: 'checkbox',
+              checked: nt.parents.indexOf(ty.id) >= 0 ? true : null,
+              onchange: function (ev) {
+                nt.parents = nt.parents.filter(function (x) { return x !== ty.id; });
+                if (ev.target.checked) nt.parents.push(ty.id);
+              },
+            }),
+            ty.name,
+          ])
+        );
+      });
+      var roleIn = h('input', { type: 'checkbox', checked: nt.role ? true : null, onchange: function (ev) { nt.role = ev.target.checked; } });
       return h('div', { class: 'cp-card' }, [
         h('h3', { class: 'cp-sub', text: 'Nouveau type' }),
         h('label', { class: 'cp-label', text: 'Nom' }),
         nameIn,
+        h('label', { class: 'cp-label', text: 'Nature : qu’est-ce que c’est, au fond ?' }),
+        natureSel,
+        st.schema.types.length ? h('label', { class: 'cp-label', text: 'Est une sorte de… (reprend ses composants et se retrouve avec lui)' }) : null,
+        st.schema.types.length ? parentBox : null,
+        h('label', { class: 'cp-check' }, [roleIn, 'C’est un rôle : une entité l’est dans un contexte (Travailleur, Client), pas par nature']),
         h('label', { class: 'cp-label', text: 'Alias (séparés par des virgules)' }),
         aliasIn,
         st.schema.components.length ? h('label', { class: 'cp-label', text: 'Réutiliser des composants' }) : null,
@@ -366,7 +482,7 @@
         h('label', { class: 'cp-label', text: 'Nouveaux champs (nom (genre: détail), …)' }),
         fieldsIn,
         preview,
-        h('p', { class: 'cp-hint', text: 'Genres : texte, nombre, date, oui-non, choix: a/b/c, lien: Type, liens: Type.' }),
+        h('p', { class: 'cp-hint', text: 'Genres : texte, texte-long, nombre (ex. nombre: kg), date, oui-non, choix: a/b/c, choix-multiple: a/b, geo, url, lien: Type, liens: Type.' }),
         errBox,
         h('div', { class: 'cp-row' }, [
           h(
@@ -380,6 +496,9 @@
                   name: nt.name,
                   aliases: splitList(nt.aliases),
                   componentIds: nt.comps,
+                  nature: nt.nature,
+                  parents: nt.parents,
+                  role: nt.role,
                   component: { name: nt.name, fieldsText: nt.fieldsText },
                 });
                 if (r.error) {
@@ -447,8 +566,8 @@
         EC()
           .issues(st.schema, st.entities, draft(), otherDrafts())
           .forEach(function (i) {
-            if (i.code === 'name-required' || i.code === 'no-type') return;
-            issuesBox.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [icon(i.level === 'error' ? 'alert-circle' : 'alert-triangle'), i.message]));
+            if (i.code === 'name-required' || i.code === 'no-type' || i.code === 'floating') return;
+            issuesBox.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
           });
       }
       paintIssues();
@@ -613,18 +732,48 @@
         return wrap;
       }
       if (f.kind === 'ref' || f.kind === 'refs') return refControl(path, f);
-      var type = f.kind === 'number' ? 'number' : f.kind === 'date' ? 'date' : 'text';
+      if (f.kind === 'multi') {
+        wrap.className = 'cp-ctl cp-ctl--chips';
+        (function paintMulti() {
+          wrap.textContent = '';
+          var cur = draft().answers[path] || [];
+          (f.options || []).forEach(function (o) {
+            var on = cur.indexOf(o) >= 0;
+            wrap.appendChild(
+              chip(o, on, function () {
+                answer(path, on ? cur.filter(function (x) { return x !== o; }) : cur.concat([o]));
+                paintMulti();
+              })
+            );
+          });
+        })();
+        return wrap;
+      }
+      if (f.kind === 'longtext') {
+        var ta = h('textarea', {
+          class: 'cp-input cp-input--area',
+          rows: '4',
+          maxlength: '1500',
+          'aria-label': f.label,
+          oninput: function () { answer(path, ta.value); },
+        });
+        ta.value = val == null ? '' : String(val);
+        wrap.appendChild(ta);
+        return wrap;
+      }
+      var type = f.kind === 'number' ? 'number' : f.kind === 'date' ? 'date' : f.kind === 'url' ? 'url' : 'text';
       var inp = h('input', {
         class: 'cp-input',
         type: type,
         step: f.kind === 'number' ? 'any' : null,
+        placeholder: f.kind === 'geo' ? 'latitude, longitude (45.5017, -73.5673)' : f.kind === 'url' ? 'https://…' : null,
         value: val == null ? '' : String(val),
-        'aria-label': f.label,
+        'aria-label': f.label + (f.unit ? ' (' + f.unit + ')' : ''),
         oninput: function () {
           answer(path, inp.value);
         },
       });
-      wrap.appendChild(inp);
+      wrap.appendChild(f.unit ? h('div', { class: 'cp-unit' }, [inp, h('span', { class: 'cp-unit-sfx', text: f.unit })]) : inp);
       var quick = h('div', { class: 'cp-quick' });
       function setQuick(v) {
         inp.value = v;
@@ -689,7 +838,7 @@
       function matches(q) {
         var key = EM().normKey(q);
         return pool().filter(function (e) {
-          if (!EC().eligible(f, e, draft())) return false;
+          if (!EC().eligible(f, e, draft(), st.schema)) return false;
           return [e.name].concat(e.aliases || []).some(function (l) {
             return EM().normKey(l).indexOf(key) >= 0;
           });
@@ -745,7 +894,7 @@
             }
           });
           pool().forEach(function (e) {
-            if (e.draft && !seen[e.id] && EC().eligible(f, e, draft())) list.push(e);
+            if (e.draft && !seen[e.id] && EC().eligible(f, e, draft(), st.schema)) list.push(e);
           });
         }
         list
@@ -763,7 +912,7 @@
               )
             );
           });
-        if (q && !pool().some(function (e) { return EM().normKey(e.name) === EM().normKey(q) && EC().eligible(f, e, draft()); })) {
+        if (q && !pool().some(function (e) { return EM().normKey(e.name) === EM().normKey(q) && EC().eligible(f, e, draft(), st.schema); })) {
           options.appendChild(
             h('button', { class: 'cp-pick cp-pick--new', type: 'button', onclick: function () { create(q); } }, [icon('plus'), 'Créer « ' + q + ' »'])
           );
@@ -781,8 +930,21 @@
 
     function renderLinks(box) {
       var d = draft();
-      box.appendChild(h('h2', { class: 'cp-q', text: 'Autres liens ?' }));
-      box.appendChild(h('p', { class: 'cp-hint', text: 'Relier « ' + (d.name || 'cette entité') + ' » à d’autres entités : contient, fait partie de, près de…' }));
+      var ask = EC().linksPrompt(st.schema, d);
+      box.appendChild(h('h2', { class: 'cp-q', text: ask.title }));
+      box.appendChild(h('p', { class: 'cp-hint', text: ask.hint }));
+      var remarks = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
+      var linkError = h('p', { class: 'cp-error', role: 'alert', hidden: true });
+      function paintRemarks() {
+        remarks.textContent = '';
+        EC()
+          .issues(st.schema, st.entities, draft(), otherDrafts())
+          .forEach(function (i) {
+            if (i.code === 'floating' || i.code === 'relation-nature' || i.code === 'cycle') {
+              remarks.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
+            }
+          });
+      }
       var list = h('div', { class: 'cp-linklist' });
       function paintList() {
         list.textContent = '';
@@ -809,6 +971,7 @@
           );
         });
         if (!draft().relations.length) list.appendChild(h('span', { class: 'cp-hint', text: 'Aucun lien pour l’instant.' }));
+        paintRemarks();
       }
       paintList();
       var relType = h('input', {
@@ -819,14 +982,45 @@
         'data-noenter': '1',
       });
       var dl = h('datalist', { id: 'cp-rel-types' });
-      EC()
-        .relationTypes(st.entities)
-        .forEach(function (t) {
-          dl.appendChild(h('option', { value: t }));
-        });
+      var choices = EC().relationChoices(st.schema, st.entities, d);
+      choices.forEach(function (c) {
+        dl.appendChild(h('option', { value: c.label }));
+      });
+      relType.value = ask.suggested[0] || choices[0].label;
+      var relHint = h('span', { class: 'cp-hint' });
+      function paintRelHint() {
+        var m = EM().matchRelation(relType.value);
+        relHint.textContent = m
+          ? m.def.symmetric
+            ? 'Lien symétrique.'
+            : 'Vu de l’autre côté : « ' + EM().inverseLabel(relType.value) + ' ».'
+          : 'Lien libre (non reconnu par l’ontologie).';
+      }
+      relType.addEventListener('input', paintRelHint);
+      paintRelHint();
+      var relChips = h('div', { class: 'cp-quick' });
+      choices.slice(0, 8).forEach(function (c) {
+        relChips.appendChild(
+          chip(c.label, false, function () {
+            relType.value = c.label;
+            paintRelHint();
+          }, c.inverse && c.inverse !== c.label ? 'Autre côté : ' + c.inverse : null)
+        );
+      });
       var search = h('input', { class: 'cp-input', placeholder: 'Chercher une entité, ou taper un nom à créer…', 'aria-label': 'Entité à lier', 'data-noenter': '1', oninput: paintOptions });
       var options = h('div', { class: 'cp-quick' });
       function link(id) {
+        var all = st.entities.concat(
+          st.order.map(function (did) {
+            return EC().pseudoEntity(st.schema, st.drafts[did]);
+          })
+        );
+        if (EM().wouldCycleRelation(st.schema, all, draft().id, relType.value, id)) {
+          linkError.textContent = '« ' + nameOf(id) + ' » contient déjà « ' + (draft().name || 'cette entité') + ' » : ce lien ferait une boucle.';
+          linkError.hidden = false;
+          return;
+        }
+        linkError.hidden = true;
         setDraft(EC().addRelationTo(draft(), relType.value, id));
         search.value = '';
         paintList();
@@ -866,9 +1060,13 @@
       }
       paintOptions();
       box.appendChild(list);
+      box.appendChild(remarks);
       box.appendChild(h('label', { class: 'cp-label', text: 'Type de lien' }));
+      box.appendChild(relChips);
       box.appendChild(relType);
+      box.appendChild(relHint);
       box.appendChild(dl);
+      box.appendChild(linkError);
       box.appendChild(h('label', { class: 'cp-label', text: 'Avec' }));
       box.appendChild(search);
       box.appendChild(options);
@@ -911,7 +1109,7 @@
           }),
         ]);
         list.forEach(function (i) {
-          card.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [icon(i.level === 'error' ? 'alert-circle' : 'alert-triangle'), i.message]));
+          card.appendChild(h('p', { class: 'cp-issue cp-issue--' + i.level }, [issueIcon(i.level), i.message]));
         });
         box.appendChild(card);
       });
@@ -1005,6 +1203,12 @@
           h('div', {}, [
             h('div', { class: 'cp-pv-name' + (d.name ? '' : ' is-empty'), text: d.name || 'Sans nom' }),
             h('div', { class: 'cp-pv-types' }, d.types.length ? d.types.map(function (t) { return h('span', { class: 'cp-chip', text: typeName(t) }); }) : [h('span', { class: 'cp-hint', text: 'Sans type' })]),
+            EC().naturesOfDraft(st.schema, d).length
+              ? h('div', { class: 'cp-pv-natures' }, EC().naturesOfDraft(st.schema, d).map(function (n) {
+                  var nat = EM().natureById(n);
+                  return h('span', { class: 'cp-chip cp-chip--nature cp-chip--' + nat.realm, title: nat.hint }, [icon(nat.icon), nat.name]);
+                }))
+              : null,
           ]),
         ])
       );
@@ -1044,6 +1248,7 @@
         var lsec = h('div', { class: 'cp-pv-sec' }, [h('div', { class: 'cp-pv-sech', text: 'Liens' })]);
         d.relations.forEach(function (r) {
           lsec.appendChild(h('div', { class: 'cp-pv-row' }, [h('span', { text: r.type }), h('b', { text: nameOf(r.to) })]));
+          if (EM().matchRelation(r.type) === null) return;
         });
         card.appendChild(lsec);
       }

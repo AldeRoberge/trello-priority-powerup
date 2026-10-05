@@ -360,3 +360,82 @@ html[data-color-mode] .tp-page--entities {
 .en-empty > .ti {
   font-size: 32px;
 }
+
+/* ── Ontology ────────────────────────────────────────────────────── */
+.en-chip--material {
+  box-shadow: inset 0 0 0 1px var(--tp-success);
+}
+.en-chip--immaterial {
+  box-shadow: inset 0 0 0 1px var(--tp-primary);
+  font-style: italic;
+}
+.en-chip--role {
+  box-shadow: inset 0 0 0 1px var(--tp-border-strong);
+}
+.en-chip--ok {
+  background: var(--tp-success-bg);
+  color: var(--tp-success);
+}
+.en-onto .en-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.en-crumb,
+.en-inside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+.en-crumb-sep {
+  color: var(--tp-text-muted);
+}
+.en-issue {
+  margin: 8px 0 0;
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+}
+.en-issue--info {
+  color: var(--tp-text-muted);
+}
+.en-issue--warn {
+  color: var(--tp-text-subtle);
+}
+.en-issue--error {
+  color: var(--tp-danger-text);
+}
+.en-area {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.en-unit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.en-unit-sfx {
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+.en-lib-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.en-lib-group {
+  min-width: 170px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.en-btn--small {
+  padding: 2px 8px;
+  font-size: 12px;
+}

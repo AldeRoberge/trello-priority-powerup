@@ -14,9 +14,21 @@
  *              reaches every entity that has not overridden that field (see effectiveData).
  *   history    bounded log of changes; every change can be reverted with revertEntry().
  *
- * Contents: 1 constants / text helpers | 2 schema (components, types, defaults) | 3 entities and
- * values | 4 mutations (all pure: they return a modified copy) | 5 relations | 6 history / revert |
- * 7 queries and natural-language resolution | 8 agent prompt lines | 9 export
+ * Ontology (see docs/entities-ontologie.md): the ECS is deliberately general, so a thing can be a hand cream,
+ * a region of the world map, a person, a worker, a building, a city, a concept. Three additions carry that:
+ *   nature     what KIND of thing a type is (matter, living, agent, place, event, social, abstract), each in
+ *              a realm (material / immaterial). Types may have parent types (a City is a Place) and inherit
+ *              their components; a type with role:true is something an entity is only in a context (Worker).
+ *   relations  a built-in vocabulary (located in / part of / made of / instance of / grounded in...) with
+ *              inverses, categories and expected natures; containment (located in + part of) is transitive.
+ *   grounding  materialism as a lint: an abstract or social entity should be anchored, within a few links,
+ *              to something material (what embodies, expresses or instantiates it). Otherwise it is
+ *              reported as "floating" (information, never blocking).
+ *
+ * Contents: 1 constants / text helpers | 2 schema (components, types, defaults) | 2b natures and type
+ * lineage | 3 entities and values | 4 mutations (all pure: they return a modified copy) | 5 relations |
+ * 5b relation vocabulary, containment, grounding | 6 history / revert | 7 queries and natural-language
+ * resolution | 8 agent prompt lines | 9 export
  */
 (function (global) {
   'use strict';
@@ -27,9 +39,9 @@
   var MAX_ALIAS = 40;
   var MAX_ALIASES = 12;
   var MAX_TEXT = 500;
-  var MAX_COMPONENTS = 30;
+  var MAX_COMPONENTS = 40;
   var MAX_FIELDS = 20;
-  var MAX_TYPES = 40;
+  var MAX_TYPES = 60;
   var MAX_ENTITIES = 500;
   var MAX_RELATIONS = 30;
   var MAX_REL_TYPE = 40;
@@ -37,7 +49,27 @@
   var MAX_HISTORY = 40;
   var MAX_PROMPT_CHARS = 2400;
   var MAX_PROMPT_MATCHES = 25;
-  var FIELD_KINDS = ['text', 'number', 'date', 'bool', 'choice', 'ref', 'refs'];
+  var MAX_LONGTEXT = 1500;
+  var MAX_URL = 300;
+  var MAX_UNIT = 12;
+  var MAX_DESCRIPTION = 200;
+  /** The description card of the schema holds 16 384 chars; stay well under it. */
+  var MAX_SCHEMA_CHARS = 15000;
+  var FIELD_KINDS = ['text', 'number', 'date', 'bool', 'choice', 'ref', 'refs', 'multi', 'longtext', 'geo', 'url'];
+
+  /**
+   * What a type of thing fundamentally IS. realm: 'material' (has a body, a place or a time: matter, living,
+   * agent, place, event) or 'immaterial' (exists by convention or by thought: social, abstract).
+   */
+  var NATURES = [
+    { id: 'matter', name: 'Matière', realm: 'material', icon: 'box', hint: 'Ce qui a une masse et occupe l’espace : un objet, un produit, une substance.' },
+    { id: 'living', name: 'Vivant', realm: 'material', icon: 'plant', hint: 'Un être qui naît, croît et meurt : une plante, un animal.' },
+    { id: 'agent', name: 'Agent', realm: 'material', icon: 'user', hint: 'Quelqu’un qui agit et a des intentions : une personne, un travailleur.' },
+    { id: 'place', name: 'Lieu', realm: 'material', icon: 'map-pin', hint: 'Une portion d’espace : une région, une ville, un bâtiment, une pièce.' },
+    { id: 'event', name: 'Événement', realm: 'material', icon: 'calendar-event', hint: 'Ce qui se déroule dans le temps : une réunion, une récolte.' },
+    { id: 'social', name: 'Fait social', realm: 'immaterial', icon: 'building-community', hint: 'Existe parce qu’un groupe le reconnaît : une organisation, une loi, une monnaie.' },
+    { id: 'abstract', name: 'Abstrait', realm: 'immaterial', icon: 'bulb', hint: 'Une idée ou une notion : justice, liberté, une méthode, un nombre.' },
+  ];
 
   function str(v, max) {
     var s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
@@ -111,9 +143,12 @@
     if (!key) return null;
     var kind = FIELD_KINDS.indexOf(f.kind) >= 0 ? f.kind : 'text';
     var out = { key: key, label: label || key, kind: kind };
-    if (kind === 'choice') out.options = uniqueStrings(f.options, MAX_CHOICES, MAX_ALIAS);
+    if (kind === 'choice' || kind === 'multi') out.options = uniqueStrings(f.options, MAX_CHOICES, MAX_ALIAS);
+    if (kind === 'number' && f.unit) out.unit = str(f.unit, MAX_UNIT);
     if (kind === 'ref' || kind === 'refs') {
       out.refTypes = uniqueStrings(f.refTypes, MAX_TYPES, MAX_NAME).map(slug).filter(Boolean);
+      // the field IS a relation of the vocabulary (e.g. a plant's place is "located in")
+      if (f.rel && relationById(f.rel)) out.rel = String(f.rel);
     }
     return out;
   }
@@ -131,6 +166,11 @@
       seen[nf.key] = true;
       fields.push(nf);
     });
+    if (id === 'location') {
+      fields.forEach(function (f) {
+        if (f.key === 'place' && f.kind === 'ref' && !f.rel) f.rel = 'located-in';
+      });
+    }
     return { id: id, name: name || id, fields: fields.slice(0, MAX_FIELDS) };
   }
 
@@ -144,6 +184,10 @@
       name: name || id,
       aliases: uniqueStrings(t.aliases, MAX_ALIASES, MAX_ALIAS),
       icon: str(t.icon, 30),
+      nature: natureById(t.nature) ? t.nature : id === 'place' ? 'place' : '',
+      parents: uniqueStrings(t.parents, 6, MAX_NAME).map(slug).filter(Boolean),
+      role: t.role === true,
+      description: str(t.description, MAX_DESCRIPTION),
       components: uniqueStrings(t.components, MAX_COMPONENTS, MAX_NAME).map(slug).filter(Boolean),
     };
   }
@@ -153,7 +197,7 @@
       components: [
         { id: 'location', name: 'Lieu', fields: [{ key: 'place', label: 'Lieu', kind: 'ref', refTypes: ['place'] }] },
       ],
-      types: [{ id: 'place', name: 'Lieu', aliases: ['endroit', 'location'], icon: 'map-pin', components: [] }],
+      types: [{ id: 'place', name: 'Lieu', aliases: ['endroit', 'location'], icon: 'map-pin', nature: 'place', components: [] }],
     });
   }
 
@@ -178,7 +222,34 @@
       });
       types.push(nt);
     });
-    return { version: VERSION, components: components.slice(0, MAX_COMPONENTS), types: types.slice(0, MAX_TYPES) };
+    types = types.slice(0, MAX_TYPES);
+    var byId = {};
+    types.forEach(function (t) {
+      byId[t.id] = t;
+    });
+    // parents must exist, not be the type itself, and never close a loop (the edge that would is dropped)
+    types.forEach(function (t) {
+      t.parents = t.parents.filter(function (p) {
+        return p !== t.id && !!byId[p] && !lineageHas(byId, p, t.id);
+      });
+    });
+    return { version: VERSION, components: components.slice(0, MAX_COMPONENTS), types: types };
+  }
+
+  /** Is `target` among the ancestors (or the type itself) of `id`? `byId` maps type ids to types. */
+  function lineageHas(byId, id, target) {
+    var seen = {};
+    var stack = [id];
+    while (stack.length) {
+      var cur = stack.pop();
+      if (cur === target) return true;
+      if (seen[cur] || !byId[cur]) continue;
+      seen[cur] = true;
+      (byId[cur].parents || []).forEach(function (p) {
+        stack.push(p);
+      });
+    }
+    return false;
   }
 
   function findById(list, id) {
@@ -236,13 +307,87 @@
   function componentIdsOf(schema, entity) {
     var out = [];
     (entity.types || []).forEach(function (tid) {
-      var t = findById(schema.types, tid);
-      if (!t) return;
-      t.components.forEach(function (cid) {
-        if (out.indexOf(cid) < 0) out.push(cid);
+      typeLineage(schema, tid).forEach(function (t) {
+        t.components.forEach(function (cid) {
+          if (out.indexOf(cid) < 0) out.push(cid);
+        });
       });
     });
     return out;
+  }
+
+  // ---------------------------------------------------------------- 2b natures and type lineage
+  function natureById(id) {
+    for (var i = 0; i < NATURES.length; i++) if (NATURES[i].id === id) return NATURES[i];
+    return null;
+  }
+
+  /** A type and its ancestors, ancestors first (a City: Place, then City). Loops cannot occur (normalizeSchema). */
+  function typeLineage(schema, typeId) {
+    var out = [];
+    var seen = {};
+    (function visit(id) {
+      if (seen[id]) return;
+      seen[id] = true;
+      var t = findById(schema.types, id);
+      if (!t) return;
+      (t.parents || []).forEach(visit);
+      out.push(t);
+    })(typeId);
+    return out;
+  }
+
+  /** Every type id an entity answers to: its types and all their ancestors. */
+  function typeClosure(schema, typeIds) {
+    var out = [];
+    (typeIds || []).forEach(function (tid) {
+      typeLineage(schema, tid).forEach(function (t) {
+        if (out.indexOf(t.id) < 0) out.push(t.id);
+      });
+    });
+    return out;
+  }
+
+  /** Is the entity (or list of type ids) of type `typeId`, directly or through a parent type? */
+  function isA(schema, entityOrTypes, typeId) {
+    var ids = Array.isArray(entityOrTypes) ? entityOrTypes : (entityOrTypes && entityOrTypes.types) || [];
+    return typeClosure(schema, ids).indexOf(typeId) >= 0;
+  }
+
+  /** Nature of a type: its own, else the nearest ancestor's ('' when none). */
+  function natureOfType(schema, typeId) {
+    var line = typeLineage(schema, typeId);
+    for (var i = line.length - 1; i >= 0; i--) if (line[i].nature) return line[i].nature;
+    return '';
+  }
+
+  /** Natures an entity has through its types (a Building is a place AND matter), without duplicates. */
+  function naturesOf(schema, entity) {
+    var out = [];
+    typeClosure(schema, (entity && entity.types) || []).forEach(function (tid) {
+      var t = findById(schema.types, tid);
+      if (t && t.nature && out.indexOf(t.nature) < 0) out.push(t.nature);
+    });
+    return out;
+  }
+
+  function realmOf(natureId) {
+    var n = natureById(natureId);
+    return n ? n.realm : '';
+  }
+
+  /** Does the entity have a body, a place or a date (as opposed to being a convention or an idea)? */
+  function isMaterial(schema, entity) {
+    return naturesOf(schema, entity).some(function (n) {
+      return realmOf(n) === 'material';
+    });
+  }
+
+  /** Types that descend from `typeId` (itself excluded). */
+  function subtypesOf(schema, typeId) {
+    return schema.types.filter(function (t) {
+      return t.id !== typeId && typeClosure(schema, [t.id]).indexOf(typeId) >= 0;
+    });
   }
 
   function fieldOf(schema, path) {
@@ -278,6 +423,37 @@
           return normKey(o) === key;
         })[0];
         return hit;
+      }
+      case 'multi': {
+        var picked = [];
+        (Array.isArray(v) ? v : [v]).forEach(function (x) {
+          var k = normKey(x);
+          var opt = (field.options || []).filter(function (o) {
+            return normKey(o) === k;
+          })[0];
+          if (opt && picked.indexOf(opt) < 0) picked.push(opt);
+        });
+        return picked.length ? picked : undefined;
+      }
+      case 'longtext': {
+        var long = String(v).replace(/\r\n?/g, '\n').trim();
+        return long ? long.slice(0, MAX_LONGTEXT) : undefined;
+      }
+      case 'geo': {
+        // "45.5017, -73.5673" (also ";" or a space as separator): latitude then longitude, in range
+        var g = /^\s*(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)\s*$/.exec(String(v));
+        if (!g) return undefined;
+        var lat = parseFloat(g[1].replace(',', '.'));
+        var lon = parseFloat(g[2].replace(',', '.'));
+        if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return undefined;
+        return Number(lat.toFixed(5)) + ', ' + Number(lon.toFixed(5));
+      }
+      case 'url': {
+        // only web links are kept (never javascript: or data: ones, the value ends up in href)
+        var u = String(v).trim();
+        if (/^https?:\/\/[^\s]+$/i.test(u)) return u.slice(0, MAX_URL);
+        if (/^[\w-]+(\.[\w-]+)+(\/[^\s]*)?$/.test(u)) return ('https://' + u).slice(0, MAX_URL);
+        return undefined;
       }
       case 'ref':
         return typeof v === 'string' && v ? v : undefined;
@@ -452,7 +628,9 @@
     }
     if (field.kind === 'ref') return nameOf(value);
     if (field.kind === 'refs') return value.map(nameOf).join(', ');
+    if (field.kind === 'multi') return value.join(', ');
     if (field.kind === 'bool') return value ? 'oui' : 'non';
+    if (field.kind === 'number' && field.unit) return value + ' ' + field.unit;
     return String(value);
   }
 
@@ -638,7 +816,7 @@
       if (e.id === id) return;
       if (e.base === id) out.push({ dir: 'in', via: 'variante de', other: e.id });
       e.relations.forEach(function (r) {
-        if (r.to === id) out.push({ dir: 'in', via: r.type, other: e.id });
+        if (r.to === id) out.push({ dir: 'in', via: r.type, inverse: inverseLabel(r.type), other: e.id });
       });
       Object.keys(e.data).forEach(function (cid) {
         Object.keys(e.data[cid]).forEach(function (key) {
@@ -709,6 +887,319 @@
       });
       return cur;
     });
+  }
+
+  // ---------------------------------------------------------------- 5b relation vocabulary, containment, grounding
+  /**
+   * Built-in relation vocabulary. A relation stored on an entity is still just {type, to} (free text is
+   * allowed); when `type` matches a name, inverse or alias below, the model knows what it means:
+   *   category   spatial | mereological | composition | production | social | taxonomic | grounding |
+   *              causal | temporal | conceptual | generic
+   *   up         "A <name> B" makes B a container/whole of A: located in + part of build the containment
+   *              hierarchy (transitive: a plant in the Salon is in the Hôtel de Ville, in Montréal)
+   *   from / to  natures usually found on each side (a mismatch is a warning, not an error)
+   */
+  var RELATIONS = [
+    { id: 'located-in', name: 'situé dans', inverse: 'abrite', category: 'spatial', up: true, from: ['matter', 'living', 'agent', 'place', 'event', 'social'], to: ['place'], aliases: ['situé à', 'localisé dans', 'located in'], inverseAliases: ['héberge', 'houses'] },
+    { id: 'part-of', name: 'fait partie de', inverse: 'contient', category: 'mereological', up: true, aliases: ['partie de', 'part of'], inverseAliases: ['comprend', 'has part', 'contains'] },
+    { id: 'lives-in', name: 'habite à', inverse: 'est habité par', category: 'spatial', from: ['agent', 'living'], to: ['place'], aliases: ['habite dans', 'lives in'] },
+    { id: 'made-of', name: 'fait de', inverse: 'compose', category: 'composition', from: ['matter', 'living'], to: ['matter', 'living'], aliases: ['composé de', 'made of', 'contient comme ingrédient'] },
+    { id: 'made-by', name: 'fabriqué par', inverse: 'a fabriqué', category: 'production', to: ['agent', 'social'], aliases: ['créé par', 'produit par', 'made by'] },
+    { id: 'owned-by', name: 'appartient à', inverse: 'possède', category: 'social', to: ['agent', 'social'], aliases: ['propriété de', 'owned by'] },
+    { id: 'member-of', name: 'membre de', inverse: 'a pour membre', category: 'social', from: ['agent', 'social'], to: ['social', 'agent'], aliases: ['member of'] },
+    { id: 'works-for', name: 'travaille pour', inverse: 'emploie', category: 'social', from: ['agent'], to: ['social', 'agent'], aliases: ['works for', 'travaille chez'], inverseAliases: ['employs'] },
+    { id: 'instance-of', name: 'instance de', inverse: 'a pour instance', category: 'taxonomic', to: ['abstract', 'social'], aliases: ['exemple de', 'instance of'], inverseAliases: ['a pour exemple'] },
+    { id: 'grounded-in', name: 'ancré dans', inverse: 'ancre', category: 'grounding', from: ['abstract', 'social'], aliases: ['basé sur', 'grounded in'] },
+    { id: 'expressed-by', name: 'exprimé par', inverse: 'exprime', category: 'grounding', from: ['abstract', 'social'], aliases: ['incarné par', 'illustré par', 'expressed by'] },
+    { id: 'kind-of', name: 'sorte de', inverse: 'a pour sorte', category: 'taxonomic', from: ['abstract', 'social'], to: ['abstract', 'social'], aliases: ['kind of', 'est un'] },
+    { id: 'causes', name: 'cause', inverse: 'est causé par', category: 'causal', aliases: ['provoque', 'causes'] },
+    { id: 'depends-on', name: 'dépend de', inverse: 'est requis par', category: 'causal', aliases: ['requiert', 'depends on'] },
+    { id: 'precedes', name: 'précède', inverse: 'suit', category: 'temporal', aliases: ['avant', 'precedes'] },
+    { id: 'opposes', name: 's’oppose à', category: 'conceptual', symmetric: true, from: ['abstract', 'social'], to: ['abstract', 'social'], aliases: ['contraire de', 'opposes'] },
+    { id: 'similar-to', name: 'ressemble à', category: 'conceptual', symmetric: true, aliases: ['similaire à', 'similar to'] },
+    { id: 'represents', name: 'représente', inverse: 'est représenté par', category: 'conceptual', aliases: ['symbolise', 'represents'] },
+    { id: 'related', name: 'lié à', category: 'generic', symmetric: true, aliases: ['related to', 'relié à'] },
+  ];
+  var relIndex = null;
+
+  function relationById(id) {
+    for (var i = 0; i < RELATIONS.length; i++) if (RELATIONS[i].id === id) return RELATIONS[i];
+    return null;
+  }
+
+  function relationIndex() {
+    if (relIndex) return relIndex;
+    relIndex = {};
+    function put(label, def, dir) {
+      var k = normKey(label);
+      if (k && !relIndex[k]) relIndex[k] = { def: def, dir: dir };
+    }
+    RELATIONS.forEach(function (d) {
+      var fwd = d.symmetric ? 'sym' : 'fwd';
+      put(d.name, d, fwd);
+      (d.aliases || []).forEach(function (a) {
+        put(a, d, fwd);
+      });
+      if (d.inverse) put(d.inverse, d, 'inv');
+      (d.inverseAliases || []).forEach(function (a) {
+        put(a, d, 'inv');
+      });
+    });
+    return relIndex;
+  }
+
+  /** @returns {{def:object, dir:'fwd'|'inv'|'sym'}|null} what a relation label means (null = free text) */
+  function matchRelation(label) {
+    return relationIndex()[normKey(label)] || null;
+  }
+
+  /** The same link read from the other end: "contient" -> "fait partie de"; free text and symmetric stay. */
+  function inverseLabel(type) {
+    var m = matchRelation(type);
+    if (!m || m.def.symmetric) return m ? m.def.name : type;
+    return m.dir === 'inv' ? m.def.name : m.def.inverse;
+  }
+
+  /**
+   * Relations that make sense for entities of these natures, most specific first (the generic "lié à"
+   * always last), as [{id, name, inverse, category}]. No natures known: the whole vocabulary.
+   */
+  function relationsFor(natures) {
+    var ns = natures || [];
+    var specific = [];
+    var generic = [];
+    RELATIONS.forEach(function (d) {
+      if (d.id === 'related') return;
+      if (!d.from) {
+        generic.push(d);
+      } else if (!ns.length || d.from.some(function (n) { return ns.indexOf(n) >= 0; })) {
+        specific.push(d);
+      }
+    });
+    return specific.concat(generic).concat([relationById('related')]);
+  }
+
+  /**
+   * What entity states, oriented "subject <relation> object": its free relations whose type is in the
+   * vocabulary, plus its ref fields that carry a `rel`. Pass inherited data (flatten) for variants.
+   * @returns {{subject:string, def:object, object:string}[]}
+   */
+  function factsOf(schema, entity) {
+    var out = [];
+    (entity.relations || []).forEach(function (r) {
+      var m = matchRelation(r.type);
+      if (!m) return;
+      if (m.dir === 'inv') out.push({ subject: r.to, def: m.def, object: entity.id });
+      else out.push({ subject: entity.id, def: m.def, object: r.to });
+      if (m.def.symmetric) out.push({ subject: r.to, def: m.def, object: entity.id });
+    });
+    Object.keys(entity.data || {}).forEach(function (cid) {
+      Object.keys(entity.data[cid]).forEach(function (key) {
+        var f = fieldOf(schema, cid + '.' + key);
+        if (!f || !f.field.rel || (f.field.kind !== 'ref' && f.field.kind !== 'refs')) return;
+        var def = relationById(f.field.rel);
+        var v = entity.data[cid][key];
+        (Array.isArray(v) ? v : [v]).forEach(function (to) {
+          if (typeof to !== 'string' || !to) return;
+          out.push({ subject: entity.id, def: def, object: to });
+          if (def.symmetric) out.push({ subject: to, def: def, object: entity.id });
+        });
+      });
+    });
+    return out;
+  }
+
+  // ---- containment hierarchy (located in + part of, transitive)
+  function addUnique(map, k, v) {
+    map[k] = map[k] || [];
+    if (map[k].indexOf(v) < 0) map[k].push(v);
+  }
+
+  /** @returns {{parents:Object<string,string[]>, children:Object<string,string[]>}} the containment graph */
+  function hierarchy(schema, entities) {
+    var idx = { parents: {}, children: {} };
+    flatten(entities).forEach(function (e) {
+      factsOf(schema, e).forEach(function (f) {
+        if (!f.def.up || f.subject === f.object) return;
+        addUnique(idx.parents, f.subject, f.object);
+        addUnique(idx.children, f.object, f.subject);
+      });
+    });
+    return idx;
+  }
+
+  function walk(map, id, limit) {
+    var out = [];
+    var seen = {};
+    var queue = (map[id] || []).slice();
+    while (queue.length && out.length < limit) {
+      var cur = queue.shift();
+      if (seen[cur]) continue;
+      seen[cur] = true;
+      out.push(cur);
+      (map[cur] || []).forEach(function (n) {
+        queue.push(n);
+      });
+    }
+    return out;
+  }
+
+  /** Containers of id, nearest first (id itself appears only when the data loops). */
+  function ancestorsIn(idx, id) {
+    return walk(idx.parents, id, 50);
+  }
+
+  /** Everything inside id, nearest first. */
+  function descendantsIn(idx, id) {
+    return walk(idx.children, id, 500);
+  }
+
+  function ancestorsOf(schema, entities, id) {
+    return ancestorsIn(hierarchy(schema, entities), id);
+  }
+
+  function descendantsOf(schema, entities, id) {
+    return descendantsIn(hierarchy(schema, entities), id);
+  }
+
+  /** The chain from the outermost container down to the entity (Canada, Montréal, Hôtel de Ville, Salon). */
+  function pathOf(schema, entities, id) {
+    var idx = hierarchy(schema, entities);
+    var chain = [id];
+    var seen = {};
+    seen[id] = true;
+    var cur = id;
+    while (idx.parents[cur] && idx.parents[cur].length) {
+      var p = idx.parents[cur][0];
+      if (seen[p]) break;
+      seen[p] = true;
+      chain.unshift(p);
+      cur = p;
+    }
+    return chain
+      .map(function (x) {
+        return findById(entities, x);
+      })
+      .filter(Boolean);
+  }
+
+  /** Would "id <type> toId" make something contain itself? Only containment relations can. */
+  function wouldCycleRelation(schema, entities, id, type, toId) {
+    var m = matchRelation(type);
+    if (!m || !m.def.up) return false;
+    var subject = m.dir === 'inv' ? toId : id;
+    var object = m.dir === 'inv' ? id : toId;
+    if (subject === object) return true;
+    return ancestorsOf(schema, entities, object).indexOf(subject) >= 0;
+  }
+
+  // ---- grounding (materialism as a lint)
+  /**
+   * Is an entity anchored to something material? Looks at most 3 links away (relations and ref fields, in
+   * both directions) for an entity that has a body, a place or a date. A material entity grounds itself.
+   * @returns {{grounded:boolean, base:string, path:string[]}} path = ids from the entity to its base
+   */
+  function groundingOf(schema, entities, id) {
+    var flat = flatten(entities);
+    var byId = {};
+    var adj = {};
+    flat.forEach(function (e) {
+      byId[e.id] = e;
+    });
+    function link(a, b) {
+      addUnique(adj, a, b);
+      addUnique(adj, b, a);
+    }
+    flat.forEach(function (e) {
+      (e.relations || []).forEach(function (r) {
+        if (byId[r.to]) link(e.id, r.to);
+      });
+      Object.keys(e.data || {}).forEach(function (cid) {
+        Object.keys(e.data[cid]).forEach(function (key) {
+          var f = fieldOf(schema, cid + '.' + key);
+          if (!f || (f.field.kind !== 'ref' && f.field.kind !== 'refs')) return;
+          [].concat(e.data[cid][key]).forEach(function (to) {
+            if (byId[to]) link(e.id, to);
+          });
+        });
+      });
+    });
+    var start = byId[id];
+    if (!start) return { grounded: false, base: '', path: [] };
+    if (isMaterial(schema, start)) return { grounded: true, base: id, path: [id] };
+    var from = {};
+    from[id] = '';
+    var frontier = [id];
+    for (var depth = 0; depth < 3; depth++) {
+      var next = [];
+      for (var i = 0; i < frontier.length; i++) {
+        var neighbours = adj[frontier[i]] || [];
+        for (var j = 0; j < neighbours.length; j++) {
+          var n = neighbours[j];
+          if (n in from) continue;
+          from[n] = frontier[i];
+          if (isMaterial(schema, byId[n])) {
+            var path = [n];
+            while (from[path[0]]) path.unshift(from[path[0]]);
+            return { grounded: true, base: n, path: path };
+          }
+          next.push(n);
+        }
+      }
+      frontier = next;
+    }
+    return { grounded: false, base: '', path: [] };
+  }
+
+  function natureNames(list) {
+    return list
+      .map(function (n) {
+        var x = natureById(n);
+        return x ? x.name.toLowerCase() : n;
+      })
+      .join(' / ');
+  }
+
+  /**
+   * Ontological remarks about one entity (which must be in `entities`): level 'error' (a containment
+   * loop), 'warn' (a relation between natures it does not usually link) or 'info' (a floating abstraction).
+   * @returns {{level:string, code:string, message:string, other?:string}[]}
+   */
+  function ontologyIssues(schema, entities, entity) {
+    var out = [];
+    var natures = naturesOf(schema, entity);
+    if (ancestorsOf(schema, entities, entity.id).indexOf(entity.id) >= 0) {
+      out.push({ level: 'error', code: 'cycle', message: '« ' + entity.name + ' » finirait par se contenir lui-même : retirez un lien « situé dans » ou « fait partie de ».' });
+    }
+    (entity.relations || []).forEach(function (r) {
+      var m = matchRelation(r.type);
+      var other = findById(entities, r.to);
+      if (!m || !other || m.def.symmetric) return;
+      var subject = m.dir === 'inv' ? other : entity;
+      var object = m.dir === 'inv' ? entity : other;
+      [['from', subject], ['to', object]].forEach(function (side) {
+        var expected = m.def[side[0]];
+        var ns = naturesOf(schema, side[1]);
+        if (!expected || !ns.length || ns.some(function (n) { return expected.indexOf(n) >= 0; })) return;
+        out.push({
+          level: 'warn',
+          code: 'relation-nature',
+          other: other.id,
+          message:
+            side[0] === 'from'
+              ? '« ' + m.def.name + ' » part d’habitude de : ' + natureNames(expected) + ' ; « ' + side[1].name + ' » est ' + natureNames(ns) + '.'
+              : '« ' + m.def.name + ' » vise d’habitude : ' + natureNames(expected) + ' ; « ' + side[1].name + ' » est ' + natureNames(ns) + '.',
+        });
+      });
+    });
+    if (natures.length && !natures.some(function (n) { return realmOf(n) === 'material'; }) && !groundingOf(schema, entities, entity.id).grounded) {
+      out.push({
+        level: 'info',
+        code: 'floating',
+        message: '« ' + entity.name + ' » (' + natureNames(natures) + ') flotte : reliez-le à ce qui l’incarne, l’exprime ou l’illustre (un lieu, une personne, un objet, un événement).',
+      });
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------- 6 history / revert
@@ -831,15 +1322,18 @@
   }
 
   /**
-   * filter = { types?: string[] (any of), text?: string, refersTo?: string[] (all of, entity ids),
+   * filter = { types?: string[] (any of, subtypes included), text?: string,
+   *            refersTo?: string[] (all of, entity ids; what is inside them counts),
    *            where?: [{ path, op, value }] (all of) }
    */
-  function matches(schema, entity, filter) {
+  function matches(schema, entity, filter, ctx) {
     var f = filter || {};
     if (f.types && f.types.length) {
+      // a City answers to "Place": the entity's types are widened to their ancestors
+      var closure = typeClosure(schema, entity.types);
       if (
         !f.types.some(function (t) {
-          return entity.types.indexOf(t) >= 0;
+          return closure.indexOf(t) >= 0;
         })
       ) {
         return false;
@@ -859,7 +1353,10 @@
     if (f.refersTo && f.refersTo.length) {
       if (
         !f.refersTo.every(function (id) {
-          return refersTo(schema, entity, id);
+          // "at the Hôtel de Ville" also reaches what is in its rooms (ctx.reach = the place and its insides)
+          return (ctx && ctx.reach ? ctx.reach(id) : [id]).some(function (rid) {
+            return refersTo(schema, entity, rid);
+          });
         })
       ) {
         return false;
@@ -872,8 +1369,17 @@
 
   function query(schema, entities, filter) {
     var flat = flatten(entities);
+    var ctx = null;
+    if (filter && filter.refersTo && filter.refersTo.length) {
+      var idx = hierarchy(schema, entities);
+      ctx = {
+        reach: function (id) {
+          return [id].concat(descendantsIn(idx, id));
+        },
+      };
+    }
     return entities.filter(function (e, i) {
-      return matches(schema, flat[i], filter);
+      return matches(schema, flat[i], filter, ctx);
     });
   }
 
@@ -928,7 +1434,7 @@
     var direct = [];
     var refs = [];
     named.forEach(function (n) {
-      var isDirect = n.entity.types.some(function (t) {
+      var isDirect = typeClosure(schema, n.entity.types).some(function (t) {
         return types.indexOf(t) >= 0;
       });
       (isDirect ? direct : []).push(n.entity);
@@ -937,16 +1443,12 @@
     });
     var where = [];
     var scope = types.length ? types : null;
-    var comps = {};
-    (scope || (schema.types || []).map(function (t) { return t.id; })).forEach(function (tid) {
-      var t = findById(schema.types, tid);
-      if (t) t.components.forEach(function (c) { comps[c] = true; });
-    });
-    Object.keys(comps).forEach(function (cid) {
+    var scopeTypes = scope || (schema.types || []).map(function (t) { return t.id; });
+    componentIdsOf(schema, { types: scopeTypes }).forEach(function (cid) {
       var c = findById(schema.components, cid);
       if (!c) return;
       c.fields.forEach(function (fd) {
-        if (fd.kind !== 'choice') return;
+        if (fd.kind !== 'choice' && fd.kind !== 'multi') return;
         (fd.options || []).forEach(function (o) {
           if (hasPhrase(hay, stem(o))) {
             where.push({ path: cid + '.' + fd.key, op: 'eq', value: o });
@@ -974,6 +1476,12 @@
   }
 
   // ---------------------------------------------------------------- 8 agent prompt lines
+  /** " [Fait social]" when the nature says more than the type's own name, else "". */
+  function natureTag(t) {
+    var n = natureById(t.nature);
+    return n && normKey(n.name) !== normKey(t.name) ? ' [' + n.name + ']' : '';
+  }
+
   function describeEntity(schema, entities, entity) {
     var types = entity.types
       .map(function (t) {
@@ -995,6 +1503,18 @@
       var o = findById(entities, r.to);
       parts.push(r.type + ': ' + (o ? o.name : '?'));
     });
+    var containers = pathOf(schema, entities, entity.id).slice(0, -1);
+    if (containers.length) {
+      parts.push(
+        'dans ' +
+          containers
+            .reverse()
+            .map(function (c) {
+              return c.name;
+            })
+            .join(' › ')
+      );
+    }
     return (
       entity.name +
       (types ? ' [' + types + ']' : '') +
@@ -1018,7 +1538,7 @@
       });
       if (!list.length) return;
       lines.push(
-        '- ' + t.name + ' (' + list.length + ') : ' +
+        '- ' + t.name + ' (' + list.length + ')' + natureTag(t) + ' : ' +
           list.slice(0, 15).map(function (e) { return e.name; }).join(', ') + (list.length > 15 ? ', …' : '')
       );
     });
@@ -1043,6 +1563,9 @@
   // ---------------------------------------------------------------- 9 export
   global.EntitiesModel = {
     VERSION: VERSION,
+    NATURES: NATURES,
+    RELATIONS: RELATIONS,
+    MAX_SCHEMA_CHARS: MAX_SCHEMA_CHARS,
     MAX_ENTITIES: MAX_ENTITIES,
     MAX_HISTORY: MAX_HISTORY,
     FIELD_KINDS: FIELD_KINDS,
@@ -1056,6 +1579,29 @@
     removeComponent: removeComponent,
     removeType: removeType,
     componentIdsOf: componentIdsOf,
+    natureById: natureById,
+    typeLineage: typeLineage,
+    typeClosure: typeClosure,
+    isA: isA,
+    natureOfType: natureOfType,
+    naturesOf: naturesOf,
+    realmOf: realmOf,
+    isMaterial: isMaterial,
+    subtypesOf: subtypesOf,
+    relationById: relationById,
+    matchRelation: matchRelation,
+    inverseLabel: inverseLabel,
+    relationsFor: relationsFor,
+    factsOf: factsOf,
+    hierarchy: hierarchy,
+    ancestorsIn: ancestorsIn,
+    descendantsIn: descendantsIn,
+    ancestorsOf: ancestorsOf,
+    descendantsOf: descendantsOf,
+    pathOf: pathOf,
+    wouldCycleRelation: wouldCycleRelation,
+    groundingOf: groundingOf,
+    ontologyIssues: ontologyIssues,
     fieldOf: fieldOf,
     findById: findById,
     createEntity: createEntity,

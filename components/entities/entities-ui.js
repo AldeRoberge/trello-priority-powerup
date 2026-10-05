@@ -29,6 +29,10 @@
     choice: 'Choix',
     ref: 'Lien vers une entité',
     refs: 'Liens vers des entités',
+    multi: 'Choix multiple',
+    longtext: 'Texte long',
+    geo: 'Coordonnées (lat, lon)',
+    url: 'Lien web',
   };
 
   /* ── 1. Helpers ──────────────────────────────────────────────────── */
@@ -195,7 +199,7 @@
       }
       if (state.typeFilter) {
         list = list.filter(function (e) {
-          return e.types.indexOf(state.typeFilter) >= 0;
+          return EM().isA(state.schema, e, state.typeFilter);
         });
       }
       return { list: list, info: info && info.recognized ? info : null };
@@ -280,7 +284,7 @@
         typeSel.textContent = '';
         typeSel.appendChild(h('option', { value: '', text: 'Tous les types' }));
         state.schema.types.forEach(function (ty) {
-          typeSel.appendChild(h('option', { value: ty.id, text: ty.name }));
+          typeSel.appendChild(h('option', { value: ty.id, text: (ty.parents.length ? '↳ ' : '') + ty.name }));
         });
         typeSel.value = state.typeFilter;
       }
@@ -494,18 +498,49 @@
         });
         return ms;
       }
-      var type = field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : 'text';
+      if (field.kind === 'multi') {
+        var box = h('div', { class: 'en-checks' });
+        (field.options || []).forEach(function (o) {
+          box.appendChild(
+            h('label', { class: 'en-check' }, [
+              h('input', {
+                type: 'checkbox',
+                checked: (val || []).indexOf(o) >= 0 ? true : null,
+                onchange: function (ev) {
+                  var cur = (EM().effectiveValue(state.entities, selected() || e, path) || []).filter(function (x) {
+                    return x !== o;
+                  });
+                  if (ev.target.checked) cur.push(o);
+                  commit(cur);
+                },
+              }),
+              o,
+            ])
+          );
+        });
+        return box;
+      }
+      if (field.kind === 'longtext') {
+        var ta = h('textarea', { class: 'en-input en-area', rows: '4', maxlength: '1500', 'aria-label': aria, onchange: function () { commit(ta.value); } });
+        ta.value = val == null ? '' : String(val);
+        return ta;
+      }
+      var type = field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : field.kind === 'url' ? 'url' : 'text';
       var inp = h('input', {
         class: 'en-input',
         type: type,
         step: field.kind === 'number' ? 'any' : null,
-        'aria-label': aria,
+        placeholder: field.kind === 'geo' ? '45.5017, -73.5673' : field.kind === 'url' ? 'https://…' : null,
+        'aria-label': aria + (field.unit ? ' (' + field.unit + ')' : ''),
         value: val == null ? '' : String(val),
         onchange: function () {
           commit(inp.value);
         },
       });
-      return inp;
+      if (field.kind === 'url' && val) {
+        return h('div', { class: 'en-unit' }, [inp, h('a', { class: 'en-link', href: String(val), target: '_blank', rel: 'noopener noreferrer', text: 'Ouvrir' })]);
+      }
+      return field.unit ? h('div', { class: 'en-unit' }, [inp, h('span', { class: 'en-unit-sfx', text: field.unit })]) : inp;
     }
 
     /** Label of a field with its provenance: inherited from the archetype, or overridden here (resettable). */
@@ -704,6 +739,7 @@
           h('div', { class: 'en-field' }, [h('label', { text: 'Types' }), typeBox]),
         ])
       );
+      els.main.appendChild(ontologyCard(e));
       els.main.appendChild(archetypeCard(e));
       EM()
         .componentIdsOf(state.schema, e)
@@ -746,6 +782,70 @@
           ),
         ])
       );
+    }
+
+    function openEntity(id) {
+      state.selId = id;
+      state.mode = 'entity';
+      state.confirm = '';
+      paintList();
+      paintMain();
+    }
+
+    function entityButton(other) {
+      return h('button', { class: 'en-link', onclick: function () { openEntity(other.id); } }, [other.name]);
+    }
+
+    /** What the entity IS: natures, where it sits in the containment hierarchy, what it contains, what grounds it. */
+    function ontologyCard(e) {
+      var card = h('div', { class: 'en-card en-onto' }, [h('h3', { class: 'en-h', text: 'Ontologie' })]);
+      var natures = EM().naturesOf(state.schema, e);
+      var chips = h('div', { class: 'en-chips' });
+      natures.forEach(function (n) {
+        var nat = EM().natureById(n);
+        chips.appendChild(h('span', { class: 'en-chip en-chip--' + nat.realm, title: nat.hint }, [icon(nat.icon), nat.name]));
+      });
+      e.types.forEach(function (tid) {
+        var ty = EM().findById(state.schema.types, tid);
+        if (ty && ty.role) chips.appendChild(h('span', { class: 'en-chip en-chip--role', title: 'Un rôle : ce que l’entité est dans un contexte', text: 'rôle : ' + ty.name }));
+      });
+      if (!natures.length) chips.appendChild(h('span', { class: 'en-hint', text: 'Sans nature : donnez un type qui en a une (voir Schéma).' }));
+      card.appendChild(chips);
+      var path = EM().pathOf(state.schema, state.entities, e.id);
+      if (path.length > 1) {
+        var crumb = h('div', { class: 'en-crumb', 'aria-label': 'Où se trouve cette entité' });
+        path.forEach(function (p, i) {
+          if (i) crumb.appendChild(h('span', { class: 'en-crumb-sep', text: '›' }));
+          crumb.appendChild(p.id === e.id ? h('strong', { text: p.name }) : entityButton(p));
+        });
+        card.appendChild(crumb);
+      }
+      var inside = EM().descendantsOf(state.schema, state.entities, e.id).slice(0, 12);
+      if (inside.length) {
+        var row = h('div', { class: 'en-inside' }, [h('span', { class: 'en-hint', text: 'Contient : ' })]);
+        inside.forEach(function (id) {
+          var o = EM().findById(state.entities, id);
+          if (o) row.appendChild(entityButton(o));
+        });
+        card.appendChild(row);
+      }
+      EM()
+        .ontologyIssues(state.schema, state.entities, e)
+        .forEach(function (i) {
+          card.appendChild(h('p', { class: 'en-issue en-issue--' + i.level }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), i.message]));
+        });
+      var g = EM().groundingOf(state.schema, state.entities, e.id);
+      if (g.grounded && g.path.length > 1) {
+        var gr = h('div', { class: 'en-inside' }, [h('span', { class: 'en-hint', text: 'Ancré dans le matériel par : ' })]);
+        g.path.slice(1).forEach(function (id, i) {
+          var o = EM().findById(state.entities, id);
+          if (!o) return;
+          if (i) gr.appendChild(h('span', { class: 'en-crumb-sep', text: '›' }));
+          gr.appendChild(entityButton(o));
+        });
+        card.appendChild(gr);
+      }
+      return natures.length || path.length > 1 || inside.length ? card : h('div', { hidden: true });
     }
 
     function emptyState() {
@@ -823,7 +923,7 @@
           var other = EM().findById(state.entities, l.other);
           card.appendChild(
             h('div', { class: 'en-link-row en-link-row--in' }, [
-              h('span', { text: (other ? other.name : '?') + ' ← ' + l.via }),
+              h('span', { text: l.inverse && l.inverse !== l.via ? l.inverse + ' ' + (other ? other.name : '?') : (other ? other.name : '?') + ' ← ' + l.via }),
               other
                 ? h(
                     'button',
@@ -841,7 +941,14 @@
             ])
           );
         });
-      var relType = h('input', { class: 'en-input', placeholder: 'Type de lien (ex. contient, fait partie de)', 'aria-label': 'Type de lien' });
+      var relType = h('input', { class: 'en-input', placeholder: 'Type de lien (ex. situé dans, fait de, ancré dans)', 'aria-label': 'Type de lien', list: 'en-rel-types' });
+      var relList = h('datalist', { id: 'en-rel-types' });
+      EM()
+        .relationsFor(EM().naturesOf(state.schema, e))
+        .forEach(function (d) {
+          relList.appendChild(h('option', { value: d.name }));
+        });
+      card.appendChild(relList);
       var relTo = h('select', { class: 'en-input', 'aria-label': 'Entité liée' });
       state.entities.forEach(function (x) {
         if (x.id !== e.id) relTo.appendChild(h('option', { value: x.id, text: x.name }));
@@ -856,6 +963,10 @@
               class: 'en-btn',
               onclick: function () {
                 if (!relTo.value) return;
+                if (EM().wouldCycleRelation(state.schema, state.entities, e.id, relType.value, relTo.value)) {
+                  toast('Ce lien ferait contenir une entité par elle-même.', 'error');
+                  return;
+                }
                 applyEntity(
                   function (cur) {
                     return EM().addRelation(cur, relType.value, relTo.value);
@@ -907,6 +1018,7 @@
           ),
         ])
       );
+      if (global.EntitiesLibrary) main.appendChild(libraryCard());
       main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Types' }));
       state.schema.types.forEach(function (ty) {
         main.appendChild(typeCard(ty));
@@ -943,16 +1055,100 @@
       );
     }
 
+    /** Ready-made types by group (matter, living, people, places, time, ideas): one click installs a type with its parents and components. */
+    function libraryCard() {
+      var EL = global.EntitiesLibrary;
+      var card = h('div', { class: 'en-card' }, [
+        h('h3', { class: 'en-h', text: 'Bibliothèque d’ontologie' }),
+        h('p', {
+          class: 'en-hint',
+          text: 'Des types prêts à l’emploi, rangés par nature : crème pour les mains (produit), région du monde, pays, ville, bâtiment, personne, travailleur, organisation, événement, concept… Un clic ajoute le type avec ses parents et ses composants.',
+        }),
+      ]);
+      EL.GROUPS.forEach(function (g) {
+        var items = EL.listFor(state.schema, { group: g.id });
+        if (!items.length) return;
+        var row = h('div', { class: 'en-lib-row' }, [h('span', { class: 'en-lib-group' }, [icon(g.icon), g.name])]);
+        items.forEach(function (x) {
+          row.appendChild(
+            x.installed
+              ? h('span', { class: 'en-chip en-chip--ok', title: 'Déjà dans le schéma' }, [icon('check'), x.preset.name])
+              : h(
+                  'button',
+                  {
+                    class: 'en-btn en-btn--small',
+                    title: x.preset.description,
+                    onclick: function () {
+                      var r = EL.install(state.schema, x.preset.id);
+                      if (r.error) {
+                        toast('Le schéma est trop grand pour ajouter ce type : supprimez des types ou composants inutilisés.', 'error');
+                        return;
+                      }
+                      setSchema(r.schema);
+                      toast('Ajouté : ' + r.added.types.join(', ') + '.');
+                    },
+                  },
+                  [icon('plus'), x.preset.name]
+                )
+          );
+        });
+        card.appendChild(row);
+      });
+      return card;
+    }
+
     function typeCard(ty) {
       var name = h('input', { class: 'en-input', value: ty.name, 'aria-label': 'Nom du type' });
       var aliases = h('input', { class: 'en-input', value: ty.aliases.join(', '), placeholder: 'alias : plant, verdure', 'aria-label': 'Alias du type' });
       var checks = h('div', { class: 'en-checks' });
       var chosen = ty.components.slice();
+      var nature = h('select', { class: 'en-input', 'aria-label': 'Nature du type' });
+      nature.appendChild(h('option', { value: '', text: ty.parents.length ? '(celle du type parent)' : '—' }));
+      EM().NATURES.forEach(function (n) {
+        nature.appendChild(h('option', { value: n.id, text: n.name }));
+      });
+      nature.value = ty.nature || '';
+      var role = h('input', { type: 'checkbox', checked: ty.role ? true : null, 'aria-label': 'Rôle' });
+      var desc = h('input', { class: 'en-input', value: ty.description || '', placeholder: 'En une phrase : qu’est-ce que c’est ?', 'aria-label': 'Description du type' });
+      var parents = ty.parents.slice();
+      var parentBox = h('div', { class: 'en-checks' });
+      state.schema.types.forEach(function (p) {
+        if (p.id === ty.id) return;
+        parentBox.appendChild(
+          h('label', { class: 'en-check' }, [
+            h('input', {
+              type: 'checkbox',
+              checked: parents.indexOf(p.id) >= 0 ? true : null,
+              onchange: function (ev) {
+                parents = parents.filter(function (x) {
+                  return x !== p.id;
+                });
+                if (ev.target.checked) parents.push(p.id);
+                save();
+              },
+            }),
+            p.name,
+          ])
+        );
+      });
       function save() {
         setSchema(
-          EM().upsertType(state.schema, { id: ty.id, name: name.value, aliases: splitList(aliases.value), components: chosen })
+          EM().upsertType(state.schema, {
+            id: ty.id,
+            name: name.value,
+            aliases: splitList(aliases.value),
+            icon: ty.icon,
+            nature: nature.value,
+            role: role.checked,
+            description: desc.value,
+            parents: parents,
+            components: chosen,
+          })
         );
       }
+      nature.addEventListener('change', save);
+      role.addEventListener('change', save);
+      desc.addEventListener('change', save);
       state.schema.components.forEach(function (c) {
         checks.appendChild(
           h('label', { class: 'en-check' }, [
@@ -977,7 +1173,11 @@
       return h('div', { class: 'en-card' }, [
         h('div', { class: 'en-field' }, [h('label', { text: 'Nom' }), name]),
         h('div', { class: 'en-field' }, [h('label', { text: 'Alias' }), aliases]),
-        h('div', { class: 'en-field' }, [h('label', { text: 'Composants' }), checks]),
+        h('div', { class: 'en-field' }, [h('label', { text: 'Description' }), desc]),
+        h('div', { class: 'en-field' }, [h('label', { text: 'Nature' }), nature]),
+        h('div', { class: 'en-field' }, [h('label', { class: 'en-check' }, [role, 'Rôle (une entité l’est dans un contexte, pas par nature)'])]),
+        ty.parents.length || state.schema.types.length > 1 ? h('div', { class: 'en-field' }, [h('label', { text: 'Est une sorte de' }), parentBox]) : null,
+        h('div', { class: 'en-field' }, [h('label', { text: 'Composants (les types parents apportent les leurs)' }), checks]),
         h(
           'button',
           {
@@ -1017,8 +1217,10 @@
         });
         kind.value = f.kind;
         var extra = null;
-        if (f.kind === 'choice') {
+        if (f.kind === 'choice' || f.kind === 'multi') {
           extra = h('input', { class: 'en-input', value: (f.options || []).join(', '), placeholder: 'choix : bonne, fragile, morte', 'aria-label': 'Choix possibles' });
+        } else if (f.kind === 'number') {
+          extra = h('input', { class: 'en-input', value: f.unit || '', placeholder: 'unité : kg, ml, $', 'aria-label': 'Unité' });
         } else if (f.kind === 'ref' || f.kind === 'refs') {
           extra = h('input', {
             class: 'en-input',
@@ -1031,7 +1233,9 @@
         function commitField() {
           var next = c.fields.slice();
           var nf = { key: f.key, label: label.value, kind: kind.value };
-          if (kind.value === 'choice') nf.options = extra && f.kind === 'choice' ? splitList(extra.value) : f.options || [];
+          if (f.rel) nf.rel = f.rel;
+          if (kind.value === 'number') nf.unit = extra && f.kind === 'number' ? extra.value : f.unit || '';
+          if (kind.value === 'choice' || kind.value === 'multi') nf.options = extra && (f.kind === 'choice' || f.kind === 'multi') ? splitList(extra.value) : f.options || [];
           if (kind.value === 'ref' || kind.value === 'refs') nf.refTypes = extra && f.kind === kind.value ? splitList(extra.value) : f.refTypes || [];
           next[i] = nf;
           saveFields(next);

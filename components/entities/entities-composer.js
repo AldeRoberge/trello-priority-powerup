@@ -15,8 +15,12 @@
  * suggest() proposes the values and links other entities of the same type already use; issues()
  * flags duplicates and ambiguous aliases; parseFieldSpec() lets a new type be described in one line.
  *
+ * The ontology (natures, type hierarchy, relation vocabulary, grounding) lives in EntitiesModel; the composer
+ * uses it to offer the right types for what the user is adding (a place, a person, an idea...), the right
+ * relations for it (an abstract concept: "ancré dans", "exprimé par"...) and to warn about floating concepts.
+ *
  * Contents: 1 helpers | 2 field specs and new types | 3 drafts | 4 intent | 5 steps and questions |
- * 6 suggestions | 7 issues | 8 finalize | 9 export
+ * 6 suggestions and relations | 7 issues | 8 finalize | 9 export
  */
 (function (global) {
   'use strict';
@@ -82,13 +86,18 @@
     date: 'date',
     'oui-non': 'bool', 'oui/non': 'bool', 'oui non': 'bool', bool: 'bool', booleen: 'bool', yesno: 'bool', 'yes-no': 'bool',
     choix: 'choice', choice: 'choice', liste: 'choice',
+    'choix-multiple': 'multi', multi: 'multi', multiple: 'multi', tags: 'multi', etiquettes: 'multi',
+    'texte-long': 'longtext', long: 'longtext', longtext: 'longtext', description: 'longtext', definition: 'longtext',
+    geo: 'geo', gps: 'geo', coordonnees: 'geo', position: 'geo',
+    url: 'url', web: 'url', site: 'url', 'lien-web': 'url',
     lien: 'ref', link: 'ref', ref: 'ref', entite: 'ref',
     liens: 'refs', links: 'refs', refs: 'refs', entites: 'refs',
   };
 
   /**
-   * "Fréquence (nombre), Dernier arrosage (date), Santé (choix: bonne/fragile/morte), Lieu (lien: Lieu)"
-   * -> [{key,label,kind,options?,refTypes?}]. A bare label is a text field. Unknown kinds are text.
+   * "Fréquence (nombre), Dernier arrosage (date), Santé (choix: bonne/fragile/morte), Lieu (lien: Lieu),
+   * Poids (nombre: kg), Peau (choix-multiple: sèche/mixte), Définition (texte-long), Position (geo), Site (url)"
+   * -> [{key,label,kind,options?,refTypes?,unit?}]. A bare label is a text field. Unknown kinds are text.
    */
   function parseFieldSpec(text, schema) {
     var fields = [];
@@ -119,7 +128,8 @@
       var kind = KIND_WORDS[kindWord] || KIND_WORDS[(m[2] || '').toLowerCase().trim()] || 'text';
       var f = { key: key, label: label, kind: kind };
       var arg = trim(m[3]);
-      if (kind === 'choice') {
+      if (kind === 'number' && arg) f.unit = arg.slice(0, 12);
+      if (kind === 'choice' || kind === 'multi') {
         f.options = arg
           .split(/[\/|]/)
           .map(trim)
@@ -141,10 +151,20 @@
 
   /** Renders fields back to the one-line spec (used to prefill an editor). */
   function fieldSpecText(fields) {
-    var names = { text: 'texte', number: 'nombre', date: 'date', bool: 'oui-non', choice: 'choix', ref: 'lien', refs: 'liens' };
+    var names = {
+      text: 'texte', number: 'nombre', date: 'date', bool: 'oui-non', choice: 'choix', ref: 'lien', refs: 'liens',
+      multi: 'choix-multiple', longtext: 'texte-long', geo: 'geo', url: 'url',
+    };
     return (fields || [])
       .map(function (f) {
-        var arg = f.kind === 'choice' ? ': ' + (f.options || []).join('/') : (f.kind === 'ref' || f.kind === 'refs') && f.refTypes && f.refTypes.length ? ': ' + f.refTypes.join('/') : '';
+        var arg =
+          f.kind === 'choice' || f.kind === 'multi'
+            ? ': ' + (f.options || []).join('/')
+            : f.kind === 'number' && f.unit
+              ? ': ' + f.unit
+              : (f.kind === 'ref' || f.kind === 'refs') && f.refTypes && f.refTypes.length
+                ? ': ' + f.refTypes.join('/')
+                : '';
         return f.kind === 'text' ? f.label : f.label + ' (' + names[f.kind] + arg + ')';
       })
       .join(', ');
@@ -152,7 +172,8 @@
 
   /**
    * Adds a type (and optionally one new component with its fields) to the schema.
-   * spec = { name, aliases?, icon?, componentIds?: string[], component?: { name, fieldsText } }
+   * spec = { name, aliases?, icon?, nature?, parents?: string[] (type ids), role?, description?,
+   *          componentIds?: string[], component?: { name, fieldsText } }
    * @returns {{schema:object, typeId?:string, componentId?:string, error?:string}}
    */
   function defineType(schema, spec) {
@@ -181,6 +202,12 @@
       name: name,
       aliases: spec.aliases || [],
       icon: spec.icon || '',
+      nature: spec.nature || '',
+      parents: (spec.parents || []).filter(function (p) {
+        return !!EM().findById(schema.types, p);
+      }),
+      role: spec.role === true,
+      description: spec.description || '',
       components: comps,
     });
     if (!EM().findById(next.types, typeId)) return { schema: schema, error: 'too-many-types' };
@@ -398,9 +425,10 @@
   }
 
   // ---------------------------------------------------------------- 6 suggestions
-  function siblings(entities, draft) {
+  function siblings(schema, entities, draft) {
+    var mine = EM().typeClosure(schema, draft.types);
     return entities.filter(function (e) {
-      return e.types.some(function (t) { return draft.types.indexOf(t) >= 0; });
+      return e.types.some(function (t) { return mine.indexOf(t) >= 0; });
     });
   }
 
@@ -414,7 +442,7 @@
     if (!f) return [];
     var counts = {};
     var order = [];
-    siblings(entities, draft).forEach(function (e) {
+    siblings(schema, entities, draft).forEach(function (e) {
       var v = EM().getValue(e, path);
       if (v === undefined) return;
       (Array.isArray(v) ? v : [v]).forEach(function (x) {
@@ -434,12 +462,12 @@
       var inList = {};
       list = list.filter(function (x) {
         var e = EM().findById(entities, x.value);
-        if (!e || !eligible(f.field, e, draft)) return false;
+        if (!e || !eligible(f.field, e, draft, schema)) return false;
         inList[x.value] = true;
         return true;
       });
       var rest = entities
-        .filter(function (e) { return !inList[e.id] && eligible(f.field, e, draft); })
+        .filter(function (e) { return !inList[e.id] && eligible(f.field, e, draft, schema); })
         .sort(function (a, b) { return String(b.updatedAt).localeCompare(String(a.updatedAt)); })
         .map(function (e) { return { value: e.id, count: 0 }; });
       return list.concat(rest);
@@ -447,10 +475,12 @@
     return list.slice(0, 4);
   }
 
-  function eligible(field, entity, draft) {
+  /** Can `entity` be the target of this link field? With `schema`, a City is eligible where a Place is asked. */
+  function eligible(field, entity, draft, schema) {
     if (entity.id === draft.id) return false;
     if (!field.refTypes || !field.refTypes.length) return true;
-    return entity.types.some(function (t) { return field.refTypes.indexOf(t) >= 0; });
+    var types = schema ? EM().typeClosure(schema, entity.types) : entity.types;
+    return types.some(function (t) { return field.refTypes.indexOf(t) >= 0; });
   }
 
   /** Relation names already used in this workspace, then the defaults (for the links step). */
@@ -466,6 +496,91 @@
       if (!used.some(function (u) { return EM().normKey(u) === EM().normKey(d); })) used.push(d);
     });
     return used;
+  }
+
+  /**
+   * Types to offer for a nature ("c'est un lieu"): every type whose nature (own or inherited) is it, the
+   * parent types first. Without a nature: all types.
+   */
+  function typesOfNature(schema, natureId) {
+    return (schema.types || []).filter(function (t) {
+      return !natureId || EM().natureOfType(schema, t.id) === natureId;
+    });
+  }
+
+  /** Natures the draft has through its chosen types. */
+  function naturesOfDraft(schema, draft) {
+    return EM().naturesOf(schema, { types: draft.types });
+  }
+
+  /**
+   * Relations to propose when linking the draft: those that fit its natures first (a place: "situé dans",
+   * "abrite"...), then the relation names already used in the workspace, then the rest of the vocabulary.
+   * @returns {{label:string, inverse:string, category:string, builtin:boolean, used:number}[]}
+   */
+  function relationChoices(schema, entities, draft) {
+    var counts = {};
+    entities.forEach(function (e) {
+      e.relations.forEach(function (r) {
+        counts[r.type] = (counts[r.type] || 0) + 1;
+      });
+    });
+    var out = [];
+    var seen = {};
+    function push(label, def) {
+      var k = EM().normKey(label);
+      if (!k || seen[k]) return;
+      seen[k] = true;
+      out.push({
+        label: label,
+        inverse: def ? EM().inverseLabel(label) : '',
+        category: def ? def.category : '',
+        builtin: !!def,
+        used: counts[label] || 0,
+      });
+    }
+    EM()
+      .relationsFor(naturesOfDraft(schema, draft))
+      .forEach(function (d) { push(d.name, d); });
+    Object.keys(counts)
+      .sort(function (a, b) { return counts[b] - counts[a]; })
+      .forEach(function (label) {
+        var m = EM().matchRelation(label);
+        push(m ? (m.dir === 'inv' ? m.def.inverse : m.def.name) : label, m && m.def);
+      });
+    return out;
+  }
+
+  /**
+   * What the "Liens" step asks, depending on what the draft is: an idea or a convention is asked what
+   * embodies it (grounding), a place what it is in, a piece of matter what it is made of or by whom...
+   * @returns {{title:string, hint:string, suggested:string[]}}
+   */
+  function linksPrompt(schema, draft) {
+    var name = draft.name ? '« ' + draft.name + ' »' : 'cette entité';
+    var natures = naturesOfDraft(schema, draft);
+    var has = function (n) { return natures.indexOf(n) >= 0; };
+    var material = natures.some(function (n) { return EM().realmOf(n) === 'material'; });
+    if (natures.length && !material) {
+      return {
+        title: 'Qu’est-ce qui incarne ou exprime ' + name + ' ?',
+        hint: 'Une idée ou une convention n’existe que par ce qui la porte : une personne, un lieu, un objet, un texte, un geste. Reliez ' + name + ' à au moins un de ces appuis, ou à une idée plus générale (sorte de, s’oppose à).',
+        suggested: ['ancré dans', 'exprimé par', 'instance de', 'sorte de', 's’oppose à'],
+      };
+    }
+    if (has('place')) {
+      return { title: 'Où ' + name + ' se situe-t-il, et que contient-il ?', hint: 'Un lieu s’emboîte dans un autre : une pièce dans un bâtiment, dans une ville, dans un pays.', suggested: ['situé dans', 'abrite', 'fait partie de'] };
+    }
+    if (has('agent')) {
+      return { title: 'Qui est ' + name + ' lié à ?', hint: 'Où il habite, pour qui il travaille, de quoi il est membre.', suggested: ['travaille pour', 'habite à', 'membre de'] };
+    }
+    if (has('matter') || has('living')) {
+      return { title: 'De quoi ' + name + ' est-il fait, et par qui ?', hint: 'La matière dont il est composé, qui l’a fabriqué, à qui il appartient, où il se trouve.', suggested: ['fait de', 'fabriqué par', 'appartient à', 'situé dans'] };
+    }
+    if (has('event')) {
+      return { title: 'Où et avec qui ?', hint: 'Le lieu, ce qui précède ou suit.', suggested: ['situé dans', 'précède', 'dépend de'] };
+    }
+    return { title: 'Autres liens ?', hint: 'Relier ' + name + ' à d’autres entités : contient, fait partie de, près de…', suggested: [] };
   }
 
   // ---------------------------------------------------------------- 7 issues
@@ -517,6 +632,7 @@
         }
       });
     });
+    ontologyIssuesOf(schema, entities, draft, others).forEach(function (i) { out.push(i); });
     if (!draft.types.length) {
       out.push({
         level: 'warn',
@@ -525,6 +641,24 @@
       });
     }
     return out;
+  }
+
+  /** A draft seen as an entity, so that the model's ontology checks can run on it before it exists. */
+  function pseudoEntity(schema, d) {
+    var data = {};
+    Object.keys(d.answers || {}).forEach(function (p) {
+      var q = p.split('.');
+      data[q[0]] = data[q[0]] || {};
+      data[q[0]][q[1]] = d.answers[p];
+    });
+    return { id: d.id, name: trim(d.name) || 'Sans nom', aliases: d.aliases || [], types: d.types || [], base: '', data: data, relations: d.relations || [], history: [] };
+  }
+
+  /** Containment loops, odd relations and floating abstractions of one draft, among entities and sibling drafts. */
+  function ontologyIssuesOf(schema, entities, draft, others) {
+    var pool = entities.concat((others || []).map(function (o) { return pseudoEntity(schema, o); }));
+    var me = pseudoEntity(schema, draft);
+    return EM().ontologyIssues(schema, pool.concat([me]), me);
   }
 
   function hasError(list) {
@@ -599,6 +733,11 @@
     suggest: suggest,
     eligible: eligible,
     relationTypes: relationTypes,
+    typesOfNature: typesOfNature,
+    naturesOfDraft: naturesOfDraft,
+    relationChoices: relationChoices,
+    linksPrompt: linksPrompt,
+    pseudoEntity: pseudoEntity,
     issues: issues,
     hasError: hasError,
     finalize: finalize,
