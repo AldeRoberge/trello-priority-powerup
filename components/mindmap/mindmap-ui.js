@@ -1,13 +1,17 @@
 /*
- * Role: UI of the Mindmap view — tasks, people and places as one graph (SVG), with the links
- * "Dépend de" (task → task), "Est fait par" (task → person) and "Est fait à" (task → place).
+ * Role: UI of the Mindmap view — tasks, people, places and the goal hierarchy as one graph (SVG), with the links
+ * "Dépend de" (task → task), "Est fait par" (task → person), "Est fait à" (task → place) and
+ * "Contribue à" (task → unit of work → goal → mission → vision, any level may be skipped).
  * Data: GanttTrello.loadBoard (same records as the Gantt / Table / Kanban); graph and layout come from
- * MindmapModel. Only the dependency links are editable here (card inputs.dependsOn, saved with
- * PriorityTrello.saveCardInputsById); people and places are edited in the card.
- *  - drag the background to pan, wheel to zoom, drag a node to move it
- *  - drag from a task pin (card side) onto another task to link it manually (same gesture as the node views)
+ * MindmapModel. Editable here: the dependency links (card inputs.dependsOn, saved with
+ * PriorityTrello.saveCardInputsById) and the goal levels + their links (MindmapGoalsTrello); people and
+ * places are edited in the card.
+ *  - drag the background (or hold the middle button anywhere) to pan, wheel to zoom, drag a node to move it
+ *  - drag from a pin (card side) onto another node to link it (task → task: dependency; otherwise "Contribue à")
  *  - click a node to focus it: its neighbours stay lit and the side panel lists its links
- *  - "Dépend de…" (panel) or the Relier button: click another task to add / remove a dependency
+ *  - click a link to select it: delete, reverse or re-target it from the panel (Suppr also deletes it)
+ *  - "Ajouter" creates a vision / mission / goal / unit of work; "Hiérarchie" lays the graph out from the center
+ *  - "Dépend de…" / "Contribue à…" (panel) or the Relier button: click another node to add / remove the link
  * Icons: Tabler webfont.
  */
 (function (global) {
@@ -110,11 +114,18 @@
       records: [],
       filter: '',
       hideDone: HD.get(),
-      show: { depends: true, by: true, at: true },
+      show: { depends: true, by: true, at: true, goals: true },
+      goals: { nodes: [], links: [] },
+      goalsLoaded: false, // false until the goal card was read (writing before would overwrite it)
+      goalsAuth: null, // null = unknown, false = Trello REST not authorized yet
+      layout: 'free', // 'free' (force) | 'tree' (hierarchy from the center)
       graph: { nodes: [], edges: [] },
       cycles: {},
       selected: null,
-      linkFrom: null, // task node id waiting for a target
+      selectedEdge: null,
+      relink: null, // edge id whose target is being replaced
+      confirmDelete: null, // goal node id waiting for a second click
+      linkFrom: null, // node id waiting for a target
       view: { x: 0, y: 0, k: 1 },
       status: '',
       statusKind: '',
@@ -129,10 +140,11 @@
       hint: h('div', { class: 'mm-hint', hidden: true }),
       canvas: h('div', { class: 'mm-canvas' }),
       panel: h('aside', { class: 'mm-panel', hidden: true }),
+      composer: h('form', { class: 'mm-composer', hidden: true }),
     };
     var svg = s('svg', { class: 'mm-svg', width: '100%', height: '100%' });
     var defs = s('defs');
-    ['depends', 'by', 'at'].forEach(function (k) {
+    ['depends', 'by', 'at', 'serves'].forEach(function (k) {
       defs.appendChild(s('marker', { id: 'mm-arrow-' + k, viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' },
         [s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mm-arrow mm-arrow--' + k })]));
     });
@@ -145,7 +157,9 @@
     svg.appendChild(gView);
     els.canvas.appendChild(svg);
     els.canvas.appendChild(els.panel);
+    els.canvas.appendChild(els.composer);
     els.canvas.appendChild(h('div', { class: 'mm-legend' }, [
+      legendItem('serves', 'Contribue à'),
       legendItem('depends', 'Dépend de'),
       legendItem('by', 'Est fait par'),
       legendItem('at', 'Est fait à'),
@@ -202,16 +216,33 @@
         toggle('depends', 'arrow-bend-down-right', 'Dépendances'),
         toggle('by', 'user', 'Personnes'),
         toggle('at', 'map-pin', 'Lieux'),
+        toggle('goals', 'target-arrow', 'Objectifs'),
         h('button', {
           class: 'mm-btn' + (state.linkFrom ? ' is-active' : ''),
-          title: 'Choisir une tâche, puis cliquer la tâche dont elle dépend',
+          title: 'Choisir une tâche ou un objectif, puis cliquer l’élément à relier',
           onclick: function () {
             if (state.linkFrom) return endLink();
             var n = state.selected && nodeById(state.selected);
-            if (n && n.kind === 'task') startLink(n.id);
-            else setStatus('Sélectionnez d’abord une tâche', 'error');
+            if (n && MM().rankOf(n) >= 0) startLink(n.id);
+            else setStatus('Sélectionnez d’abord une tâche ou un objectif', 'error');
           },
         }, [icon('link'), 'Relier']),
+        h('button', {
+          class: 'mm-btn',
+          title: 'Créer une vision, une mission, un objectif ou une unité de travail',
+          onclick: function () { openComposer(); },
+        }, [icon('plus'), 'Ajouter']),
+        h('button', {
+          class: 'mm-btn' + (state.layout === 'tree' ? ' is-active' : ''),
+          'aria-pressed': state.layout === 'tree' ? 'true' : 'false',
+          title: 'Disposer du centre (vision, mission) vers l’extérieur (objectifs, unités de travail, tâches)',
+          onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
+        }, [icon('hierarchy-3'), 'Hiérarchie']),
+        state.goalsAuth === false ? h('button', {
+          class: 'mm-btn mm-btn--primary',
+          title: 'Trello doit être autorisé pour lire et enregistrer les objectifs',
+          onclick: function () { authorizeGoals(); },
+        }, [icon('key'), 'Autoriser Trello']) : null,
         h('span', { class: 'mm-spacer' }),
       ];
       if (state.status) {
@@ -784,8 +815,11 @@
       applyView();
     }
 
+    // middle mouse button pans from anywhere (even over a card), like Miro; also stop the browser autoscroll
+    svg.addEventListener('mousedown', function (ev) { if (ev.button === 1) ev.preventDefault(); });
     svg.addEventListener('pointerdown', function (ev) {
-      if (ev.button) return;
+      if (ev.button !== 0 && ev.button !== 1) return;
+      if (ev.button === 1) ev.preventDefault();
       var start = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y };
       var moved = false;
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
@@ -802,7 +836,7 @@
         svg.removeEventListener('pointermove', move);
         svg.removeEventListener('pointerup', up);
         svg.removeEventListener('pointercancel', up);
-        if (!moved && state.selected) select(null);
+        if (!moved && state.selected && ev.button === 0) select(null);
       }
       svg.addEventListener('pointermove', move);
       svg.addEventListener('pointerup', up);
