@@ -1066,3 +1066,17 @@ html[data-color-mode="dark"] .dc-root {
     transition: none;
   }
 }
+.dc-folder-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  padding: 2px 6px;
+  border: 1px solid var(--tp-primary);
+  border-radius: 4px;
+  background: var(--tp-input-bg);
+  color: var(--tp-text);
+}
+.dc-folder-input:focus {
+  outline: none;
+}

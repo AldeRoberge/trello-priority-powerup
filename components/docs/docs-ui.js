@@ -92,8 +92,6 @@
     return (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + ' k' : String(n)) + ' car.';
   }
 
-  /** Drag payload: {kind:'doc'|'folder', id} */
-  var DRAG_TYPE = 'application/x-cerveau-docs';
 
   function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -327,7 +325,7 @@
       els.side.appendChild(els.sideList);
       // empty area of the list: drop = move to the root, right-click = create / sort menu
       els.sideList.addEventListener('dragover', function (e) {
-        if (e.dataTransfer.types.indexOf(DRAG_TYPE) < 0) return;
+        if (!drag) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         clearDropMarks();
@@ -387,7 +385,10 @@
         return;
       }
       var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter, state.sort);
-      if (!rows.length) {
+      var pend = state.pendingFolder;
+      if (pend && pend.parent && !rows.some(function (r) { return r.type === 'folder' && r.folder.id === pend.parent; })) pend = state.pendingFolder = null;
+      if (pend && !pend.parent) list.appendChild(newFolderRow(0));
+      if (!rows.length && !pend) {
         list.appendChild(
           h('p', {
             class: 'dc-list-empty',
@@ -399,6 +400,7 @@
       rows.forEach(function (r) {
         if (r.type === 'folder') {
           list.appendChild(folderRow(r));
+          if (pend && pend.parent === r.folder.id) list.appendChild(newFolderRow(r.depth + 1));
           return;
         }
         var d = r.doc;
@@ -498,13 +500,10 @@
     /* Drag and drop: documents and folders can be dropped on a folder (move into it), on a document
      * (move next to it, i.e. into its folder) or on the empty list area (move to the root). */
 
-    function readDrag(e) {
-      try {
-        var p = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || 'null');
-        return p && p.id ? p : null;
-      } catch (err) {
-        return null;
-      }
+    var drag = null; // {kind, id} while one of our rows is being dragged (dataTransfer types are unreliable across browsers)
+
+    function readDrag() {
+      return drag;
     }
 
     function clearDropMarks() {
@@ -513,7 +512,8 @@
     }
 
     function dropInto(e, folderId) {
-      var p = readDrag(e);
+      var p = readDrag();
+      drag = null;
       clearDropMarks();
       if (!p) return;
       e.preventDefault();
@@ -534,12 +534,15 @@
       row.addEventListener('dragstart', function (e) {
         closePop();
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: kind, id: id }));
-        e.dataTransfer.setData('text/plain', '');
+        e.dataTransfer.setData('text/plain', id); // Firefox only starts a drag when some data is set
+        drag = { kind: kind, id: id };
       });
-      row.addEventListener('dragend', clearDropMarks);
+      row.addEventListener('dragend', function () {
+        drag = null;
+        clearDropMarks();
+      });
       row.addEventListener('dragover', function (e) {
-        if (e.dataTransfer.types.indexOf(DRAG_TYPE) < 0) return;
+        if (!drag) return;
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
@@ -569,20 +572,65 @@
       );
     }
 
+    /** Starts creating a folder right in the tree: a row with a text box, at the root or under `parentId`. */
     function newFolder(parentId) {
-      dialog({ title: 'Nouveau dossier', text: parentId ? 'Dans « ' + DM().folderPath(state.idx, parentId) + ' »' : 'À la racine', input: '', ok: 'Créer' }).then(function (name) {
-        name = typeof name === 'string' ? DM().cleanFolderName(name) : '';
-        if (!name) return;
-        var id = DM().newFolderId();
+      state.filter = '';
+      els.search.value = '';
+      if (parentId) setFolderOpen(parentId, true);
+      state.pendingFolder = { parent: parentId || '', value: '' };
+      paintList();
+    }
+
+    function newFolderRow(depth) {
+      var pend = state.pendingFolder;
+      var finished = false;
+      var input = h('input', {
+        class: 'dc-folder-input',
+        type: 'text',
+        maxlength: String(DM().MAX_FOLDER_NAME),
+        placeholder: 'Nom du dossier',
+        'aria-label': 'Nom du nouveau dossier',
+        value: pend.value,
+      });
+      function finish(commit) {
+        if (finished) return;
+        finished = true;
+        var name = DM().cleanFolderName(input.value);
+        state.pendingFolder = null;
+        if (!commit || !name) {
+          paintList();
+          return;
+        }
+        var parentId = pend.parent;
         editFolders(function (idx) {
           var parent = parentId && DM().folderById(idx, parentId) ? parentId : null;
-          idx.folders.push({ id: id, name: name, parent: parent });
-        }).then(function (ok) {
-          if (!ok) return;
-          if (parentId) setFolderOpen(parentId, true);
-          paintList();
+          idx.folders.push({ id: DM().newFolderId(), name: name, parent: parent });
         });
+        paintList();
+      }
+      input.addEventListener('input', function () { pend.value = input.value; });
+      input.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
       });
+      input.addEventListener('blur', function () { finish(true); });
+      var row = h('div', { class: 'dc-item dc-folder dc-folder-new', style: 'padding-left:' + (8 + depth * 16) + 'px' }, [
+        icon('chevron-right', 'dc-folder-chev'),
+        icon('folder', 'dc-item-icon'),
+        input,
+      ]);
+      setTimeout(function () {
+        if (finished || !input.isConnected) return;
+        input.focus();
+        input.select();
+      }, 0);
+      return row;
     }
 
     function renameFolder(id) {
