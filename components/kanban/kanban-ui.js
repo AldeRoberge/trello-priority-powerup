@@ -4,6 +4,8 @@
  *  - drag a card to another column or to a new position (saved to Trello as list + pos)
  *  - "+ Ajouter une carte" at the bottom of each column; click a tile to open the card
  *  - urgency / due / progress chips open the shared CardFields editors; right-click: card menu
+ *  - "Demander à l'IA…" input on every tile (and one for the board in the toolbar): free text → KanbanAI
+ *    creates / defines tasks, updates progress, puts a card on hold
  * Icons: Tabler webfont.
  */
 (function (global) {
@@ -13,6 +15,7 @@
   var TT = function () { return global.TableTrello; };
   var KM = function () { return global.KanbanModel; };
   var MENU = function () { return global.TableMenu; };
+  var AI = function () { return global.KanbanAI; };
 
   var URGENCY_TONE = { Aucun: 0, 'Bientôt': 1, 'Assez vite': 2, Vite: 3, 'Au plus vite': 4 };
 
@@ -62,6 +65,7 @@
       authOk: true,
       dragId: null,
       composer: null, // list id with the open "add card" composer
+      aiBusy: false,
       status: '',
       statusKind: '',
     };
@@ -231,6 +235,7 @@
         h('label', { class: 'kb-search' }, [icon('search'), filter]),
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
         h('span', { class: 'kb-status' }),
+        AI() ? boardAsk() : null,
         h('span', { class: 'kb-spacer' }),
         h('span', { class: 'kb-count', 'aria-live': 'polite' }),
         btn(HD.icon(state.hideDone), HD.label(state.hideDone, done), {
@@ -250,6 +255,62 @@
       var shown = columns().reduce(function (n, col) { return n + col.cards.length; }, 0);
       var total = state.rows.length;
       c.textContent = (shown === total ? total : shown + ' / ' + total) + (total > 1 ? ' cartes' : ' carte');
+    }
+
+    /* ── Ask the AI ────────────────────────────────────────────────── */
+    /**
+     * Free-text instruction → KanbanAI → writes. `target` is the card the input sits on (null = board level).
+     * `input` is disabled while the call runs; the board is reloaded once it is done.
+     */
+    function askAI(text, target, input) {
+      text = String(text || '').trim();
+      if (!text || state.aiBusy) return;
+      state.aiBusy = true;
+      if (input) input.disabled = true;
+      setStatus('IA en cours…', 'busy');
+      AI().run(t, { text: text, target: target, rows: state.rows, lists: state.lists, record: record }).then(function (res) {
+        state.aiBusy = false;
+        var ok = res.applied.length > 0;
+        var msg = ok ? 'IA : ' + res.applied.join(', ') : res.message || 'Rien à modifier.';
+        if (res.failed.length) msg += ' (échec : ' + res.failed.join(' ; ') + ')';
+        setStatus(msg, res.failed.length && !ok ? 'error' : 'ok', 8000);
+        return reload({ quiet: true });
+      }, function (err) {
+        state.aiBusy = false;
+        if (input) { input.disabled = false; input.focus(); }
+        fail(err);
+      });
+    }
+
+    function askInput(cls, placeholder, target) {
+      var input = h('input', {
+        class: cls,
+        type: 'text',
+        placeholder: placeholder,
+        autocomplete: 'off',
+        spellcheck: 'false',
+        onkeydown: function (e) {
+          e.stopPropagation();
+          if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); askAI(input.value, target, input); }
+          else if (e.key === 'Escape') { input.value = ''; input.blur(); }
+        },
+        onclick: function (e) { e.stopPropagation(); },
+      });
+      return input;
+    }
+
+    function askBox(row) {
+      var input = askInput('kb-ai-input', 'Demander à l’IA…', row);
+      var box = h('div', { class: 'kb-ai', onclick: function (e) { e.stopPropagation(); } }, [icon('sparkles'), input]);
+      // A draggable ancestor would turn text selection in the input into a card drag.
+      input.addEventListener('focus', function () { var c = box.closest('.kb-card'); if (c) c.draggable = false; });
+      input.addEventListener('blur', function () { var c = box.closest('.kb-card'); if (c) c.draggable = true; });
+      return box;
+    }
+
+    function boardAsk() {
+      var input = askInput('kb-ai-input', 'Demander à l’IA : créer une tâche…', null);
+      return h('label', { class: 'kb-ai kb-ai--bar', title: 'Créer ou mettre à jour des tâches en langage naturel' }, [icon('sparkles'), input]);
     }
 
     /* ── Card tile ─────────────────────────────────────────────────── */
@@ -299,6 +360,7 @@
         ]);
         kids.push(prog);
       }
+      if (AI()) kids.push(askBox(row));
       var el = h('div', {
         class: 'kb-card',
         draggable: 'true',

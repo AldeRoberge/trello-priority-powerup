@@ -341,3 +341,35 @@ html[data-color-mode] .tp-page--kanban {
 @media (prefers-reduced-motion: reduce) {
   .kb-skel, .kb-spin { animation: none; }
 }
+
+/* ── Ask the AI ─────────────────────────────────────────────────────── */
+.kb-ai {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px transparent;
+  color: var(--tp-text-muted);
+  cursor: text;
+}
+.kb-ai:hover { box-shadow: inset 0 0 0 1px var(--tp-border); }
+.kb-ai:focus-within { box-shadow: inset 0 0 0 1px var(--tp-primary); color: var(--tp-primary); }
+.kb-ai > .ti { flex: none; font-size: 14px; }
+.kb-ai-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--tp-text);
+}
+.kb-ai-input::placeholder { color: var(--tp-text-muted); opacity: 0.8; }
+.kb-ai-input:disabled { opacity: 0.6; cursor: progress; }
+.kb-ai--bar { margin: 0; min-width: 260px; max-width: 420px; flex: 1; padding: 0 9px; }
+.kb-ai--bar .kb-ai-input { font-size: 13px; padding: 5px 0; }
