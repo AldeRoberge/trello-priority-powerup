@@ -64,6 +64,7 @@
     '{"message":"confirmation courte de ce que tu as fait ou de ce qu\'il manque",',
     ' "actions":[',
     '  {"op":"create","title":"…","desc":"…","list":"<id de liste>","progress":0},',
+    '  {"op":"delete","cardId":"<id>"},',
     '  {"op":"update","cardId":"<id>","desc":"description complète","progress":57,"waiting":true,"waitingReason":"…","list":"<id de liste>"}',
     ' ]}',
   ].join('\n');
@@ -79,6 +80,7 @@
       'Règles :',
       '- "create" = nouvelle tâche (l’utilisateur demande d’en ajouter / créer une). title court à l’infinitif ou nominal. list = id d’une liste fournie (par défaut la liste de la carte ou la première liste non démarrée). desc = quelques lignes utiles seulement si l’utilisateur donne des détails.',
       '- "update" = modifier une carte existante (cardId obligatoire, pris dans les données fournies).',
+      '- "delete" = supprimer / archiver une carte (cardId obligatoire). C’est un archivage réversible : ne refuse pas, fais-le quand l’utilisateur demande de supprimer, effacer ou enlever une carte, et dis « archivée » dans message.',
       '- desc (update) = la description COMPLÈTE qui remplace l’ancienne, en Markdown. Conserve ce qui est encore vrai et utile, intègre la nouvelle information (ex. : une ligne « ' + (o.today || '') + ' : en attente de la réponse de … »). Pour « définir la tâche », écris objectif, étapes concrètes et critère de réussite, brièvement. N’inclus desc que si elle change.',
       '- progress = entier 0–100, seulement si le message dit ou implique clairement un changement d’avancement. Ne mets 100 que si la tâche est clairement terminée. Une mise en attente ne change pas le progrès par elle-même.',
       '- waiting = true quand l’utilisateur attend quelqu’un ou quelque chose (réponse, livraison, décision) ou met la tâche en pause ; waitingReason = motif court (qui / quoi on attend), UNIQUEMENT si l’utilisateur le dit ; sinon omets waitingReason (n’invente jamais de motif, pas de « en attente de rien »). waiting = false quand l’attente est levée.',
@@ -154,6 +156,9 @@
         var p = a.progress == null ? null : clampPct(a.progress);
         if (p) c.progress = p;
         out.push(c);
+      } else if (op === 'delete') {
+        var did = ctx.target ? targetId : str(typeof a.cardId === 'string' ? a.cardId : '', 64);
+        if (rows.some(function (r) { return r.id === did; })) out.push({ op: 'delete', cardId: did });
       } else if (op === 'update') {
         var id = str(typeof a.cardId === 'string' ? a.cardId : '', 64) || targetId;
         if (ctx.target) id = targetId; // an input typed on a card only ever edits that card
@@ -244,6 +249,15 @@
     if (res.failed.length) parts.push('Échec : ' + res.failed.join(' ; ') + '.');
     if (res.message && !res.applied.length) parts.unshift(res.message);
     return parts.join(' ') || 'Rien à modifier.';
+  }
+
+  function applyDelete(t, a, o, res) {
+    var row = (o.rows || []).filter(function (r) { return r.id === a.cardId; })[0];
+    if (!row) return Promise.resolve();
+    return TT().archiveCard(t, row.id).then(function () {
+      if (typeof o.record === 'function') o.record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
+      res.applied.push('carte « ' + (row.name || '') + ' » archivée');
+    });
   }
 
   function applyCreate(t, a, o, res) {
@@ -362,7 +376,7 @@
       var chain = Promise.resolve();
       actions.forEach(function (a) {
         chain = chain.then(function () {
-          return (a.op === 'create' ? applyCreate(t, a, o, res) : applyUpdate(t, a, o, res)).catch(function (err) {
+          return (a.op === 'create' ? applyCreate(t, a, o, res) : a.op === 'delete' ? applyDelete(t, a, o, res) : applyUpdate(t, a, o, res)).catch(function (err) {
             res.failed.push((err && (err.reason || err.message)) || 'erreur');
           });
         });

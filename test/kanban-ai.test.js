@@ -74,7 +74,7 @@ describe('KanbanAI', () => {
       const out = AI.normalizeActions([
         { op: 'update', cardId: 'zzz', progress: 10 },
         { op: 'create', title: 'T', list: 'nope' },
-        { op: 'delete', cardId: 'a' },
+        { op: 'purge', cardId: 'a' },
         null,
       ], { rows, lists, target: null });
       assert.equal(out.length, 1);
@@ -89,6 +89,11 @@ describe('KanbanAI', () => {
       const rows = mkRows();
       const out = AI.normalizeActions([{ op: 'update', cardId: 'a', waiting: true, list: 'l4' }], { rows, lists, target: rows[0] });
       assert.equal(out[0].listId, undefined);
+    });
+    it('keeps delete actions only for known cards; on a card it targets that card', () => {
+      const rows = mkRows();
+      assert.deepEqual(AI.normalizeActions([{ op: 'delete', cardId: 'b' }, { op: 'delete', cardId: 'zzz' }], { rows, lists, target: null }), [{ op: 'delete', cardId: 'b' }]);
+      assert.deepEqual(AI.normalizeActions([{ op: 'delete', cardId: 'b' }], { rows, lists, target: rows[0] }), [{ op: 'delete', cardId: 'a' }]);
     });
     it('resolves a list by name', () => {
       assert.equal(AI.resolveListId('en cours', lists), 'l2');
