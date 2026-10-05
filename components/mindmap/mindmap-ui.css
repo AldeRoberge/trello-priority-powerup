@@ -303,3 +303,7 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-crumb:hover { background: rgba(127, 127, 127, 0.14); }
 .mm-crumb-kind { font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.65; }
 .mm-crumb-sep { opacity: 0.5; }
+
+.mm-suggest { margin: 0; padding: 4px; list-style: none; border-radius: 6px; background: var(--tp-surface); box-shadow: 0 0 0 1px var(--tp-border), 0 6px 18px rgba(0,0,0,.35); }
+.mm-suggest-item { padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--tp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-suggest-item.is-active { background: var(--tp-primary); color: #fff; }

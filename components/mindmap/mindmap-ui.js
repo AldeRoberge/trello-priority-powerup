@@ -665,17 +665,14 @@
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', up);
         document.removeEventListener('pointercancel', cancel);
-        finish();
         if (target) {
-          var tn = nodeById(target);
-          // task ↔ task: left / top pin = "this depends on it", right / bottom pin = "it depends on this"
-          if (tn && n.kind === 'task' && tn.kind === 'task' && (side === 'right' || side === 'bottom')) return applyLink(target, n.id);
-          return applyLink(n.id, target);
+          finish();
+          return linkFromPin(n, side, target);
         }
-        if (n.kind !== 'task' || !me || !els.canvas.contains(me.target)) return;
-        var p = toGraph(me);
-        if (Math.sqrt(Math.pow(p.x - from.x, 2) + Math.pow(p.y - from.y, 2)) < 60) return; // a click on the pin, not a drag
-        askNewTask(n, side, p, me);
+        var p = me && toGraph(me);
+        if (n.kind !== 'task' || !me || !els.canvas.contains(me.target) || Math.sqrt(Math.pow(p.x - from.x, 2) + Math.pow(p.y - from.y, 2)) < 60) return finish(); // a click on the pin, not a drag
+        finish(true);
+        askNewTask(n, side, p, me, temp);
       }
       function cancel() {
         document.removeEventListener('pointermove', move);
@@ -684,9 +681,9 @@
         target = null;
         finish();
       }
-      function finish() {
+      function finish(keepWire) {
         if (target && nodeEls[target]) nodeEls[target].classList.remove('is-drop-target');
-        if (temp.parentNode) temp.parentNode.removeChild(temp);
+        if (!keepWire && temp.parentNode) temp.parentNode.removeChild(temp);
         root.classList.remove('is-wiring');
       }
       document.addEventListener('pointermove', move);
@@ -776,24 +773,69 @@
      * Inline name box at the drop point, then creates the task there. From a pin (src + side) it is linked:
      * left / top = src depends on the new task, right / bottom = the new task depends on src. src null = unlinked.
      */
-    function askNewTask(src, side, p, me) {
+    /** Task ↔ task: left / top pin = "this depends on it", right / bottom pin = "it depends on this". */
+    function linkFromPin(n, side, targetId) {
+      var tn = nodeById(targetId);
+      if (tn && n.kind === 'task' && tn.kind === 'task' && (side === 'right' || side === 'bottom')) return applyLink(targetId, n.id);
+      return applyLink(n.id, targetId);
+    }
+
+    function askNewTask(src, side, p, me, wire) {
       var r = els.canvas.getBoundingClientRect();
       var input = h('input', { class: 'mm-input mm-newtask', type: 'text', placeholder: 'Nouvelle tâche…', maxlength: '120', 'aria-label': 'Nom de la nouvelle tâche' });
-      input.style.cssText = 'position:absolute;z-index:5;width:210px;left:' + Math.max(4, me.clientX - r.left - 105) + 'px;top:' + Math.max(4, me.clientY - r.top - 16) + 'px';
+      input.style.cssText = 'position:absolute;z-index:5;width:210px;left:' + Math.max(4, me.clientX - r.left - (side === 'right' ? 0 : side === 'left' ? 210 : 105)) + 'px;top:' + Math.max(4, me.clientY - r.top - 16) + 'px';
       var done = false;
-      function close() { if (input.parentNode) input.parentNode.removeChild(input); }
+      var list = h('ul', { class: 'mm-suggest', role: 'listbox' });
+      list.style.cssText = 'position:absolute;z-index:6;width:210px;left:' + input.style.left + ';top:' + (parseFloat(input.style.top) + 36) + 'px';
+      list.hidden = true;
+      list.addEventListener('mousedown', function (ev) { ev.preventDefault(); }); // keep the focus in the input
+      var matches = [];
+      var active = -1;
+      function close() {
+        done = true;
+        [input, list, wire].forEach(function (el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+      }
+      function paintActive() {
+        Array.prototype.forEach.call(list.children, function (li, i) { li.classList.toggle('is-active', i === active); });
+      }
+      function refresh() {
+        var q = input.value.trim().toLowerCase();
+        matches = !q ? [] : state.graph.nodes.filter(function (n) {
+          return n.kind === 'task' && (!src || n.id !== src.id) && n.label.toLowerCase().indexOf(q) >= 0;
+        }).slice(0, 8);
+        active = -1;
+        list.textContent = '';
+        matches.forEach(function (n, i) {
+          var li = h('li', { class: 'mm-suggest-item', role: 'option', text: n.label });
+          li.addEventListener('click', function () { choose(n); });
+          li.addEventListener('mousemove', function () { active = i; paintActive(); });
+          list.appendChild(li);
+        });
+        list.hidden = !matches.length;
+      }
+      function choose(n) {
+        close();
+        if (src) linkFromPin(src, side, n.id);
+        else select(n.id);
+      }
+      input.addEventListener('input', refresh);
       input.addEventListener('keydown', function (ev) {
         ev.stopPropagation();
-        if (ev.key === 'Escape') { done = true; close(); }
-        if (ev.key === 'Enter') {
+        if (ev.key === 'Escape') close();
+        else if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && matches.length) {
           ev.preventDefault();
+          active = ev.key === 'ArrowDown' ? (active + 1) % matches.length : (active - 1 + matches.length) % matches.length;
+          paintActive();
+        } else if (ev.key === 'Enter') {
+          ev.preventDefault();
+          if (active >= 0) return choose(matches[active]);
           var name = input.value.trim();
-          done = true;
           close();
           if (name) createTaskAt(src, side, p, name);
         }
       });
       input.addEventListener('blur', function () { if (!done) close(); });
+      els.canvas.appendChild(list);
       els.canvas.appendChild(input);
       input.focus();
     }
