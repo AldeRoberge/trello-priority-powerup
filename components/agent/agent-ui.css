@@ -5085,3 +5085,59 @@ html .tp-page--priority .agent-suggestion-chip.is-selected {
   font-size: 15px;
   line-height: 1;
 }
+
+/* Work panel: live steps of what the assistant is doing */
+.agent-work-panel {
+  margin: 8px 0 8px 36px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-left: 3px solid #5b8def;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  font-size: 13px;
+}
+.agent-work-panel.is-done { border-left-color: #3fa66b; }
+.agent-work-panel.is-failed { border-left-color: #d9534f; }
+.agent-work-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.agent-work-panel.is-running .agent-work-head-icon {
+  display: inline-block;
+  animation: agent-work-spin 1.4s linear infinite;
+}
+.agent-work-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-work-step {
+  display: grid;
+  grid-template-columns: 18px auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+}
+.agent-work-mark::before { content: '\25CB'; opacity: 0.5; }
+.agent-work-step.is-running .agent-work-mark::before {
+  content: '\25D4';
+  opacity: 1;
+  color: #5b8def;
+  display: inline-block;
+  animation: agent-work-spin 1s linear infinite;
+}
+.agent-work-step.is-done .agent-work-mark::before { content: '\2713'; opacity: 1; color: #3fa66b; }
+.agent-work-step.is-failed .agent-work-mark::before { content: '\2715'; opacity: 1; color: #d9534f; }
+.agent-work-step.is-pending .agent-work-label { opacity: 0.6; }
+.agent-work-detail { opacity: 0.7; font-size: 12px; }
+.agent-work-step.is-failed .agent-work-detail { color: #d9534f; opacity: 1; }
+@keyframes agent-work-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .agent-work-panel.is-running .agent-work-head-icon,
+  .agent-work-step.is-running .agent-work-mark::before { animation: none; }
+}

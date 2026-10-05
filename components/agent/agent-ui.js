@@ -5943,7 +5943,7 @@
     async function onOfferAccept(item, row) {
       clearActiveOffer(row, 'yes');
       muteListening();
-      var result = await Agent.executeActions(bridge, item.actions || []);
+      var result = await runActionsWithPanel(item.actions || []);
       appendMessage('assistant', result.summary || 'Okay, c\'est fait.');
       appendChangeRecap(result, { ok: result.ok });
       appendActionResultBlocks(result);
@@ -6334,6 +6334,83 @@
       if (!bubble) return;
       bubble.classList.remove('agent-msg-bubble--pending');
       fillMessageContent(bubble, text || '', blocks || [], { streaming: false });
+    }
+
+    /**
+     * Visible "work in progress" panel: one row per action, live status
+     * (pending → running → done / failed), so it is obvious what the AI is doing.
+     */
+    function runActionsWithPanel(actions) {
+      var list = Array.isArray(actions) ? actions : [];
+      if (!list.length) return Agent.executeActions(bridge, list);
+      var panel = el('div', 'agent-work-panel is-running');
+      panel.setAttribute('role', 'status');
+      panel.setAttribute('aria-live', 'polite');
+      var head = el('div', 'agent-work-head');
+      var headIcon = el('span', 'agent-work-head-icon');
+      headIcon.textContent = '✦';
+      var headText = el('span', 'agent-work-head-text');
+      headText.textContent = 'Je travaille sur la carte…';
+      head.appendChild(headIcon);
+      head.appendChild(headText);
+      panel.appendChild(head);
+      var steps = el('ol', 'agent-work-steps');
+      var rows = list.map(function (action) {
+        var li = el('li', 'agent-work-step is-pending');
+        var mark = el('span', 'agent-work-mark');
+        var label = el('span', 'agent-work-label');
+        label.textContent =
+          typeof Agent.describeActionStep === 'function'
+            ? Agent.describeActionStep(action)
+            : 'J\'applique une modification';
+        var detail = el('span', 'agent-work-detail');
+        li.appendChild(mark);
+        li.appendChild(label);
+        li.appendChild(detail);
+        steps.appendChild(li);
+        return { li: li, detail: detail };
+      });
+      panel.appendChild(steps);
+      messagesEl.appendChild(panel);
+      scrollMessagesToBottom();
+      notifyLayout();
+      return Agent.executeActions(bridge, list, {
+        onStart: function (i) {
+          if (!rows[i]) return;
+          rows[i].li.className = 'agent-work-step is-running';
+          scrollMessagesToBottom();
+        },
+        onDone: function (i, result) {
+          if (!rows[i]) return;
+          var ok = !result || result.ok !== false;
+          rows[i].li.className = 'agent-work-step ' + (ok ? 'is-done' : 'is-failed');
+          var text = ok
+            ? (result && result.summary) || ''
+            : (result && result.error) || 'Échec';
+          rows[i].detail.textContent = text;
+        }
+      }).then(
+        function (applied) {
+          var okAll = !!(applied && applied.ok);
+          panel.classList.remove('is-running');
+          panel.classList.add(okAll ? 'is-done' : 'is-failed');
+          headIcon.textContent = okAll ? '✓' : '!';
+          headText.textContent = okAll
+            ? list.length > 1
+              ? 'Terminé — ' + list.length + ' modifications appliquées'
+              : 'Modification appliquée'
+            : 'Terminé avec des erreurs';
+          notifyLayout();
+          return applied;
+        },
+        function (err) {
+          panel.classList.remove('is-running');
+          panel.classList.add('is-failed');
+          headIcon.textContent = '!';
+          headText.textContent = 'Échec';
+          throw err;
+        }
+      );
     }
 
     function appendActionResultBlocks(applied, context) {
@@ -6964,7 +7041,7 @@
       if (pending || !item || !item.actions || !item.actions.length) return;
       muteListening();
       appendAnsweredOffer(item.label, 'yes');
-      var result = await Agent.executeActions(bridge, item.actions);
+      var result = await runActionsWithPanel(item.actions);
       appendMessage('assistant', result.summary || 'Okay, c\'est appliqu\u00e9.');
       appendChangeRecap(result, { ok: result.ok });
       appendActionResultBlocks(result);
@@ -8648,7 +8725,7 @@
           await persistInterviewState(interviewState);
         }
         if (turn.actions && turn.actions.length) {
-          var applied = await Agent.executeActions(bridge, turn.actions);
+          var applied = await runActionsWithPanel(turn.actions);
           appendChangeRecap(applied, {
             droppedActions: turn.droppedActions,
             ok: applied.ok
@@ -9218,7 +9295,7 @@
         var applied = identityApplied;
         if (otherActions.length) {
           muteListening();
-          var restApplied = await Agent.executeActions(bridge, otherActions);
+          var restApplied = await runActionsWithPanel(otherActions);
           if (!applied) {
             applied = restApplied;
           } else {
@@ -9366,7 +9443,7 @@
       if (actions.length) {
         muteListening();
         appendAnsweredOffer(fu.label, 'yes');
-        var result = await Agent.executeActions(bridge, actions);
+        var result = await runActionsWithPanel(actions);
         appendMessage('assistant', result.summary || 'Okay, c\'est fait.');
         appendChangeRecap(result, { ok: result.ok });
         appendActionResultBlocks(result);

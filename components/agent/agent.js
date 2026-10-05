@@ -2232,6 +2232,62 @@
     );
   }
 
+  /**
+   * "Pu bloqué", "c'est pu bloqué", "ça bloque pu", "plus bloquée", "débloqué"…
+   * (Québec: « pu » = « plus »). Accent- and apostrophe-insensitive.
+   */
+  function looksLikeUnblockedPhrase(text) {
+    var raw = String(text || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!raw) return false;
+    // Still blocked / negated unblock ("pas debloque", "toujours bloque").
+    if (/\b(pas|jamais)\s+(encore\s+)?debloqu/.test(raw)) return false;
+    return (
+      /\b(pu|plus|p)\s+(du\s+tout\s+)?bloquee?s?\b/.test(raw) ||
+      /\bbloque\s+(pu|plus)\b/.test(raw) ||
+      /\bbloquent\s+(pu|plus)\b/.test(raw) ||
+      /\b(est|c|ca|cest|suis|sont)\s+(pu|plus)\s+(en\s+attente|bloquee?s?)\b/.test(raw) ||
+      /\bdebloquee?s?\b/.test(raw) ||
+      /\bdebloquer\b/.test(raw) ||
+      /\bpas\s+(ou\s+plus\s+)?bloquee?s?\b/.test(raw)
+    );
+  }
+
+  /** A "reason" that is really the user saying it is no longer blocked. */
+  function isUnblockedReasonText(reason) {
+    return looksLikeUnblockedPhrase(reason) && !/\ben\s+attente\b/i.test(String(reason || ''));
+  }
+
+  function ensureUnblockedIntent(actions, userText) {
+    var list = Array.isArray(actions) ? actions.slice() : [];
+    if (!looksLikeUnblockedPhrase(userText)) return list;
+    var unblock = { tool: 'set_blocked', args: { enAttente: false, blockedReasons: [], blockedLinks: [] } };
+    var replaced = false;
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a || a.tool !== 'set_blocked') continue;
+      var args = a.args && typeof a.args === 'object' ? a.args : {};
+      var reasons = Array.isArray(args.blockedReasons) ? args.blockedReasons : [];
+      var reasonsAreUnblock =
+        reasons.length > 0 && reasons.every(isUnblockedReasonText);
+      // Model blocked the card with an "unblock" phrase as the cause → flip it.
+      if (args.enAttente === false) {
+        replaced = true;
+      } else if (reasonsAreUnblock || !reasons.length) {
+        list[i] = unblock;
+        replaced = true;
+      }
+      break;
+    }
+    if (!replaced) list.push(unblock);
+    return list;
+  }
+
   function ensureQuebecLibreEffect(actions, userText) {
     if (!looksLikeQuebecLibrePhrase(userText)) return actions || [];
     var list = Array.isArray(actions) ? actions.slice() : [];
@@ -4296,6 +4352,7 @@
       '- Bloqu\u00e9 \u2260 Termin\u00e9\u00a0: si context.progress.percent=100 (ou carte marqu\u00e9e compl\u00e8te), set_blocked DOIT aussi remettre le progr\u00e8s hors Termin\u00e9 via set_progress {progressEnabled:true, progress:0} (ou le % r\u00e9el si partiel). Le runtime le fait aussi, mais inclus set_progress dans actions.',
       '- Ex. (attente + pas commenc\u00e9)\u00a0: user \u00ab\u00a0J\'attends l\'acc\u00e8s admin\u00a0\u00bb \u2192 {"message":"Ok, bloqu\u00e9 en attendant l\'acc\u00e8s admin.","suggestions":["D\u00e9finir une \u00e9ch\u00e9ance","Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_blocked","args":{"enAttente":true,"blockedReasons":["En attente de l\'acc\u00e8s admin"]}},{"tool":"add_subtask","args":{"text":"Obtenir l\'acc\u00e8s admin","blocked":true}},{"tool":"set_progress","args":{"progressEnabled":true,"progress":0}}]}',
       '- D\u00e9bloquer\u00a0: set_blocked avec enAttente:false (ou blockedReasons:[], blockedLinks:[]) \u2014 le runtime efface aussi progress.blocked / items[].blocked.',
+      '- Fran\u00e7ais qu\u00e9b\u00e9cois (comprends et adapte-toi)\u00a0: \u00ab\u00a0pu\u00a0\u00bb = \u00ab\u00a0plus\u00a0\u00bb (n\u00e9gation), \u00ab\u00a0chu\u00a0\u00bb = \u00ab\u00a0je suis\u00a0\u00bb, \u00ab\u00a0pantoute\u00a0\u00bb = \u00ab\u00a0pas du tout\u00a0\u00bb, \u00ab\u00a0correct\u00a0\u00bb = \u00ab\u00a0ok\u00a0\u00bb. \u00ab\u00a0Pu bloqu\u00e9\u00a0\u00bb, \u00ab\u00a0c\'est pu bloqu\u00e9\u00a0\u00bb, \u00ab\u00a0\u00e7a bloque pu\u00a0\u00bb, \u00ab\u00a0j\'attends pu rien\u00a0\u00bb = ce n\'est PLUS bloqu\u00e9 \u2192 set_blocked {enAttente:false}. N\'\u00e9cris JAMAIS \u00ab\u00a0Pu bloqu\u00e9\u00a0\u00bb comme cause (blockedReasons).',
       'Sous-t\u00e2ches (progress.items du contexte)\u00a0:',
       '- Les sous-t\u00e2ches existantes sont dans context.progress.items (id + text). Quand l\'utilisateur cite un libell\u00e9 d\'item (\u00ab\u00a0Valider le devis\u00a0\u00bb, etc.), c\'est une sous-t\u00e2che\u00a0: retrouve-la dans items.',
       '- Pour toute op\u00e9ration sur une sous-t\u00e2che existante\u00a0: passer id OU matchText (libell\u00e9 actuel).',
@@ -8186,6 +8243,7 @@
     message = progressGuard.message;
     actions = progressGuard.actions;
     actions = ensureQuebecLibreEffect(actions, userText);
+    actions = ensureUnblockedIntent(actions, userText);
     var emotion = progressGuard.emotion;
     if (looksLikeQuebecLibrePhrase(userText) && !emotion) {
       emotion = 'happy';
@@ -10461,6 +10519,7 @@
     message = progressGuard.message;
     actions = progressGuard.actions;
     actions = ensureQuebecLibreEffect(actions, userText);
+    actions = ensureUnblockedIntent(actions, userText);
     var projectScope = isProjectScope(context && context.scope);
     if (projectScope) {
       var droppedForScope = [];
@@ -18405,18 +18464,65 @@
     return result;
   }
 
-  async function executeActions(bridge, actions) {
+  /** Present-tense, user-facing label for one action ("Je débloque la tâche"). */
+  function describeActionStep(action) {
+    var tool = action && action.tool;
+    var args = (action && action.args) || {};
+    var has = function (k) {
+      return Object.prototype.hasOwnProperty.call(args, k);
+    };
+    switch (tool) {
+      case 'set_blocked':
+        if (args.enAttente === false) return 'Je débloque la tâche';
+        if (Array.isArray(args.blockedReasons) && args.blockedReasons.length) {
+          return 'Je note la cause du blocage';
+        }
+        return 'Je marque la tâche comme bloquée';
+      case 'set_subtask_blocked':
+        return args.blocked === false
+          ? 'Je débloque la sous-tâche'
+          : 'Je bloque la sous-tâche';
+      case 'set_priority': return 'Je mets à jour la priorité';
+      case 'set_due': return 'Je définis l\'échéance';
+      case 'set_progress':
+        return has('progress') ? 'Je mets le progrès à jour' : 'Je configure le progrès';
+      case 'set_statut': return 'Je change le statut';
+      case 'add_subtask': return 'J\'ajoute une sous-tâche';
+      case 'rename_subtask': return 'Je renomme la sous-tâche';
+      case 'remove_subtask': return 'Je supprime la sous-tâche';
+      case 'complete_all_subtasks': return 'Je termine toutes les sous-tâches';
+      case 'reset_progress': return 'Je réinitialise le progrès';
+      case 'rename_card': return 'Je renomme la carte';
+      case 'set_description': return 'Je mets la description à jour';
+      case 'set_project': return 'Je lie la carte au projet';
+      case 'trigger_effect': return 'Je lance un effet';
+      case 'point_at': return 'Je te montre la section';
+      default:
+        return TOOL_LABELS[tool]
+          ? 'Je fais : ' + TOOL_LABELS[tool].replace(/\.$/, '').toLowerCase()
+          : 'J\'applique une modification';
+    }
+  }
+
+  async function executeActions(bridge, actions, hooks) {
     var list = Array.isArray(actions) ? actions : [];
     var results = [];
     var summaries = [];
     var errors = [];
     var executed = 0;
     var rejected = 0;
+    hooks = hooks || {};
     for (var i = 0; i < list.length; i++) {
+      if (typeof hooks.onStart === 'function') {
+        try { hooks.onStart(i, list[i]); } catch (hookErr) { /* UI only */ }
+      }
       var result = await executeAction(bridge, list[i]);
       result = enrichActionError(result);
       result = enrichResultVisual(bridge, result);
       results.push(result);
+      if (typeof hooks.onDone === 'function') {
+        try { hooks.onDone(i, result); } catch (hookErr2) { /* UI only */ }
+      }
       if (result.ok) {
         executed += 1;
         if (result.summary) summaries.push(result.summary);
@@ -18816,6 +18922,9 @@
     ensureProgressCelebration: ensureProgressCelebration,
     looksLikeQuebecLibrePhrase: looksLikeQuebecLibrePhrase,
     ensureQuebecLibreEffect: ensureQuebecLibreEffect,
+    describeActionStep: describeActionStep,
+    looksLikeUnblockedPhrase: looksLikeUnblockedPhrase,
+    ensureUnblockedIntent: ensureUnblockedIntent,
     applyProgressCompleteGuards: applyProgressCompleteGuards,
     rewriteWinkEmoticons: rewriteWinkEmoticons,
     ensureContrastHighlights: ensureContrastHighlights,
