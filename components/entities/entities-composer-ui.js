@@ -276,6 +276,33 @@
       box.appendChild(h('h3', { class: 'cp-sub', text: 'Type' }));
       box.appendChild(grid);
       if (st.newType) box.appendChild(newTypeForm());
+      if (st.entities.length) {
+        var baseSel = h('select', {
+          class: 'cp-input',
+          'aria-label': 'Partir d’un modèle',
+          onchange: function () {
+            applyIntentNow();
+            setDraft(EC().setBase(st.schema, st.entities, draft(), baseSel.value));
+            renderMain();
+            refresh();
+          },
+        });
+        baseSel.appendChild(h('option', { value: '', text: 'Aucun : partir de zéro' }));
+        st.entities.forEach(function (e) {
+          baseSel.appendChild(h('option', { value: e.id, text: e.name + (e.types.length ? ' (' + e.types.map(typeName).join(', ') + ')' : '') }));
+        });
+        baseSel.value = draft().base || '';
+        box.appendChild(h('h3', { class: 'cp-sub', text: 'Modèle (archétype)' }));
+        box.appendChild(
+          h('p', {
+            class: 'cp-hint',
+            text: draft().base
+              ? 'Hérite de « ' + nameOf(draft().base) + ' » : seules vos réponses deviennent des valeurs propres ; le reste suit le modèle.'
+              : 'Optionnel : partir d’une entité existante. Elle hérite de ses valeurs, et ne garde que ce que vous changez.',
+          })
+        );
+        box.appendChild(baseSel);
+      }
     }
 
     function newTypeForm() {
@@ -521,6 +548,7 @@
           h('div', { class: 'cp-ask' }, [
             h('label', { class: 'cp-ask-q', text: q.text }),
             h('span', { class: 'cp-hint', text: q.hint }),
+            inheritedLine(path, f),
             fieldControl(path, f),
           ])
         );
@@ -528,6 +556,15 @@
     }
 
     /* ── 4. Field controls ────────────────────────────────────────── */
+
+    function inheritedLine(path, f) {
+      var v = EC().inheritedValue(st.entities, draft(), path);
+      if (v === undefined) return null;
+      return h('span', { class: 'cp-inherit' }, [
+        icon('git-fork'),
+        'Hérité de « ' + nameOf(draft().base) + ' » : ' + valueText(f, v) + ' (laissez vide pour le garder)',
+      ]);
+    }
 
     function answer(path, v) {
       setDraft(EC().setAnswer(draft(), path, v));
@@ -971,6 +1008,7 @@
           ]),
         ])
       );
+      if (d.base) card.appendChild(h('div', { class: 'cp-pv-aliases' }, [icon('git-fork'), ' variante de ' + nameOf(d.base)]));
       if (d.aliases.length) card.appendChild(h('div', { class: 'cp-pv-aliases', text: 'aussi : ' + d.aliases.join(', ') }));
       if (comp.total) {
         card.appendChild(
@@ -985,11 +1023,20 @@
         .forEach(function (cid) {
           var c = EM().findById(st.schema.components, cid);
           if (!c) return;
-          var rows = c.fields.filter(function (f) { return d.answers[cid + '.' + f.key] !== undefined; });
+          var rows = c.fields.filter(function (f) {
+            return d.answers[cid + '.' + f.key] !== undefined || EC().inheritedValue(st.entities, d, cid + '.' + f.key) !== undefined;
+          });
           if (!rows.length) return;
           var sec = h('div', { class: 'cp-pv-sec' }, [h('div', { class: 'cp-pv-sech', text: c.name })]);
           rows.forEach(function (f) {
-            sec.appendChild(h('div', { class: 'cp-pv-row' }, [h('span', { text: f.label }), h('b', { text: valueText(f, d.answers[cid + '.' + f.key]) })]));
+            var own = d.answers[cid + '.' + f.key];
+            var val = own !== undefined ? own : EC().inheritedValue(st.entities, d, cid + '.' + f.key);
+            sec.appendChild(
+              h('div', { class: 'cp-pv-row' + (own === undefined ? ' is-inherited' : '') }, [
+                h('span', { text: f.label + (own === undefined ? ' (hérité)' : '') }),
+                h('b', { text: valueText(f, val) }),
+              ])
+            );
           });
           card.appendChild(sec);
         });

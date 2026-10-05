@@ -255,12 +255,15 @@
 
     function rowSummary(e) {
       var parts = [];
-      Object.keys(e.data).forEach(function (cid) {
-        Object.keys(e.data[cid]).forEach(function (key) {
+      var data = EM().effectiveData(state.entities, e);
+      Object.keys(data).forEach(function (cid) {
+        Object.keys(data[cid]).forEach(function (key) {
           var f = EM().fieldOf(state.schema, cid + '.' + key);
-          if (f && f.field.kind === 'ref') parts.push(EM().formatValue(f.field, e.data[cid][key], state.entities));
+          if (f && f.field.kind === 'ref') parts.push(EM().formatValue(f.field, data[cid][key], state.entities));
         });
       });
+      var base = e.base ? EM().findById(state.entities, e.base) : null;
+      if (base) parts.unshift('variante de ' + base.name);
       return parts.join(' · ');
     }
 
@@ -286,6 +289,7 @@
       els.side.appendChild(
         h('div', { class: 'en-side-head' }, [
           h('div', { class: 'en-title' }, [icon('stack-2'), h('span', { text: 'Entités' }), els.status]),
+          h('button', { class: 'en-btn en-btn--primary en-btn--block', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
           queryInput,
           typeSel,
           chipBox,
@@ -394,7 +398,7 @@
       historyBox.appendChild(h('h3', { class: 'en-h', text: 'Historique' }));
       var list = e.history.slice().reverse();
       list.forEach(function (entry) {
-        var revertable = entry.op !== 'create' && !entry.undoOf;
+        var revertable = EM().isRevertable(entry);
         var when = entry.ts ? new Date(entry.ts).toLocaleString('fr-CA', { dateStyle: 'short', timeStyle: 'short' }) : '';
         historyBox.appendChild(
           h('div', { class: 'en-hist-row' + (entry.undoOf ? ' is-undo' : '') }, [
@@ -425,11 +429,14 @@
 
     function fieldInput(e, comp, field) {
       var path = comp.id + '.' + field.key;
-      var val = EM().getValue(e, path);
+      var val = EM().effectiveValue(state.entities, e, path);
       function commit(v) {
-        applyEntity(function (cur) {
-          return EM().setValue(state.schema, cur, path, v);
-        });
+        applyEntity(
+          function (cur) {
+            return EM().setValue(state.schema, cur, path, v);
+          },
+          { rebuild: !!e.base }
+        );
       }
       var aria = comp.name + ' : ' + field.label;
       if (field.kind === 'bool') {
@@ -501,6 +508,141 @@
       return inp;
     }
 
+    /** Label of a field with its provenance: inherited from the archetype, or overridden here (resettable). */
+    function fieldLabel(e, comp, f) {
+      var path = comp.id + '.' + f.key;
+      var row = h('div', { class: 'en-flabel' }, [h('label', { text: f.label })]);
+      if (!e.base) return row;
+      var origin = EM().originOf(state.entities, e, path);
+      var base = EM().findById(state.entities, e.base);
+      if (origin && origin !== 'own') {
+        row.appendChild(h('span', { class: 'en-badge en-badge--inherited', title: 'Suit le modèle : modifier ici crée une valeur propre' }, [icon('git-fork'), 'hérité de ' + (EM().findById(state.entities, origin) || { name: '?' }).name]));
+      } else if (origin === 'own' && base && EM().effectiveValue(state.entities, base, path) !== undefined) {
+        row.appendChild(h('span', { class: 'en-badge en-badge--own' }, ['modifié']));
+        row.appendChild(
+          h(
+            'button',
+            {
+              class: 'en-link',
+              title: 'Revenir à la valeur du modèle',
+              onclick: function () {
+                applyEntity(
+                  function (cur) {
+                    return EM().setValue(state.schema, cur, path, undefined);
+                  },
+                  { rebuild: true }
+                );
+              },
+            },
+            [icon('arrow-back-up'), 'Réinitialiser']
+          )
+        );
+      } else if (origin === 'own') {
+        row.appendChild(h('span', { class: 'en-badge en-badge--own' }, ['propre']));
+      }
+      return row;
+    }
+
+    /** Archetype selector, clone buttons and the list of variants. */
+    function archetypeCard(e) {
+      var base = e.base ? EM().findById(state.entities, e.base) : null;
+      var sel = h('select', { class: 'en-input', 'aria-label': 'Modèle (archétype)' });
+      sel.appendChild(h('option', { value: '', text: 'Aucun (entité indépendante)' }));
+      state.entities.forEach(function (x) {
+        if (x.id === e.id || EM().wouldCycle(state.entities, e.id, x.id)) return;
+        sel.appendChild(h('option', { value: x.id, text: x.name }));
+      });
+      sel.value = e.base || '';
+      sel.addEventListener('change', function () {
+        applyEntity(
+          function (cur) {
+            return EM().setBase(state.entities, cur, sel.value);
+          },
+          { rebuild: true }
+        );
+      });
+      var variants = EM().variantsOf(state.entities, e.id);
+      var card = h('div', { class: 'en-card' }, [
+        h('h3', { class: 'en-h', text: 'Modèle et variantes' }),
+        h('div', { class: 'en-field' }, [h('label', { text: 'Basé sur' }), sel]),
+        h('p', {
+          class: 'en-hint',
+          text: base
+            ? 'Les valeurs non modifiées ici suivent « ' + base.name + ' » ; ce que vous changez ici n’affecte jamais « ' + base.name + ' » ni ses autres variantes.'
+            : 'Choisissez un modèle pour hériter de ses valeurs et ne stocker que vos différences.',
+        }),
+      ]);
+      var actions = h('div', { class: 'en-actions' }, [
+        h('button', { class: 'en-btn', title: 'Nouvelle entité qui hérite de celle-ci', onclick: function () { cloneSelected(false); } }, [icon('git-fork'), 'Créer une variante']),
+        h('button', { class: 'en-btn', title: 'Copie sans lien avec l’original', onclick: function () { cloneSelected(true); } }, [icon('copy'), 'Copie indépendante']),
+      ]);
+      if (base) {
+        actions.appendChild(
+          h(
+            'button',
+            {
+              class: 'en-btn',
+              title: 'Garde les valeurs actuelles mais ne suit plus le modèle',
+              onclick: function () {
+                applyEntity(
+                  function (cur) {
+                    return EM().detachEntity(state.entities, cur);
+                  },
+                  { rebuild: true }
+                );
+              },
+            },
+            [icon('unlink'), 'Détacher du modèle']
+          )
+        );
+      }
+      card.appendChild(actions);
+      if (variants.length) {
+        card.appendChild(h('div', { class: 'en-flabel' }, [h('label', { text: 'Variantes (' + variants.length + ')' })]));
+        var list = h('div', { class: 'en-variants' });
+        variants.forEach(function (v) {
+          list.appendChild(
+            h(
+              'button',
+              {
+                class: 'en-btn',
+                onclick: function () {
+                  state.selId = v.id;
+                  paintList();
+                  paintMain();
+                },
+              },
+              [v.name]
+            )
+          );
+        });
+        card.appendChild(list);
+      }
+      return card;
+    }
+
+    function cloneSelected(detach) {
+      var cur = selected();
+      if (!cur) return;
+      var copy;
+      try {
+        copy = EM().cloneEntity(state.schema, state.entities, cur.id, { detach: detach });
+      } catch (err) {
+        toast('Copie refusée : ' + (err && err.message), 'error');
+        return;
+      }
+      state.entities = state.entities.concat([copy]);
+      state.selId = copy.id;
+      scheduleSave();
+      paintList();
+      paintMain();
+      var input = els.main.querySelector('.en-name');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+
     function paintMain() {
       els.main.textContent = '';
       if (state.mode === 'schema') return paintSchema();
@@ -562,6 +704,7 @@
           h('div', { class: 'en-field' }, [h('label', { text: 'Types' }), typeBox]),
         ])
       );
+      els.main.appendChild(archetypeCard(e));
       EM()
         .componentIdsOf(state.schema, e)
         .forEach(function (cid) {
@@ -570,7 +713,7 @@
           var card = h('div', { class: 'en-card' }, [h('h3', { class: 'en-h', text: comp.name })]);
           if (!comp.fields.length) card.appendChild(h('p', { class: 'en-hint', text: 'Ce composant n’a aucun champ (voir Schéma).' }));
           comp.fields.forEach(function (f) {
-            card.appendChild(h('div', { class: 'en-field' }, [h('label', { text: f.label }), fieldInput(e, comp, f)]));
+            card.appendChild(h('div', { class: 'en-field' }, [fieldLabel(e, comp, f), fieldInput(e, comp, f)]));
           });
           els.main.appendChild(card);
         });

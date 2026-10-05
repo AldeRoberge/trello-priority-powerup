@@ -30,6 +30,17 @@ Le bouton **Composer** (colonne de gauche, ou l'état vide) ouvre un dialogue qu
 
 Logique pure et testée : `components/entities/entities-composer.js` (`readIntent`, `stepsFor`, `suggest`, `issues`, `defineType`, `finalize`) ; interface : `entities-composer-ui.js` + `.css`. Test : `test/entities-composer.test.js`.
 
+## Archétypes et surcharges
+
+Une entité peut être **basée sur** une autre (son archétype). Elle hérite de toutes ses valeurs et ne stocke que ses **surcharges** :
+
+- Modifier une variante écrit une valeur propre ; l'archétype et les autres variantes ne bougent jamais.
+- Modifier l'archétype se répercute sur les variantes, sauf sur les champs qu'elles ont surchargés.
+- Chaque champ indique sa provenance (« hérité de Ficus » / « modifié ») ; **Réinitialiser** supprime la surcharge et revient à la valeur du modèle.
+- **Créer une variante** (hérite), **Copie indépendante** (valeurs copiées, aucun lien) et **Détacher du modèle** (garde les valeurs actuelles, ne suit plus) sont dans la carte « Modèle et variantes ». Les chaînes (variante d'une variante) fonctionnent ; les boucles sont refusées.
+- Supprimer un archétype fige les valeurs héritées de ses variantes. Alias, types et liens libres ne sont pas hérités ; les recherches (« mes plantes au travail ») et l'assistant voient les valeurs héritées.
+- Dans le Composer : « Modèle (archétype) » à l'écran *Quoi ?* ; chaque question affiche la valeur héritée et laisser vide la conserve.
+
 ## Résolution d'une phrase
 
 `EntitiesModel.resolveText(schema, entities, texte)` cherche dans la phrase : les noms/alias de **types** (pluriel ignoré, accents ignorés), les noms/alias d'**entités** (le plus long gagne : « Hôtel de Ville » avant « Hôtel »), et les valeurs de champs à **choix** (« mortes »). Résultat : un filtre `{types, refersTo, where}` et les entités correspondantes. Les possessifs (mon, mes, my) et les verbes sont ignorés. Une entité nommée qui a déjà le type demandé est un choix direct (« tailler le ficus »).

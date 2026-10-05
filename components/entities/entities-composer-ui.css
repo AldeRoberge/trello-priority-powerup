@@ -569,6 +569,17 @@
   gap: 10px;
   font-size: 12px;
 }
+.cp-pv-row.is-inherited {
+  opacity: 0.7;
+  font-style: italic;
+}
+.cp-inherit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--tp-text-subtle);
+}
 .cp-pv-row > span {
   color: var(--tp-text-muted);
 }

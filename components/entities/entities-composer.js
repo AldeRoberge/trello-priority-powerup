@@ -195,6 +195,7 @@
       name: trim(opts.name),
       aliases: (opts.aliases || []).slice(),
       types: (opts.types || []).slice(),
+      base: opts.base || '',
       answers: Object.assign({}, opts.answers),
       relations: (opts.relations || []).slice(),
       intent: '',
@@ -212,6 +213,26 @@
     if (empty) delete next.answers[path];
     else next.answers[path] = value;
     return next;
+  }
+
+  /**
+   * Starts the draft from an archetype: it inherits every value and only stores what the user
+   * answers (overrides). Types default to the archetype's. '' removes the archetype.
+   */
+  function setBase(schema, entities, draft, baseId) {
+    var next = clone(draft);
+    var b = baseId ? EM().findById(entities, baseId) : null;
+    next.base = b ? b.id : '';
+    if (b && !next.types.length) {
+      next.types = b.types.filter(function (t) { return !!EM().findById(schema.types, t); });
+    }
+    return next;
+  }
+
+  /** The value a field would inherit from the draft's archetype (undefined when none). */
+  function inheritedValue(entities, draft, path) {
+    var b = draft.base ? EM().findById(entities, draft.base) : null;
+    return b ? EM().effectiveValue(entities, b, path) : undefined;
   }
 
   function toggleType(schema, draft, typeId, on) {
@@ -543,6 +564,7 @@
         {
           id: d.id,
           name: d.name,
+          base: d.base && EM().findById(entities, d.base) ? d.base : '',
           aliases: d.aliases,
           types: d.types,
           data: data,
@@ -564,6 +586,8 @@
     withDraft: withDraft,
     setAnswer: setAnswer,
     toggleType: toggleType,
+    setBase: setBase,
+    inheritedValue: inheritedValue,
     pruneAnswers: pruneAnswers,
     addRelationTo: addRelationTo,
     removeRelationFrom: removeRelationFrom,

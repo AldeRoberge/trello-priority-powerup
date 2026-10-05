@@ -9,6 +9,9 @@
  *   Entity     an id + name + aliases + types + data + relations + history.
  *   data       { componentId: { fieldKey: value } }, addressed by path "component.field".
  *   relations  free-form named links to other entities ({type:'part-of', to:id}); ref fields are links too.
+ *   base       optional archetype (another entity's id): the entity inherits its data values and only
+ *              stores OVERRIDES. Editing an override never touches the archetype; editing the archetype
+ *              reaches every entity that has not overridden that field (see effectiveData).
  *   history    bounded log of changes; every change can be reverted with revertEntry().
  *
  * Contents: 1 constants / text helpers | 2 schema (components, types, defaults) | 3 entities and
@@ -342,6 +345,7 @@
     return {
       id: String(raw.id),
       name: name,
+      base: raw.base && String(raw.base) !== String(raw.id) ? String(raw.base) : '',
       aliases: uniqueStrings(raw.aliases, MAX_ALIASES, MAX_ALIAS),
       types: types,
       data: data,
@@ -356,6 +360,87 @@
     var p = String(path || '').split('.');
     var c = entity && entity.data && entity.data[p[0]];
     return c ? c[p[1]] : undefined;
+  }
+
+  // ---- archetype inheritance
+  /** The entity, then its archetype, then the archetype's archetype... (cycles and missing bases stop it). */
+  function chainOf(entities, entity) {
+    var out = [entity];
+    var seen = {};
+    seen[entity.id] = true;
+    var cur = entity;
+    while (cur.base && !seen[cur.base] && out.length < 12) {
+      var b = findById(entities, cur.base);
+      if (!b) break;
+      seen[b.id] = true;
+      out.push(b);
+      cur = b;
+    }
+    return out;
+  }
+
+  /** Own overrides laid over the archetype chain: what the entity "has" once inheritance is applied. */
+  function effectiveData(entities, entity) {
+    var chain = chainOf(entities, entity);
+    var data = {};
+    for (var i = chain.length - 1; i >= 0; i--) {
+      Object.keys(chain[i].data || {}).forEach(function (cid) {
+        data[cid] = Object.assign({}, data[cid], chain[i].data[cid]);
+      });
+    }
+    return data;
+  }
+
+  function effectiveValue(entities, entity, path) {
+    var p = String(path || '').split('.');
+    var c = effectiveData(entities, entity)[p[0]];
+    return c ? c[p[1]] : undefined;
+  }
+
+  /**
+   * Where a field's value comes from: 'own' (override), an archetype's entity id (inherited), or ''
+   * (no value anywhere).
+   */
+  function originOf(entities, entity, path) {
+    var chain = chainOf(entities, entity);
+    for (var i = 0; i < chain.length; i++) {
+      if (getValue(chain[i], path) !== undefined) return i === 0 ? 'own' : chain[i].id;
+    }
+    return '';
+  }
+
+  /** Entities with inheritance applied (same ids; data merged). Cheap when nobody has a base. */
+  function flatten(entities) {
+    if (
+      !entities.some(function (e) {
+        return e.base;
+      })
+    ) {
+      return entities;
+    }
+    return entities.map(function (e) {
+      return e.base ? Object.assign({}, e, { data: effectiveData(entities, e) }) : e;
+    });
+  }
+
+  /** Entities whose archetype is id (direct variants). */
+  function variantsOf(entities, id) {
+    return entities.filter(function (e) {
+      return e.base === id;
+    });
+  }
+
+  /** Would making baseId the archetype of id create a loop? */
+  function wouldCycle(entities, id, baseId) {
+    var seen = {};
+    var cur = baseId;
+    while (cur && !seen[cur]) {
+      if (cur === id) return true;
+      seen[cur] = true;
+      var e = findById(entities, cur);
+      cur = e ? e.base : '';
+    }
+    return false;
   }
 
   /** Display text of a value (refs resolve to entity names through `entities`). */
@@ -389,6 +474,7 @@
       {
         id: (init && init.id) || newId('e_'),
         name: name,
+        base: init && init.base,
         aliases: init && init.aliases,
         types: init && init.types,
         data: init && init.data,
@@ -455,6 +541,63 @@
     return next;
   }
 
+  /**
+   * A variant of id: same types, inherits every value from it and stores only its own changes
+   * (opts.detach = a plain independent copy: values and relations copied, no link to the original).
+   */
+  function cloneEntity(schema, entities, id, opts) {
+    opts = opts || {};
+    var src = findById(entities, id);
+    if (!src) throw new Error('unknown-entity');
+    var base = opts.name ? str(opts.name, MAX_NAME) : str(src.name + ' (copie)', MAX_NAME);
+    var name = base;
+    var n = 1;
+    while (
+      entities.some(function (e) {
+        return e.name === name;
+      })
+    ) {
+      n += 1;
+      name = str(base + ' ' + n, MAX_NAME);
+    }
+    return createEntity(
+      schema,
+      opts.detach
+        ? { name: name, types: src.types, data: effectiveData(entities, src), relations: src.relations }
+        : { name: name, types: src.types, base: src.id },
+      opts
+    );
+  }
+
+  /** Sets (or clears with '') the archetype. Own overrides are kept. Throws on a loop or unknown entity. */
+  function setBase(entities, entity, baseId, opts) {
+    var b = baseId || '';
+    if (b === (entity.base || '')) return entity;
+    if (b) {
+      if (!findById(entities, b)) throw new Error('unknown-entity');
+      if (wouldCycle(entities, entity.id, b)) throw new Error('base-cycle');
+    }
+    var next = clone(entity);
+    pushHistory(next, { op: 'base', before: entity.base || '', after: b }, opts);
+    next.base = b;
+    return next;
+  }
+
+  /** Cuts the link to the archetype, keeping what the entity currently has (inherited values become its own). */
+  function detachEntity(entities, entity, opts) {
+    if (!entity.base) return entity;
+    var next = clone(entity);
+    pushHistory(next, { op: 'base', before: entity.base, after: '' }, opts);
+    next.data = effectiveData(entities, entity);
+    next.base = '';
+    return next;
+  }
+
+  /** Can this history entry be undone from the entity alone? (base changes need the other entities.) */
+  function isRevertable(entry) {
+    return !!entry && !entry.undoOf && ['set', 'rename', 'aliases', 'types', 'relate', 'unrelate'].indexOf(entry.op) >= 0;
+  }
+
   // ---------------------------------------------------------------- 5 relations
   function addRelation(entity, type, toId, opts) {
     var t = str(type, MAX_REL_TYPE) || 'lié à';
@@ -483,8 +626,9 @@
   }
 
   /** Every link touching `id`: outgoing relations, then incoming relations and ref fields. */
-  function linksOf(schema, entities, id) {
+  function linksOf(schema, rawEntities, id) {
     var out = [];
+    var entities = flatten(rawEntities);
     var self = findById(entities, id);
     if (!self) return out;
     self.relations.forEach(function (r) {
@@ -492,6 +636,7 @@
     });
     entities.forEach(function (e) {
       if (e.id === id) return;
+      if (e.base === id) out.push({ dir: 'in', via: 'variante de', other: e.id });
       e.relations.forEach(function (r) {
         if (r.to === id) out.push({ dir: 'in', via: r.type, other: e.id });
       });
@@ -538,6 +683,8 @@
     });
     return rest.map(function (e) {
       var cur = e;
+      // variants of the deleted archetype keep what they inherited (it becomes their own)
+      if (cur.base === id) cur = detachEntity(entities, cur, opts);
       cur.relations.forEach(function (r) {
         if (r.to === id) cur = removeRelation(cur, r.type, id, opts);
       });
@@ -628,6 +775,13 @@
         return prefix + 'Alias : ' + ((h.after || []).join(', ') || '(aucun)');
       case 'types':
         return prefix + 'Types : ' + names(h.after);
+      case 'base': {
+        var bn = function (bid) {
+          var x = findById(entities, bid);
+          return bid ? (x ? x.name : '?') : '(aucun)';
+        };
+        return prefix + 'Modèle : ' + bn(h.before) + ' → ' + bn(h.after);
+      }
       case 'relate':
         return prefix + 'Lien ajouté : ' + relName(h.after);
       case 'unrelate':
@@ -717,8 +871,9 @@
   }
 
   function query(schema, entities, filter) {
-    return entities.filter(function (e) {
-      return matches(schema, e, filter);
+    var flat = flatten(entities);
+    return entities.filter(function (e, i) {
+      return matches(schema, flat[i], filter);
     });
   }
 
@@ -827,10 +982,13 @@
       })
       .join('/');
     var parts = [];
-    Object.keys(entity.data).forEach(function (cid) {
-      Object.keys(entity.data[cid]).forEach(function (key) {
+    var data = effectiveData(entities, entity);
+    var baseEntity = entity.base ? findById(entities, entity.base) : null;
+    if (baseEntity) parts.push('variante de ' + baseEntity.name);
+    Object.keys(data).forEach(function (cid) {
+      Object.keys(data[cid]).forEach(function (key) {
         var f = fieldOf(schema, cid + '.' + key);
-        if (f) parts.push(f.field.label + ': ' + formatValue(f.field, entity.data[cid][key], entities));
+        if (f) parts.push(f.field.label + ': ' + formatValue(f.field, data[cid][key], entities));
       });
     });
     entity.relations.forEach(function (r) {
@@ -906,6 +1064,17 @@
     setTypes: setTypes,
     setValue: setValue,
     getValue: getValue,
+    chainOf: chainOf,
+    effectiveData: effectiveData,
+    effectiveValue: effectiveValue,
+    originOf: originOf,
+    flatten: flatten,
+    variantsOf: variantsOf,
+    wouldCycle: wouldCycle,
+    cloneEntity: cloneEntity,
+    setBase: setBase,
+    detachEntity: detachEntity,
+    isRevertable: isRevertable,
     formatValue: formatValue,
     addRelation: addRelation,
     removeRelation: removeRelation,

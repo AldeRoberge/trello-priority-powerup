@@ -63,6 +63,39 @@ html[data-color-mode] .tp-page--entities {
 .en-btn--danger {
   color: var(--tp-danger-text);
 }
+.en-btn--block {
+  justify-content: center;
+}
+.en-flabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.en-flabel > label {
+  font-size: 11px;
+  color: var(--tp-text-muted);
+}
+.en-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: var(--tp-surface-active);
+  color: var(--tp-text-subtle);
+}
+.en-badge--own {
+  box-shadow: inset 0 0 0 1px var(--tp-primary);
+  color: var(--tp-link);
+  background: none;
+}
+.en-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .en-link {
   font: inherit;
   cursor: pointer;
