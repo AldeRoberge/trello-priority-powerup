@@ -59,4 +59,11 @@
   <div id="kanbanMount">
     <div class="kb-root" aria-busy="true"><div class="kb-board"><script>document.currentScript.parentNode.innerHTML = KanbanUI.skeletonCols();</script></div></div>
   </div>
-
+  <script>
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'kanban' });
+    PriorityTrello.initIframePage(function (t) {
+      KanbanUI.mount(document.getElementById('kanbanMount'), t);
+    });
+  </script>
+</body>
+</html>
