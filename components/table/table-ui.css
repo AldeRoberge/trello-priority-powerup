@@ -951,3 +951,38 @@ body.tb-resizing {
   border-color: color-mix(in srgb, #579dff 55%, transparent);
   color: var(--text-primary, #fff);
 }
+.tb-prog-ring {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  overflow: visible;
+}
+.tb-ring-track {
+  stroke: var(--tp-surface-active, rgba(9, 30, 66, 0.25));
+}
+.tb-ring-arc {
+  stroke: var(--tp-primary);
+  transition: stroke-dashoffset 0.15s;
+}
+.tb-ring-disc,
+.tb-ring-check {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tb-ring-disc {
+  fill: var(--tp-success, #22a06b);
+}
+.tb-ring-check {
+  stroke: #fff;
+}
+.tb-prog.is-done .tb-ring-disc,
+.tb-prog.is-done .tb-ring-check {
+  opacity: 1;
+}
+.tb-prog.is-done .tb-ring-arc {
+  opacity: 0;
+}
+.tb-prog-ring:hover .tb-ring-track {
+  stroke: var(--tp-text-subtle);
+}

@@ -758,10 +758,31 @@
       return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
     }
 
+    var RING_C = 2 * Math.PI * 7;
+    /** Circle that fills clockwise with the %, becoming a solid disc with a checkmark at 100%. */
+    function progressRing(p) {
+      var NS = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 20 20');
+      svg.setAttribute('class', 'tb-prog-ring');
+      svg.innerHTML =
+        '<circle class="tb-ring-track" cx="10" cy="10" r="7" fill="none" stroke-width="2"/>' +
+        '<circle class="tb-ring-arc" cx="10" cy="10" r="7" fill="none" stroke-width="2" stroke-linecap="round" transform="rotate(-90 10 10)" stroke-dasharray="' + RING_C.toFixed(2) + '"/>' +
+        '<circle class="tb-ring-disc" cx="10" cy="10" r="9.5"/>' +
+        '<path class="tb-ring-check" d="M6 10.3l2.6 2.6L14 7.5" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+      setRing(svg, p);
+      return svg;
+    }
+    function setRing(svg, p) {
+      var arc = svg.querySelector('.tb-ring-arc');
+      if (arc) arc.setAttribute('stroke-dashoffset', (RING_C * (1 - p / 100)).toFixed(2));
+    }
+
     function richValue(row, key) {
       if (key === 'progress' && typeof row.progress === 'number') {
         var p = Math.max(0, Math.min(100, row.progress));
         return h('span', { class: 'tb-prog' + (p >= 100 ? ' is-done' : '') }, [
+          progressRing(p),
           h('span', { class: 'tb-prog-bar' }, [h('i', { style: 'width:' + p + '%' })]),
           h('span', { class: 'tb-prog-num', text: p + '%' }),
         ]);
@@ -790,6 +811,14 @@
       var num = rich.querySelector('.tb-prog-num');
       if (!bar || !fill || !num) return;
       td.classList.add('tb-cell--draggable');
+      var ringEl = rich.querySelector('.tb-prog-ring');
+      if (ringEl) {
+        ringEl.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+        ringEl.addEventListener('click', function (e) {
+          e.stopPropagation();
+          saveProgress(row, row.progress >= 100 ? 0 : 100);
+        });
+      }
       bar.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -802,6 +831,8 @@
         function paint() {
           fill.style.width = pct + '%';
           num.textContent = pct + '%';
+          var ring = rich.querySelector('.tb-prog-ring');
+          if (ring) setRing(ring, pct);
           rich.classList.toggle('is-done', pct >= 100);
         }
         function move(ev) {
