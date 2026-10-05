@@ -317,21 +317,13 @@
       kids.push(h('span', { class: 'tb-spacer' }));
       kids.push(h('span', { class: 'tb-count', 'aria-live': 'polite' }));
       var doneCount = state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
-      kids.push(
-        btn(HD.icon(state.hideDone), HD.label(state.hideDone, doneCount), {
-          active: state.hideDone,
-          title: HD.title(state.hideDone),
-          onclick: function () { HD.set(!state.hideDone); },
-        })
-      );
-      var doneCount = state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
-      kids.push(
-        btn(HD.icon(state.hideDone), HD.label(state.hideDone, doneCount), {
-          active: state.hideDone,
-          title: HD.title(state.hideDone),
-          onclick: function () { HD.set(!state.hideDone); },
-        })
-      );
+      var hideBtn = btn(HD.icon(state.hideDone), null, {
+        active: state.hideDone,
+        title: HD.label(state.hideDone, doneCount) + ' · ' + HD.title(state.hideDone),
+        onclick: function () { HD.set(!state.hideDone); },
+      });
+      if (state.hideDone && doneCount) hideBtn.appendChild(h('span', { class: 'tb-badge tb-badge--soft', text: String(Math.min(doneCount, 99)) }));
+      kids.push(hideBtn);
       var histBtn = btn('history', 'Historique', { active: state.drawer === 'history', title: 'Tout ce qui a été modifié depuis ce tableau, avec annulation', onclick: function () { openDrawer('history'); } });
       histBtn.appendChild(h('span', { class: 'tb-badge tb-badge--soft', hidden: !(HP && HP.count()), text: String(Math.min(HP ? HP.count() : 0, 99)) }));
       kids.push(histBtn);
@@ -343,7 +335,8 @@
       }
       if (connected) kids.push(btn('refresh-dot', 'Synchroniser', { title: 'Forcer une synchronisation Trello ⇄ Sheet', onclick: syncNow }));
       kids.push(
-        btn(connected ? 'brand-google-drive' : 'plug-connected', connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets', {
+        btn(connected ? 'brand-google-drive' : 'plug-connected', null, {
+          title: connected ? 'Afficher dans Google Sheet' : 'Connecter Google Sheets',
           primary: true,
           onclick: openSheet,
         })
