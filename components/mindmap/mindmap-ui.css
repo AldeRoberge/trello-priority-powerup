@@ -89,6 +89,9 @@ html[data-color-mode] .tp-page--mindmap {
 /* ── Canvas ──────────────────────────────────────────────────────── */
 .mm-canvas {
   position: relative;
+  background-color: color-mix(in srgb, var(--tp-surface) 90%, #000);
+  background-image: radial-gradient(color-mix(in srgb, var(--tp-text) 11%, transparent) 1px, transparent 1.2px);
+  background-size: 18px 18px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -106,37 +109,72 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-svg:active { cursor: grabbing; }
 .is-linking .mm-svg { cursor: crosshair; }
 
-/* Edges */
-.mm-edge { stroke: var(--tp-text-muted); stroke-width: 1.4; fill: none; opacity: 0.85; }
-.mm-edge--depends { stroke: var(--mm-depends); stroke-width: 2; opacity: 1; }
-.mm-edge--by { stroke: var(--mm-person); stroke-dasharray: 5 4; }
-.mm-edge--at { stroke: var(--mm-place); stroke-dasharray: 2 4; stroke-linecap: round; }
+/* Edges: glowing wires like the Team graph */
+.mm-edge { stroke: var(--tp-text-muted); stroke-width: 2; fill: none; stroke-linecap: round; pointer-events: none; }
+.mm-edge--depends { stroke: var(--mm-depends); stroke-width: 2.25; }
+.mm-edge--by { stroke: var(--mm-person); }
+.mm-edge--at { stroke: var(--mm-place); }
 .mm-edge.is-cycle { stroke: var(--tp-danger-text); }
 .mm-edge.is-dim { opacity: 0.12; }
-.mm-edge-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+.mm-edge-glow { fill: none; stroke-width: 7; stroke-linecap: round; opacity: 0.14; pointer-events: none; stroke: var(--tp-text-muted); }
+.mm-edge-glow--depends { stroke: var(--mm-depends); }
+.mm-edge-glow--by { stroke: var(--mm-person); }
+.mm-edge-glow--at { stroke: var(--mm-place); }
+.mm-edge-glow.is-dim { opacity: 0.03; }
+.mm-wire-group:hover .mm-edge-glow { opacity: 0.35; }
+.mm-edge-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
 .mm-arrow--depends { fill: var(--mm-depends); }
 .mm-arrow--by { fill: var(--mm-person); }
 .mm-arrow--at { fill: var(--mm-place); }
 .mm-edge-label { display: none; font-size: 10px; fill: var(--tp-text-muted); pointer-events: none; paint-order: stroke; stroke: var(--tp-surface); stroke-width: 3px; }
 .mm-edge-label.is-shown { display: block; }
+.mm-wire-temp { fill: none; stroke: var(--mm-depends); stroke-width: 2.25; stroke-dasharray: 6 5; stroke-linecap: round; opacity: 0.9; pointer-events: none; }
+.is-wiring .mm-svg,
+.is-wiring .mm-svg * { cursor: crosshair !important; }
 
-/* Nodes */
-.mm-node { cursor: pointer; outline: none; }
+/* Nodes: cards with a tinted header, same look as the Assignés / Lieux node views */
+.mm-node { cursor: grab; outline: none; --mm-accent: #579dff; }
 .mm-node.is-dim { opacity: 0.22; }
-.mm-node .mm-shape { fill: var(--tp-surface-subtle); stroke: var(--tp-border); stroke-width: 1.4; }
-.mm-node--task .mm-shape { fill: var(--tp-surface); }
-.mm-node--person .mm-shape { fill: var(--mm-person); stroke: none; }
-.mm-node--place .mm-shape { fill: var(--tp-surface); stroke: var(--mm-place); stroke-width: 1.6; }
+.mm-node .mm-shape {
+  fill: var(--tp-surface-subtle);
+  stroke: color-mix(in srgb, var(--tp-text) 14%, transparent);
+  stroke-width: 1;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.3));
+}
+.mm-head { fill: color-mix(in srgb, var(--mm-accent) 22%, var(--tp-surface-subtle)); pointer-events: none; }
+.mm-head-rule { stroke: color-mix(in srgb, var(--mm-accent) 40%, transparent); stroke-width: 1; pointer-events: none; }
+.mm-node--task .mm-head-rule { display: none; }
+.mm-node--task[data-body] .mm-head-rule { display: block; }
 .mm-node:hover .mm-shape,
-.mm-node:focus-visible .mm-shape { stroke-width: 2.4; }
-.mm-node.is-selected .mm-shape { stroke: var(--tp-primary); stroke-width: 3; }
-.mm-node.is-linking .mm-shape { stroke: var(--tp-primary); stroke-dasharray: 5 3; stroke-width: 3; }
-.mm-node.is-cycle .mm-shape { stroke: var(--tp-danger-text); stroke-width: 2.4; }
-.mm-label { font-size: 12px; fill: var(--tp-text); pointer-events: none; }
-.mm-label--below { font-size: 11px; fill: var(--tp-text-muted); }
-.mm-initials { font-size: 12px; font-weight: 600; fill: #fff; pointer-events: none; }
+.mm-node:focus-visible .mm-shape { stroke: color-mix(in srgb, var(--mm-accent) 60%, transparent); }
+.mm-node.is-selected .mm-shape { stroke: var(--tp-primary); stroke-width: 2.5; }
+.mm-node.is-drop-target .mm-shape { stroke: var(--mm-accent); stroke-width: 2.5; }
+.mm-node.is-linking .mm-shape { stroke: var(--tp-primary); stroke-dasharray: 5 3; stroke-width: 2.5; }
+.mm-node.is-cycle .mm-shape { stroke: var(--tp-danger-text); stroke-width: 2; }
+.mm-label { font-size: 13px; font-weight: 600; fill: var(--tp-text); pointer-events: none; }
+.mm-sub { font-size: 11px; fill: var(--tp-text-muted); pointer-events: none; }
+.mm-avatar { fill: var(--mm-accent); stroke: color-mix(in srgb, var(--mm-accent) 70%, transparent); stroke-width: 2; pointer-events: none; }
+.mm-initials { font-size: 11px; font-weight: 600; fill: #fff; pointer-events: none; }
+.mm-pinicon { fill: var(--mm-accent); pointer-events: none; }
+.mm-pinhole { fill: var(--tp-surface-subtle); pointer-events: none; }
+.mm-progress-track { fill: color-mix(in srgb, var(--tp-text) 14%, transparent); pointer-events: none; }
 .mm-progress { fill: var(--tp-success); pointer-events: none; }
-.mm-stripe { pointer-events: none; }
+
+/* Pins (drag from one to another task to link): faint dot that swells and glows on hover */
+.mm-pin { cursor: crosshair; }
+.mm-pin-hit { fill: transparent; }
+.mm-pin-dot {
+  fill: var(--tp-surface);
+  stroke: var(--mm-depends);
+  stroke-width: 2;
+  opacity: 0.3;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.16s ease, transform 0.16s ease, fill 0.16s ease;
+}
+.mm-node--task:hover .mm-pin-dot { opacity: 0.65; }
+.mm-pin:hover .mm-pin-dot { opacity: 1; fill: var(--mm-depends); transform: scale(1.5); }
+.is-wiring .mm-node--task .mm-pin-dot { opacity: 0.6; }
 
 .mm-legend {
   position: absolute;

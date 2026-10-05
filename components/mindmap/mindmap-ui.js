@@ -5,6 +5,7 @@
  * MindmapModel. Only the dependency links are editable here (card inputs.dependsOn, saved with
  * PriorityTrello.saveCardInputsById); people and places are edited in the card.
  *  - drag the background to pan, wheel to zoom, drag a node to move it
+ *  - drag from a task pin (card side) onto another task to link it manually (same gesture as the node views)
  *  - click a node to focus it: its neighbours stay lit and the side panel lists its links
  *  - "Dépend de…" (panel) or the Relier button: click another task to add / remove a dependency
  * Icons: Tabler webfont.
@@ -14,8 +15,16 @@
 
   var MM = function () { return global.MindmapModel; };
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var TASK_W = 168;
-  var TASK_H = 34;
+  var CHAR_W = 6.6; // average glyph width of the 13px label, used to wrap text
+  var HEAD_PAD = 9;
+  var LINE_H = 17;
+  var PIN_GAP = 6; // wires stop this far outside the card so the pin stays visible
+  var SIDES = {
+    top: { nx: 0, ny: -1 },
+    right: { nx: 1, ny: 0 },
+    bottom: { nx: 0, ny: 1 },
+    left: { nx: -1, ny: 0 },
+  };
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -51,6 +60,42 @@
   function clip(text, max) {
     text = String(text || '');
     return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  }
+
+  /** Greedy word wrap on a character budget; long words are broken, overflow past maxLines is ellipsised. */
+  function wrap(text, maxChars, maxLines) {
+    var words = String(text || '').trim().split(/\s+/).filter(Boolean);
+    var lines = [];
+    var cur = '';
+    words.forEach(function (w) {
+      while (w.length > maxChars) {
+        if (cur) { lines.push(cur); cur = ''; }
+        lines.push(w.slice(0, maxChars));
+        w = w.slice(maxChars);
+      }
+      if (!cur) cur = w;
+      else if ((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
+      else { lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    if (!lines.length) lines.push('');
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      lines[maxLines - 1] = clip(lines[maxLines - 1] + '…', maxChars);
+    }
+    return lines;
+  }
+
+  function hueOf(text) {
+    var hsh = 0;
+    String(text || '').split('').forEach(function (c) { hsh = (hsh * 31 + c.charCodeAt(0)) % 360; });
+    return hsh;
+  }
+
+  /** Rectangle with only the top corners rounded (card header). */
+  function topRounded(x, y, w, hgt, r) {
+    return 'M' + x + ',' + (y + hgt) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+      'H' + (x + w - r) + 'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + 'V' + (y + hgt) + 'Z';
   }
 
   function initials(name) {
@@ -199,10 +244,17 @@
       var g = MM().buildGraph(state.records, { hideDone: state.hideDone, filter: state.filter, show: state.show });
       var anyNew = false;
       g.nodes.forEach(function (n) {
-        if (!opts.fresh && prev[n.id] && !opts.relayout) { n.x = prev[n.id].x; n.y = prev[n.id].y; n.pinned = true; }
+        measure(n);
+        n.fixed = false;
+        if (!opts.fresh && prev[n.id] && !opts.relayout) { n.x = prev[n.id].x; n.y = prev[n.id].y; n.pinned = true; n.fixed = true; }
         else anyNew = true;
       });
-      if (opts.relayout || anyNew) MM().layout(g.nodes, g.edges);
+      if (opts.relayout || anyNew) {
+        MM().layout(g.nodes, g.edges);
+        // the model lays out points; cards are bigger, so open the layout up and then push overlaps apart
+        g.nodes.forEach(function (n) { if (!n.fixed) { n.x *= 1.5; n.y *= 1.3; } });
+        separate(g.nodes);
+      }
       g.nodes.forEach(function (n) { n.pinned = false; });
       state.graph = g;
       state.cycles = {};
@@ -215,26 +267,75 @@
       if (opts.relayout || !opts.keepView) fit();
     }
 
-    function nodeBox(n) {
-      if (n.kind === 'task') return { w: TASK_W, h: TASK_H };
-      if (n.kind === 'person') return { w: 40, h: 40 };
-      return { w: Math.min(150, 34 + n.label.length * 6.4), h: 28 };
+    /** Card size and wrapped text lines for a node (full label, never cropped). */
+    function measure(n) {
+      var rec = n.rec || {};
+      var iconW = n.kind === 'task' ? 0 : 30;
+      n.w = n.kind === 'task' ? 210 : n.kind === 'person' ? 180 : 170;
+      n.lines = wrap(n.label, Math.floor((n.w - 24 - iconW) / CHAR_W), 5);
+      n.headH = Math.max(n.kind === 'task' ? 0 : 34, n.lines.length * LINE_H + HEAD_PAD * 2 - 2);
+      var hasProgress = n.kind === 'task' && typeof rec.progress === 'number' && rec.progress > 0;
+      n.bodyH = n.kind === 'task' && (rec.listName || hasProgress) ? 26 : 0;
+      n.h = n.headH + n.bodyH;
     }
 
-    /** Point where the segment from the centre of `n` towards (tx, ty) leaves its box (for edge ends). */
-    function edgePoint(n, tx, ty) {
-      var b = nodeBox(n);
-      var dx = tx - n.x;
-      var dy = ty - n.y;
-      if (!dx && !dy) return { x: n.x, y: n.y };
-      if (n.kind === 'person') {
-        var d = Math.sqrt(dx * dx + dy * dy);
-        return { x: n.x + (dx / d) * 21, y: n.y + (dy / d) * 21 };
+    function nodeBox(n) {
+      return { w: n.w || 180, h: n.h || 40 };
+    }
+
+    /** Push overlapping cards apart (cards laid out by hand — `fixed` — never move). */
+    function separate(nodes) {
+      var gap = 28;
+      for (var it = 0; it < 60; it++) {
+        var any = false;
+        for (var i = 0; i < nodes.length; i++) {
+          for (var j = i + 1; j < nodes.length; j++) {
+            var a = nodes[i];
+            var b = nodes[j];
+            if (a.fixed && b.fixed) continue;
+            var dx = b.x - a.x;
+            var dy = b.y - a.y;
+            var ox = (a.w + b.w) / 2 + gap - Math.abs(dx);
+            var oy = (a.h + b.h) / 2 + gap - Math.abs(dy);
+            if (ox <= 0 || oy <= 0) continue;
+            any = true;
+            var wa = a.fixed ? 0 : b.fixed ? 1 : 0.5;
+            var wb = b.fixed ? 0 : a.fixed ? 1 : 0.5;
+            if (ox < oy) {
+              var sx = dx < 0 ? -1 : 1;
+              a.x -= sx * ox * wa; b.x += sx * ox * wb;
+            } else {
+              var sy = dy < 0 ? -1 : 1;
+              a.y -= sy * oy * wa; b.y += sy * oy * wb;
+            }
+          }
+        }
+        if (!any) break;
       }
-      var sx = (b.w / 2) / Math.abs(dx || 1e-6);
-      var sy = (b.h / 2) / Math.abs(dy || 1e-6);
-      var k = Math.min(sx, sy);
-      return { x: n.x + dx * k, y: n.y + dy * k };
+    }
+
+    /** Anchor of a card side (card-border midpoint) and its outward normal. */
+    function anchor(n, side) {
+      var d = SIDES[side];
+      return { x: n.x + d.nx * n.w / 2, y: n.y + d.ny * n.h / 2, nx: d.nx, ny: d.ny, side: side };
+    }
+
+    /** Facing sides for a wire between two cards. */
+    function facing(a, b) {
+      var dx = b.x - a.x;
+      var dy = b.y - a.y;
+      var horizontal = Math.abs(dx) / ((a.w + b.w) / 2) >= Math.abs(dy) / ((a.h + b.h) / 2);
+      if (horizontal) return dx >= 0 ? ['right', 'left'] : ['left', 'right'];
+      return dy >= 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+    }
+
+    function wirePath(p1, p2) {
+      var dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+      var off = Math.max(30, Math.min(140, dist * 0.4));
+      return 'M' + p1.x.toFixed(1) + ',' + p1.y.toFixed(1) +
+        ' C' + (p1.x + p1.nx * off).toFixed(1) + ',' + (p1.y + p1.ny * off).toFixed(1) +
+        ' ' + (p2.x + p2.nx * off).toFixed(1) + ',' + (p2.y + p2.ny * off).toFixed(1) +
+        ' ' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1);
     }
 
     function renderGraph() {
@@ -245,23 +346,24 @@
       var graph = state.graph;
       graph.edges.forEach(function (e) {
         var cls = e.kind === 'depends' ? 'depends' : e.kind === 'by' ? 'by' : 'at';
-        var line = s('line', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : ''), 'marker-end': 'url(#mm-arrow-' + cls + ')' });
+        var glow = s('path', { class: 'mm-edge-glow mm-edge-glow--' + cls });
+        var line = s('path', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : ''), 'marker-end': 'url(#mm-arrow-' + cls + ')' });
         var title = s('title');
         title.textContent = MM().EDGE_LABELS[e.kind] || e.kind;
         line.appendChild(title);
         var label = s('text', { class: 'mm-edge-label', 'text-anchor': 'middle' });
         label.textContent = MM().EDGE_LABELS[e.kind] || e.kind;
-        var wrap = s('g', {}, [line, label]);
+        var wrapG = s('g', { class: 'mm-wire-group' }, [glow, line, label]);
         if (e.kind === 'depends') {
           // wide invisible stroke so a dependency is easy to click (select / remove it)
-          var hit = s('line', { class: 'mm-edge-hit' });
+          var hit = s('path', { class: 'mm-edge-hit' });
           hit.addEventListener('click', function (ev) { ev.stopPropagation(); onEdgeClick(e); });
-          wrap.appendChild(hit);
-          edgeEls[e.id] = { line: line, label: label, hit: hit, e: e };
+          wrapG.appendChild(hit);
+          edgeEls[e.id] = { line: line, glow: glow, label: label, hit: hit, e: e };
         } else {
-          edgeEls[e.id] = { line: line, label: label, e: e };
+          edgeEls[e.id] = { line: line, glow: glow, label: label, e: e };
         }
-        gEdges.appendChild(wrap);
+        gEdges.appendChild(wrapG);
       });
       graph.nodes.forEach(function (n) {
         var g = buildNodeEl(n);
@@ -273,33 +375,66 @@
     }
 
     function buildNodeEl(n) {
-      var g = s('g', { class: 'mm-node mm-node--' + n.kind, tabindex: '0', role: 'button', 'aria-label': n.label });
-      var b = nodeBox(n);
-      if (n.kind === 'task') {
-        var rec = n.rec || {};
-        var rect = s('rect', { class: 'mm-shape', x: -b.w / 2, y: -b.h / 2, width: b.w, height: b.h, rx: 8 });
-        if (rec.color) rect.style.stroke = rec.color;
-        g.appendChild(rect);
-        g.appendChild(s('rect', { class: 'mm-stripe', x: -b.w / 2, y: -b.h / 2, width: 5, height: b.h, rx: 2, fill: rec.color || '#8590a2' }));
-        var tx = s('text', { class: 'mm-label', x: -b.w / 2 + 14, y: 4 });
-        tx.textContent = clip(n.label, 24);
-        g.appendChild(tx);
-        if (typeof rec.progress === 'number' && rec.progress > 0) {
-          g.appendChild(s('rect', { class: 'mm-progress', x: -b.w / 2 + 8, y: b.h / 2 - 5, width: Math.max(0, (b.w - 16) * Math.min(100, rec.progress) / 100), height: 2.5, rx: 1 }));
+      var g = s('g', { class: 'mm-node mm-node--' + n.kind, tabindex: '0', role: 'button', 'aria-label': n.label, 'data-id': n.id });
+      var rec = n.rec || {};
+      var accent = n.kind === 'task' ? (rec.color || 'hsl(210 62% 58%)') : n.kind === 'person' ? 'hsl(' + hueOf(n.label) + ' 55% 62%)' : 'hsl(150 50% 46%)';
+      g.style.setProperty('--mm-accent', accent);
+      if (n.bodyH) g.setAttribute('data-body', '');
+      var x0 = -n.w / 2;
+      var y0 = -n.h / 2;
+      g.appendChild(s('rect', { class: 'mm-shape', x: x0, y: y0, width: n.w, height: n.h, rx: 9 }));
+      g.appendChild(s('path', { class: 'mm-head', d: topRounded(x0, y0, n.w, n.headH, 9) }));
+      g.appendChild(s('line', { class: 'mm-head-rule', x1: x0, x2: x0 + n.w, y1: y0 + n.headH, y2: y0 + n.headH }));
+      var textX = x0 + 12;
+      if (n.kind !== 'task') {
+        var cy = y0 + n.headH / 2;
+        textX = x0 + 42;
+        if (n.kind === 'person') {
+          g.appendChild(s('circle', { class: 'mm-avatar', cx: x0 + 24, cy: cy, r: 13 }));
+          var it = s('text', { class: 'mm-initials', 'text-anchor': 'middle', x: x0 + 24, y: cy + 4 });
+          it.textContent = initials(n.label);
+          g.appendChild(it);
+        } else {
+          g.appendChild(s('path', {
+            class: 'mm-pinicon',
+            d: 'M' + (x0 + 24) + ',' + (cy + 9) + 'C' + (x0 + 14) + ',' + (cy - 1) + ' ' + (x0 + 15) + ',' + (cy - 9) + ' ' + (x0 + 24) + ',' + (cy - 9) +
+              'C' + (x0 + 33) + ',' + (cy - 9) + ' ' + (x0 + 34) + ',' + (cy - 1) + ' ' + (x0 + 24) + ',' + (cy + 9) + 'Z',
+          }));
+          g.appendChild(s('circle', { class: 'mm-pinhole', cx: x0 + 24, cy: cy - 3, r: 2.6 }));
         }
-      } else if (n.kind === 'person') {
-        g.appendChild(s('circle', { class: 'mm-shape', r: 20 }));
-        var it = s('text', { class: 'mm-initials', 'text-anchor': 'middle', y: 4 });
-        it.textContent = initials(n.label);
-        g.appendChild(it);
-        var pl = s('text', { class: 'mm-label mm-label--below', 'text-anchor': 'middle', y: 36 });
-        pl.textContent = clip(n.label, 20);
-        g.appendChild(pl);
-      } else {
-        g.appendChild(s('rect', { class: 'mm-shape', x: -b.w / 2, y: -b.h / 2, width: b.w, height: b.h, rx: 14 }));
-        var lt = s('text', { class: 'mm-label', 'text-anchor': 'middle', y: 4 });
-        lt.textContent = clip(n.label, 22);
-        g.appendChild(lt);
+      }
+      n.lines.forEach(function (line, i) {
+        var tx = s('text', { class: 'mm-label', x: textX, y: y0 + HEAD_PAD + 12 + i * LINE_H });
+        tx.textContent = line;
+        g.appendChild(tx);
+      });
+      if (n.bodyH) {
+        var by = y0 + n.headH;
+        var hasProgress = typeof rec.progress === 'number' && rec.progress > 0;
+        if (rec.listName) {
+          var lt = s('text', { class: 'mm-sub', x: x0 + 12, y: by + 17 });
+          lt.textContent = clip(rec.listName, hasProgress ? 17 : 30);
+          g.appendChild(lt);
+        }
+        if (hasProgress) {
+          var pw = 60;
+          var px = x0 + n.w - 12 - pw - 30;
+          g.appendChild(s('rect', { class: 'mm-progress-track', x: px, y: by + 11, width: pw, height: 4, rx: 2 }));
+          g.appendChild(s('rect', { class: 'mm-progress', x: px, y: by + 11, width: Math.max(0, pw * Math.min(100, rec.progress) / 100), height: 4, rx: 2 }));
+          var pt = s('text', { class: 'mm-sub', x: x0 + n.w - 12, y: by + 16, 'text-anchor': 'end' });
+          pt.textContent = Math.round(rec.progress) + '%';
+          g.appendChild(pt);
+        }
+      }
+      if (n.kind === 'task') {
+        Object.keys(SIDES).forEach(function (side) {
+          var a = anchor({ x: 0, y: 0, w: n.w, h: n.h }, side);
+          var pin = s('g', { class: 'mm-pin', transform: 'translate(' + a.x + ',' + a.y + ')', 'data-side': side });
+          pin.appendChild(s('circle', { class: 'mm-pin-hit', r: 11 }));
+          pin.appendChild(s('circle', { class: 'mm-pin-dot', r: 5 }));
+          pin.addEventListener('pointerdown', function (ev) { startWireDrag(ev, n, side); });
+          g.appendChild(pin);
+        });
       }
       var title = s('title');
       title.textContent = n.label;
@@ -321,15 +456,16 @@
       var a = nodeById(e.from);
       var b = nodeById(e.to);
       if (!ref || !a || !b) return;
-      var p1 = edgePoint(a, b.x, b.y);
-      var p2 = edgePoint(b, a.x, a.y);
-      [ref.line, ref.hit].forEach(function (l) {
-        if (!l) return;
-        l.setAttribute('x1', p1.x.toFixed(1)); l.setAttribute('y1', p1.y.toFixed(1));
-        l.setAttribute('x2', p2.x.toFixed(1)); l.setAttribute('y2', p2.y.toFixed(1));
-      });
+      var sides = facing(a, b);
+      var p1 = anchor(a, sides[0]);
+      var p2 = anchor(b, sides[1]);
+      // the wire stops just outside each card so the pin and arrowhead stay visible
+      p1.x += p1.nx * PIN_GAP; p1.y += p1.ny * PIN_GAP;
+      p2.x += p2.nx * PIN_GAP; p2.y += p2.ny * PIN_GAP;
+      var d = wirePath(p1, p2);
+      [ref.line, ref.glow, ref.hit].forEach(function (l) { if (l) l.setAttribute('d', d); });
       ref.label.setAttribute('x', ((p1.x + p2.x) / 2).toFixed(1));
-      ref.label.setAttribute('y', ((p1.y + p2.y) / 2 - 4).toFixed(1));
+      ref.label.setAttribute('y', ((p1.y + p2.y) / 2 - 6).toFixed(1));
     }
 
     function applyFocus() {
@@ -349,6 +485,7 @@
         if (!ref) return;
         var lit = !focus || e.from === focus || e.to === focus;
         ref.line.classList.toggle('is-dim', !lit);
+        ref.glow.classList.toggle('is-dim', !lit);
         ref.label.classList.toggle('is-shown', !!focus && lit);
       });
     }
@@ -386,6 +523,67 @@
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onNodeClick(n); }
         if (ev.key === 'Escape') { endLink(); select(null); }
       });
+    }
+
+    /** Drag from a card's pin to another task: "source depends on target" (dropping on an existing link removes it). */
+    function startWireDrag(ev, n, side) {
+      if (ev.button) return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      var from = anchor(n, side);
+      var temp = s('path', { class: 'mm-wire-temp' });
+      gEdges.appendChild(temp);
+      root.classList.add('is-wiring');
+      var target = null;
+      function toGraph(me) {
+        var r = svg.getBoundingClientRect();
+        return { x: (me.clientX - r.left - state.view.x) / state.view.k, y: (me.clientY - r.top - state.view.y) / state.view.k };
+      }
+      function targetAt(me) {
+        var el = document.elementFromPoint(me.clientX, me.clientY);
+        var ng = el && el.closest && el.closest('.mm-node--task');
+        var id = ng && ng.getAttribute('data-id');
+        return id && id !== n.id ? id : null;
+      }
+      function move(me) {
+        var p = toGraph(me);
+        var id = targetAt(me);
+        if (id !== target) {
+          if (target && nodeEls[target]) nodeEls[target].classList.remove('is-drop-target');
+          target = id;
+          if (target && nodeEls[target]) nodeEls[target].classList.add('is-drop-target');
+        }
+        var end = { x: p.x, y: p.y, nx: 0, ny: 0 };
+        var tn = target && nodeById(target);
+        if (tn) end = anchor(tn, facing(n, tn)[1]);
+        else end.nx = Math.abs(p.x - from.x) > Math.abs(p.y - from.y) ? (p.x > from.x ? -1 : 1) : 0;
+        if (!tn && !end.nx) end.ny = p.y > from.y ? -1 : 1;
+        var start = { x: from.x + from.nx * PIN_GAP, y: from.y + from.ny * PIN_GAP, nx: from.nx, ny: from.ny };
+        temp.setAttribute('d', wirePath(start, end));
+      }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', cancel);
+        finish();
+        if (target) toggleDependency(n.id.slice(2), target.slice(2));
+      }
+      function cancel() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', cancel);
+        target = null;
+        finish();
+      }
+      function finish() {
+        if (target && nodeEls[target]) nodeEls[target].classList.remove('is-drop-target');
+        if (temp.parentNode) temp.parentNode.removeChild(temp);
+        root.classList.remove('is-wiring');
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', cancel);
+      move(ev);
     }
 
     function onNodeClick(n) {
@@ -563,6 +761,9 @@
     function applyView() {
       var v = state.view;
       gView.setAttribute('transform', 'translate(' + v.x.toFixed(1) + ',' + v.y.toFixed(1) + ') scale(' + v.k.toFixed(3) + ')');
+      // the dot grid pans and zooms with the graph
+      els.canvas.style.backgroundSize = (18 * v.k).toFixed(2) + 'px ' + (18 * v.k).toFixed(2) + 'px';
+      els.canvas.style.backgroundPosition = v.x.toFixed(1) + 'px ' + v.y.toFixed(1) + 'px';
     }
 
     function fit() {
