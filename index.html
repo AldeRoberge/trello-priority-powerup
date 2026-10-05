@@ -365,6 +365,41 @@
       return openPriorityPopup(t, { openSection: 'objectif' });
     }
 
+    // Full-screen views live in a Trello modal, so a refresh drops them. Remember the open view
+    // for this browser tab (sessionStorage survives a refresh) and reopen it when the board reloads.
+    var VIEW_KEY = 'tp-open-view';
+    var VIEWS = { gantt: 'Gantt', table: 'Table', kanban: 'Kanban', docs: 'Documents' };
+    function rememberView(view, boardId) {
+      try {
+        if (view) sessionStorage.setItem(VIEW_KEY, JSON.stringify({ view: view, board: boardId }));
+        else sessionStorage.removeItem(VIEW_KEY);
+      } catch (e) { /* storage blocked: no restore */ }
+    }
+    function openView(t, view, title) {
+      return t.board('id').then(function (b) {
+        rememberView(view, b && b.id);
+        return t.modal({
+          title: title,
+          url: PriorityTrello.pageUrl('./' + view + '.html'),
+          fullscreen: true,
+          accentColor: '#22272B',
+          callback: function () { rememberView(null); }, // closed on purpose: do not restore
+        });
+      });
+    }
+    var restoreTried = false;
+    function restoreView(t) {
+      if (restoreTried) return;
+      restoreTried = true;
+      var saved = null;
+      try { saved = JSON.parse(sessionStorage.getItem(VIEW_KEY) || 'null'); } catch (e) { /* ignore */ }
+      if (!saved || !VIEWS[saved.view]) return;
+      t.board('id').then(function (b) {
+        if (b && b.id === saved.board) return openView(t, saved.view, VIEWS[saved.view]);
+        rememberView(null);
+      }).catch(function () {});
+    }
+
     TrelloPowerUp.initialize({
 
       // Face: single Priority badge (priority label + progress % when set).
@@ -505,6 +540,7 @@
 
       // Settings popup loads board context itself — do not gate the menu item on preload.
       'board-buttons': trackCapability('board-buttons', function(t) {
+        restoreView(t);
         function buttonsFor(label) {
         return [
           {
@@ -540,48 +576,28 @@
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/gantt-chart.svg',
             text: 'Gantt',
             callback: function(t) {
-              return t.modal({
-                title: 'Gantt',
-                url: PriorityTrello.pageUrl('./gantt.html'),
-                fullscreen: true,
-                accentColor: '#22272B',
-              });
+              return openView(t, 'gantt', 'Gantt');
             },
           },
           {
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/table.svg',
             text: 'Table',
             callback: function(t) {
-              return t.modal({
-                title: 'Table',
-                url: PriorityTrello.pageUrl('./table.html'),
-                fullscreen: true,
-                accentColor: '#22272B',
-              });
+              return openView(t, 'table', 'Table');
             },
           },
           {
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/kanban.svg',
             text: 'Kanban',
             callback: function(t) {
-              return t.modal({
-                title: 'Kanban',
-                url: PriorityTrello.pageUrl('./kanban.html'),
-                fullscreen: true,
-                accentColor: '#22272B',
-              });
+              return openView(t, 'kanban', 'Kanban');
             },
           },
           {
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/file-text.svg',
             text: 'Documents',
             callback: function(t) {
-              return t.modal({
-                title: 'Documents',
-                url: PriorityTrello.pageUrl('./docs.html'),
-                fullscreen: true,
-                accentColor: '#22272B',
-              });
+              return openView(t, 'docs', 'Documents');
             },
           },
         ];
