@@ -218,3 +218,82 @@ body.tp-page--gantt #ganttMount {
 .gantt-bulk.is-visible ~ .gantt-body {
   padding-bottom: 56px;
 }
+
+/*
+ * Tableau look: white canvas, light grid in both directions, flat header with a strong rule
+ * underneath, slim square-cornered bars centred in the row, thin dashed "today" reference line.
+ */
+.gantt-chart {
+  --gantt-grid-line: color-mix(in srgb, var(--tp-text) 9%, var(--tp-surface));
+}
+.gantt-row {
+  border-bottom-color: color-mix(in srgb, var(--tp-text) 9%, var(--tp-surface));
+}
+.gantt-row--header,
+.gantt-timeline-header,
+.gantt-label-cell--header {
+  background-color: var(--tp-surface);
+}
+.gantt-row--header {
+  border-bottom: 2px solid color-mix(in srgb, var(--tp-text) 35%, var(--tp-surface));
+}
+.gantt-col-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--tp-text-subtle);
+}
+.gantt-label-cell--header .gantt-header-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tp-text-subtle);
+}
+.gantt-timeline-header--day .gantt-col-head {
+  border-right: 1px solid var(--gantt-grid-line);
+}
+.gantt-col-head.is-today {
+  background: color-mix(in srgb, var(--tp-danger-text) 10%, transparent);
+  color: var(--tp-danger-text);
+}
+
+/* Sections: plain bold group headers instead of tinted uppercase bands */
+.gantt-row--section {
+  background: var(--tp-surface);
+  border-bottom-color: color-mix(in srgb, var(--tp-text) 22%, var(--tp-surface));
+}
+.gantt-label-cell--section {
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--tp-text);
+}
+.gantt-section-title {
+  font-weight: 700;
+}
+
+/* Bars: slim, square, solid */
+.gantt-bar {
+  top: 11px;
+  height: 18px;
+  border-radius: 2px;
+  font-size: 11px;
+}
+.gantt-bar-fill {
+  background: rgba(0, 0, 0, 0.22);
+}
+.gantt-bar.is-editable:hover {
+  filter: brightness(1.08);
+}
+.gantt-paint-ghost {
+  top: 11px;
+  height: 18px;
+  border-radius: 2px;
+}
+
+/* Today: dashed reference line */
+.gantt-today-line {
+  width: 0;
+  background: none;
+  border-left: 2px dashed var(--tp-danger-text);
+  opacity: 0.8;
+}
