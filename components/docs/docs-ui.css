@@ -909,6 +909,20 @@ html[data-color-mode="dark"] .dc-root {
   font-size: 16px;
   color: var(--tp-text-muted);
 }
+.dc-pop--task {
+  width: 300px;
+  max-width: 320px;
+}
+.dc-pop-line--plain {
+  color: var(--tp-text-muted);
+}
+.dc-pop-desc {
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
 .dc-menu {
   gap: 0;
   padding: 4px;

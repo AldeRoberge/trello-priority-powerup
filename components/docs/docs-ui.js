@@ -605,6 +605,18 @@
         }
       });
       ed.addEventListener('click', onEditorClick);
+      ed.addEventListener('mouseover', function (e) {
+        var chip = e.target.closest && e.target.closest('.dc-mention--task');
+        if (!chip || !ed.contains(chip) || (pop && !(previewChip && !previewPinned))) return;
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(function () { if (!pop || !previewPinned) openTaskPreview(chip, false); }, 350);
+      });
+      ed.addEventListener('mouseout', function (e) {
+        var chip = e.target.closest && e.target.closest('.dc-mention--task');
+        if (!chip) return;
+        clearTimeout(previewTimer);
+        if (!previewPinned) scheduleClosePreview();
+      });
     }
 
     function onEditorClick(e) {
@@ -813,10 +825,69 @@
         if (state.docs.some(function (d) { return d.id === id; }) || (state.current && state.current.id === id)) openDoc(id);
         else toast('Ce document est introuvable.', 'error');
       } else if (type === 'task') {
-        openTask(id, chip.getAttribute('data-label'));
+        openTaskPreview(chip, true);
       } else {
         openPersonPopover(chip);
       }
+    }
+
+    /** Quick preview of a linked task (hover or click); "Ouvrir" opens the full card. */
+    var previewTimer = null;
+    var previewChip = null;
+    var previewPinned = false;
+    function openTaskPreview(chip, pin) {
+      clearTimeout(previewTimer);
+      if (previewChip === chip && pop && pop.classList.contains('dc-pop--task')) {
+        if (pin) previewPinned = true;
+        return;
+      }
+      closePop();
+      previewChip = chip;
+      previewPinned = !!pin;
+      var id = chip.getAttribute('data-id');
+      var name = chip.getAttribute('data-label') || 'Carte';
+      var item = DM().resolveMention(state.index, 'task', id);
+      var body = h('div', { class: 'dc-pop-sub', text: 'Chargement…' });
+      var head = [h('div', { class: 'dc-pop-name', text: name })];
+      if (item && item.sub) head.push(h('div', { class: 'dc-pop-sub', text: item.sub }));
+      var openBtn = h('button', { class: 'dc-btn dc-btn--primary', type: 'button', onclick: function () { closePop(); openTask(id, name); } }, [icon('external-link'), 'Ouvrir']);
+      var el = h('div', { class: 'dc-pop dc-pop--task' }, head.concat([body, h('div', { class: 'dc-pop-row' }, [openBtn])]));
+      pop = el;
+      el.addEventListener('mouseenter', function () { clearTimeout(previewTimer); });
+      el.addEventListener('mouseleave', function () { if (!previewPinned) scheduleClosePreview(); });
+      placePop(el, chip.getBoundingClientRect());
+      var rest = global.PriorityTrello && global.PriorityTrello.trelloRest;
+      if (!item || !rest) {
+        body.textContent = item ? '' : 'Tâche introuvable (archivée ou supprimée).';
+        return;
+      }
+      Promise.resolve(rest(t, '/cards/' + encodeURIComponent(id) + '?fields=desc,due,dueComplete,idMembers,badges')).then(
+        function (res) {
+          if (pop !== el) return;
+          var c = res && res.ok !== false ? res.data : null;
+          if (!c) { body.textContent = 'Aperçu indisponible.'; return; }
+          var lines = [];
+          if (c.due) {
+            var d = new Date(c.due);
+            lines.push(h('div', { class: 'dc-pop-line dc-pop-line--plain' }, [icon(c.dueComplete ? 'circle-check' : 'clock'), d.toLocaleDateString('fr-CA', { year: 'numeric', month: 'short', day: 'numeric' })]));
+          }
+          var desc = String(c.desc || '').trim();
+          if (desc) lines.push(h('div', { class: 'dc-pop-desc', text: desc.length > 400 ? desc.slice(0, 400) + '…' : desc }));
+          else if (!lines.length) lines.push(h('div', { class: 'dc-pop-sub', text: 'Aucune description.' }));
+          if (body.parentNode) {
+            lines.forEach(function (n) { body.parentNode.insertBefore(n, body); });
+            body.parentNode.removeChild(body);
+          }
+        },
+        function () { if (pop === el) body.textContent = 'Aperçu indisponible.'; }
+      );
+    }
+
+    function scheduleClosePreview() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(function () {
+        if (!previewPinned && pop && pop.classList.contains('dc-pop--task')) closePop();
+      }, 250);
     }
 
     function openTask(cardId, name) {
@@ -1326,6 +1397,8 @@
     function closePop() {
       if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
       pop = null;
+      previewChip = null;
+      previewPinned = false;
     }
 
     function placePop(el, rect) {
