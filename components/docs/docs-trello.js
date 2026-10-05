@@ -137,6 +137,20 @@
   }
 
   /**
+   * The Documents view never opens empty: when the board has no document, a default one is created.
+   * Re-lists right before creating so two members opening the view together rarely create two.
+   * @param {{id:string,title:string,updatedAt:string}[]} docs what listDocs just returned
+   * @returns {Promise<{docs: object[], created: object|null}>} docs includes the new one
+   */
+  async function ensureDefaultDoc(t, docs) {
+    if (docs && docs.length) return { docs: docs, created: null };
+    var again = await listDocs(t);
+    if (again.length) return { docs: again, created: null };
+    var doc = await createDoc(t, DM().DEFAULT_TITLE, DM().DEFAULT_BODY);
+    return { docs: [{ id: doc.id, title: doc.title, updatedAt: doc.updatedAt }], created: doc };
+  }
+
+  /**
    * Saves the body. Refuses ({reason:'conflict', remote}) when someone saved a newer revision since
    * `doc.rev` was loaded, unless opts.force.
    * @returns {Promise<{rev:number, updatedAt:string}>}
@@ -203,6 +217,7 @@
     listDocs: listDocs,
     loadDoc: loadDoc,
     createDoc: createDoc,
+    ensureDefaultDoc: ensureDefaultDoc,
     saveDoc: saveDoc,
     renameDoc: renameDoc,
     deleteDoc: deleteDoc,

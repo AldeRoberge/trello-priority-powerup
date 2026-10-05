@@ -990,7 +990,26 @@
     });
   }
 
+  /** Created when the Documents view opens on a board that has no document yet. */
+  var DEFAULT_TITLE = 'Bienvenue';
+  var DEFAULT_BODY = [
+    '# Bienvenue dans vos documents',
+    '',
+    'Ce document a été créé automatiquement. Modifiez-le, renommez-le ou supprimez-le (menu **…**).',
+    '',
+    '## Quelques idées',
+    '',
+    '- `@` pour mentionner une personne',
+    '- `@@` pour lier une tâche du tableau',
+    '- `@@@` pour lier un autre document',
+    '- `/` pour insérer un titre, une liste, une citation…',
+    '',
+    '- [ ] Écrire mon premier compte rendu',
+  ].join('\n');
+
   global.DocsModel = {
+    DEFAULT_TITLE: DEFAULT_TITLE,
+    DEFAULT_BODY: DEFAULT_BODY,
     NAME_PREFIX: NAME_PREFIX,
     MAX_DESC: MAX_DESC,
     MAX_BODY: MAX_BODY,

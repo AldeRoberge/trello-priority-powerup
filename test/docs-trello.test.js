@@ -52,6 +52,18 @@ describe('DocsTrello (against an in-memory Trello)', () => {
     assert.ok(!docs.some((d) => d.id === 'old1'));
   });
 
+  it('creates a default archived document when the board has none, and only then', async () => {
+    const first = await DT.ensureDefaultDoc(fake.t, await DT.listDocs(fake.t));
+    assert.equal(first.created.title, DM.DEFAULT_TITLE);
+    assert.equal(first.docs.length, 1);
+    const card = fake.cards.find((c) => c.id === first.created.id);
+    assert.equal(card.closed, true);
+    assert.equal(DM.unpackDesc(card.desc).body, DM.DEFAULT_BODY);
+    const again = await DT.ensureDefaultDoc(fake.t, await DT.listDocs(fake.t));
+    assert.equal(again.created, null);
+    assert.equal((await DT.listDocs(fake.t)).length, 1);
+  });
+
   it('loads a document with its text and revision', async () => {
     const created = await DT.createDoc(fake.t, 'Notes', 'bonjour **monde**');
     const loaded = await DT.loadDoc(fake.t, created.id);

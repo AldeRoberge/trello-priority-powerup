@@ -1895,7 +1895,12 @@
           return;
         }
         loadSources().catch(function () {});
-        return DT().listDocs(t).then(
+        return DT().listDocs(t).then(function (docs) {
+          return DT().ensureDefaultDoc(t, docs).then(
+            function (r) { return r.docs; },
+            function (err) { failure(err); return docs; } // creation failed: show the empty state
+          );
+        }).then(
           function (docs) {
             state.docs = docs;
             state.docsLoaded = true;

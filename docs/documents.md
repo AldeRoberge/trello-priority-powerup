@@ -4,6 +4,8 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 
 ## Utilisation
 
+À l'ouverture de la vue, si le tableau n'a aucun document, un document **Bienvenue** est créé automatiquement (mode d'emploi rapide, modifiable ou supprimable).
+
 | Action | Comment |
 |--------|---------|
 | Nouveau document | bouton **Nouveau** (ou `@@@titre` puis *Créer le document « titre »* depuis un autre document) |
@@ -42,9 +44,27 @@ Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barr
 - Trello doit être autorisé (même bouton que dans la vue Table) pour lire et écrire les documents.
 - Au-delà d'environ 1 000 cartes archivées dans le tableau, Trello peut ne pas toutes renvoyer dans une seule réponse : les plus anciens documents pourraient alors manquer à la liste.
 
+## Synchronisation Google Drive
+
+Chaque document est copié dans un dossier Google Drive sous forme de fichier **`Titre.md`** (texte Markdown, sans le bloc caché de révision). La copie va dans un seul sens, Trello → Drive : modifier le fichier dans Drive ne change pas le document.
+
+- À chaque enregistrement, le webhook Trello fait mettre à jour le fichier (quelques secondes) ; un document renommé renomme son fichier, un document supprimé met son fichier à la corbeille Drive.
+- Toutes les 10 minutes, le Worker rapproche aussi l'ensemble (rattrapage). Seuls les fichiers créés par le Worker sont touchés.
+- `POST /documents/sync` (en-tête `x-sync-secret`) force une passe ; `GET /info` donne `documents.status` (dernière passe, erreur éventuelle).
+
+Installation, une fois (après `npm run setup:sheet-sync`) :
+
+```powershell
+npm run setup:documents-drive
+```
+
+Le script demande le dossier Drive (collez l'URL d'un dossier d'un **Drive partagé**, ou Entrée pour en créer un dans Mon Drive), le partage avec le compte de service, enregistre le secret `GOOGLE_DRIVE_FOLDER_ID`, redéploie le Worker et lance une première passe.
+
+**Limite importante** : Google n'accorde aucun quota de stockage aux comptes de service. Avec un compte Google personnel (gmail.com), la création des fichiers dans *Mon Drive* est refusée (erreur `storageQuotaExceeded`, affichée par le script). Il faut alors un dossier dans un **Drive partagé** (Google Workspace). Sans `GOOGLE_DRIVE_FOLDER_ID`, la copie Drive est simplement désactivée.
+
 ## Synchronisation Google Sheets
 
-Le Worker ignore les événements des cartes `📄` (sinon chaque sauvegarde automatique remplirait l'onglet **Activités** et déclencherait une synchronisation). Après avoir récupéré cette version, redéployez le Worker une fois :
+Le Worker ignore les événements des cartes `📄` côté Sheet (sinon chaque sauvegarde automatique remplirait l'onglet **Activités** et déclencherait une synchronisation) ; ils ne servent qu'à la copie Drive ci-dessus. Après avoir récupéré cette version, redéployez le Worker une fois :
 
 ```powershell
 npm --prefix workers/trello-sheet-sync run deploy
@@ -56,4 +76,4 @@ Sans redéploiement, tout fonctionne mais les documents apparaissent dans les ac
 
 - `npm run test:unit` : `test/docs-model.test.js` (conversion Markdown ⇄ éditeur, mentions, recherche), `test/docs-trello.test.js` (création archivée, révisions, conflits, suppression contre un faux Trello en mémoire).
 - `npm run test:e2e -- --page=docs` : l'éditeur complet dans Edge/Chrome sans interface (saisie, `@`, `/`, raccourcis, collage, sauvegarde, conflit, suppression…).
-- À la main : `npm run test:e2e -- --serve` puis ouvrir `/sandbox/e2e/docs.html?manual` (`&dark` pour le thème sombre, `&empty` sans document, `&unauth` sans jeton Trello).
+- À la main : `npm run test:e2e -- --serve` puis ouvrir `/sandbox/e2e/docs.html?manual` (`&dark` pour le thème sombre, `&empty` sans document (le document Bienvenue est alors créé), `&unauth` sans jeton Trello).

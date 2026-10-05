@@ -8,6 +8,7 @@
 //   POST /push                   {cards:[...]} computed columns from the Power-Up
 //   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
 //   POST /alerts/ack             acknowledge CRITICAL alerts
+//   POST /documents/sync         mirror the Documents view into the Drive folder now
 //   POST /webhook/register       (re)register the Trello webhook
 // Everything except the webhook and /health needs the header x-sync-secret.
 
@@ -30,6 +31,7 @@ import {
 } from './sync.js';
 import { describeAction, isDocumentAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
+import { driveEnabled, syncDocumentCard, syncAllDocuments, docSyncStatus } from './drive.js';
 
 function corsHeaders(request, env) {
   const origin = request.headers.get('origin') || '';
@@ -62,7 +64,16 @@ async function handleWebhook(request, env, ctx) {
   } catch {
     /* not JSON */
   }
-  if (isDocumentAction(payload)) return new Response('ok'); // Document view cards: nothing to sync
+  if (isDocumentAction(payload)) {
+    // Document view cards: no Sheet sync and no Activities, only the Drive copy
+    const cardId = payload.action.data.card.id;
+    if (driveEnabled(env)) ctx.waitUntil(syncDocumentCard(env, cardId).catch((e) => console.error('document sync failed', e)));
+    return new Response('ok');
+  }
+  // A deleted card no longer has a name: if it was a document, its Drive file must go
+  if (driveEnabled(env) && payload && payload.action && payload.action.type === 'deleteCard' && payload.action.data && payload.action.data.card) {
+    ctx.waitUntil(syncDocumentCard(env, payload.action.data.card.id).catch((e) => console.error('document cleanup failed', e)));
+  }
   ctx.waitUntil(
     (async () => {
       try {
@@ -100,6 +111,7 @@ export default {
           available: Object.entries(COLUMNS).map(([key, c]) => ({ key, header: c.header, dir: c.dir })),
           defaults: DEFAULT_COLUMNS,
           lastSync,
+          documents: { enabled: driveEnabled(env), folderUrl: driveEnabled(env) ? `https://drive.google.com/drive/folders/${env.GOOGLE_DRIVE_FOLDER_ID}` : '', status: docSyncStatus },
           alerts: await readAlerts(env),
         });
       }
@@ -108,7 +120,8 @@ export default {
         const saved = await saveSettings(env, { columns: body.columns, logLevel: body.logLevel, sheetTheme: body.sheetTheme });
         return json(request, env, { ...saved, sync: await runSync(env, { forceFormat: true }) });
       }
-      if (url.pathname === '/sync' && request.method === 'POST') return json(request, env, await runSync(env));
+      if (url.pathname === '/sync' && request.method === 'POST') return json(request, env, { ...(await runSync(env)), documents: await syncAllDocuments(env) });
+      if (url.pathname === '/documents/sync' && request.method === 'POST') return json(request, env, await syncAllDocuments(env));
       if (url.pathname === '/push' && request.method === 'POST') {
         const body = await request.json();
         return json(request, env, await pushComputed(env, Array.isArray(body.cards) ? body.cards : []));
@@ -135,7 +148,13 @@ export default {
     return json(request, env, { error: 'not found' }, 404);
   },
 
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(watchSheet(env).catch((e) => console.error('scheduled sync failed', e)));
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      (async () => {
+        // Documents change rarely and the webhook already mirrors each save: reconcile every 10 minutes
+        if (new Date(event.scheduledTime).getUTCMinutes() % 10 === 0) await syncAllDocuments(env).catch((e) => console.error('documents sync failed', e));
+        await watchSheet(env).catch((e) => console.error('scheduled sync failed', e));
+      })(),
+    );
   },
 };

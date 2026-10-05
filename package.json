@@ -21,6 +21,7 @@
     "dev": "node scripts/dev-server.js",
     "stamp:build": "node scripts/stamp-build.js",
     "render:icon": "node scripts/render-icon.js",
-    "setup:sheet-sync": "powershell -ExecutionPolicy Bypass -File scripts/setup-sheet-sync.ps1"
+    "setup:sheet-sync": "powershell -ExecutionPolicy Bypass -File scripts/setup-sheet-sync.ps1",
+    "setup:documents-drive": "powershell -ExecutionPolicy Bypass -File scripts/setup-documents-drive.ps1"
   }
 }

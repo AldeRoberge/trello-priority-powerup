@@ -46,6 +46,21 @@ export async function getCards(env, categoryFieldId) {
   });
 }
 
+/** Archived cards of the board (the Documents view keeps its documents there), with their text. */
+export function getClosedCards(env) {
+  return call(env, `/boards/${env.TRELLO_BOARD_ID}/cards/closed?fields=id,name,desc,dateLastActivity`);
+}
+
+/** One card (open or archived) or null when it no longer exists. */
+export async function getCard(env, id) {
+  try {
+    return await call(env, `/cards/${encodeURIComponent(id)}?fields=id,name,desc,closed,idBoard`);
+  } catch (e) {
+    if (/ 404 /.test(String(e && e.message))) return null;
+    throw e;
+  }
+}
+
 export function updateCard(env, id, fields) {
   return call(env, `/cards/${id}`, 'PUT', fields);
 }

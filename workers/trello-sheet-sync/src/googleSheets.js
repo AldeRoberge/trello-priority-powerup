@@ -52,6 +52,12 @@ async function accessToken(env) {
   return cached.value;
 }
 
+/** Authenticated fetch for the Drive helpers in drive.js (same service-account token). */
+export async function authedFetch(env, url, init = {}) {
+  const token = await accessToken(env);
+  return fetch(url, { ...init, headers: { ...(init.headers || {}), authorization: `Bearer ${token}` } });
+}
+
 async function call(env, path, init) {
   const token = await accessToken(env);
   const res = await fetch(`${API}/${env.GOOGLE_SHEET_ID}${path}`, {
