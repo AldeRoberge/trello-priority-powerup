@@ -1019,6 +1019,7 @@
         ])
       );
       if (global.EntitiesLibrary) main.appendChild(libraryCard());
+      main.appendChild(relationsCard());
       main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Types' }));
       state.schema.types.forEach(function (ty) {
         main.appendChild(typeCard(ty));
@@ -1053,6 +1054,79 @@
           [icon('plus'), 'Nouveau composant']
         )
       );
+    }
+
+    var CATEGORY_LABELS = {
+      spatial: 'Spatial', mereological: 'Parties et touts', composition: 'Composition', production: 'Production', social: 'Social',
+      taxonomic: 'Classification', grounding: 'Ancrage', causal: 'Causal', temporal: 'Temps', conceptual: 'Conceptuel', generic: 'Générique',
+    };
+
+    /** The relation vocabulary: built-in ones (read-only) and the user's own (name, inverse, category, containment). */
+    function relationsCard() {
+      var card = h('div', { class: 'en-card' }, [
+        h('h3', { class: 'en-h', text: 'Relations' }),
+        h('p', {
+          class: 'en-hint',
+          text: 'Un lien dont le nom est reconnu a un sens : son inverse (« situé dans » / « abrite »), et « situé dans » ou « fait partie de » forment la hiérarchie de contenance. Ajoutez les vôtres ; un nom inconnu reste un lien libre.',
+        }),
+      ]);
+      var builtin = h('div', { class: 'en-chips' });
+      EM().RELATIONS.forEach(function (d) {
+        if (d.custom) return;
+        builtin.appendChild(h('span', { class: 'en-chip', title: (CATEGORY_LABELS[d.category] || '') + (d.inverse ? ' · inverse : ' + d.inverse : ' · symétrique') }, [d.name]));
+      });
+      card.appendChild(builtin);
+      (state.schema.relations || []).forEach(function (r) {
+        var name = h('input', { class: 'en-input', value: r.name, 'aria-label': 'Nom du lien' });
+        var inverse = h('input', { class: 'en-input', value: r.inverse, placeholder: 'inverse (ex. dirige)', 'aria-label': 'Inverse', disabled: r.symmetric ? true : null });
+        var cat = h('select', { class: 'en-input', 'aria-label': 'Catégorie' });
+        EM().RELATION_CATEGORIES.forEach(function (c) {
+          cat.appendChild(h('option', { value: c, text: CATEGORY_LABELS[c] }));
+        });
+        cat.value = r.category;
+        var sym = h('input', { type: 'checkbox', checked: r.symmetric ? true : null });
+        var up = h('input', { type: 'checkbox', checked: r.up ? true : null, disabled: r.symmetric ? true : null });
+        function save() {
+          var next = EM().removeRelationDef(state.schema, r.id);
+          setSchema(EM().upsertRelationDef(next, { name: name.value, inverse: inverse.value, category: cat.value, symmetric: sym.checked, up: up.checked }));
+        }
+        [name, inverse, cat, sym, up].forEach(function (el) {
+          el.addEventListener('change', save);
+        });
+        card.appendChild(
+          h('div', { class: 'en-field-row' }, [
+            name,
+            inverse,
+            cat,
+            h('label', { class: 'en-check', title: 'Pas d’inverse : « ressemble à »' }, [sym, 'symétrique']),
+            h('label', { class: 'en-check', title: 'A situé dans B : B contient A (hiérarchie de contenance)' }, [up, 'contenant']),
+            h('button', { class: 'en-link', 'aria-label': 'Supprimer le lien ' + r.name, onclick: function () { setSchema(EM().removeRelationDef(state.schema, r.id)); } }, [icon('x')]),
+          ])
+        );
+      });
+      var nn = h('input', { class: 'en-input', placeholder: 'Nouveau lien (ex. dirigé par)', 'aria-label': 'Nom du nouveau lien' });
+      card.appendChild(
+        h('div', { class: 'en-link-add' }, [
+          nn,
+          h(
+            'button',
+            {
+              class: 'en-btn',
+              onclick: function () {
+                if (!nn.value.trim()) return;
+                var next = EM().upsertRelationDef(state.schema, { name: nn.value });
+                if ((next.relations || []).length === (state.schema.relations || []).length) {
+                  toast('Ce nom est déjà un lien connu, ou est vide.', 'error');
+                  return;
+                }
+                setSchema(next);
+              },
+            },
+            [icon('plus'), 'Ajouter']
+          ),
+        ])
+      );
+      return card;
     }
 
     /** Ready-made types by group (matter, living, people, places, time, ideas): one click installs a type with its parents and components. */

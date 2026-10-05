@@ -53,6 +53,8 @@
   var MAX_URL = 300;
   var MAX_UNIT = 12;
   var MAX_DESCRIPTION = 200;
+  var MAX_CUSTOM_RELATIONS = 20;
+  var RELATION_CATEGORIES = ['spatial', 'mereological', 'composition', 'production', 'social', 'taxonomic', 'grounding', 'causal', 'temporal', 'conceptual', 'generic'];
   /** The description card of the schema holds 16 384 chars; stay well under it. */
   var MAX_SCHEMA_CHARS = 15000;
   var FIELD_KINDS = ['text', 'number', 'date', 'bool', 'choice', 'ref', 'refs', 'multi', 'longtext', 'geo', 'url'];
@@ -203,6 +205,8 @@
 
   function normalizeSchema(raw) {
     var s = raw && typeof raw === 'object' ? raw : {};
+    var relations = normalizeRelationDefs(s.relations);
+    syncCustomRelations(relations);
     var seenC = {};
     var components = [];
     (Array.isArray(s.components) ? s.components : []).forEach(function (c) {
@@ -233,7 +237,70 @@
         return p !== t.id && !!byId[p] && !lineageHas(byId, p, t.id);
       });
     });
-    return { version: VERSION, components: components.slice(0, MAX_COMPONENTS), types: types };
+    var out = { version: VERSION, components: components.slice(0, MAX_COMPONENTS), types: types };
+    if (relations.length) out.relations = relations;
+    return out;
+  }
+
+  /**
+   * User-defined relations ({name, inverse?, category?, symmetric?, up?}): same behaviour as the built-in
+   * ones (inverse label, containment when up). Built-in names cannot be redefined.
+   */
+  function normalizeRelationDefs(list) {
+    var out = [];
+    var seen = {};
+    (Array.isArray(list) ? list : []).forEach(function (r) {
+      if (!r || typeof r !== 'object') return;
+      var name = str(r.name, MAX_ALIAS);
+      var key = normKey(name);
+      if (!key || seen[key]) return;
+      var builtin = matchRelation(name);
+      if (builtin && !builtin.def.custom) return;
+      var symmetric = r.symmetric === true;
+      var inverse = symmetric ? '' : str(r.inverse, MAX_ALIAS);
+      var ik = normKey(inverse);
+      if (ik && (ik === key || seen[ik])) inverse = '';
+      var ib = inverse ? matchRelation(inverse) : null;
+      if (ib && !ib.def.custom) inverse = '';
+      seen[key] = true;
+      if (inverse) seen[normKey(inverse)] = true;
+      out.push({
+        id: 'custom-' + (slug(name) || 'lien'),
+        name: name,
+        inverse: inverse,
+        category: RELATION_CATEGORIES.indexOf(r.category) >= 0 ? r.category : 'generic',
+        symmetric: symmetric,
+        up: r.up === true && !symmetric,
+      });
+    });
+    return out.slice(0, MAX_CUSTOM_RELATIONS);
+  }
+
+  /** Makes the schema's relations known to the vocabulary (replacing the previous custom ones). */
+  function syncCustomRelations(list) {
+    for (var i = RELATIONS.length - 1; i >= 0; i--) if (RELATIONS[i].custom) RELATIONS.splice(i, 1);
+    list.forEach(function (d) {
+      RELATIONS.push(Object.assign({ custom: true }, d));
+    });
+    relIndex = null;
+  }
+
+  function upsertRelationDef(schema, def) {
+    var next = clone(schema);
+    var key = normKey(def && def.name);
+    var rest = (next.relations || []).filter(function (r) {
+      return normKey(r.name) !== key;
+    });
+    next.relations = rest.concat([def]);
+    return normalizeSchema(next);
+  }
+
+  function removeRelationDef(schema, id) {
+    var next = clone(schema);
+    next.relations = (next.relations || []).filter(function (r) {
+      return 'custom-' + slug(r.name) !== id;
+    });
+    return normalizeSchema(next);
   }
 
   /** Is `target` among the ancestors (or the type itself) of `id`? `byId` maps type ids to types. */
@@ -1565,6 +1632,9 @@
     VERSION: VERSION,
     NATURES: NATURES,
     RELATIONS: RELATIONS,
+    RELATION_CATEGORIES: RELATION_CATEGORIES,
+    upsertRelationDef: upsertRelationDef,
+    removeRelationDef: removeRelationDef,
     MAX_SCHEMA_CHARS: MAX_SCHEMA_CHARS,
     MAX_ENTITIES: MAX_ENTITIES,
     MAX_HISTORY: MAX_HISTORY,

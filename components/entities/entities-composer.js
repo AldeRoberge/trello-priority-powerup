@@ -362,10 +362,20 @@
           });
         });
         if (slot) out.answers[slot] = e.id;
-        else out.relations.push({ type: DEFAULT_REL_TYPES[2], to: e.id });
+        else out.relations.push({ type: relationFor(schema, out.types, e), to: e.id });
       }
     });
     return out;
+  }
+
+  /**
+   * The relation to use when a sentence mentions an entity and no link field fits: "situé dans" when the
+   * mentioned thing is a place and the subject is not one itself, else the generic "lié à".
+   */
+  function relationFor(schema, subjectTypes, target) {
+    var tn = EM().naturesOf(schema, target);
+    var sn = EM().naturesOf(schema, { types: subjectTypes });
+    return tn.indexOf('place') >= 0 && sn.indexOf('place') < 0 ? 'situé dans' : DEFAULT_REL_TYPES[2];
   }
 
   /** Applies a read intent to a draft without overwriting what the user already filled. */

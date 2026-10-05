@@ -53,7 +53,7 @@ Genres ajoutés : choix multiple, texte long, coordonnées (lat, lon), lien web 
 
 ### Relations (`EntitiesModel.RELATIONS`)
 
-Texte libre toujours permis ; un nom reconnu (nom, inverse ou alias, français ou anglais) prend un sens : catégorie, inverse, transitivité (`up`), natures attendues (écart = avertissement).
+Texte libre toujours permis ; on peut aussi **définir ses propres relations** (Schéma > Relations : nom, inverse, catégorie, symétrique, contenant). Un nom reconnu (nom, inverse ou alias, français ou anglais) prend un sens : catégorie, inverse, transitivité (`up`), natures attendues (écart = avertissement).
 
 | Catégorie | Relations (inverse) |
 | --- | --- |
@@ -83,6 +83,6 @@ Carte **Ontologie** par entité : natures, rôle, chemin (Canada › Montréal �
 
 ## 6. Pas fait
 
-- Relations personnalisées (nom, inverse, natures) : le vocabulaire est dans le code ; un nom inconnu reste un lien libre.
-- La lecture d'une phrase (`readIntent`) crée encore un lien « lié à » (et non « situé dans ») quand aucun champ de lien ne convient, pour ne pas changer le comportement existant.
+- Les relations personnalisées sont enregistrées avec le schéma et actives pour la page en cours (un seul schéma par tableau).
+- Quand une phrase cite un lieu et qu'aucun champ de lien ne convient, le Composer crée « situé dans » (sinon « lié à »).
 - Pas de graphe visuel de la hiérarchie : seulement le chemin et la liste du contenu.

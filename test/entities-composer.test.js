@@ -142,10 +142,10 @@ describe('EntitiesComposer', () => {
       assert.deepEqual(r.types, []);
     });
 
-    it('a mentioned entity without a matching ref field becomes a relation', () => {
+    it('a mentioned entity without a matching ref field becomes a relation ("situé dans" for a place)', () => {
       const r = C.readIntent(schema, entities, 'Arrosoir, au travail');
       assert.equal(r.name, 'Arrosoir');
-      assert.deepEqual(r.relations, [{ type: 'lié à', to: mairie.id }]);
+      assert.deepEqual(r.relations, [{ type: 'situé dans', to: mairie.id }]);
     });
 
     it('applyIntent never overwrites what the user already typed', () => {

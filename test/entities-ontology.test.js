@@ -414,4 +414,41 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       assert.deepEqual(sugg, [{ value: mtl.id, count: 0 }]);
     });
   });
+  describe('custom relations', () => {
+    it('a schema relation behaves like a built-in: inverse, containment, no redefining built-ins', () => {
+      let s = M.upsertRelationDef(M.defaultSchema(), { name: 'est garé dans', inverse: 'stationne', category: 'spatial', up: true });
+      s = M.upsertRelationDef(s, { name: 'situé dans', inverse: 'x' });
+      s = M.upsertRelationDef(s, { name: 'ami de', symmetric: true, category: 'nope' });
+      assert.deepEqual(s.relations.map((r) => r.name), ['est garé dans', 'ami de']);
+      assert.equal(M.inverseLabel('est garé dans'), 'stationne');
+      assert.equal(M.inverseLabel('stationne'), 'est garé dans');
+      assert.equal(M.matchRelation('ami de').def.category, 'generic');
+      assert.ok(M.relationsFor([]).some((d) => d.name === 'ami de'));
+      const garage = M.createEntity(s, { name: 'Garage', types: ['place'], id: 'g' });
+      const car = M.createEntity(s, { name: 'Auto', id: 'c', relations: [{ type: 'est garé dans', to: 'g' }] });
+      assert.deepEqual(M.ancestorsOf(s, [garage, car], 'c'), ['g']);
+      assert.equal(M.wouldCycleRelation(s, [garage, car], 'g', 'est garé dans', 'c'), true);
+      s = M.removeRelationDef(s, 'custom-est_gare_dans');
+      assert.equal(M.matchRelation('est garé dans'), null);
+      assert.deepEqual(s.relations.map((r) => r.name), ['ami de']);
+      M.normalizeSchema({});
+      assert.equal(M.matchRelation('ami de'), null, 'custom relations follow the schema in use');
+    });
+
+    it('a field can carry a custom relation', () => {
+      const s = M.upsertRelationDef(M.defaultSchema(), { name: 'dirigé par', inverse: 'dirige', category: 'social' });
+      const s2 = M.upsertComponent(s, { id: 'c', name: 'C', fields: [{ key: 'chef', label: 'Chef', kind: 'ref', rel: 'custom-dirige_par' }] });
+      assert.equal(M.fieldOf(s2, 'c.chef').field.rel, 'custom-dirige_par');
+    });
+  });
+
+  describe('readIntent relation choice', () => {
+    it('a mentioned place gives "situé dans" for a non-place subject, "lié à" for a place subject', () => {
+      const mtl = make({ name: 'Montréal', types: ['ville'] });
+      const r1 = C.readIntent(schema, [mtl], 'Glycérine, une substance à Montréal');
+      assert.deepEqual(r1.relations, [{ type: 'situé dans', to: mtl.id }]);
+      const r2 = C.readIntent(schema, [mtl], 'Plateau, une ville à Montréal');
+      assert.equal(r2.relations.length, 0, 'Montréal is itself a city: it is a direct pick, not an anchor');
+    });
+  });
 });
