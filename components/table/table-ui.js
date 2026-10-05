@@ -876,6 +876,13 @@
       row.progress = pct;
       writeProgress(row.id, pct)
         .then(function () {
+          // 100 % marks the card complete: move it to the board's completed list.
+          var done = pct >= 100 && row.statutKey !== 'completed'
+            ? state.lists.filter(function (l) { return l.category === 'completed'; })[0]
+            : null;
+          return done ? TT().moveCard(t, row.id, done.id, 'bottom') : null;
+        })
+        .then(function () {
           setStatus('Enregistré', 'ok');
           schedulePush();
           if (prev !== pct) {
