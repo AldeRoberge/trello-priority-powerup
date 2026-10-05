@@ -73,7 +73,8 @@
   function mount(root, t) {
     var HIDE_DONE_KEY = 'tp-table-hide-done';
     function readHideDone() {
-      try { return global.localStorage.getItem(HIDE_DONE_KEY) === '1'; } catch (e) { return false; }
+      // Hidden unless the user explicitly chose to show completed cards.
+      try { return global.localStorage.getItem(HIDE_DONE_KEY) !== '0'; } catch (e) { return true; }
     }
     var state = {
       lists: [],
