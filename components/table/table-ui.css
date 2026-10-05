@@ -354,6 +354,10 @@ textarea.tb-input {
 .tb-search .ti { position: absolute; left: 8px; font-size: 15px; color: var(--tp-text-muted); pointer-events: none; }
 .tb-search .tb-filter { padding-left: 28px; }
 .tb-status { display: inline-flex; align-items: center; gap: 5px; }
+.tb-status-msg {
+  border: 0; background: none; font: inherit; color: inherit; padding: 0; cursor: pointer; border-radius: 3px;
+}
+.tb-status-msg:hover { text-decoration: underline; }
 .tb-link {
   display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; font: inherit;
   color: var(--tp-link); cursor: pointer; text-decoration: underline; padding: 0 0 0 6px;

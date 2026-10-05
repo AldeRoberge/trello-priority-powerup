@@ -138,7 +138,15 @@
       if (state.statusKind === 'ok') s.appendChild(icon('check'));
       if (state.statusKind === 'busy') s.appendChild(icon(state.statusIcon || 'loader-2', 'tb-spin'));
       if (state.statusKind === 'error') s.appendChild(icon('alert-triangle'));
-      s.appendChild(document.createTextNode(state.status));
+      if (state.statusKind === 'ok' && state.status) {
+        s.appendChild(h('button', {
+          class: 'tb-status-msg',
+          title: 'Ouvrir l’historique',
+          onclick: function () { openDrawer('history', null, true); },
+        }, [document.createTextNode(state.status)]));
+      } else {
+        s.appendChild(document.createTextNode(state.status));
+      }
       if (state.statusAction) {
         s.appendChild(
           h('button', {
