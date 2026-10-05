@@ -76,10 +76,59 @@
     return true;
   }
 
+  /* Folder tree: one hidden archived card holds it (see DocsModel "Folders"); listDocs refreshes the cache. */
+  var folderIndex = null;
+  var indexCardId = '';
+
+  /** The folder tree read by the last listDocs (empty before that). */
+  function getFolderIndex() {
+    return folderIndex || DM().emptyIndex();
+  }
+
+  /**
+   * Read-modify-write of the folder tree: re-reads the card so two members' edits merge instead of
+   * overwriting each other, applies `mutate(index)` (which may throw to abort), saves, returns the new tree.
+   */
+  async function updateFolderIndex(t, mutate) {
+    var id = await boardId(t);
+    var cards = need(await ST().trelloRest(t, '/boards/' + enc(id) + '/cards/closed?fields=name,desc')) || [];
+    var card = cards.filter(function (c) {
+      return c && c.id && DM().isFolderIndexName(c.name);
+    })[0];
+    var idx = DM().parseFolderIndex(card && card.desc);
+    mutate(idx);
+    var desc = DM().packFolderIndex(idx);
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
+    if (card) {
+      need(await ST().trelloRest(t, '/cards/' + enc(card.id), 'PUT', { desc: desc }));
+      indexCardId = String(card.id);
+    } else {
+      var listId = await homeListId(t);
+      var created = need(
+        await ST().trelloRest(t, '/cards?idList=' + enc(listId) + '&name=' + enc(DM().FOLDER_INDEX_NAME) + '&pos=bottom&desc=' + enc(desc), 'POST')
+      );
+      if (!created || !created.id) throw fail('no-card');
+      try {
+        need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true }));
+      } catch (err) {
+        await ST().trelloRest(t, '/cards/' + enc(created.id), 'DELETE').catch(function () {});
+        throw err;
+      }
+      indexCardId = String(created.id);
+    }
+    folderIndex = idx;
+    return idx;
+  }
+
   /** @returns {Promise<{id:string,title:string,updatedAt:string}[]>} newest first */
   async function listDocs(t) {
     var id = await boardId(t);
-    var cards = need(await ST().trelloRest(t, '/boards/' + enc(id) + '/cards/closed?fields=name,dateLastActivity')) || [];
+    var cards = need(await ST().trelloRest(t, '/boards/' + enc(id) + '/cards/closed?fields=name,desc,dateLastActivity')) || [];
+    var idxCard = cards.filter(function (c) {
+      return c && c.id && DM().isFolderIndexName(c.name);
+    })[0];
+    indexCardId = idxCard ? String(idxCard.id) : '';
+    folderIndex = DM().parseFolderIndex(idxCard && idxCard.desc);
     return cards
       .filter(function (c) {
         return c && c.id && DM().isDocName(c.name);
@@ -215,6 +264,8 @@
     isAuthorized: isAuthorized,
     authorize: authorize,
     listDocs: listDocs,
+    getFolderIndex: getFolderIndex,
+    updateFolderIndex: updateFolderIndex,
     loadDoc: loadDoc,
     createDoc: createDoc,
     ensureDefaultDoc: ensureDefaultDoc,

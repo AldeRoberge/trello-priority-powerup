@@ -254,6 +254,36 @@ html[data-color-mode="dark"] .dc-root {
   background: var(--tp-surface-active);
   color: var(--tp-text);
 }
+.dc-folder .dc-item-title {
+  font-weight: 600;
+}
+.dc-folder-chev {
+  flex: none;
+  margin-right: -4px;
+  font-size: 14px;
+  color: var(--tp-text-muted);
+}
+.dc-new-folder {
+  padding: 5px 7px;
+}
+.dc-dialog-input {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 4px;
+  background: var(--tp-input-bg);
+  color: var(--tp-text);
+}
+.dc-dialog-input:focus {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: -1px;
+}
+.dc-menu-item.is-on {
+  font-weight: 600;
+}
 .dc-skel {
   padding: 12px 8px;
 }

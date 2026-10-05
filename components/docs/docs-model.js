@@ -990,6 +990,160 @@
     });
   }
 
+  /* ── Folders ─────────────────────────────────────────────────────────
+   * The tree lives in one hidden archived card ("📁 Dossiers"), as JSON:
+   *   { v:1, folders:[{id,name,parent|null}], docs:{ <docCardId>: <folderId> } }
+   * A doc absent from `docs` (or pointing to a missing folder) sits at the root. */
+
+  var FOLDER_INDEX_NAME = '📁 Dossiers';
+  var MAX_FOLDER_NAME = 60;
+
+  function isFolderIndexName(name) {
+    return typeof name === 'string' && name.indexOf('📁') === 0;
+  }
+
+  function cleanFolderName(name) {
+    return String(name == null ? '' : name).replace(/\s+/g, ' ').trim().slice(0, MAX_FOLDER_NAME);
+  }
+
+  function emptyIndex() {
+    return { v: 1, folders: [], docs: {} };
+  }
+
+  /** Tolerant parse: anything unreadable gives an empty index; dangling parents / cycles are healed. */
+  function parseFolderIndex(desc) {
+    var idx = emptyIndex();
+    var raw;
+    try {
+      raw = JSON.parse(String(desc == null ? '' : desc));
+    } catch (e) {
+      return idx;
+    }
+    if (!raw || typeof raw !== 'object') return idx;
+    var seen = {};
+    (Array.isArray(raw.folders) ? raw.folders : []).forEach(function (f) {
+      if (!f || typeof f.id !== 'string' || !f.id || seen[f.id]) return;
+      var name = cleanFolderName(f.name);
+      if (!name) return;
+      seen[f.id] = true;
+      idx.folders.push({ id: f.id, name: name, parent: typeof f.parent === 'string' && f.parent ? f.parent : null });
+    });
+    idx.folders.forEach(function (f) {
+      if (f.parent && (!seen[f.parent] || f.parent === f.id)) f.parent = null;
+    });
+    idx.folders.forEach(function (f) {
+      // a parent chain that loops back on itself: cut it at this folder
+      var hops = 0;
+      var cur = f;
+      while (cur && cur.parent && hops <= idx.folders.length) {
+        cur = idx.folders.filter(function (x) { return x.id === cur.parent; })[0];
+        hops++;
+        if (cur === f) {
+          f.parent = null;
+          return;
+        }
+      }
+    });
+    var docs = raw.docs && typeof raw.docs === 'object' ? raw.docs : {};
+    Object.keys(docs).forEach(function (k) {
+      if (typeof docs[k] === 'string' && seen[docs[k]]) idx.docs[k] = docs[k];
+    });
+    return idx;
+  }
+
+  function packFolderIndex(idx) {
+    return JSON.stringify({ v: 1, folders: idx.folders, docs: idx.docs });
+  }
+
+  function newFolderId() {
+    return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function folderById(idx, id) {
+    return idx.folders.filter(function (f) { return f.id === id; })[0] || null;
+  }
+
+  /** True when `target` is `id` itself or one of its descendants (moving `id` there would loop). */
+  function isInsideFolder(idx, id, target) {
+    var cur = target;
+    var hops = 0;
+    while (cur && hops++ <= idx.folders.length) {
+      if (cur === id) return true;
+      var f = folderById(idx, cur);
+      cur = f && f.parent;
+    }
+    return false;
+  }
+
+  function folderPath(idx, id) {
+    var out = [];
+    var cur = folderById(idx, id);
+    var hops = 0;
+    while (cur && hops++ <= idx.folders.length) {
+      out.unshift(cur.name);
+      cur = cur.parent ? folderById(idx, cur.parent) : null;
+    }
+    return out.join(' / ');
+  }
+
+  /** Removes a folder; its sub-folders and documents move up to its parent (nothing is deleted). */
+  function removeFolderFrom(idx, id) {
+    var f = folderById(idx, id);
+    if (!f) return idx;
+    var up = f.parent || null;
+    idx.folders = idx.folders.filter(function (x) { return x.id !== id; });
+    idx.folders.forEach(function (x) { if (x.parent === id) x.parent = up; });
+    Object.keys(idx.docs).forEach(function (k) {
+      if (idx.docs[k] !== id) return;
+      if (up) idx.docs[k] = up;
+      else delete idx.docs[k];
+    });
+    return idx;
+  }
+
+  /**
+   * Flat list of sidebar rows, depth-first, folders before documents (A→Z), documents keeping their order.
+   * With a query only matching documents show, inside their (force-opened) ancestor folders.
+   * @param {Set|Object} open map/set of expanded folder ids
+   * @returns {{type:'folder'|'doc', depth:number, folder?:object, doc?:object, count?:number, open?:boolean}[]}
+   */
+  function folderRows(docs, idx, open, query) {
+    var q = fold(String(query || '').trim());
+    var isOpen = function (id) { return q ? true : !!(open && (open.has ? open.has(id) : open[id])); };
+    var byFolder = {};
+    (docs || []).forEach(function (d) {
+      var fid = idx.docs[d.id] && folderById(idx, idx.docs[d.id]) ? idx.docs[d.id] : '';
+      (byFolder[fid] = byFolder[fid] || []).push(d);
+    });
+    function countIn(fid) {
+      var n = (byFolder[fid] || []).length;
+      idx.folders.forEach(function (f) { if (f.parent === fid) n += countIn(f.id); });
+      return n;
+    }
+    function matchesIn(fid) {
+      if ((byFolder[fid] || []).some(function (d) { return fold(d.title).indexOf(q) >= 0; })) return true;
+      return idx.folders.some(function (f) { return f.parent === fid && matchesIn(f.id); });
+    }
+    var rows = [];
+    function walk(fid, depth) {
+      idx.folders
+        .filter(function (f) { return (f.parent || '') === fid; })
+        .sort(function (a, b) { return fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0; })
+        .forEach(function (f) {
+          if (q && !matchesIn(f.id)) return;
+          var o = isOpen(f.id);
+          rows.push({ type: 'folder', depth: depth, folder: f, count: countIn(f.id), open: o });
+          if (o) walk(f.id, depth + 1);
+        });
+      (byFolder[fid] || []).forEach(function (d) {
+        if (q && fold(d.title).indexOf(q) < 0) return;
+        rows.push({ type: 'doc', depth: depth, doc: d });
+      });
+    }
+    walk('', 0);
+    return rows;
+  }
+
   /** Created when the Documents view opens on a board that has no document yet. */
   var DEFAULT_TITLE = 'Bienvenue';
   var DEFAULT_BODY = [
@@ -1008,6 +1162,19 @@
   ].join('\n');
 
   global.DocsModel = {
+    FOLDER_INDEX_NAME: FOLDER_INDEX_NAME,
+    MAX_FOLDER_NAME: MAX_FOLDER_NAME,
+    isFolderIndexName: isFolderIndexName,
+    cleanFolderName: cleanFolderName,
+    emptyIndex: emptyIndex,
+    parseFolderIndex: parseFolderIndex,
+    packFolderIndex: packFolderIndex,
+    newFolderId: newFolderId,
+    folderById: folderById,
+    isInsideFolder: isInsideFolder,
+    folderPath: folderPath,
+    removeFolderFrom: removeFolderFrom,
+    folderRows: folderRows,
     DEFAULT_TITLE: DEFAULT_TITLE,
     DEFAULT_BODY: DEFAULT_BODY,
     NAME_PREFIX: NAME_PREFIX,

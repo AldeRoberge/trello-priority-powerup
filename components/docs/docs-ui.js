@@ -63,6 +63,16 @@
     }
   }
 
+  var OPEN_KEY = 'cerveau.docs.openFolders';
+  function loadOpenFolders() {
+    try {
+      var o = JSON.parse(recall(OPEN_KEY) || '{}');
+      return o && typeof o === 'object' ? o : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
   function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -107,6 +117,8 @@
   function mount(root, t) {
     var state = {
       docs: [],
+      idx: DM().emptyIndex(), // folder tree (DocsModel "Folders")
+      openFolders: loadOpenFolders(),
       docsLoaded: false,
       filter: '',
       current: null, // {id,title,body,rev,updatedAt} as last loaded / saved
@@ -266,6 +278,12 @@
         h('div', { class: 'dc-side-head' }, [
           h('span', { class: 'dc-side-title', text: 'Documents' }),
           h('button', {
+            class: 'dc-btn dc-new-folder',
+            title: 'Nouveau dossier',
+            'aria-label': 'Nouveau dossier',
+            onclick: function () { newFolder(''); },
+          }, [icon('folder-plus')]),
+          h('button', {
             class: 'dc-btn dc-btn--primary dc-new',
             title: 'Nouveau document',
             onclick: function () { newDoc(); },
@@ -287,8 +305,8 @@
         for (var i = 0; i < 5; i++) list.appendChild(h('div', { class: 'dc-skel' }, [h('span', { class: 'dc-skel-bar' })]));
         return;
       }
-      var docs = DM().filterDocs(state.docs, state.filter);
-      if (!docs.length) {
+      var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter);
+      if (!rows.length) {
         list.appendChild(
           h('p', {
             class: 'dc-list-empty',
@@ -297,7 +315,12 @@
         );
         return;
       }
-      docs.forEach(function (d) {
+      rows.forEach(function (r) {
+        if (r.type === 'folder') {
+          list.appendChild(folderRow(r));
+          return;
+        }
+        var d = r.doc;
         var on = state.current && state.current.id === d.id;
         var more = h('button', {
           class: 'dc-item-more',
@@ -310,6 +333,7 @@
         }, [icon('dots')]);
         var row = h('div', {
           class: 'dc-item' + (on ? ' is-on' : ''),
+          style: 'padding-left:' + (8 + r.depth * 16) + 'px',
           role: 'option',
           'aria-selected': on ? 'true' : 'false',
           tabindex: '0',
@@ -335,6 +359,192 @@
         ]);
         list.appendChild(row);
       });
+    }
+
+    /* Folders */
+
+    function setFolderOpen(id, open) {
+      if (open) state.openFolders[id] = 1;
+      else delete state.openFolders[id];
+      remember(OPEN_KEY, JSON.stringify(state.openFolders));
+    }
+
+    function folderRow(r) {
+      var f = r.folder;
+      var more = h('button', {
+        class: 'dc-item-more',
+        title: 'Actions',
+        'aria-label': 'Actions du dossier',
+        onclick: function (e) {
+          e.stopPropagation();
+          openFolderMenu(more, f.id);
+        },
+      }, [icon('dots')]);
+      function toggle() {
+        setFolderOpen(f.id, !state.openFolders[f.id]);
+        paintList();
+      }
+      return h('div', {
+        class: 'dc-item dc-folder',
+        style: 'padding-left:' + (8 + r.depth * 16) + 'px',
+        role: 'treeitem',
+        'aria-expanded': r.open ? 'true' : 'false',
+        tabindex: '0',
+        'data-folder': f.id,
+        onclick: toggle,
+        onkeydown: function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+          }
+        },
+        oncontextmenu: function (e) {
+          e.preventDefault();
+          openFolderMenu(more, f.id);
+        },
+      }, [
+        icon(r.open ? 'chevron-down' : 'chevron-right', 'dc-folder-chev'),
+        icon(r.open ? 'folder-open' : 'folder', 'dc-item-icon'),
+        h('span', { class: 'dc-item-main' }, [h('span', { class: 'dc-item-title', text: f.name })]),
+        h('span', { class: 'dc-item-time', text: String(r.count) }),
+        more,
+      ]);
+    }
+
+    /** Runs a change of the folder tree on Trello, then repaints with the merged result. */
+    function editFolders(mutate, okMsg) {
+      return DT().updateFolderIndex(t, mutate).then(
+        function (idx) {
+          state.idx = idx;
+          paintList();
+          if (okMsg) toast(okMsg, 'ok');
+          return true;
+        },
+        function (err) {
+          failure(err);
+          return false;
+        }
+      );
+    }
+
+    function newFolder(parentId) {
+      dialog({ title: 'Nouveau dossier', text: parentId ? 'Dans « ' + DM().folderPath(state.idx, parentId) + ' »' : 'À la racine', input: '', ok: 'Créer' }).then(function (name) {
+        name = typeof name === 'string' ? DM().cleanFolderName(name) : '';
+        if (!name) return;
+        var id = DM().newFolderId();
+        editFolders(function (idx) {
+          var parent = parentId && DM().folderById(idx, parentId) ? parentId : null;
+          idx.folders.push({ id: id, name: name, parent: parent });
+        }).then(function (ok) {
+          if (!ok) return;
+          if (parentId) setFolderOpen(parentId, true);
+          paintList();
+        });
+      });
+    }
+
+    function renameFolder(id) {
+      var f = DM().folderById(state.idx, id);
+      if (!f) return;
+      dialog({ title: 'Renommer le dossier', text: DM().folderPath(state.idx, id), input: f.name, ok: 'Renommer' }).then(function (name) {
+        name = typeof name === 'string' ? DM().cleanFolderName(name) : '';
+        if (!name || name === f.name) return;
+        editFolders(function (idx) {
+          var x = DM().folderById(idx, id);
+          if (x) x.name = name;
+        });
+      });
+    }
+
+    function deleteFolder(id) {
+      var f = DM().folderById(state.idx, id);
+      if (!f) return;
+      dialog({
+        title: 'Supprimer le dossier « ' + f.name + ' » ?',
+        text: 'Les documents et sous-dossiers qu’il contient ne sont pas supprimés : ils remontent d’un niveau.',
+        ok: 'Supprimer',
+        danger: true,
+      }).then(function (yes) {
+        if (!yes) return;
+        editFolders(function (idx) { DM().removeFolderFrom(idx, id); }, 'Dossier supprimé.');
+      });
+    }
+
+    /** folderId '' = root. Refuses to put a folder inside itself. */
+    function moveFolder(id, parentId) {
+      editFolders(function (idx) {
+        var x = DM().folderById(idx, id);
+        if (!x || (parentId && !DM().folderById(idx, parentId)) || DM().isInsideFolder(idx, id, parentId)) return;
+        x.parent = parentId || null;
+      });
+    }
+
+    function moveDocToFolder(docId, folderId) {
+      editFolders(function (idx) {
+        if (folderId && DM().folderById(idx, folderId)) idx.docs[docId] = folderId;
+        else delete idx.docs[docId];
+      }).then(function (ok) {
+        if (ok && folderId) setFolderOpen(folderId, true);
+        if (ok) paintList();
+      });
+    }
+
+    /** Popover listing the root and every folder (optionally minus a folder's own subtree). */
+    function openFolderPicker(anchor, title, current, excludeId, onPick) {
+      closePop();
+      var idx = state.idx;
+      var items = [h('div', { class: 'dc-pop-sub', text: title })];
+      function opt(label, id, depth) {
+        items.push(h('button', {
+          class: 'dc-menu-item' + (id === current ? ' is-on' : ''),
+          type: 'button',
+          style: 'padding-left:' + (10 + depth * 14) + 'px',
+          onclick: function () {
+            closePop();
+            if (id !== current) onPick(id);
+          },
+        }, [icon(id ? 'folder' : 'home'), h('span', { text: label })]));
+      }
+      opt('Racine (aucun dossier)', '', 0);
+      (function walk(pid, depth) {
+        idx.folders
+          .filter(function (f) { return (f.parent || '') === pid; })
+          .sort(function (a, b) { return a.name.localeCompare(b.name); })
+          .forEach(function (f) {
+            if (excludeId && DM().isInsideFolder(idx, excludeId, f.id)) return;
+            opt(f.name, f.id, depth + 1);
+            walk(f.id, depth + 1);
+          });
+      })('', 0);
+      pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, items);
+      placePop(pop, anchor.getBoundingClientRect());
+    }
+
+    function openFolderMenu(anchor, folderId) {
+      closePop();
+      function item(iconName, label, run, danger) {
+        return h('button', {
+          class: 'dc-menu-item' + (danger ? ' is-danger' : ''),
+          type: 'button',
+          onclick: function () {
+            closePop();
+            run();
+          },
+        }, [icon(iconName), h('span', { text: label })]);
+      }
+      var f = DM().folderById(state.idx, folderId);
+      if (!f) return;
+      pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, [
+        item('file-plus', 'Nouveau document ici', function () { newDoc(null, null, folderId); }),
+        item('folder-plus', 'Nouveau sous-dossier', function () { newFolder(folderId); }),
+        item('pencil', 'Renommer…', function () { renameFolder(folderId); }),
+        item('folder-share', 'Déplacer vers…', function () {
+          openFolderPicker(anchor, 'Déplacer le dossier vers', f.parent || '', folderId, function (to) { moveFolder(folderId, to); });
+        }),
+        h('div', { class: 'dc-menu-sep' }),
+        item('trash', 'Supprimer…', function () { deleteFolder(folderId); }, true),
+      ]);
+      placePop(pop, anchor.getBoundingClientRect());
     }
 
     function touchListItem(id, patch) {
@@ -1510,6 +1720,9 @@
         item('copy', 'Dupliquer', function () { duplicateDoc(docId); }),
         item('download', 'Télécharger (.md)', function () { exportDoc(docId, 'download'); }),
         item('clipboard', 'Copier en Markdown', function () { exportDoc(docId, 'copy'); }),
+        item('folder-share', 'Déplacer vers un dossier…', function () {
+          openFolderPicker(anchor, 'Déplacer le document vers', state.idx.docs[docId] || '', '', function (to) { moveDocToFolder(docId, to); });
+        }),
         h('div', { class: 'dc-menu-sep' }),
         item('trash', 'Supprimer…', function () { confirmDelete(docId); }, true),
       ]);
@@ -1524,16 +1737,19 @@
           resolve(v);
         }
         var cancel = h('button', { class: 'dc-btn', type: 'button', onclick: function () { done(false); } }, [opts.cancel || 'Annuler']);
-        var ok = h('button', { class: 'dc-btn ' + (opts.danger ? 'dc-btn--danger' : 'dc-btn--primary'), type: 'button', onclick: function () { done(true); } }, [opts.ok || 'OK']);
+        var field = opts.input != null ? h('input', { class: 'dc-dialog-input', type: 'text', maxlength: String(DM().MAX_FOLDER_NAME), value: opts.input }) : null;
+        var ok = h('button', { class: 'dc-btn ' + (opts.danger ? 'dc-btn--danger' : 'dc-btn--primary'), type: 'button', onclick: function () { done(field ? field.value : true); } }, [opts.ok || 'OK']);
+        if (field) field.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); done(field.value); } });
         overlay.appendChild(h('div', { class: 'dc-dialog' }, [
           h('h2', { class: 'dc-dialog-title', text: opts.title }),
           h('p', { class: 'dc-dialog-text', text: opts.text }),
+          field,
           h('div', { class: 'dc-dialog-actions' }, [cancel, ok]),
         ]));
         overlay.addEventListener('keydown', function (e) { if (e.key === 'Escape') done(false); });
         overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) done(false); });
         shell.appendChild(overlay);
-        (opts.danger ? cancel : ok).focus();
+        (field || (opts.danger ? cancel : ok)).focus();
       });
     }
 
@@ -1729,7 +1945,7 @@
       }
     }
 
-    function newDoc(title, body) {
+    function newDoc(title, body, folderId) {
       if (state.busy) return;
       var go = state.current ? saveNow() : Promise.resolve(true);
       go.then(function () {
@@ -1743,6 +1959,10 @@
             sortDocs();
             state.filter = '';
             els.search.value = '';
+            if (folderId) {
+              setFolderOpen(folderId, true);
+              moveDocToFolder(doc.id, folderId);
+            }
             openDoc(doc.id, { skipSave: true, focusTitle: !title });
           },
           function (err) {
@@ -1885,6 +2105,7 @@
       return DT().listDocs(t).then(function (docs) {
         var openId = state.current && state.current.id;
         state.docs = docs;
+        state.idx = DT().getFolderIndex();
         paintList();
         rebuildIndex();
         if (!openId) return;
@@ -2135,6 +2356,7 @@
         }).then(
           function (docs) {
             state.docs = docs;
+            state.idx = DT().getFolderIndex();
             state.docsLoaded = true;
             paintList();
             rebuildIndex();
