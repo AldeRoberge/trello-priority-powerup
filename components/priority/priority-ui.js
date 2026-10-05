@@ -11064,10 +11064,12 @@
         } catch (e) {
           text = genericRowSummary(value);
         }
-        text = String(text || '').trim();
-        summary.textContent = text || ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
-        summary.classList.toggle('is-empty', !text);
-        summary.title = text;
+        var isNode = !!(text && text.nodeType);
+        var plain = isNode ? (text.textContent || '').trim() : String(text || '').trim();
+        if (isNode && plain) summary.replaceChildren(text);
+        else summary.textContent = plain || ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
+        summary.classList.toggle('is-empty', !plain);
+        summary.title = plain;
       }
 
       function setCollapsed(next, persist) {
@@ -11620,9 +11622,51 @@
     rowSummaries.title = function () {
       return titleInput.classList.contains('is-loading') ? '' : titleInput.value;
     };
+    function mountText(mount, selectors) {
+      for (var i = 0; i < selectors.length; i++) {
+        var el = mount.querySelector(selectors[i]);
+        var t = el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : '';
+        if (t) return t;
+      }
+      return '';
+    }
+    // Folded-row summary: bold main text + muted details, e.g. « Importante · 5.0 ».
+    function richSummary(main, details) {
+      if (!main) return '';
+      var frag = document.createDocumentFragment();
+      var mainEl = document.createElement('span');
+      mainEl.className = 'info-row-summary-main';
+      mainEl.textContent = main;
+      frag.appendChild(mainEl);
+      (details || []).filter(Boolean).forEach(function (d) {
+        var sep = document.createElement('span');
+        sep.className = 'info-row-summary-sep';
+        sep.textContent = '·';
+        sep.setAttribute('aria-hidden', 'true');
+        var sub = document.createElement('span');
+        sub.className = 'info-row-summary-sub';
+        sub.textContent = d;
+        frag.appendChild(sep);
+        frag.appendChild(sub);
+      });
+      return frag;
+    }
     rowSummaries.priority = function () {
-      var badge = priorityInline.mount.querySelector('.heat-badge');
-      return badge ? genericRowSummary(badge) : '';
+      var m = priorityInline.mount;
+      var score = mountText(m, ['.heat-badge-num-val']);
+      var label = mountText(m, ['.priority-summary-label', '.heat-badge-label']);
+      return label ? richSummary(label, [score]) : score;
+    };
+    rowSummaries.progress = function () {
+      var m = progressInline.mount;
+      var status = mountText(m, ['.statut-summary-label', '.statut-embedded-summary']);
+      var pct = /(\d+)\s*%/.exec(m.textContent || '');
+      return richSummary(status || (pct ? 'Progrès' : ''), [
+        pct ? pct[1] + ' %' : ''
+      ]);
+    };
+    rowSummaries.due = function () {
+      return mountText(dueInline.mount, ['.due-summary-label']);
     };
     rowSummaries.desc = function () {
       var text = (descInput.value || '')
@@ -11634,7 +11678,11 @@
     rowSummaries.members = function () {
       var names = Array.prototype.map
         .call(membersEl.children, function (c) {
-          return (c.textContent || '').replace(/\s+/g, ' ').trim();
+          var clone = c.cloneNode(true);
+          Array.prototype.forEach.call(clone.querySelectorAll('button'), function (n) {
+            n.remove();
+          });
+          return (clone.textContent || '').replace(/[\s×]+$/, '').replace(/\s+/g, ' ').trim();
         })
         .filter(Boolean);
       return names.join(', ');

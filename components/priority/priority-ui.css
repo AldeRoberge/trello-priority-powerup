@@ -10042,16 +10042,47 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   outline-offset: 2px;
 }
 
+/* Folded rows: fixed label column so every summary shares one left edge. */
+.info-row.is-collapsible.is-collapsed > .info-row-label .info-row-label-text {
+  flex: 0 0 5.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .info-row-summary {
   flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.info-row-summary-main {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-left: 6px;
-  font-size: 13px;
+}
+
+.info-row-summary-sep {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.info-row-summary-sub {
+  flex: 0 0 auto;
   font-weight: 500;
-  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
 }
 
 .info-row-summary[hidden] {
