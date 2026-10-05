@@ -15,7 +15,6 @@
   var MENU = function () { return global.TableMenu; };
 
   var URGENCY_TONE = { Aucun: 0, 'Bientôt': 1, 'Assez vite': 2, Vite: 3, 'Au plus vite': 4 };
-  var HIDE_DONE_KEY = 'tp-kanban-hide-done';
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -54,14 +53,12 @@
   }
 
   function mount(root, t) {
-    function readHideDone() {
-      try { return global.localStorage.getItem(HIDE_DONE_KEY) === '1'; } catch (e) { return false; }
-    }
+    var HD = global.HideDone;
     var state = {
       lists: [],
       rows: [],
       filter: '',
-      hideDone: readHideDone(),
+      hideDone: HD.get(),
       authOk: true,
       dragId: null,
       composer: null, // list id with the open "add card" composer
@@ -233,20 +230,15 @@
       [
         h('label', { class: 'kb-search' }, [icon('search'), filter]),
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
-        btn(state.hideDone ? 'eye-off' : 'eye', state.hideDone ? 'Terminées masquées' + (done ? ' (' + done + ')' : '') : 'Terminées', {
-          active: state.hideDone,
-          title: state.hideDone ? 'Afficher les cartes terminées' : 'Masquer les cartes terminées',
-          onclick: function () {
-            state.hideDone = !state.hideDone;
-            try { global.localStorage.setItem(HIDE_DONE_KEY, state.hideDone ? '1' : '0'); } catch (e) { /* ignore */ }
-            renderBar();
-            renderBoard();
-          },
-        }),
-        HP ? HP.button(document.body) : null,
         h('span', { class: 'kb-status' }),
         h('span', { class: 'kb-spacer' }),
         h('span', { class: 'kb-count', 'aria-live': 'polite' }),
+        btn(HD.icon(state.hideDone), HD.label(state.hideDone, done), {
+          active: state.hideDone,
+          title: HD.title(state.hideDone),
+          onclick: function () { HD.set(!state.hideDone); },
+        }),
+        HP ? HP.button(document.body) : null,
       ].forEach(function (c) { els.bar.appendChild(c); });
       paintStatus();
       paintCount();
@@ -577,6 +569,11 @@
       });
     }
 
+    HD.subscribe(function (on) {
+      state.hideDone = on;
+      renderBar();
+      renderBoard();
+    });
     renderBar();
     els.board.innerHTML = skeletonCols();
     return reload({ quiet: true });

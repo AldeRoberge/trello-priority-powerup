@@ -297,6 +297,7 @@
     EDGE_LABELS: EDGE_LABELS,
     PLACE_EDGES: PLACE_EDGES,
     buildGraph: buildGraph,
+    isClosed: isClosed,
     findCycles: findCycles,
     wouldCycle: wouldCycle,
     neighbours: neighbours,

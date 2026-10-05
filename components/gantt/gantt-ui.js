@@ -377,7 +377,7 @@
       cardsById: Object.create(null),
       expanded: Object.create(null),
       selected: Object.create(null),
-      hideCompleted: storedFilters.hideCompleted,
+      hideCompleted: global.HideDone ? global.HideDone.get() : storedFilters.hideCompleted,
       hideUndated: storedFilters.hideUndated,
       hideBlocked: storedFilters.hideBlocked,
       sortKeys: storedFilters.sortKeys,
@@ -416,6 +416,7 @@
     };
 
     function persistFilters() {
+      if (global.HideDone) global.HideDone.set(state.hideCompleted);
       storeFilters({
         hideCompleted: state.hideCompleted,
         hideUndated: state.hideUndated,
@@ -515,6 +516,23 @@
       if (filterPanel) filterPanel.refresh();
       if (sortPanel) sortPanel.refresh();
       if (summaryBar) summaryBar.refresh();
+      refreshHideDoneBtn();
+    }
+
+    var hideDoneBtn = null;
+    /** The shared "Terminées" button follows the option however it was toggled (panel, menu, chips). */
+    function refreshHideDoneBtn() {
+      var HD = global.HideDone;
+      if (!HD || !hideDoneBtn) return;
+      var on = !!state.hideCompleted;
+      hideDoneBtn.classList.toggle('is-active', on);
+      hideDoneBtn.title = HD.title(on);
+      hideDoneBtn.innerHTML = '';
+      var i = document.createElement('i');
+      i.className = 'ti ti-' + HD.icon(on);
+      i.setAttribute('aria-hidden', 'true');
+      hideDoneBtn.appendChild(i);
+      hideDoneBtn.appendChild(document.createTextNode(HD.label(on)));
     }
 
     /** Filters changed: save, redraw the rows, keep every control in sync. */
@@ -913,6 +931,14 @@
       });
     }
     var histBtn = HP ? HP.button(document.body) : null;
+    if (global.HideDone) {
+      global.HideDone.subscribe(function (on) {
+        if (state.hideCompleted === on) return;
+        state.hideCompleted = on;
+        renderChart();
+        refreshFilterUi();
+      });
+    }
 
     function range() {
       return model.viewRange(state.viewMode, state.anchor);
@@ -1363,6 +1389,21 @@
         reload();
       });
       filters.appendChild(refresh);
+      var HD = global.HideDone;
+      if (HD) {
+        var hdBtn = makeIconBtn(
+          'gantt-btn' + (state.hideCompleted ? ' is-active' : ''),
+          'ti-' + HD.icon(state.hideCompleted),
+          HD.label(state.hideCompleted),
+          function () {
+            state.hideCompleted = !state.hideCompleted;
+            onFiltersChanged();
+          }
+        );
+        hdBtn.title = HD.title(state.hideCompleted);
+        hideDoneBtn = hdBtn;
+        filters.appendChild(hdBtn);
+      }
       if (histBtn) filters.appendChild(histBtn);
       toolbar.appendChild(filters);
     }

@@ -14,7 +14,6 @@
 
   var MM = function () { return global.MindmapModel; };
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var HIDE_DONE_KEY = 'tp-mindmap-hide-done';
   var TASK_W = 168;
   var TASK_H = 34;
 
@@ -61,13 +60,11 @@
   }
 
   function mount(root, t) {
-    function readHideDone() {
-      try { return global.localStorage.getItem(HIDE_DONE_KEY) === '1'; } catch (e) { return false; }
-    }
+    var HD = global.HideDone;
     var state = {
       records: [],
       filter: '',
-      hideDone: readHideDone(),
+      hideDone: HD.get(),
       show: { depends: true, by: true, at: true },
       graph: { nodes: [], edges: [] },
       cycles: {},
@@ -161,14 +158,6 @@
         toggle('by', 'user', 'Personnes'),
         toggle('at', 'map-pin', 'Lieux'),
         h('button', {
-          class: 'mm-btn' + (state.hideDone ? ' is-active' : ''), 'aria-pressed': state.hideDone ? 'true' : 'false',
-          onclick: function () {
-            state.hideDone = !state.hideDone;
-            try { global.localStorage.setItem(HIDE_DONE_KEY, state.hideDone ? '1' : '0'); } catch (e) { /* ignore */ }
-            rebuild({ relayout: true });
-          },
-        }, [icon('eye-off'), 'Masquer terminées']),
-        h('button', {
           class: 'mm-btn' + (state.linkFrom ? ' is-active' : ''),
           title: 'Choisir une tâche, puis cliquer la tâche dont elle dépend',
           onclick: function () {
@@ -184,6 +173,12 @@
         kids.push(h('span', { class: 'mm-status' + (state.statusKind ? ' is-' + state.statusKind : '') }, [state.status]));
       }
       kids.push(h('span', { class: 'mm-count' }, [tasks + (tasks > 1 ? ' tâches' : ' tâche')]));
+      var doneCount = state.records.filter(function (r) { return MM().isClosed(r); }).length;
+      kids.push(h('button', {
+        class: 'mm-btn' + (state.hideDone ? ' is-active' : ''), 'aria-pressed': state.hideDone ? 'true' : 'false',
+        title: HD.title(state.hideDone),
+        onclick: function () { HD.set(!state.hideDone); },
+      }, [icon(HD.icon(state.hideDone)), HD.label(state.hideDone, doneCount)]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Recentrer', 'aria-label': 'Recentrer', onclick: fit }, [icon('focus-2')]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Réorganiser', 'aria-label': 'Réorganiser', onclick: function () { rebuild({ relayout: true, fresh: true }); } }, [icon('layout-grid')]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Actualiser', 'aria-label': 'Actualiser', onclick: function () { reload(); } }, [icon('refresh')]));
@@ -645,6 +640,10 @@
       });
     }
 
+    HD.subscribe(function (on) {
+      state.hideDone = on;
+      rebuild({ relayout: true });
+    });
     renderBar();
     return reload();
   }

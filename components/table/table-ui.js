@@ -71,11 +71,7 @@
   }
 
   function mount(root, t) {
-    var HIDE_DONE_KEY = 'tp-table-hide-done';
-    function readHideDone() {
-      // Hidden unless the user explicitly chose to show completed cards.
-      try { return global.localStorage.getItem(HIDE_DONE_KEY) !== '0'; } catch (e) { return true; }
-    }
+    var HD = global.HideDone;
     var state = {
       lists: [],
       rows: [],
@@ -84,7 +80,7 @@
       sheetTheme: 'light',
       sorts: [], // [{key, dir}] — first is the main sort, the rest break ties
       filter: '',
-      hideDone: readHideDone(),
+      hideDone: HD.get(),
       categoryFieldId: null,
       categoryAvailable: false,
       sheet: null,
@@ -193,7 +189,7 @@
     /* ── Helpers ───────────────────────────────────────────────────── */
     function visibleRows() {
       var rows = TM().filterRows(state.rows, state.filter);
-      if (state.hideDone) rows = rows.filter(function (r) { return r.statutKey !== 'completed'; });
+      if (state.hideDone) rows = rows.filter(function (r) { return r.statutKey !== 'completed' && r.statutKey !== 'canceled'; });
       if (state.sorts.length) rows = TM().sortRowsMulti(rows, state.sorts, { lists: state.lists });
       return rows;
     }
@@ -301,19 +297,6 @@
           },
         }),
       ];
-      var doneCount = state.rows.filter(function (r) { return r.statutKey === 'completed'; }).length;
-      kids.push(
-        btn(state.hideDone ? 'eye-off' : 'eye', state.hideDone ? 'Terminées masquées' + (doneCount ? ' (' + doneCount + ')' : '') : 'Terminées', {
-          active: state.hideDone,
-          title: state.hideDone ? 'Afficher les cartes terminées' : 'Masquer les cartes terminées',
-          onclick: function () {
-            state.hideDone = !state.hideDone;
-            try { global.localStorage.setItem(HIDE_DONE_KEY, state.hideDone ? '1' : '0'); } catch (e) { /* ignore */ }
-            renderBar();
-            renderGrid();
-          },
-        })
-      );
       if (state.sorts.length) {
         kids.push(btn(state.sorts[0].dir === 'asc' ? 'sort-ascending' : 'sort-descending', 'Tri : ' + state.sorts.map(function (s) {
           return TM().COLUMNS[s.key].header + (s.dir === 'asc' ? ' ↑' : ' ↓');
@@ -325,6 +308,22 @@
       kids.push(h('span', { class: 'tb-status' }));
       kids.push(h('span', { class: 'tb-spacer' }));
       kids.push(h('span', { class: 'tb-count', 'aria-live': 'polite' }));
+      var doneCount = state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
+      kids.push(
+        btn(HD.icon(state.hideDone), HD.label(state.hideDone, doneCount), {
+          active: state.hideDone,
+          title: HD.title(state.hideDone),
+          onclick: function () { HD.set(!state.hideDone); },
+        })
+      );
+      var doneCount = state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
+      kids.push(
+        btn(HD.icon(state.hideDone), HD.label(state.hideDone, doneCount), {
+          active: state.hideDone,
+          title: HD.title(state.hideDone),
+          onclick: function () { HD.set(!state.hideDone); },
+        })
+      );
       var histBtn = btn('history', 'Historique', { active: state.drawer === 'history', title: 'Tout ce qui a été modifié depuis ce tableau, avec annulation', onclick: function () { openDrawer('history'); } });
       histBtn.appendChild(h('span', { class: 'tb-badge tb-badge--soft', hidden: !(HP && HP.count()), text: String(Math.min(HP ? HP.count() : 0, 99)) }));
       kids.push(histBtn);
@@ -1701,6 +1700,11 @@
       }
     });
 
+    HD.subscribe(function (on) {
+      state.hideDone = on;
+      renderBar();
+      renderGrid();
+    });
     renderBar();
     renderDock();
     setInterval(loadAlerts, 30000);
