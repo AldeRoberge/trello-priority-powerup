@@ -14,7 +14,12 @@
 .vt-tabs {
   display: flex;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.vt-tabs::-webkit-scrollbar { display: none; }
 .vt-tab {
   display: inline-flex;
   align-items: center;
@@ -27,6 +32,8 @@
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
+  flex: none;
+  white-space: nowrap;
 }
 .vt-tab:hover {
   color: var(--tp-text);
@@ -40,4 +47,9 @@
 }
 .vt-tab .ti {
   font-size: 16px;
+}
+/* Narrow modal: inactive tabs collapse to their icon so every view stays reachable. */
+@media (max-width: 640px) {
+  .vt-tab:not(.is-on) { padding-left: 10px; padding-right: 10px; font-size: 0; gap: 0; }
+  .vt-tab:not(.is-on) .ti { font-size: 18px; }
 }

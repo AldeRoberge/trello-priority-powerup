@@ -3,7 +3,7 @@
  * Trello modal. Switching navigates the iframe to the sibling page and keeps the query/hash that
  * carry the Trello iframe context, so the handshake works on the new page.
  *
- *   ViewTabs.mount(el, { active: 'gantt' | 'table' | 'kanban' | 'docs' | 'entities' })
+ *   ViewTabs.mount(el, { active: 'gantt' | 'table' | 'kanban' | 'mindmap' | 'docs' | 'entities' } — one list (VIEWS) for every page; add a view there only)
  */
 (function (global) {
   'use strict';
@@ -38,6 +38,7 @@
       a.className = 'vt-tab' + (v.key === active ? ' is-on' : '');
       a.setAttribute('role', 'tab');
       a.setAttribute('aria-selected', v.key === active ? 'true' : 'false');
+      a.title = v.label;
       a.href = hrefFor(v.page, global.location);
       var i = document.createElement('i');
       i.className = 'ti ti-' + v.icon;
@@ -53,6 +54,8 @@
       nav.appendChild(a);
     });
     container.appendChild(nav);
+    var on = nav.querySelector('.is-on');
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     return nav;
   }
 

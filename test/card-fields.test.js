@@ -58,3 +58,15 @@ test('ViewTabs.hrefFor keeps the Trello iframe context (search + hash)', () => {
   assert.equal(VT.hrefFor('./gantt.html', loc), 'https://x.github.io/app/gantt.html?a=1#%7B%22ctx%22%3A1%7D');
   assert.deepEqual([...VT.VIEWS.map((v) => v.key)], ['gantt', 'table', 'kanban', 'mindmap', 'docs', 'entities']);
 });
+
+test('every ViewTabs view page uses the shared tab strip (no page can lose a tab)', () => {
+  const root = path.join(__dirname, '..');
+  for (const v of VT.VIEWS) {
+    const file = path.join(root, v.page);
+    assert.ok(fs.existsSync(file), v.page + ' exists');
+    const html = fs.readFileSync(file, 'utf8');
+    assert.match(html, /components\/shared\/view-tabs\.js/, v.page + ' loads view-tabs.js');
+    assert.match(html, /components\/shared\/view-tabs\.css/, v.page + ' loads view-tabs.css');
+    assert.ok(html.includes("ViewTabs.mount(document.getElementById('viewTabs'), { active: '" + v.key + "' })"), v.page + ' mounts with its own key');
+  }
+});
