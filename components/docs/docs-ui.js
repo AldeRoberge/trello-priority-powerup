@@ -73,6 +73,28 @@
     }
   }
 
+  var SORT_KEY = 'cerveau.docs.sort';
+  function loadSort() {
+    var v = recall(SORT_KEY);
+    return DM().SORTS.indexOf(v) >= 0 ? v : 'date';
+  }
+  var SORT_LABELS = [
+    ['date', 'Modifié récemment'],
+    ['date-asc', 'Modifié il y a longtemps'],
+    ['name', 'Nom A → Z'],
+    ['name-desc', 'Nom Z → A'],
+    ['size', 'Taille (plus long d’abord)'],
+    ['size-asc', 'Taille (plus court d’abord)'],
+  ];
+
+  function sizeLabel(n) {
+    n = n || 0;
+    return (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + ' k' : String(n)) + ' car.';
+  }
+
+  /** Drag payload: {kind:'doc'|'folder', id} */
+  var DRAG_TYPE = 'application/x-cerveau-docs';
+
   function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -119,6 +141,7 @@
       docs: [],
       idx: DM().emptyIndex(), // folder tree (DocsModel "Folders")
       openFolders: loadOpenFolders(),
+      sort: loadSort(),
       docsLoaded: false,
       filter: '',
       current: null, // {id,title,body,rev,updatedAt} as last loaded / saved
@@ -279,6 +302,12 @@
           h('span', { class: 'dc-side-title', text: 'Documents' }),
           h('button', {
             class: 'dc-btn dc-new-folder',
+            title: 'Trier',
+            'aria-label': 'Trier les documents',
+            onclick: function (e) { openListMenu(e.currentTarget.getBoundingClientRect(), true); },
+          }, [icon('arrows-sort')]),
+          h('button', {
+            class: 'dc-btn dc-new-folder',
             title: 'Nouveau dossier',
             'aria-label': 'Nouveau dossier',
             onclick: function () { newFolder(''); },
@@ -296,6 +325,58 @@
       });
       els.side.appendChild(h('label', { class: 'dc-search' }, [icon('search'), els.search]));
       els.side.appendChild(els.sideList);
+      // empty area of the list: drop = move to the root, right-click = create / sort menu
+      els.sideList.addEventListener('dragover', function (e) {
+        if (e.dataTransfer.types.indexOf(DRAG_TYPE) < 0) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropMarks();
+        els.sideList.classList.add('is-drop-root');
+      });
+      els.sideList.addEventListener('dragleave', function (e) {
+        if (!e.relatedTarget || !els.sideList.contains(e.relatedTarget)) clearDropMarks();
+      });
+      els.sideList.addEventListener('drop', function (e) {
+        dropInto(e, '');
+      });
+      els.sideList.addEventListener('contextmenu', function (e) {
+        if (e.target.closest && e.target.closest('.dc-item')) return;
+        e.preventDefault();
+        openListMenu({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY });
+      });
+    }
+
+    function setSort(mode) {
+      state.sort = mode;
+      remember(SORT_KEY, mode);
+      paintList();
+    }
+
+    /** Create + sort menu: right-click on the empty list area, or the sort button (anchor rect). */
+    function openListMenu(rect, sortOnly) {
+      closePop();
+      var items = [];
+      function item(iconName, label, run, checked) {
+        return h('button', {
+          class: 'dc-menu-item' + (checked ? ' is-on' : ''),
+          type: 'button',
+          onclick: function () {
+            closePop();
+            run();
+          },
+        }, [icon(checked ? 'check' : iconName), h('span', { text: label })]);
+      }
+      if (!sortOnly) {
+        items.push(item('file-plus', 'Nouveau document', function () { newDoc(); }));
+        items.push(item('folder-plus', 'Nouveau dossier', function () { newFolder(''); }));
+        items.push(h('div', { class: 'dc-menu-sep' }));
+      }
+      items.push(h('div', { class: 'dc-pop-sub', text: 'Trier par' }));
+      SORT_LABELS.forEach(function (s) {
+        items.push(item('arrows-sort', s[1], function () { setSort(s[0]); }, state.sort === s[0]));
+      });
+      pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, items);
+      placePop(pop, rect);
     }
 
     function paintList() {
@@ -305,7 +386,7 @@
         for (var i = 0; i < 5; i++) list.appendChild(h('div', { class: 'dc-skel' }, [h('span', { class: 'dc-skel-bar' })]));
         return;
       }
-      var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter);
+      var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter, state.sort);
       if (!rows.length) {
         list.appendChild(
           h('p', {
@@ -353,10 +434,11 @@
           icon('file-text', 'dc-item-icon'),
           h('span', { class: 'dc-item-main' }, [
             h('span', { class: 'dc-item-title', text: d.title }),
-            h('span', { class: 'dc-item-time', text: DM().relativeTime(d.updatedAt) }),
+            h('span', { class: 'dc-item-time', text: DM().relativeTime(d.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(d.size) : '') }),
           ]),
           more,
         ]);
+        wireDrag(row, 'doc', d.id, state.idx.docs[d.id] || '');
         list.appendChild(row);
       });
     }
@@ -384,7 +466,7 @@
         setFolderOpen(f.id, !state.openFolders[f.id]);
         paintList();
       }
-      return h('div', {
+      var row = h('div', {
         class: 'dc-item dc-folder',
         style: 'padding-left:' + (8 + r.depth * 16) + 'px',
         role: 'treeitem',
@@ -409,6 +491,66 @@
         h('span', { class: 'dc-item-time', text: String(r.count) }),
         more,
       ]);
+      wireDrag(row, 'folder', f.id, f.id);
+      return row;
+    }
+
+    /* Drag and drop: documents and folders can be dropped on a folder (move into it), on a document
+     * (move next to it, i.e. into its folder) or on the empty list area (move to the root). */
+
+    function readDrag(e) {
+      try {
+        var p = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || 'null');
+        return p && p.id ? p : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function clearDropMarks() {
+      Array.prototype.forEach.call(els.sideList.querySelectorAll('.is-drop'), function (n) { n.classList.remove('is-drop'); });
+      els.sideList.classList.remove('is-drop-root');
+    }
+
+    function dropInto(e, folderId) {
+      var p = readDrag(e);
+      clearDropMarks();
+      if (!p) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (p.kind === 'folder') {
+        if (folderId !== p.id && (DM().folderById(state.idx, p.id) || {}).parent !== (folderId || null)) moveFolder(p.id, folderId);
+      } else if ((state.idx.docs[p.id] || '') !== folderId) {
+        moveDocToFolder(p.id, folderId);
+      }
+    }
+
+    /**
+     * @param {string} dropFolder folder a drop on this row lands in ('' = root): the folder itself for a
+     *   folder row, the document's own folder for a document row
+     */
+    function wireDrag(row, kind, id, dropFolder) {
+      row.setAttribute('draggable', 'true');
+      row.addEventListener('dragstart', function (e) {
+        closePop();
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: kind, id: id }));
+        e.dataTransfer.setData('text/plain', '');
+      });
+      row.addEventListener('dragend', clearDropMarks);
+      row.addEventListener('dragover', function (e) {
+        if (e.dataTransfer.types.indexOf(DRAG_TYPE) < 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropMarks();
+        var target = dropFolder ? els.sideList.querySelector('[data-folder="' + dropFolder + '"]') : null;
+        if (target) target.classList.add('is-drop');
+        else els.sideList.classList.add('is-drop-root');
+      });
+      row.addEventListener('drop', function (e) {
+        dropInto(e, dropFolder);
+      });
     }
 
     /** Runs a change of the folder tree on Trello, then repaints with the merged result. */
@@ -2034,7 +2176,7 @@
             cur.body = md;
             lastMd = md;
             histBodySaved();
-            touchListItem(cur.id, { updatedAt: res.updatedAt });
+            touchListItem(cur.id, { updatedAt: res.updatedAt, size: md.length });
           });
         });
       }
@@ -2249,7 +2391,7 @@
         return pre.then(function () { return DT().loadDoc(t, id); }).then(function (doc) {
           return DT().saveDoc(t, { id: id, body: val, rev: doc.rev }, { force: true });
         }).then(function (res) {
-          touchListItem(id, { updatedAt: res.updatedAt });
+          touchListItem(id, { updatedAt: res.updatedAt, size: String(val || '').length });
           if (isCur) return openDoc(id, { reload: true, skipSave: true });
         });
       }

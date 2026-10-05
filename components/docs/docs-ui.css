@@ -263,6 +263,18 @@ html[data-color-mode="dark"] .dc-root {
   font-size: 14px;
   color: var(--tp-text-muted);
 }
+.dc-item.is-drop {
+  background: color-mix(in srgb, var(--tp-primary) 22%, transparent);
+  outline: 2px dashed var(--tp-primary);
+  outline-offset: -2px;
+}
+.dc-list.is-drop-root {
+  outline: 2px dashed var(--tp-primary);
+  outline-offset: -3px;
+}
+.dc-list {
+  min-height: 80px;
+}
 .dc-new-folder {
   padding: 5px 7px;
 }

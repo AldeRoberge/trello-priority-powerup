@@ -1101,13 +1101,38 @@
     return idx;
   }
 
+  var SORTS = ['date', 'date-asc', 'name', 'name-desc', 'size', 'size-asc'];
+
+  function docComparator(sort) {
+    function byName(a, b) {
+      var x = fold(a.title);
+      var y = fold(b.title);
+      return x < y ? -1 : x > y ? 1 : 0;
+    }
+    function byDate(a, b) {
+      return a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0;
+    }
+    function bySize(a, b) {
+      return (a.size || 0) - (b.size || 0);
+    }
+    switch (sort) {
+      case 'date-asc': return byDate;
+      case 'name': return byName;
+      case 'name-desc': return function (a, b) { return byName(b, a); };
+      case 'size': return function (a, b) { return bySize(b, a) || byName(a, b); };
+      case 'size-asc': return function (a, b) { return bySize(a, b) || byName(a, b); };
+      default: return function (a, b) { return byDate(b, a); };
+    }
+  }
+
   /**
    * Flat list of sidebar rows, depth-first, folders before documents (A→Z), documents keeping their order.
    * With a query only matching documents show, inside their (force-opened) ancestor folders.
    * @param {Set|Object} open map/set of expanded folder ids
+   * @param {string} [sort] one of SORTS (default 'date'); folders follow the name order, A→Z unless 'name-desc'
    * @returns {{type:'folder'|'doc', depth:number, folder?:object, doc?:object, count?:number, open?:boolean}[]}
    */
-  function folderRows(docs, idx, open, query) {
+  function folderRows(docs, idx, open, query, sort) {
     var q = fold(String(query || '').trim());
     var isOpen = function (id) { return q ? true : !!(open && (open.has ? open.has(id) : open[id])); };
     var byFolder = {};
@@ -1124,18 +1149,20 @@
       if ((byFolder[fid] || []).some(function (d) { return fold(d.title).indexOf(q) >= 0; })) return true;
       return idx.folders.some(function (f) { return f.parent === fid && matchesIn(f.id); });
     }
+    var cmp = docComparator(sort);
+    var dir = sort === 'name-desc' ? -1 : 1;
     var rows = [];
     function walk(fid, depth) {
       idx.folders
         .filter(function (f) { return (f.parent || '') === fid; })
-        .sort(function (a, b) { return fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0; })
+        .sort(function (a, b) { return dir * (fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0); })
         .forEach(function (f) {
           if (q && !matchesIn(f.id)) return;
           var o = isOpen(f.id);
           rows.push({ type: 'folder', depth: depth, folder: f, count: countIn(f.id), open: o });
           if (o) walk(f.id, depth + 1);
         });
-      (byFolder[fid] || []).forEach(function (d) {
+      (byFolder[fid] || []).slice().sort(cmp).forEach(function (d) {
         if (q && fold(d.title).indexOf(q) < 0) return;
         rows.push({ type: 'doc', depth: depth, doc: d });
       });
@@ -1175,6 +1202,7 @@
     folderPath: folderPath,
     removeFolderFrom: removeFolderFrom,
     folderRows: folderRows,
+    SORTS: SORTS,
     DEFAULT_TITLE: DEFAULT_TITLE,
     DEFAULT_BODY: DEFAULT_BODY,
     NAME_PREFIX: NAME_PREFIX,

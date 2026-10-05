@@ -134,7 +134,7 @@
         return c && c.id && DM().isDocName(c.name);
       })
       .map(function (c) {
-        return { id: String(c.id), title: DM().titleFromName(c.name), updatedAt: c.dateLastActivity || '' };
+        return { id: String(c.id), title: DM().titleFromName(c.name), updatedAt: c.dateLastActivity || '', size: DM().unpackDesc(c.desc).body.length };
       })
       .sort(function (a, b) {
         return a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0;
