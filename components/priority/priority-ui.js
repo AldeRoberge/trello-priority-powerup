@@ -11042,8 +11042,44 @@
       return (clone.textContent || '').replace(/\s+/g, ' ').trim();
     }
 
+    // Folded rows with no value sink below the filled ones (stable, creation
+    // order kept inside each group; the title and open rows never move).
+    var rowOrderSeq = 0;
+    var sortingRows = false;
+    function sortEmptyRowsDown() {
+      if (sortingRows) return;
+      var rows = Array.prototype.filter.call(body.children, function (el) {
+        return el.classList && el.classList.contains('is-collapsible');
+      });
+      if (rows.length < 2) return;
+      var byOrder = function (a, b) {
+        return +a.dataset.rowOrder - +b.dataset.rowOrder;
+      };
+      var filled = rows.filter(function (r) { return r.dataset.rowEmpty !== '1'; }).sort(byOrder);
+      var empty = rows.filter(function (r) { return r.dataset.rowEmpty === '1'; }).sort(byOrder);
+      var ordered = filled.concat(empty);
+      if (ordered.every(function (r, i) { return r === rows[i]; })) return;
+      sortingRows = true;
+      try {
+        var marks = rows.map(function (r) {
+          var m = document.createComment('');
+          body.insertBefore(m, r);
+          return m;
+        });
+        ordered.forEach(function (r, i) {
+          body.insertBefore(r, marks[i]);
+        });
+        marks.forEach(function (m) {
+          body.removeChild(m);
+        });
+      } finally {
+        sortingRows = false;
+      }
+    }
+
     function makeRowCollapsible(key, row, label, value) {
       row.classList.add('is-collapsible');
+      row.dataset.rowOrder = String(rowOrderSeq++);
       var chevron = document.createElement('i');
       chevron.className = 'ti ti-chevron-down info-row-chevron';
       chevron.setAttribute('aria-hidden', 'true');
@@ -11057,7 +11093,11 @@
       label.appendChild(chevron);
 
       function refresh() {
-        if (!row.classList.contains('is-collapsed')) return;
+        if (!row.classList.contains('is-collapsed')) {
+          row.dataset.rowEmpty = '0';
+          sortEmptyRowsDown();
+          return;
+        }
         var text = '';
         try {
           text = rowSummaries[key] ? rowSummaries[key]() : genericRowSummary(value);
@@ -11070,6 +11110,8 @@
         else summary.textContent = plain || ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
         summary.classList.toggle('is-empty', !plain);
         summary.title = plain;
+        row.dataset.rowEmpty = !plain && key !== 'title' ? '1' : '0';
+        sortEmptyRowsDown();
       }
 
       function setCollapsed(next, persist) {
@@ -19610,6 +19652,7 @@
     syncTitleInputSize();
     setDescMode('rich', { focus: false });
     applyMoreDetailsExpanded(moreDetailsExpanded, { silent: true });
+    sortEmptyRowsDown();
     scheduleLabelSuggestions(false);
     scheduleTaskTypeSuggestions(false);
 
