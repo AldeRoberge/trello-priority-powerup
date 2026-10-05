@@ -1550,3 +1550,13 @@ html:has(body.tp-page--gantt) body {
   justify-content: space-between;
   gap: 8px;
 }
+
+.gantt-progress-text--btn,
+.gantt-detail-slot.is-progress .gantt-progress-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.gantt-progress-text--btn {
+  padding: 0;
+}

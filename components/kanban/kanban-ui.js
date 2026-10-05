@@ -370,6 +370,7 @@
             openEditor(row, 'progress', e.currentTarget);
           },
         }, [
+          global.ProgressRing ? global.ProgressRing.create(p) : null,
           h('span', { class: 'kb-prog-bar' }, [h('i', { style: 'width:' + p + '%' })]),
           h('span', { class: 'kb-prog-num', text: p + '%' }),
         ]);

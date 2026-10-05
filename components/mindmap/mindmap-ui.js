@@ -526,12 +526,21 @@
         var hasProgress = typeof rec.progress === 'number' && rec.progress > 0;
         if (rec.listName) {
           var lt = s('text', { class: 'mm-sub', x: x0 + 12, y: by + 17 });
-          lt.textContent = clip(rec.listName, hasProgress ? 17 : 30);
+          lt.textContent = clip(rec.listName, hasProgress ? 12 : 30);
           g.appendChild(lt);
         }
         if (hasProgress) {
-          var pw = 60;
+          var pw = 50;
           var px = x0 + n.w - 12 - pw - 30;
+          if (global.ProgressRing) {
+            var ring = global.ProgressRing.create(rec.progress);
+            ring.setAttribute('x', px - 20);
+            ring.setAttribute('y', by + 6);
+            ring.setAttribute('width', 14);
+            ring.setAttribute('height', 14);
+            ring.style.pointerEvents = 'none';
+            g.appendChild(ring);
+          }
           g.appendChild(s('rect', { class: 'mm-progress-track', x: px, y: by + 11, width: pw, height: 4, rx: 2 }));
           g.appendChild(s('rect', { class: 'mm-progress', x: px, y: by + 11, width: Math.max(0, pw * Math.min(100, rec.progress) / 100), height: 4, rx: 2 }));
           var pt = s('text', { class: 'mm-sub', x: x0 + n.w - 12, y: by + 16, 'text-anchor': 'end' });
@@ -1634,13 +1643,14 @@
       // progress: click or drag the bar to set the %, the detailed editor via the button
       var fill = h('div', { class: 'mm-card-fill', style: 'width:' + pct + '%' });
       var num = h('span', { class: 'mm-card-num', text: pct + ' %' });
+      var ringEl = global.ProgressRing ? global.ProgressRing.create(pct) : null;
       var bar = h('div', { class: 'mm-card-bar mm-card-bar--edit', title: 'Cliquer ou glisser pour régler le progrès' }, [fill]);
       bar.addEventListener('pointerdown', function (ev) {
         if (ev.button !== 0) return;
         ev.preventDefault();
         var val = pct;
         function at(x) { var r = bar.getBoundingClientRect(); return r.width ? Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100))) : val; }
-        function move(e) { val = at(e.clientX); fill.style.width = val + '%'; num.textContent = val + ' %'; }
+        function move(e) { val = at(e.clientX); fill.style.width = val + '%'; num.textContent = val + ' %'; if (ringEl) global.ProgressRing.set(ringEl, val); }
         function up() {
           document.removeEventListener('pointermove', move);
           document.removeEventListener('pointerup', up);
@@ -1673,7 +1683,7 @@
       els.panel.appendChild(h('div', { class: 'mm-card' }, [
         title,
         h('label', { class: 'mm-field' }, [h('span', { text: 'Statut' }), status]),
-        h('div', { class: 'mm-card-progress' }, [bar, num, detail]),
+        h('div', { class: 'mm-card-progress' }, [ringEl, bar, num, detail]),
         h('div', { class: 'mm-actions' }, [
           fieldBtn('priority', 'flag', urgency),
           fieldBtn('due', 'calendar-event', due),

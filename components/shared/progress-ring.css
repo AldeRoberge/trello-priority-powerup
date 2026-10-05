@@ -1,0 +1,36 @@
+/* Shared progress ring (see progress-ring.js): mirrors the Table's Progrès cell. */
+.pg-ring {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+}
+.pg-track {
+  stroke: var(--tp-surface-active, rgba(9, 30, 66, 0.25));
+}
+.pg-arc {
+  stroke: var(--tp-primary);
+  transition: stroke-dashoffset 0.15s;
+}
+.pg-disc,
+.pg-check {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.pg-disc {
+  fill: var(--tp-success, #22a06b);
+}
+.pg-check {
+  stroke: #fff;
+}
+.pg-ring.is-done .pg-disc,
+.pg-ring.is-done .pg-check {
+  opacity: 1;
+}
+.pg-ring.is-done .pg-arc {
+  opacity: 0;
+}
+button:hover > .pg-ring .pg-track,
+.pg-ring:hover .pg-track {
+  stroke: var(--tp-text-subtle);
+}

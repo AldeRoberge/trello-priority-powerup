@@ -2292,10 +2292,10 @@
         var pct = Math.round(row.progress || 0);
         var progBtn = el('button', 'gantt-progress-text gantt-progress-text--btn', {
           type: 'button',
-          text: pct + '%',
           title: 'Progr\u00e8s ' + pct + '%',
         });
         progBtn.setAttribute('aria-label', 'Progr\u00e8s ' + pct + '%');
+        progBtn.appendChild(progressRingEl(pct));
         progBtn.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
@@ -2332,15 +2332,23 @@
         var localPct = Math.round(row.progress || 0);
         slot(
           'is-progress',
-          el('span', 'gantt-progress-text', {
-            text: localPct + '%',
-            title: 'Progr\u00e8s ' + localPct + '%',
-          })
+          (function () {
+            var span = el('span', 'gantt-progress-text', {
+              title: 'Progr\u00e8s ' + localPct + '%',
+            });
+            span.appendChild(progressRingEl(localPct));
+            return span;
+          })()
         );
         slot('is-due', null);
       }
 
       return icons;
+    }
+
+    function progressRingEl(pct) {
+      if (global.ProgressRing) return global.ProgressRing.create(pct);
+      return document.createTextNode(pct + '%');
     }
 
     function buildSubtaskTitleBadge(row) {
