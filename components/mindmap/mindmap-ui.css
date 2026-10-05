@@ -243,6 +243,16 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-x:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
 .mm-tag { font-size: 11px; color: var(--tp-text-muted); white-space: nowrap; }
 .mm-open { margin-top: 8px; }
+.mm-tabs { display: flex; gap: 2px; margin: 0 0 10px; box-shadow: inset 0 -1px 0 var(--tp-border); }
+.mm-tab { padding: 6px 10px; font: inherit; font-size: 13px; border: 0; background: none; color: var(--tp-text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.mm-tab:hover { color: var(--tp-text); }
+.mm-tab.is-active { color: var(--tp-text); font-weight: 600; border-bottom-color: var(--mm-serves, #e2a03f); }
+.mm-card-title { font-size: 15px; font-weight: 600; line-height: 1.3; word-break: break-word; margin-bottom: 8px; }
+.mm-card-progress { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--tp-text-muted); }
+.mm-card-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 1px var(--tp-border); overflow: hidden; }
+.mm-card-fill { height: 100%; background: #3fa37a; }
+.mm-card-h { margin: 12px 0 4px; font-size: 12px; color: var(--tp-text-muted); font-weight: 600; }
+.mm-card-desc { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.45; }
 
 /* ── Goal hierarchy (vision → mission → goal → unit of work → task), links, composer ── */
 .mm-root { --mm-serves: #e2a03f; }

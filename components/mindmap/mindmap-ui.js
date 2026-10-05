@@ -1177,6 +1177,27 @@
       return h('div', { class: 'mm-sec' }, kids);
     }
 
+    /** "Information" tab: the card itself (title, status, progress, due date, description). */
+    function renderCardInfo(rec) {
+      var pct = typeof rec.progress === 'number' ? Math.max(0, Math.min(100, Math.round(rec.progress))) : null;
+      var card = h('div', { class: 'mm-card' }, [
+        h('div', { class: 'mm-panel-meta' }, [
+          rec.listName ? h('span', { class: 'mm-chip', text: rec.listName }) : null,
+          rec.dueDate ? h('span', { class: 'mm-chip', text: 'Échéance ' + rec.dueDate }) : null,
+        ]),
+        pct === null ? null : h('div', { class: 'mm-card-progress', title: pct + ' %' }, [
+          h('div', { class: 'mm-card-bar' }, [h('div', { class: 'mm-card-fill', style: 'width:' + pct + '%' })]),
+          h('span', { text: pct + ' %' }),
+        ]),
+        h('h4', { class: 'mm-card-h', text: 'Description' }),
+        rec.desc && String(rec.desc).trim()
+          ? h('div', { class: 'mm-card-desc', text: String(rec.desc) })
+          : h('p', { class: 'mm-note', text: 'Aucune description.' }),
+      ]);
+      els.panel.appendChild(card);
+      els.panel.appendChild(h('button', { class: 'mm-btn mm-btn--primary mm-open', onclick: function () { openCard(rec); } }, [icon('external-link'), 'Ouvrir la carte']));
+    }
+
     function renderPanel() {
       els.panel.textContent = '';
       var edge = state.selectedEdge && edgeById(state.selectedEdge);
@@ -1192,6 +1213,19 @@
       ]);
       els.panel.appendChild(head);
       var rec = n.kind === 'task' ? n.rec : null;
+      if (rec) {
+        var tab = state.panelTab === 'props' ? 'props' : 'info';
+        els.panel.appendChild(h('div', { class: 'mm-tabs', role: 'tablist' }, [['info', 'Information'], ['props', 'Propriétés']].map(function (d) {
+          return h('button', {
+            class: 'mm-tab' + (tab === d[0] ? ' is-active' : ''),
+            role: 'tab',
+            'aria-selected': tab === d[0] ? 'true' : 'false',
+            text: d[1],
+            onclick: function () { state.panelTab = d[0]; renderPanel(); },
+          });
+        })));
+        if (tab === 'info') return renderCardInfo(rec);
+      }
       if (rec) {
         els.panel.appendChild(h('div', { class: 'mm-panel-meta' }, [
           rec.listName ? h('span', { class: 'mm-chip', text: rec.listName }) : null,
