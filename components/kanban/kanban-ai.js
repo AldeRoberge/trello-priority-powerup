@@ -12,6 +12,8 @@
  *   KanbanAI.run(t, { text, target, rows, lists, record }) → Promise<{ message, applied[], failed[] }>
  *     target: the card row the instruction is about (null = board-level, the model picks the cards)
  *     record: optional history hook, same entries as the Kanban panel (create / move / field)
+ * Each instruction and its outcome is also appended to the card's Assistant chat (cardAgentChat), so it
+ * shows up in the card's Assistant panel.
  */
 (function (global) {
   'use strict';
@@ -218,6 +220,32 @@
     });
   }
 
+  /** Appends a user + assistant message to a card's Assistant chat (best effort, never throws). */
+  function logChat(t, cardId, userText, assistantText) {
+    var pa = PA();
+    if (!cardId || !pa || typeof pa.loadCardChat !== 'function' || typeof pa.saveCardChat !== 'function') return Promise.resolve();
+    // loadCardChat / saveCardChat address the *current* card; point them at `cardId` instead.
+    var bridge = {
+      get: function (_scope, vis, key) { return t.get(cardId, vis, key); },
+      set: function (_scope, vis, key, val) { return t.set(cardId, vis, key, val); },
+    };
+    return pa.loadCardChat(bridge).then(function (chat) {
+      chat.messages = (chat.messages || []).concat([
+        { role: 'user', content: userText },
+        { role: 'assistant', content: assistantText },
+      ]);
+      return pa.saveCardChat(bridge, chat);
+    }).catch(function () { /* the chat log is a convenience */ });
+  }
+
+  function chatSummary(res) {
+    var parts = [];
+    if (res.applied.length) parts.push('Fait : ' + res.applied.join(', ') + '.');
+    if (res.failed.length) parts.push('Échec : ' + res.failed.join(' ; ') + '.');
+    if (res.message && !res.applied.length) parts.unshift(res.message);
+    return parts.join(' ') || 'Rien à modifier.';
+  }
+
   function applyCreate(t, a, o, res) {
     var listId = a.listId || defaultListId(o.lists, o.target);
     var list = (o.lists || []).filter(function (l) { return l.id === listId; })[0];
@@ -228,6 +256,7 @@
       if (cardId && a.desc) steps = steps.then(function () { return PT().restPutCard(t, cardId, { desc: a.desc }); });
       if (cardId && a.progress) steps = steps.then(function () { return writeProgress(t, cardId, a.progress); }).catch(function () { /* card not readable yet: progress stays 0 */ });
       return steps.then(function () {
+        if (cardId) res.touched[cardId] = true;
         if (cardId && typeof o.record === 'function') o.record({ type: 'create', targetId: cardId, title: a.title, after: list.name });
         res.applied.push('tâche « ' + a.title + ' » créée dans « ' + list.name + ' »');
       });
@@ -255,6 +284,7 @@
   function applyUpdate(t, a, o, res) {
     var row = (o.rows || []).filter(function (r) { return r.id === a.cardId; })[0];
     if (!row) return Promise.resolve();
+    res.touched[row.id] = true;
     var chain = Promise.resolve();
     var landed = null; // list the card ends up in, to avoid a second move
 
@@ -328,7 +358,7 @@
       var obj = parseReply(reply && reply.content);
       if (!obj) throw new Error('Réponse IA illisible, reformulez.');
       var actions = normalizeActions(obj.actions, { rows: o.rows, lists: o.lists, target: o.target });
-      var res = { message: str(obj.message, 600), applied: [], failed: [] };
+      var res = { message: str(obj.message, 600), applied: [], failed: [], touched: {} };
       var chain = Promise.resolve();
       actions.forEach(function (a) {
         chain = chain.then(function () {
@@ -337,7 +367,12 @@
           });
         });
       });
-      return chain.then(function () { return res; });
+      return chain.then(function () {
+        var ids = Object.keys(res.touched);
+        if (o.target && ids.indexOf(o.target.id) < 0) ids.push(o.target.id);
+        var note = chatSummary(res);
+        return Promise.all(ids.map(function (id) { return logChat(t, id, text, note); })).then(function () { return res; });
+      });
     });
   }
 

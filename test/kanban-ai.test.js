@@ -146,6 +146,19 @@ describe('KanbanAI', () => {
       assert.deepEqual(records.map((r) => r.type), ['field', 'field', 'field', 'move']);
     });
 
+    it('logs the instruction and outcome in the card chat', async () => {
+      const rows = mkRows();
+      const stored = {};
+      global.PriorityAgent.loadCardChat = async (b) => ({ messages: (await b.get('card', 'private', 'cardAgentChat'))?.messages || [] });
+      global.PriorityAgent.saveCardChat = async (b, chat) => b.set('card', 'private', 'cardAgentChat', chat);
+      const t = { get: async (id, vis, key) => stored[id + key], set: async (id, vis, key, v) => { stored[id + key] = v; } };
+      await AI.run(t, { text: 'Waiting for the Marketplace guy', target: rows[0], rows, lists });
+      const msgs = stored['acardAgentChat'].messages;
+      assert.deepEqual(msgs.map((m) => m.role), ['user', 'assistant']);
+      assert.equal(msgs[0].content, 'Waiting for the Marketplace guy');
+      assert.match(msgs[1].content, /mise en attente/);
+    });
+
     it('rejects with no-provider when the provider is not configured', async () => {
       global.PriorityAgent.isConfigured = () => false;
       await assert.rejects(() => AI.run({}, { text: 'x', target: null, rows: mkRows(), lists }), (e) => e.reason === 'no-provider');
