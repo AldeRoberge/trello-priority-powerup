@@ -149,6 +149,13 @@
           },
           refreshPlaces: refresh('places', global.Places),
           applyPlaces: apply('places', global.Places),
+          getEntities: function () {
+            var ET = global.EntitiesTrello;
+            if (!ET) return null;
+            // cache-aware: only hits Trello when the last read is older than its TTL
+            ET.load(t).catch(function () { /* not authorized yet: no entities for the agent */ });
+            return ET.peek();
+          },
           getBoardDigest: function () {
             return cachedDigest || '';
           },

@@ -29,7 +29,7 @@ import {
   parseTheme,
   lastSync,
 } from './sync.js';
-import { describeAction, isDocumentAction } from './webhook.js';
+import { describeAction, isDocumentAction, isEntityAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
 import { driveEnabled, syncDocumentCard, syncAllDocuments, docSyncStatus } from './drive.js';
 
@@ -64,6 +64,7 @@ async function handleWebhook(request, env, ctx) {
   } catch {
     /* not JSON */
   }
+  if (isEntityAction(payload)) return new Response('ok'); // Entities view cards: nothing to sync
   if (isDocumentAction(payload)) {
     // Document view cards: no Sheet sync and no Activities, only the Drive copy
     const cardId = payload.action.data.card.id;

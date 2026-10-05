@@ -36,12 +36,21 @@ export function isDocumentAction(payload) {
 }
 
 /**
+ * Entities of the Power-Up's Entities view are archived cards named "🧩 Name" (see
+ * components/entities/entities-trello.js). Same reasoning as documents, and no Drive copy either.
+ */
+export function isEntityAction(payload) {
+  const card = payload && payload.action && payload.action.data && payload.action.data.card;
+  return !!(card && typeof card.name === 'string' && card.name.startsWith('🧩'));
+}
+
+/**
  * @returns {{activities: object[], cardId: string|null}}  each activity:
  *   { user, origin:'Trello', action, card, cardId, field, fieldKey, before, after, ref, at }
  */
 export function describeAction(payload) {
   const action = payload && payload.action;
-  if (!action || !action.type || isDocumentAction(payload)) return { activities: [], cardId: null };
+  if (!action || !action.type || isDocumentAction(payload) || isEntityAction(payload)) return { activities: [], cardId: null };
   const d = action.data || {};
   const card = d.card || {};
   const base = {

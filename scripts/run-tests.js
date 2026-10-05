@@ -70,6 +70,9 @@ const UNIT_FILES = [
   'desc-meta.test.js',
   'docs-model.test.js',
   'docs-trello.test.js',
+  'entities-model.test.js',
+  'entities-trello.test.js',
+  'agent-entities.test.js',
 ];
 
 function listTests() {

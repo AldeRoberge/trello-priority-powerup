@@ -2886,6 +2886,7 @@
     'getProfile',
     'getPeople',
     'getPlaces',
+    'getEntities',
     'getCustomAssigneeCatalog',
     'getPlaceCatalog',
     'getMemory',
@@ -2997,6 +2998,14 @@
       } catch (e) {
         ctx.placeDirectory = [];
       }
+    }
+    if (typeof bridge.getEntities === 'function') {
+      try {
+        var entitiesRaw = bridge.getEntities();
+        if (entitiesRaw && entitiesRaw.schema && Array.isArray(entitiesRaw.entities) && entitiesRaw.entities.length) {
+          ctx.entityStore = { schema: entitiesRaw.schema, entities: entitiesRaw.entities };
+        }
+      } catch (eEnt) { /* optional */ }
     }
     if (typeof bridge.getCustomAssigneeCatalog === 'function') {
       try {
@@ -3901,6 +3910,18 @@
         placesLines = [];
       }
     }
+    var entityLines = [];
+    if (global.EntitiesModel && context && context.entityStore) {
+      try {
+        entityLines = global.EntitiesModel.promptLines(
+          context.entityStore.schema,
+          context.entityStore.entities,
+          options && options.userText
+        ) || [];
+      } catch (eEnt) {
+        entityLines = [];
+      }
+    }
     var profileIsEn = !!(context && context.profile && context.profile.language === 'en');
     var isEn =
       replyLanguage === 'en' ? true : replyLanguage === 'fr' ? false : profileIsEn;
@@ -4018,6 +4039,7 @@
       .concat(profileLines)
       .concat(peopleLines)
       .concat(placesLines)
+      .concat(entityLines)
       .concat(humanProfileJobLines(isEn))
       .concat(scopeLines)
       .concat([

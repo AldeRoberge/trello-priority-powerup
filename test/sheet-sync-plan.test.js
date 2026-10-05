@@ -326,6 +326,15 @@ describe('trello-sheet-sync worker logic', () => {
       assert.deepEqual(d('updateList', { list: { id: 'l' } }), []);
     });
 
+    it('ignores the cards of the Entities view (archived "🧩 Name" cards)', () => {
+      const save = { ...base, type: 'updateCard', data: { card: { id: 'e1', name: '🧩 Ficus' }, old: { desc: 'avant' } } };
+      assert.equal(webhook.isEntityAction({ action: save }), true);
+      assert.equal(webhook.isDocumentAction({ action: save }), false);
+      assert.deepEqual(webhook.describeAction({ action: save }), { activities: [], cardId: null });
+      assert.equal(webhook.isEntityAction({ action: { ...base, type: 'updateCard', data: { card: { id: 'c1', name: 'Tâche' } } } }), false);
+      assert.equal(webhook.isEntityAction(null), false);
+    });
+
     it('ignores the cards of the Document view (archived "📄 Title" cards that autosave)', () => {
       const save = { ...base, type: 'updateCard', data: { card: { id: 'd1', name: '📄 Plan de projet' }, old: { desc: 'avant' } } };
       assert.equal(webhook.isDocumentAction({ action: save }), true);

@@ -1,9 +1,9 @@
 /*
- * Role: top tab strip that switches between the project views (Gantt, Table, Kanban, Documents) inside the same
+ * Role: top tab strip that switches between the project views (Gantt, Table, Kanban, Documents, Entities) inside the same
  * Trello modal. Switching navigates the iframe to the sibling page and keeps the query/hash that
  * carry the Trello iframe context, so the handshake works on the new page.
  *
- *   ViewTabs.mount(el, { active: 'gantt' | 'table' | 'kanban' | 'docs' })
+ *   ViewTabs.mount(el, { active: 'gantt' | 'table' | 'kanban' | 'docs' | 'entities' })
  */
 (function (global) {
   'use strict';
@@ -13,6 +13,7 @@
     { key: 'table', label: 'Tableau', icon: 'table', page: './table.html' },
     { key: 'kanban', label: 'Kanban', icon: 'layout-kanban', page: './kanban.html' },
     { key: 'docs', label: 'Documents', icon: 'file-text', page: './docs.html' },
+    { key: 'entities', label: 'Entités', icon: 'stack-2', page: './entities.html' },
   ];
 
   /** URL of a sibling page carrying over the current search + hash (pure; used by tests). */
