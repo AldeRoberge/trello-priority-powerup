@@ -1430,25 +1430,145 @@
       return h('div', { class: 'mm-sec' }, kids);
     }
 
-    /** "Information" tab: the card itself (title, status, progress, due date, description). */
+    /** Reloads the board after an edit (keeps the view and the selection; the panel is redrawn by rebuild). */
+    function refreshAfterEdit() {
+      return global.GanttTrello.loadBoard(t).then(function (board) {
+        state.records = board.cards || [];
+        state.lists = board.lists || state.lists || [];
+        rebuild({ keepView: true });
+      }).catch(function (err) { setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error'); });
+    }
+
+    function runEdit(fn) {
+      setStatus('Enregistrement…');
+      return Promise.resolve().then(fn).then(function () {
+        setStatus('Enregistré', 'ok');
+        return refreshAfterEdit();
+      }, function (err) {
+        setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error');
+        return refreshAfterEdit();
+      });
+    }
+
+    function visibleDesc(rec) {
+      var dm = global.DescMeta;
+      return dm && typeof dm.splitDesc === 'function' ? dm.splitDesc(rec.desc || '').visible : String(rec.desc || '');
+    }
+
+    function openFieldEditor(rec, kind, anchor) {
+      var CF = global.CardFields;
+      var TT = global.TableTrello;
+      if (!CF || !TT) return setStatus('Éditeur indisponible', 'error');
+      CF.open(kind, {
+        t: t,
+        cardId: rec.id,
+        cardName: rec.name,
+        anchor: anchor,
+        value: kind === 'desc' ? visibleDesc(rec) : undefined,
+        save: kind === 'desc' ? function (text) { return TT.saveDesc(t, { id: rec.id, fullDesc: rec.desc || '' }, text); } : undefined,
+        onSaved: function () { setStatus('Enregistré', 'ok'); },
+        onError: function (m) { setStatus(m, 'error'); },
+        onClose: function (changed) { if (changed) refreshAfterEdit(); },
+      });
+    }
+
+    /** Master progress over subtasks, else the card's own progress (same rule as the Table). */
+    function writeProgressTo(cardId, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+      return CT.getCardCompletionById(t, cardId).then(function (data) {
+        data = CT.normalizeCompletionData(data || { items: [] });
+        var next = data.items && data.items.length
+          ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
+          : Object.assign({}, data, { progress: pct });
+        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next));
+      });
+    }
+
+    /** "Information" tab: the card itself, every field editable in place. */
     function renderCardInfo(rec) {
-      var pct = typeof rec.progress === 'number' ? Math.max(0, Math.min(100, Math.round(rec.progress))) : null;
-      var card = h('div', { class: 'mm-card' }, [
-        h('div', { class: 'mm-panel-meta' }, [
-          rec.listName ? h('span', { class: 'mm-chip', text: rec.listName }) : null,
-          rec.dueDate ? h('span', { class: 'mm-chip', text: 'Échéance ' + rec.dueDate }) : null,
+      var TT = global.TableTrello;
+      var pct = typeof rec.progress === 'number' ? Math.max(0, Math.min(100, Math.round(rec.progress))) : 0;
+      var visible = visibleDesc(rec);
+
+      // title
+      var title = h('textarea', { class: 'mm-card-title', rows: '1', 'aria-label': 'Titre de la carte', maxlength: '300' });
+      title.value = rec.name || '';
+      function fitTitle() { title.style.height = 'auto'; title.style.height = title.scrollHeight + 'px'; }
+      title.addEventListener('input', fitTitle);
+      title.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); title.blur(); } });
+      title.addEventListener('change', function () {
+        var v = title.value.trim();
+        if (!v || v === rec.name) { title.value = rec.name || ''; return; }
+        runEdit(function () { return TT.saveName(t, rec.id, v); });
+      });
+
+      // status (list)
+      var lists = state.lists || [];
+      var status = h('select', { class: 'mm-input', 'aria-label': 'Statut' }, lists.map(function (l) {
+        var o = h('option', { value: String(l.id), text: l.name });
+        if (String(l.id) === String(rec.listId)) o.selected = true;
+        return o;
+      }));
+      status.addEventListener('change', function () {
+        if (status.value === String(rec.listId)) return;
+        runEdit(function () { return TT.moveCard(t, rec.id, status.value, 'bottom'); });
+      });
+
+      // progress: click or drag the bar to set the %, the detailed editor via the button
+      var fill = h('div', { class: 'mm-card-fill', style: 'width:' + pct + '%' });
+      var num = h('span', { class: 'mm-card-num', text: pct + ' %' });
+      var bar = h('div', { class: 'mm-card-bar mm-card-bar--edit', title: 'Cliquer ou glisser pour régler le progrès' }, [fill]);
+      bar.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        var val = pct;
+        function at(x) { var r = bar.getBoundingClientRect(); return r.width ? Math.max(0, Math.min(100, Math.round((x - r.left) / r.width * 100))) : val; }
+        function move(e) { val = at(e.clientX); fill.style.width = val + '%'; num.textContent = val + ' %'; }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          document.removeEventListener('pointercancel', up);
+          if (val !== pct) runEdit(function () { return writeProgressTo(rec.id, val); });
+        }
+        move(ev);
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+      });
+      var detail = h('button', { class: 'mm-x', title: 'Progrès détaillé (sous-tâches)', 'aria-label': 'Progrès détaillé', onclick: function (ev) { openFieldEditor(rec, 'progress', ev.currentTarget); } }, [icon('adjustments')]);
+
+      function fieldBtn(kind, ic, text, extra) {
+        return h('button', { class: 'mm-btn mm-btn--small' + (extra || ''), onclick: function (ev) { openFieldEditor(rec, kind, ev.currentTarget); } }, [icon(ic), text]);
+      }
+      var urgency = rec.priorityEnabled !== false && rec.priorityLabel
+        ? rec.priorityLabel + (typeof rec.priorityScore === 'number' ? ' · ' + (Math.round(rec.priorityScore * 10) / 10) : '')
+        : 'Priorité…';
+      var TMod = global.TableModel;
+      var due = rec.dueDate ? 'Échéance ' + (TMod && TMod.formatDay ? TMod.formatDay(rec.dueDate) : rec.dueDate) : 'Échéance…';
+
+      var tags = (rec.labels || []).map(function (l) { return h('span', { class: 'mm-chip', text: l.name || l.color || '·' }); })
+        .concat((rec.assignees || []).map(function (a) { return h('span', { class: 'mm-chip', title: a.name }, [icon('user'), a.name]); }));
+
+      var descBody = visible.trim()
+        ? h('div', { class: 'mm-card-desc', text: visible, title: 'Cliquer pour modifier', onclick: function (ev) { if (!String(global.getSelection()).length) openFieldEditor(rec, 'desc', ev.currentTarget); } })
+        : h('button', { class: 'mm-btn mm-btn--small', onclick: function (ev) { openFieldEditor(rec, 'desc', ev.currentTarget); } }, [icon('plus'), 'Ajouter une description']);
+
+      els.panel.appendChild(h('div', { class: 'mm-card' }, [
+        title,
+        h('label', { class: 'mm-field' }, [h('span', { text: 'Statut' }), status]),
+        h('div', { class: 'mm-card-progress' }, [bar, num, detail]),
+        h('div', { class: 'mm-actions' }, [
+          fieldBtn('priority', 'flag', urgency),
+          fieldBtn('due', 'calendar-event', due),
+          fieldBtn('blocked', 'ban', rec.blocked ? 'Bloqué' : 'Bloquer…', rec.blocked ? ' mm-btn--danger' : ''),
         ]),
-        pct === null ? null : h('div', { class: 'mm-card-progress', title: pct + ' %' }, [
-          h('div', { class: 'mm-card-bar' }, [h('div', { class: 'mm-card-fill', style: 'width:' + pct + '%' })]),
-          h('span', { text: pct + ' %' }),
-        ]),
+        tags.length ? h('div', { class: 'mm-panel-meta' }, tags) : null,
         h('h4', { class: 'mm-card-h', text: 'Description' }),
-        rec.desc && String(rec.desc).trim()
-          ? h('div', { class: 'mm-card-desc', text: String(rec.desc) })
-          : h('p', { class: 'mm-note', text: 'Aucune description.' }),
-      ]);
-      els.panel.appendChild(card);
+        descBody,
+      ]));
       els.panel.appendChild(h('button', { class: 'mm-btn mm-btn--primary mm-open', onclick: function () { openCard(rec); } }, [icon('external-link'), 'Ouvrir la carte']));
+      setTimeout(fitTitle, 0);
     }
 
     /** Breadcrumb Vision / … / Projet above the node (bottom-up) plus what is missing above it (never blocking). */

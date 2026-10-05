@@ -315,3 +315,14 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-menu-item:disabled { opacity: .4; cursor: default; }
 .mm-menu-item kbd { font: inherit; font-size: 11px; opacity: .6; }
 .mm-menu-sep { height: 1px; margin: 4px 2px; background: var(--tp-border); }
+
+/* Information tab: editable card */
+.mm-panel { user-select: text; }
+.mm-card-title { display: block; width: 100%; box-sizing: border-box; padding: 4px 6px; margin: 0 0 8px -6px; font-family: inherit; color: var(--tp-text); background: none; border: 0; border-radius: 4px; resize: none; overflow: hidden; }
+.mm-card-title:hover { background: var(--tp-surface-hover); }
+.mm-card-title:focus { outline: none; background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 2px var(--tp-primary); }
+.mm-card-bar--edit { height: 10px; border-radius: 5px; cursor: ew-resize; touch-action: none; }
+.mm-card-num { min-width: 34px; text-align: right; }
+.mm-card-desc { padding: 6px 8px; border-radius: 4px; cursor: text; box-shadow: inset 0 0 0 1px var(--tp-border); }
+.mm-card-desc:hover { background: var(--tp-surface-hover); }
+.mm-panel select.mm-input { width: 100%; }
