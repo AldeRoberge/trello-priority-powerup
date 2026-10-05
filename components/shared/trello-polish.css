@@ -97,10 +97,10 @@ html[data-color-mode] .tp-page--priority.is-split-assistant .cerveau-assistant {
   color: var(--tp-text-subtle);
 }
 
-/* Feature blocks (priority / progress / due) sit under a hairline */
+/* Feature blocks (priority / progress / due): no divider lines */
 .tp-page--priority .info-row--inline-feature {
-  padding-top: var(--tp-section-gap);
-  border-top: 1px solid var(--tp-border);
+  padding-top: 0;
+  border-top: 0;
 }
 
 /* Slider label column must fit the longest label ("Empressement") */
