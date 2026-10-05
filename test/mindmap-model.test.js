@@ -122,6 +122,52 @@ describe('MindmapModel', () => {
       assert.equal(MM.buildGraph(records, { goals, show: { goals: false } }).nodes.filter((n) => n.kind === 'goal').length, 0);
     });
 
+    it('reads the legacy "work" level as a project', () => {
+      const n = MM.normalizeGoals({ nodes: [{ id: 'g:w', level: 'work', name: 'Plan' }], links: [] });
+      assert.equal(n.nodes[0].level, 'project');
+    });
+
+    describe('context (breadcrumb and flags)', () => {
+      const chain = {
+        nodes: [
+          { id: 'g:v', level: 'vision', name: 'V' },
+          { id: 'g:m', level: 'mission', name: 'M' },
+          { id: 'g:g', level: 'goal', name: 'G' },
+          { id: 'g:o', level: 'objective', name: 'O' },
+          { id: 'g:p', level: 'project', name: 'P' },
+          { id: 'g:p2', level: 'project', name: 'Projet orphelin' },
+          { id: 'g:o2', level: 'objective', name: 'Objectif seul' },
+        ],
+        links: [
+          { from: 'g:m', to: 'g:v' },
+          { from: 'g:g', to: 'g:m' },
+          { from: 'g:o', to: 'g:g' },
+          { from: 'g:p', to: 'g:o' },
+          { from: 't:a', to: 'g:p' },
+        ],
+      };
+      const g = MM.buildGraph(records, { goals: chain });
+
+      it('lists the ancestors from the nearest up to the vision', () => {
+        assert.deepEqual(MM.ancestors(g.edges, 't:a'), ['g:p', 'g:o', 'g:g', 'g:m', 'g:v']);
+        assert.deepEqual(MM.ancestors(g.edges, 'g:v'), []);
+      });
+
+      it('flags work with no project / objective / goal above it, without blocking', () => {
+        assert.deepEqual(MM.contextFlags(g, 't:a'), []);
+        assert.deepEqual(MM.contextFlags(g, 't:b').map((f) => f.id), ['no-project']);
+        assert.deepEqual(MM.contextFlags(g, 'g:p2').map((f) => f.id), ['no-objective']);
+        assert.deepEqual(MM.contextFlags(g, 'g:o2').map((f) => f.id), ['no-goal']);
+        assert.deepEqual(MM.contextFlags(g, 'g:o'), []);
+        assert.deepEqual(MM.contextFlags(g, 'nope'), []);
+      });
+
+      it('a task that serves an objective directly is still flagged as having no project', () => {
+        const x = MM.buildGraph(records, { goals: { nodes: chain.nodes, links: chain.links.concat([{ from: 't:b', to: 'g:o' }]) } });
+        assert.deepEqual(MM.contextFlags(x, 't:b').map((f) => f.id), ['no-project']);
+      });
+    });
+
     it('decides what a link between two nodes means', () => {
       const t1 = { id: 't:a', kind: 'task' };
       const t2 = { id: 't:b', kind: 'task' };

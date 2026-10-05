@@ -40,20 +40,18 @@ Vision → Objective are **outcomes** (the "why"). Project → Action are **work
 7. **Macro to micro by zooming.** Zoomed out you see clusters and statuses of outcomes; zoomed in you see
    individual tasks. Thousands of items stay usable by collapsing and clustering.
 
-## Where this stands in the code today
+## Where this stands in the code
 
-| Spec level | Today | Gap |
-|---|---|---|
-| Vision, Mission, Goal | Mindmap goal nodes (`level` vision / mission / goal), stored in the "🎯 Carte des objectifs" card (`mindmap-goals-trello.js`) | none structurally |
-| Objective | Goals component `goals.objectifs` + metrics (`goals-trello.js`), which is **separate** from the Mindmap's "goal" level and shares the label "Objectif" | two disconnected models |
-| Project | Goals component `goals.projects` (belongs to an objectif), card link `goals.projectId`; Mindmap has a "Unité de travail" level instead | two disconnected models |
-| Task | Trello card; Mindmap `serves` edge to a goal level | card → project link and card → mindmap link are independent |
-| Subtask / Action | Not modelled | use card checklists (subtask = checklist, action = item) |
-| Kanban | Columns = Trello lists | no grouping by project/objective/assignee |
+Mindmap levels (stored in the "🎯 Carte des objectifs" card, `mindmap-goals-trello.js`):
+**vision, mission, goal ("But"), objective ("Objectif"), project ("Projet")**, then tasks (Trello cards).
+Old data with the `work` level is read as `project`. Selecting a task or a goal-level node shows its
+breadcrumb Vision / … / Projet and flags what is missing above it ("Sans projet", "Sans objectif",
+"Sans but ni mission"); nothing is blocked.
 
-## Decision needed
+Still to do, in order:
 
-The Mindmap hierarchy (vision → mission → goal → unit of work) and the Goals hierarchy
-(objectif → project → card) describe the same idea twice. They should become one chain:
-`Vision → Mission → Goal → Objective → Project → Task`, where Objective keeps its metrics, Project keeps
-its card link, and the Mindmap's "Unité de travail" level is replaced by Project.
+1. Bridge the Goals component (`goals.objectifs` with metrics, `goals.projects`, card `goals.projectId`) to the
+   Mindmap objective / project levels so there is a single chain and objectives are judged by their metrics.
+2. Kanban: group by project / objective / assignee, show the breadcrumb on cards.
+3. Subtasks and actions from card checklists.
+4. Semantic zoom and clustering for large maps; progress roll-up (work progress vs outcome progress).

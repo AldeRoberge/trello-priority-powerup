@@ -296,3 +296,10 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-composer[hidden] { display: none; }
 .mm-composer-title { font-weight: 600; font-size: 14px; }
 .mm-composer-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* Breadcrumb of the selected node: Vision / Mission / … / Projet */
+.mm-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.mm-crumb { display: inline-flex; flex-direction: column; align-items: flex-start; max-width: 100%; padding: 2px 8px; border: 1px solid var(--mm-line, rgba(127, 127, 127, 0.35)); border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.mm-crumb:hover { background: rgba(127, 127, 127, 0.14); }
+.mm-crumb-kind { font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.65; }
+.mm-crumb-sep { opacity: 0.5; }
