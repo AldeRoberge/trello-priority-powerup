@@ -13528,9 +13528,21 @@
     });
 
     // Drag the background to move around; double-click recentres.
+    pgFrame.addEventListener('mousedown', function (event) {
+      if (event.button === 1 && !event.target.closest('.tg-editor')) event.preventDefault();
+    });
+    pgFrame.addEventListener('auxclick', function (event) {
+      if (event.button === 1) event.preventDefault();
+    });
     pgFrame.addEventListener('pointerdown', function (event) {
-      if (event.button != null && event.button !== 0) return;
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-wire-hit')) return;
+      var middle = event.button === 1;
+      if (event.button != null && event.button !== 0 && !middle) return;
+      if (middle) {
+        if (event.target.closest('.tg-editor')) return;
+        event.preventDefault();
+      } else if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-wire-hit')) {
+        return;
+      }
       var startX = event.clientX;
       var startY = event.clientY;
       var baseX = pgPan.x;
@@ -15090,9 +15102,24 @@
     }
 
     // Drag the background to move around the map; double-click recentres it.
+    // Middle button pans from anywhere (also over nodes / wires), like Miro or Figma.
+    tgFrame.addEventListener('mousedown', function (event) {
+      if (event.button === 1 && !event.target.closest('.tg-editor, .tg-create, .info-member-roles-picker-host')) {
+        event.preventDefault(); // no Windows autoscroll cursor
+      }
+    });
+    tgFrame.addEventListener('auxclick', function (event) {
+      if (event.button === 1) event.preventDefault();
+    });
     tgFrame.addEventListener('pointerdown', function (event) {
-      if (event.button != null && event.button !== 0) return;
-      if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .tg-resize, .tg-wire-hit, .info-member-roles-picker-host')) return;
+      var middle = event.button === 1;
+      if (event.button != null && event.button !== 0 && !middle) return;
+      if (middle) {
+        if (event.target.closest('.tg-editor, .tg-create, .info-member-roles-picker-host')) return;
+        event.preventDefault();
+      } else if (event.target.closest('.tg-node, .tg-edge, .tg-pill, .tg-editor, .tg-collapse, .tg-zoom-btn, .tg-resize, .tg-wire-hit, .info-member-roles-picker-host')) {
+        return;
+      }
       var startX = event.clientX;
       var startY = event.clientY;
       var baseX = tgPan.x;
