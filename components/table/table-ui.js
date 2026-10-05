@@ -102,6 +102,33 @@
     var pushTimer = null;
     var statusTimer = null;
 
+    /* ── History: local record of what this table changed (kept per board, each entry can be undone) ── */
+    var HISTORY_MAX = 200;
+    var HISTORY_FILTERS = [
+      { id: 'all', label: 'Tout', icon: 'list' },
+      { id: 'archive', label: 'Archivages', icon: 'archive' },
+      { id: 'edit', label: 'Modifications', icon: 'pencil' },
+      { id: 'move', label: 'Déplacements', icon: 'arrows-move' },
+      { id: 'create', label: 'Créations', icon: 'plus' },
+      { id: 'undone', label: 'Annulées', icon: 'arrow-back-up' },
+    ];
+    var HISTORY_TYPES = {
+      archive: { icon: 'archive', tone: 'warn', group: 'archive' },
+      create: { icon: 'plus', tone: 'ok', group: 'create' },
+      edit: { icon: 'pencil', tone: 'info', group: 'edit' },
+      progress: { icon: 'progress-check', tone: 'info', group: 'edit' },
+      field: { icon: 'adjustments', tone: 'info', group: 'edit' },
+      move: { icon: 'arrows-move', tone: 'violet', group: 'move' },
+      reorder: { icon: 'arrows-sort', tone: 'violet', group: 'move' },
+    };
+    var hist = { items: [], filter: 'all', q: '', busy: {}, confirmClear: false, key: 'tp-table-history' };
+    try {
+      var ctxBoard = t && typeof t.getContext === 'function' ? t.getContext().board : '';
+      if (ctxBoard) hist.key += ':' + ctxBoard;
+      var savedHist = JSON.parse(global.localStorage.getItem(hist.key) || '[]');
+      if (Array.isArray(savedHist)) hist.items = savedHist.filter(function (e) { return e && e.id && HISTORY_TYPES[e.type]; }).slice(0, HISTORY_MAX);
+    } catch (e) { /* storage unavailable or corrupted: start empty */ }
+
     root.innerHTML = '';
     var els = {
       bar: h('div', { class: 'tb-bar' }),
@@ -148,6 +175,12 @@
               a.run();
             },
           }, [icon('arrow-back-up'), a_label(state.statusAction)])
+        );
+        s.appendChild(
+          h('button', { class: 'tb-link', title: 'Ouvrir l’historique des modifications', onclick: function () { openDrawer('history', null, true); } }, [
+            icon('history'),
+            document.createTextNode(' Historique'),
+          ])
         );
       }
     }
@@ -301,6 +334,9 @@
       kids.push(h('span', { class: 'tb-status' }));
       kids.push(h('span', { class: 'tb-spacer' }));
       kids.push(h('span', { class: 'tb-count', 'aria-live': 'polite' }));
+      var histBtn = btn('history', 'Historique', { active: state.drawer === 'history', title: 'Tout ce qui a été modifié depuis ce tableau, avec annulation', onclick: function () { openDrawer('history'); } });
+      histBtn.appendChild(h('span', { class: 'tb-badge tb-badge--soft', hidden: !hist.items.length, text: String(Math.min(hist.items.length, 99)) }));
+      kids.push(histBtn);
       if (connected) {
         var logBtn = btn('list-details', 'Logs', { title: 'Journal de la synchronisation', onclick: function () { openDrawer('logs'); } });
         logBtn.appendChild(h('span', { class: 'tb-badge', hidden: !state.alerts.length, text: '!' }));
@@ -507,7 +543,10 @@
             document.body.classList.remove('tb-resizing');
             saveWidths();
           }
-          document.addEventListener('pointermove', move);
+          pct = pctAt(e.clientX);
+        td.classList.add('is-dragging');
+        paint();
+        document.addEventListener('pointermove', move);
           document.addEventListener('pointerup', up);
         },
       });
@@ -668,6 +707,7 @@
           }
           return reloadUntilPresent(0).then(function () {
             var hidden = cardId && !visibleRows().some(function (r) { return r.id === cardId; });
+            if (cardId) record({ type: 'create', cardId: cardId, cardName: name, after: list.name });
             setStatus('Carte créée dans « ' + list.name + ' »' + (hidden ? ' (masquée par le filtre)' : ''), 'ok', hidden ? 5000 : 0);
             if (opts && opts.rename && cardId && !hidden) beginEdit(cardId, 'name');
             else if (input) {
@@ -724,7 +764,7 @@
     }
 
     /**
-     * Click-and-drag on the progress bar sets the % in place (a plain click still opens the popover).
+     * Clicking or dragging on the progress bar sets the % in place (clicking elsewhere in the cell opens the popover).
      * Saves on release the same way the mini editor does: master progress over subtasks, else card progress.
      */
     function bindProgressDrag(td, row, rich, setDragged) {
@@ -733,10 +773,10 @@
       var num = rich.querySelector('.tb-prog-num');
       if (!bar || !fill || !num) return;
       td.classList.add('tb-cell--draggable');
-      td.addEventListener('pointerdown', function (e) {
+      bar.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;
-        var startX = e.clientX;
-        var moved = false;
+        e.preventDefault();
+        var moved = true;
         var pct = row.progress;
         function pctAt(x) {
           var r = bar.getBoundingClientRect();
@@ -748,8 +788,6 @@
           rich.classList.toggle('is-done', pct >= 100);
         }
         function move(ev) {
-          if (!moved && Math.abs(ev.clientX - startX) < 4) return;
-          moved = true;
           td.classList.add('is-dragging');
           pct = pctAt(ev.clientX);
           paint();
@@ -770,22 +808,35 @@
       });
     }
 
+    /** Master progress over subtasks, else the card's own progress. Rejects if the editor is unavailable. */
+    function writeProgress(cardId, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+      return CT.getCardCompletionById(t, cardId).then(function (data) {
+        data = CT.normalizeCompletionData(data || { items: [] });
+        var next = data.items && data.items.length
+          ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
+          : Object.assign({}, data, { progress: pct });
+        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next));
+      });
+    }
+
     function saveProgress(row, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
       var prev = row.progress;
       row.progress = pct;
-      CT.getCardCompletionById(t, row.id)
-        .then(function (data) {
-          data = CT.normalizeCompletionData(data || { items: [] });
-          var next = data.items && data.items.length
-            ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
-            : Object.assign({}, data, { progress: pct });
-          return CT.saveCardCompletionById(t, row.id, CT.normalizeCompletionData(next));
-        })
+      writeProgress(row.id, pct)
         .then(function () {
           setStatus('Enregistré', 'ok');
           schedulePush();
+          if (prev !== pct) {
+            var known = typeof prev === 'number';
+            record({
+              type: known ? 'progress' : 'field', label: 'Progrès', cardId: row.id, cardName: row.name,
+              before: known ? prev + ' %' : '', after: pct + ' %', beforeVal: prev, afterVal: pct,
+            });
+          }
           reload({ quiet: true });
         }, function (err) {
           row.progress = prev;
@@ -793,6 +844,8 @@
           fail(err);
         });
     }
+
+    var FIELD_KIND_LABELS = { progress: 'Progrès', priority: 'Priorité', due: 'Échéance' };
 
     /** Opens the shared CardFields editor of `kind` for a row, hanging from `anchor`. */
     function openEditor(row, kind, anchor) {
@@ -807,10 +860,17 @@
           ? function (text) {
               var prev = row.desc;
               row.desc = text;
-              return TT().saveDesc(t, row, text).then(function (full) { row.fullDesc = full; }, function (err) { row.desc = prev; throw err; });
+              return TT().saveDesc(t, row, text).then(function (full) {
+                row.fullDesc = full;
+                if (prev !== text) record({ type: 'edit', cardId: row.id, cardName: row.name, key: 'desc', before: prev, after: text, beforeVal: prev, afterVal: text });
+              }, function (err) { row.desc = prev; throw err; });
             }
           : undefined,
-        onSaved: function () { setStatus('Enregistré', 'ok'); schedulePush(); },
+        onSaved: function () {
+          setStatus('Enregistré', 'ok');
+          schedulePush();
+          if (kind !== 'desc') record({ type: 'field', label: FIELD_KIND_LABELS[kind] || 'Champ', cardId: row.id, cardName: row.name });
+        },
         onError: function (m) { setStatus(m, 'error'); },
         onClose: function (changed) { if (changed) reload({ quiet: true }); else renderGrid(); },
       });
@@ -983,6 +1043,7 @@
 
     function commitEdit(row, key, value) {
       var prev = row[key];
+      var prevListId = row.listId;
       var write = null;
       if (key === 'name') {
         value = String(value).trim();
@@ -1015,6 +1076,11 @@
         function () {
           setStatus('Enregistré', 'ok');
           schedulePush();
+          if (key === 'statut') {
+            record({ type: 'move', cardId: row.id, cardName: row.name, key: key, before: prev, after: row.statut, beforeVal: prevListId, afterVal: row.listId, afterPos: 'bottom' });
+          } else {
+            record({ type: 'edit', cardId: row.id, cardName: row.name, key: key, before: prev, after: value, beforeVal: prev, afterVal: value });
+          }
         },
         function (err) {
           row[key] = prev;
@@ -1028,14 +1094,10 @@
       TT().archiveCard(t, row.id).then(function () {
         state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
         renderGrid();
+        var entry = record({ type: 'archive', cardId: row.id, cardName: row.name, after: row.statut || '' });
         setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok', 8000, {
           label: 'Annuler',
-          run: function () {
-            TT().unarchiveCard(t, row.id).then(function () {
-              reload({ quiet: true });
-              setStatus('Carte restaurée', 'ok');
-            }, fail);
-          },
+          run: function () { toggleEntry(entry); },
         });
       }, fail);
     }
@@ -1051,6 +1113,7 @@
       var pos = TM().dropPos(siblings, idx);
       var listChanged = moved.listId !== targetRow.listId;
       var list = listById(targetRow.listId);
+      var from = { listId: moved.listId, pos: moved.pos, statut: moved.statut };
       moved.pos = pos;
       moved.listId = targetRow.listId;
       if (list) {
@@ -1062,7 +1125,15 @@
       renderGrid();
       setStatus('Enregistrement…', 'busy');
       var op = listChanged ? TT().moveCard(t, moved.id, targetRow.listId, pos) : TT().reorderCard(t, moved.id, pos);
-      op.then(function () { setStatus('Ordre enregistré', 'ok'); schedulePush(); }, function (err) {
+      op.then(function () {
+        setStatus('Ordre enregistré', 'ok');
+        schedulePush();
+        if (listChanged) {
+          record({ type: 'move', cardId: moved.id, cardName: moved.name, key: 'statut', before: from.statut, after: moved.statut, beforeVal: from.listId, afterVal: moved.listId, beforePos: from.pos, afterPos: pos });
+        } else if (from.pos !== pos) {
+          record({ type: 'reorder', cardId: moved.id, cardName: moved.name, after: moved.statut, beforeVal: from.pos, afterVal: pos });
+        }
+      }, function (err) {
         fail(err);
         reload({ quiet: true });
       });
@@ -1248,7 +1319,7 @@
         journal.level = (res.data && res.data.logLevel) || 'INFO';
         state.sheetTheme = (res.data && res.data.sheetTheme) || 'light';
         renderAlerts();
-        var b = els.bar.querySelector('.tb-badge');
+        var b = els.bar.querySelector('.tb-badge:not(.tb-badge--soft)');
         if (b) b.hidden = !state.alerts.length;
       });
     }
@@ -1286,13 +1357,15 @@
       if (minLevel) journal.minLevel = minLevel;
       renderDrawer();
       clearInterval(drawerTimer);
-      if (state.drawer) {
+      if (state.drawer && state.drawer !== 'history') {
         refreshDrawer();
         drawerTimer = setInterval(refreshDrawer, 15000);
       }
+      renderBar();
     }
 
     function refreshDrawer() {
+      if (state.drawer === 'history') { renderDrawer(); return Promise.resolve(); }
       if (!state.drawer || !SH().isConnected(state.sheet)) return Promise.resolve();
       journal.loading = true;
       var call = state.drawer === 'logs' ? SH().logs(state.sheet, { limit: 300, level: journal.minLevel }) : SH().activities(state.sheet, { limit: 300 });
@@ -1334,12 +1407,18 @@
       d.hidden = !state.drawer;
       if (!state.drawer) return;
       var isLogs = state.drawer === 'logs';
+      var isHist = state.drawer === 'history';
       var head = h('div', { class: 'tb-drawer-head' }, [
         h('div', { class: 'tb-tabs' }, [
+          h('button', { class: 'tb-tab' + (isHist ? ' is-on' : ''), onclick: function () { openDrawer('history', null, true); } }, [icon('history'), h('span', { text: 'Historique' })]),
           h('button', { class: 'tb-tab' + (isLogs ? ' is-on' : ''), onclick: function () { openDrawer('logs', journal.minLevel, true); } }, [icon('list-details'), h('span', { text: 'Logs' })]),
-          h('button', { class: 'tb-tab' + (!isLogs ? ' is-on' : ''), onclick: function () { openDrawer('activities', null, true); } }, [icon('activity'), h('span', { text: 'Activités' })]),
+          h('button', { class: 'tb-tab' + (!isLogs && !isHist ? ' is-on' : ''), onclick: function () { openDrawer('activities', null, true); } }, [icon('activity'), h('span', { text: 'Activités' })]),
         ]),
       ]);
+      if (isHist) {
+        renderHistoryDrawer(d, head);
+        return;
+      }
       if (isLogs) {
         var minSel = h('select', { class: 'tb-select', title: 'Niveau minimum affiché', onchange: function (e) { journal.minLevel = e.target.value; refreshDrawer(); } });
         LEVELS_UI.forEach(function (l) { minSel.appendChild(h('option', { value: l, text: 'Afficher ≥ ' + l, selected: l === journal.minLevel })); });
@@ -1401,6 +1480,222 @@
         body.appendChild(table);
       }
       d.appendChild(body);
+    }
+
+    /* ── History panel ────────────────────────────────────────────── */
+    function persistHistory() {
+      try { global.localStorage.setItem(hist.key, JSON.stringify(hist.items.slice(0, HISTORY_MAX))); } catch (e) { /* storage unavailable */ }
+    }
+
+    /** Adds an entry on top of the history; `e` is plain data so it survives a reload (undo is derived from it). */
+    function record(e) {
+      e.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      e.ts = Date.now();
+      e.state = 'done';
+      hist.items.unshift(e);
+      if (hist.items.length > HISTORY_MAX) hist.items.length = HISTORY_MAX;
+      persistHistory();
+      var badge = els.bar.querySelector('.tb-badge--soft');
+      if (badge) { badge.hidden = false; badge.textContent = String(Math.min(hist.items.length, 99)); }
+      if (state.drawer === 'history') renderDrawer();
+      return e;
+    }
+
+    function canToggle(e) {
+      return e.type !== 'field';
+    }
+
+    /** Runs the write that moves an entry back to its "before" state (`back`) or forward to its "after" state. */
+    function applyEntry(e, back) {
+      var val = back ? e.beforeVal : e.afterVal;
+      var row = findRow(e.cardId);
+      if (e.type === 'archive') return back ? TT().unarchiveCard(t, e.cardId) : TT().archiveCard(t, e.cardId);
+      if (e.type === 'create') return back ? TT().archiveCard(t, e.cardId) : TT().unarchiveCard(t, e.cardId);
+      if (e.type === 'move') return TT().moveCard(t, e.cardId, val, back ? e.beforePos : e.afterPos);
+      if (e.type === 'reorder') return TT().reorderCard(t, e.cardId, val);
+      if (e.type === 'progress') return writeProgress(e.cardId, val);
+      if (e.type === 'edit') {
+        if (e.key === 'name') return TT().saveName(t, e.cardId, val);
+        if (e.key === 'category') return TT().saveCategory(t, e.cardId, state.categoryFieldId, val);
+        if (e.key === 'desc') {
+          if (!row) return Promise.reject(new Error('Carte introuvable (archivée ou supprimée)'));
+          return TT().saveDesc(t, row, val);
+        }
+      }
+      return Promise.reject(new Error('Cette modification ne peut pas être annulée'));
+    }
+
+    /** Undo a "done" entry, or redo an "undone" one. */
+    function toggleEntry(e) {
+      if (hist.busy[e.id] || !canToggle(e)) return;
+      var back = e.state === 'done';
+      hist.busy[e.id] = true;
+      setStatus(back ? 'Annulation…' : 'Rétablissement…', 'busy');
+      if (state.drawer === 'history') renderDrawer();
+      applyEntry(e, back).then(
+        function () {
+          e.state = back ? 'undone' : 'done';
+          e.tsChanged = Date.now();
+          delete hist.busy[e.id];
+          persistHistory();
+          setStatus(back ? 'Action annulée' : 'Action rétablie', 'ok');
+          schedulePush();
+          return reload({ quiet: true });
+        },
+        function (err) {
+          delete hist.busy[e.id];
+          fail(err);
+        }
+      ).then(function () { if (state.drawer === 'history') renderDrawer(); });
+    }
+
+    function histVisible() {
+      var q = hist.q.trim().toLowerCase();
+      return hist.items.filter(function (e) {
+        if (hist.filter === 'undone' ? e.state !== 'undone' : hist.filter !== 'all' && HISTORY_TYPES[e.type].group !== hist.filter) return false;
+        if (!q) return true;
+        return [e.cardName, e.before, e.after, histVerb(e)].join(' ').toLowerCase().indexOf(q) !== -1;
+      });
+    }
+
+    function colName(key) {
+      var spec = key && TM().COLUMNS[key];
+      return (spec && spec.header) || key || 'Champ';
+    }
+
+    function histVerb(e) {
+      if (e.type === 'archive') return 'archivée';
+      if (e.type === 'create') return 'créée' + (e.after ? ' dans « ' + e.after + ' »' : '');
+      if (e.type === 'move') return 'déplacée';
+      if (e.type === 'reorder') return 'réordonnée' + (e.after ? ' dans « ' + e.after + ' »' : '');
+      return (e.label || colName(e.key)) + ' modifié';
+    }
+
+    function relTime(ts) {
+      var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+      if (s < 45) return 'à l’instant';
+      if (s < 3600) return 'il y a ' + Math.max(1, Math.round(s / 60)) + ' min';
+      if (s < 86400) return 'il y a ' + Math.round(s / 3600) + ' h';
+      return '';
+    }
+
+    function dayLabel(ts) {
+      var d = new Date(ts);
+      var today = new Date();
+      var key = d.toDateString();
+      if (key === today.toDateString()) return 'Aujourd’hui';
+      var y = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      if (key === y.toDateString()) return 'Hier';
+      var label = d.toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' });
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
+
+    function clock(ts) {
+      return new Date(ts).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function histItem(e) {
+      var meta = HISTORY_TYPES[e.type];
+      var undone = e.state === 'undone';
+      var busy = !!hist.busy[e.id];
+      var title = h('div', { class: 'tb-hi-title' }, [
+        h('strong', { class: 'tb-hi-card', text: e.cardName || 'Carte' }),
+        h('span', { class: 'tb-hi-verb', text: histVerb(e) }),
+        undone ? h('span', { class: 'tb-hi-tag', text: 'Annulée' }) : null,
+      ]);
+      var detail = null;
+      if (e.type === 'archive') detail = h('div', { class: 'tb-hi-sub' }, [icon('layout-list'), h('span', { text: e.after ? 'Était dans « ' + e.after + ' »' : 'Retirée du tableau' })]);
+      else if (e.before || e.after) {
+        detail = h('div', { class: 'tb-hi-sub' }, [beforeAfter({ 'Avant': e.before || '(vide)', 'Après': e.after || '(vide)' })]);
+      }
+      var when = relTime(e.ts);
+      var right = h('div', { class: 'tb-hi-side' }, [
+        h('span', { class: 'tb-hi-time', title: new Date(e.ts).toLocaleString('fr-CA'), text: clock(e.ts) + (when ? ' · ' + when : '') }),
+        canToggle(e)
+          ? h('button', {
+              class: 'tb-hi-act' + (undone ? ' is-redo' : ''),
+              disabled: busy ? true : null,
+              title: undone ? 'Rétablir cette modification' : 'Annuler cette modification',
+              onclick: function () { toggleEntry(e); },
+            }, [icon(busy ? 'loader-2' : undone ? 'arrow-forward-up' : 'arrow-back-up', busy ? 'tb-spin' : ''), h('span', { text: undone ? 'Rétablir' : 'Annuler' })])
+          : h('span', { class: 'tb-hi-noundo', title: 'Annulation indisponible pour ce champ', text: 'Non annulable' }),
+      ]);
+      return h('li', { class: 'tb-hi' + (undone ? ' is-undone' : '') }, [
+        h('span', { class: 'tb-hi-ico tb-hi-ico--' + meta.tone }, [icon(meta.icon)]),
+        h('div', { class: 'tb-hi-main' }, [title, detail]),
+        right,
+      ]);
+    }
+
+    function renderHistoryList(listEl) {
+      listEl.innerHTML = '';
+      var items = histVisible();
+      if (!items.length) {
+        listEl.appendChild(h('li', { class: 'tb-hi-empty' }, [
+          icon('history'),
+          h('div', { text: hist.items.length ? 'Aucune entrée ne correspond à ce filtre.' : 'Rien dans l’historique pour le moment.' }),
+          hist.items.length ? null : h('small', { text: 'Archivages, modifications, déplacements et créations faits depuis ce tableau apparaîtront ici, avec un bouton pour les annuler.' }),
+        ]));
+        return;
+      }
+      var lastDay = '';
+      var dayCount = {};
+      items.forEach(function (e) { var k = new Date(e.ts).toDateString(); dayCount[k] = (dayCount[k] || 0) + 1; });
+      items.forEach(function (e) {
+        var k = new Date(e.ts).toDateString();
+        if (k !== lastDay) {
+          lastDay = k;
+          listEl.appendChild(h('li', { class: 'tb-hi-day' }, [h('span', { text: dayLabel(e.ts) }), h('em', { text: String(dayCount[k]) })]));
+        }
+        listEl.appendChild(histItem(e));
+      });
+    }
+
+    function renderHistoryDrawer(d, head) {
+      var listEl = h('ul', { class: 'tb-hist' });
+      head.appendChild(
+        h('span', { class: 'tb-search tb-hi-search' }, [
+          icon('search'),
+          h('input', {
+            class: 'tb-filter', type: 'search', placeholder: 'Chercher une carte ou une valeur…', value: hist.q,
+            oninput: function (ev) { hist.q = ev.target.value; renderHistoryList(listEl); },
+          }),
+        ])
+      );
+      head.appendChild(h('span', { class: 'tb-spacer' }));
+      head.appendChild(
+        hist.confirmClear
+          ? btn('trash', 'Confirmer l’effacement', { title: 'Les actions ne pourront plus être annulées depuis ici', onclick: function () {
+              hist.items = [];
+              hist.confirmClear = false;
+              persistHistory();
+              renderBar();
+              renderDrawer();
+            } })
+          : btn('trash', null, { title: 'Vider l’historique', onclick: function () {
+              if (!hist.items.length) return;
+              hist.confirmClear = true;
+              renderDrawer();
+              setTimeout(function () { if (hist.confirmClear) { hist.confirmClear = false; if (state.drawer === 'history') renderDrawer(); } }, 4000);
+            } })
+      );
+      head.appendChild(btn('chevron-down', null, { title: 'Fermer', onclick: function () { state.drawer = null; clearInterval(drawerTimer); renderDrawer(); renderBar(); } }));
+      d.appendChild(head);
+
+      var counts = { all: hist.items.length, undone: 0, archive: 0, edit: 0, move: 0, create: 0 };
+      hist.items.forEach(function (e) {
+        counts[HISTORY_TYPES[e.type].group] += 1;
+        if (e.state === 'undone') counts.undone += 1;
+      });
+      var chips = h('div', { class: 'tb-hi-chips' }, HISTORY_FILTERS.map(function (f) {
+        return h('button', {
+          class: 'tb-hi-chip' + (hist.filter === f.id ? ' is-on' : ''),
+          onclick: function () { hist.filter = f.id; renderDrawer(); },
+        }, [icon(f.icon), h('span', { text: f.label }), h('em', { text: String(counts[f.id] || 0) })]);
+      }));
+      d.appendChild(chips);
+      renderHistoryList(listEl);
+      d.appendChild(h('div', { class: 'tb-drawer-body' }, [listEl]));
     }
 
     /* ── Assistant dock (project-scope chat under the table) ──────── */

@@ -555,9 +555,16 @@ tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
 .tb-prog.is-done .tb-prog-bar i {
   background: var(--tp-success, #22a06b);
 }
-.tb-cell--draggable {
+.tb-cell--draggable .tb-prog-bar {
+  position: relative;
+  overflow: visible;
   cursor: ew-resize;
-  touch-action: pan-y;
+  touch-action: none;
+}
+.tb-cell--draggable .tb-prog-bar::before {
+  content: '';
+  position: absolute;
+  inset: -9px 0;
 }
 .tb-cell--draggable.is-dragging {
   user-select: none;
