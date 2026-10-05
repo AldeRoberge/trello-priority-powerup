@@ -621,7 +621,7 @@
       var addInput = h('input', {
         class: 'tb-add',
         id: 'tbAdd',
-        placeholder: 'Nouvelle carte — écrire un titre puis Entrée',
+        placeholder: 'Nouvelle carte : écrire un titre puis appuyer sur Entrée',
         onkeydown: function (e) {
           if (e.key !== 'Enter') return;
           var name = e.target.value.trim();

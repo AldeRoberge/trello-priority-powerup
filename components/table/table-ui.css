@@ -323,14 +323,25 @@ textarea.tb-input {
 .tb-add {
   width: 100%;
   font: inherit;
-  padding: 5px 0;
-  border: 0;
+  padding: 9px 10px;
+  border: 1px dashed var(--tp-text-muted);
+  border-radius: 6px;
   outline: 0;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--tp-text);
+  font-size: 14px;
 }
 .tb-add::placeholder {
-  color: var(--tp-text-muted);
+  color: var(--tp-text);
+  opacity: 0.75;
+}
+.tb-add:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.tb-add:focus {
+  border-style: solid;
+  border-color: #4c9aff;
+  background: rgba(76, 154, 255, 0.1);
 }
 
 /* ── Icons, toolbar ─────────────────────────────────────────────── */
