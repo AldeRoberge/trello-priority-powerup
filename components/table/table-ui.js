@@ -654,7 +654,18 @@
         .createRow(t, name, list.id)
         .then(function (res) {
           var cardId = res && res.cardId;
-          return reload({ quiet: true }).then(function () {
+          // Trello's client-side card cache can lag right after a REST create, so the new card may be
+          // missing from the first reload: retry a few times before giving up.
+          function loaded() { return !cardId || state.rows.some(function (r) { return r.id === cardId; }); }
+          function reloadUntilPresent(attempt) {
+            return reload({ quiet: true }).then(function () {
+              if (loaded() || attempt >= 4) return;
+              return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () {
+                return reloadUntilPresent(attempt + 1);
+              });
+            });
+          }
+          return reloadUntilPresent(0).then(function () {
             var hidden = cardId && !visibleRows().some(function (r) { return r.id === cardId; });
             setStatus('Carte créée dans « ' + list.name + ' »' + (hidden ? ' (masquée par le filtre)' : ''), 'ok', hidden ? 5000 : 0);
             if (opts && opts.rename && cardId && !hidden) beginEdit(cardId, 'name');
