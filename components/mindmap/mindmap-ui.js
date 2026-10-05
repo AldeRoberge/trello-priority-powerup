@@ -22,6 +22,7 @@
   var CHAR_W = 6.6; // average glyph width of the 13px label, used to wrap text
   var HEAD_PAD = 9;
   var LINE_H = 17;
+  var GRID = 18; // matches the canvas dot grid (background-size in applyView / CSS)
   var PIN_GAP = 6; // wires stop this far outside the card so the pin stays visible
   var SIDES = {
     top: { nx: 0, ny: -1 },
@@ -123,6 +124,8 @@
       cycles: {},
       selected: null,
       selectedEdge: null,
+      snap: (function () { try { return localStorage.getItem('tp-mindmap-snap') !== '0'; } catch (e) { return true; } })(),
+      dropPos: {}, // node id → graph position chosen for a task just created from the canvas
       relink: null, // edge id whose target is being replaced
       confirmDelete: null, // goal node id waiting for a second click
       linkFrom: null, // node id waiting for a target
@@ -254,6 +257,16 @@
           title: 'Disposer du centre (vision, mission) vers l’extérieur (objectifs, unités de travail, tâches)',
           onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
         }, [icon('hierarchy-3'), 'Hiérarchie']),
+        h('button', {
+          class: 'mm-btn' + (state.snap ? ' is-active' : ''),
+          'aria-pressed': state.snap ? 'true' : 'false',
+          title: 'Aimanter les cartes à la grille en les déplaçant (Alt = déplacement libre)',
+          onclick: function () {
+            state.snap = !state.snap;
+            try { localStorage.setItem('tp-mindmap-snap', state.snap ? '1' : '0'); } catch (e) { /* ignore */ }
+            renderBar();
+          },
+        }, [icon('grid-dots'), 'Grille']),
         state.goalsAuth === false ? h('button', {
           class: 'mm-btn mm-btn--primary',
           title: 'Trello doit être autorisé pour lire et enregistrer les objectifs',
@@ -293,7 +306,8 @@
       g.nodes.forEach(function (n) {
         measure(n);
         n.fixed = false;
-        if (!opts.fresh && prev[n.id] && !opts.relayout) { n.x = prev[n.id].x; n.y = prev[n.id].y; n.pinned = true; n.fixed = true; }
+        if (state.dropPos[n.id]) { n.x = state.dropPos[n.id].x; n.y = state.dropPos[n.id].y; n.pinned = true; n.fixed = true; n.placed = true; delete state.dropPos[n.id]; }
+        else if (!opts.fresh && prev[n.id] && !opts.relayout) { n.x = prev[n.id].x; n.y = prev[n.id].y; n.pinned = true; n.fixed = true; }
         else anyNew = true;
       });
       if (opts.relayout && state.layout === 'tree') {
@@ -591,6 +605,7 @@
           moved = true;
           n.x = start.nx + dx / state.view.k;
           n.y = start.ny + dy / state.view.k;
+          if (state.snap && !me.altKey) { n.x = Math.round(n.x / GRID) * GRID; n.y = Math.round(n.y / GRID) * GRID; } // Alt = free move
           positionNode(n);
           state.graph.edges.forEach(function (e) { if (e.from === n.id || e.to === n.id) positionEdge(e); });
         }
@@ -646,12 +661,21 @@
         var start = { x: from.x + from.nx * PIN_GAP, y: from.y + from.ny * PIN_GAP, nx: from.nx, ny: from.ny };
         temp.setAttribute('d', wirePath(start, end));
       }
-      function up() {
+      function up(me) {
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', up);
         document.removeEventListener('pointercancel', cancel);
         finish();
-        if (target) applyLink(n.id, target);
+        if (target) {
+          var tn = nodeById(target);
+          // task ↔ task: left / top pin = "this depends on it", right / bottom pin = "it depends on this"
+          if (tn && n.kind === 'task' && tn.kind === 'task' && (side === 'right' || side === 'bottom')) return applyLink(target, n.id);
+          return applyLink(n.id, target);
+        }
+        if (n.kind !== 'task' || !me || !els.canvas.contains(me.target)) return;
+        var p = toGraph(me);
+        if (Math.sqrt(Math.pow(p.x - from.x, 2) + Math.pow(p.y - from.y, 2)) < 60) return; // a click on the pin, not a drag
+        askNewTask(n, side, p, me);
       }
       function cancel() {
         document.removeEventListener('pointermove', move);
@@ -746,6 +770,66 @@
       if (res.error) { setStatus(res.error, 'error'); return Promise.resolve(); }
       if (res.kind === 'depends') return toggleDependency(res.from.slice(2), res.to.slice(2));
       return toggleServes(res.from, res.to);
+    }
+
+    /**
+     * Inline name box at the drop point, then creates the task there. From a pin (src + side) it is linked:
+     * left / top = src depends on the new task, right / bottom = the new task depends on src. src null = unlinked.
+     */
+    function askNewTask(src, side, p, me) {
+      var r = els.canvas.getBoundingClientRect();
+      var input = h('input', { class: 'mm-input mm-newtask', type: 'text', placeholder: 'Nouvelle tâche…', maxlength: '120', 'aria-label': 'Nom de la nouvelle tâche' });
+      input.style.cssText = 'position:absolute;z-index:5;width:210px;left:' + Math.max(4, me.clientX - r.left - 105) + 'px;top:' + Math.max(4, me.clientY - r.top - 16) + 'px';
+      var done = false;
+      function close() { if (input.parentNode) input.parentNode.removeChild(input); }
+      input.addEventListener('keydown', function (ev) {
+        ev.stopPropagation();
+        if (ev.key === 'Escape') { done = true; close(); }
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          var name = input.value.trim();
+          done = true;
+          close();
+          if (name) createTaskAt(src, side, p, name);
+        }
+      });
+      input.addEventListener('blur', function () { if (!done) close(); });
+      els.canvas.appendChild(input);
+      input.focus();
+    }
+
+    function createTaskAt(src, side, p, name) {
+      var pt = global.PriorityTrello;
+      var srcRec = src && src.rec;
+      var sel = !srcRec && state.selected && nodeById(state.selected);
+      var listRec = srcRec || (sel && sel.kind === 'task' && sel.rec) || state.records[0];
+      if (!pt || typeof pt.createCard !== 'function' || !listRec || !listRec.listId) {
+        setStatus('Création indisponible', 'error');
+        return Promise.resolve();
+      }
+      var below = side === 'bottom';
+      var above = side === 'top';
+      var pos = { x: p.x + (side === 'right' ? 105 : side === 'left' ? -105 : 0), y: p.y + (below ? 22 : above ? -22 : 0) };
+      setStatus('Création…');
+      return pt.createCard(t, { name: name, idList: listRec.listId }).then(function (res) {
+        if (!res || !res.ok) throw new Error((res && res.reason) || 'erreur');
+        var newId = res.cardId;
+        state.dropPos['t:' + newId] = pos;
+        if (!src) return null;
+        var dependsOnSrc = side === 'right' || side === 'bottom';
+        var depCard = dependsOnSrc ? newId : src.rec.id;
+        var depId = dependsOnSrc ? src.rec.id : newId;
+        var existing = dependsOnSrc ? [] : ((src.rec.inputs && src.rec.inputs.dependsOn) || []).slice();
+        return pt.saveCardInputsById(t, depCard, { dependsOn: existing.concat([depId]) });
+      }).then(function () {
+        return global.GanttTrello.loadBoard(t);
+      }).then(function (board) {
+        state.records = board.cards || [];
+        setStatus('Tâche créée', 'ok');
+        rebuild({ keepView: true });
+      }).catch(function (err) {
+        setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error');
+      });
     }
 
     function edgesWithout(e) {
@@ -1226,6 +1310,11 @@
       svg.addEventListener('pointermove', move);
       svg.addEventListener('pointerup', up);
       svg.addEventListener('pointercancel', up);
+    });
+    svg.addEventListener('dblclick', function (ev) {
+      if (ev.button || (ev.target.closest && ev.target.closest('.mm-node, .mm-edge-hit'))) return;
+      var r = svg.getBoundingClientRect();
+      askNewTask(null, null, { x: (ev.clientX - r.left - state.view.x) / state.view.k, y: (ev.clientY - r.top - state.view.y) / state.view.k }, ev);
     });
     svg.addEventListener('wheel', function (ev) {
       ev.preventDefault();
