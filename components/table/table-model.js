@@ -173,8 +173,15 @@
 
   /** ctx: { lists } — the board's lists in order, so Statut sorts like the board and not A→Z. */
   function sortRows(rows, key, dir, ctx) {
-    if (!key || !COLUMNS[key]) return rows.slice();
-    var sign = dir === 'desc' ? -1 : 1;
+    return sortRowsMulti(rows, key ? [{ key: key, dir: dir }] : [], ctx);
+  }
+
+  /** Sort by several levels: sorts = [{key, dir}], the first is the main one, later ones break ties. */
+  function sortRowsMulti(rows, sorts, ctx) {
+    var levels = (sorts || []).filter(function (s) {
+      return s && COLUMNS[s.key];
+    });
+    if (!levels.length) return rows.slice();
     var listRank = {};
     ((ctx && ctx.lists) || []).forEach(function (l, i) {
       listRank[l.id] = i;
@@ -182,14 +189,26 @@
     var sctx = { listRank: listRank };
     return rows
       .map(function (r, i) {
-        return { r: r, i: i, v: sortValue(r, key, sctx) };
+        return {
+          r: r,
+          i: i,
+          v: levels.map(function (s) {
+            return sortValue(r, s.key, sctx);
+          }),
+        };
       })
       .sort(function (x, y) {
-        var emptyA = x.v == null || x.v === '';
-        var emptyB = y.v == null || y.v === '';
-        if (emptyA !== emptyB) return emptyA ? 1 : -1; // keep empties last in both directions
-        if (emptyA) return x.i - y.i;
-        return sign * compareValues(x.v, y.v) || x.i - y.i;
+        for (var k = 0; k < levels.length; k++) {
+          var av = x.v[k];
+          var bv = y.v[k];
+          var emptyA = av == null || av === '';
+          var emptyB = bv == null || bv === '';
+          if (emptyA !== emptyB) return emptyA ? 1 : -1; // keep empties last in both directions
+          if (emptyA) continue;
+          var c = (levels[k].dir === 'desc' ? -1 : 1) * compareValues(av, bv);
+          if (c) return c;
+        }
+        return x.i - y.i;
       })
       .map(function (x) {
         return x.r;
@@ -285,6 +304,7 @@
     cellText: cellText,
     formatDay: formatDay,
     sortRows: sortRows,
+    sortRowsMulti: sortRowsMulti,
     sortLabels: sortLabels,
     filterRows: filterRows,
     orderByLists: orderByLists,

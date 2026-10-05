@@ -371,6 +371,7 @@ textarea.tb-input {
 .tb-th:hover .tb-sort { opacity: 0.55; }
 .tb-th.is-sorted .tb-sort { opacity: 1; color: var(--tp-primary); }
 .tb-th.is-sorted .tb-th-icon { color: var(--tp-primary); }
+.tb-sort-n { margin-left: 2px; font-size: 10px; font-weight: 700; color: var(--tp-primary); vertical-align: 2px; }
 .tb-th:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: -2px; }
 .tb-th:focus-visible .tb-sort { opacity: 0.55; }
 

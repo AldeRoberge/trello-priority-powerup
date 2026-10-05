@@ -59,6 +59,19 @@ describe('TableModel', () => {
     assert.match(row.fullDesc, /cerveau-meta/);
   });
 
+  it('sorts by several levels, later ones breaking ties', () => {
+    const rows = [
+      { id: 'a', priority: 5, name: 'b' },
+      { id: 'b', priority: 5, name: 'a' },
+      { id: 'c', priority: 9, name: 'c' },
+      { id: 'd', priority: null, name: 'a' },
+    ];
+    const ids = (s) => TM.sortRowsMulti(rows, s).map((r) => r.id);
+    assert.deepEqual(ids([{ key: 'priority', dir: 'desc' }, { key: 'name', dir: 'asc' }]), ['c', 'b', 'a', 'd']);
+    assert.deepEqual(ids([{ key: 'priority', dir: 'desc' }, { key: 'name', dir: 'desc' }]), ['c', 'a', 'b', 'd']);
+    assert.deepEqual(ids([]), ['a', 'b', 'c', 'd']);
+  });
+
   it('sorts numbers and text, empties last in both directions', () => {
     const rows = [
       { id: 'a', priority: 5, name: 'b' },

@@ -82,7 +82,7 @@
       columns: TM().DEFAULT_COLUMNS.slice(),
       widths: {},
       sheetTheme: 'light',
-      sort: null, // {key, dir}
+      sorts: [], // [{key, dir}] — first is the main sort, the rest break ties
       filter: '',
       hideDone: readHideDone(),
       categoryFieldId: null,
@@ -216,11 +216,11 @@
     function visibleRows() {
       var rows = TM().filterRows(state.rows, state.filter);
       if (state.hideDone) rows = rows.filter(function (r) { return r.statutKey !== 'completed'; });
-      if (state.sort) rows = TM().sortRows(rows, state.sort.key, state.sort.dir, { lists: state.lists });
+      if (state.sorts.length) rows = TM().sortRowsMulti(rows, state.sorts, { lists: state.lists });
       return rows;
     }
     function canReorder() {
-      return !state.sort && !state.filter && !state.hideDone;
+      return !state.sorts.length && !state.filter && !state.hideDone;
     }
     function findRow(id) {
       return state.rows.filter(function (r) { return r.id === id; })[0] || null;
@@ -236,9 +236,21 @@
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () {});
     }
 
-    function setSort(key, dir) {
-      state.sort = key ? { key: key, dir: dir } : null;
+    function sortOf(key) {
+      return state.sorts.filter(function (s) { return s.key === key; })[0] || null;
+    }
+    /** add=false replaces the whole sort; add=true sets/removes just this column's level (dir null removes). */
+    function setSort(key, dir, add) {
+      if (!key) state.sorts = [];
+      else if (!add) state.sorts = dir ? [{ key: key, dir: dir }] : [];
+      else {
+        var at = state.sorts.findIndex(function (s) { return s.key === key; });
+        var rest = state.sorts.filter(function (s) { return s.key !== key; });
+        if (dir) rest.splice(at === -1 ? rest.length : at, 0, { key: key, dir: dir });
+        state.sorts = rest;
+      }
       renderGrid();
+      renderBar();
     }
 
     function hideColumn(key) {
@@ -324,10 +336,11 @@
           },
         })
       );
-      if (state.sort) {
-        var sortSpec = TM().COLUMNS[state.sort.key];
-        kids.push(btn(state.sort.dir === 'asc' ? 'sort-ascending' : 'sort-descending', 'Tri : ' + sortSpec.header, {
-          title: 'Trié ' + TM().sortLabels(state.sort.key)[state.sort.dir] + ' · cliquer pour revenir à l’ordre du tableau',
+      if (state.sorts.length) {
+        kids.push(btn(state.sorts[0].dir === 'asc' ? 'sort-ascending' : 'sort-descending', 'Tri : ' + state.sorts.map(function (s) {
+          return TM().COLUMNS[s.key].header + (s.dir === 'asc' ? ' ↑' : ' ↓');
+        }).join(', '), {
+          title: 'Trié ' + state.sorts.map(function (s) { return TM().COLUMNS[s.key].header + ' ' + TM().sortLabels(s.key)[s.dir]; }).join(', puis ') + ' · cliquer pour revenir à l’ordre du tableau',
           onclick: function () { setSort(null); },
         }));
       }
@@ -566,28 +579,32 @@
         var spec = TM().COLUMNS[key];
         var width = colWidth(key);
         tableWidth += width;
-        var active = state.sort && state.sort.key === key;
-        var sortIcon = active ? (state.sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrows-sort';
-        var toggleSort = function () {
-          if (active) setSort(state.sort.dir === 'asc' ? key : null, 'desc');
-          else setSort(key, 'asc');
+        var cur = sortOf(key);
+        var active = !!cur;
+        var sortIcon = active ? (cur.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrows-sort';
+        // Click: sort by this column alone. Shift/Ctrl-click: add it as another level (or cycle its direction).
+        var toggleSort = function (e) {
+          var add = !!(e && (e.shiftKey || e.ctrlKey || e.metaKey));
+          var next = !cur ? 'asc' : cur.dir === 'asc' ? 'desc' : null;
+          if (!add && cur && state.sorts.length > 1) next = 'asc'; // collapse a multi-sort onto this column
+          setSort(key, next, add);
         };
         head.appendChild(
           h('th', {
             class: 'tb-th' + (active ? ' is-sorted' : ''),
             'data-key': key,
             style: 'min-width:' + width + 'px;width:' + width + 'px',
-            title: 'Cliquer pour trier',
+            title: 'Cliquer pour trier · Maj+clic pour ajouter un niveau de tri',
             tabindex: '0',
-            'aria-sort': active ? (state.sort.dir === 'asc' ? 'ascending' : 'descending') : null,
+            'aria-sort': active ? (cur.dir === 'asc' ? 'ascending' : 'descending') : null,
             onclick: toggleSort,
             onkeydown: function (e) {
               if (e.key !== 'Enter' && e.key !== ' ') return;
               e.preventDefault();
               e.stopPropagation(); // the grid's own Enter handler is for the selected cell
-              toggleSort();
+              toggleSort(e);
             },
-          }, [icon(spec.icon, 'tb-th-icon'), h('span', { class: 'tb-th-text', text: spec.header }), icon(sortIcon, 'tb-sort'), resizer(key)])
+          }, [icon(spec.icon, 'tb-th-icon'), h('span', { class: 'tb-th-text', text: spec.header }), icon(sortIcon, 'tb-sort'), state.sorts.length > 1 && active ? h('span', { class: 'tb-sort-n', text: String(state.sorts.indexOf(cur) + 1) }) : null, resizer(key)])
         );
       });
       table.style.width = tableWidth + 'px';
@@ -1150,7 +1167,7 @@
         { icon: 'refresh', label: 'Actualiser', action: function () { reload(); } },
         { icon: 'columns-3', label: 'Colonnes…', action: function () { state.menuOpen = true; renderMenu(); } },
       ];
-      if (state.sort) items.push({ icon: 'arrows-sort', label: 'Retirer le tri (ordre du tableau)', action: function () { setSort(null); } });
+      if (state.sorts.length) items.push({ icon: 'arrows-sort', label: 'Retirer le tri (ordre du tableau)', action: function () { setSort(null); } });
       items.push({ sep: true });
       if (connected) {
         items.push({ icon: 'refresh-dot', label: 'Synchroniser avec le Sheet', action: syncNow });
@@ -1164,12 +1181,15 @@
     function headerItems(key) {
       var spec = TM().COLUMNS[key];
       var idx = state.columns.indexOf(key);
-      var sorted = state.sort && state.sort.key === key ? state.sort.dir : null;
+      var sorted = sortOf(key) ? sortOf(key).dir : null;
+      var others = state.sorts.some(function (s) { return s.key !== key; });
       return [
         { title: spec.header },
-        { icon: 'sort-ascending', label: 'Trier ' + TM().sortLabels(key).asc, checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } },
-        { icon: 'sort-descending', label: 'Trier ' + TM().sortLabels(key).desc, checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } },
-        { icon: 'arrows-sort', label: 'Retirer le tri', disabled: !sorted, action: function () { setSort(null); } },
+        { icon: 'sort-ascending', label: 'Trier ' + TM().sortLabels(key).asc, checked: sorted === 'asc' && !others, action: function () { setSort(key, 'asc'); } },
+        { icon: 'sort-descending', label: 'Trier ' + TM().sortLabels(key).desc, checked: sorted === 'desc' && !others, action: function () { setSort(key, 'desc'); } },
+        { icon: 'sort-ascending', label: 'Ajouter au tri ' + TM().sortLabels(key).asc, checked: sorted === 'asc' && others, disabled: !state.sorts.length, action: function () { setSort(key, 'asc', true); } },
+        { icon: 'sort-descending', label: 'Ajouter au tri ' + TM().sortLabels(key).desc, checked: sorted === 'desc' && others, disabled: !state.sorts.length, action: function () { setSort(key, 'desc', true); } },
+        { icon: 'arrows-sort', label: others ? 'Retirer ce niveau de tri' : 'Retirer le tri', disabled: !sorted, action: function () { setSort(key, null, true); } },
         { sep: true },
         { icon: 'arrow-left', label: 'Déplacer à gauche', disabled: idx <= 0, action: function () { moveColumn(idx, -1); } },
         { icon: 'arrow-right', label: 'Déplacer à droite', disabled: idx >= state.columns.length - 1, action: function () { moveColumn(idx, 1); } },
@@ -1222,10 +1242,11 @@
         statutItems(row).forEach(function (i) { items.push(i); });
       }
       if (key) {
-        var sorted = state.sort && state.sort.key === key ? state.sort.dir : null;
+        var sorted = sortOf(key) && state.sorts.length === 1 ? sortOf(key).dir : null;
         items.push({ sep: true });
         items.push({ icon: 'sort-ascending', label: 'Trier « ' + spec.header + ' » ' + TM().sortLabels(key).asc, checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } });
         items.push({ icon: 'sort-descending', label: 'Trier « ' + spec.header + ' » ' + TM().sortLabels(key).desc, checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } });
+        items.push({ icon: 'sort-ascending', label: 'Ajouter « ' + spec.header + ' » au tri', disabled: !state.sorts.length, action: function () { setSort(key, sortOf(key) ? sortOf(key).dir : 'asc', true); } });
         items.push({ icon: 'eye-off', label: 'Masquer la colonne', disabled: state.columns.length <= 1, action: function () { hideColumn(key); } });
       }
       items.push({ sep: true });
