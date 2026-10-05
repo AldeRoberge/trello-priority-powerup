@@ -3579,9 +3579,13 @@
         timelineCol.appendChild(marker);
       }
 
-      // The three state sections always stay, so "no rows" means "no section header with a task".
+      // The three state sections always stay, so "no rows" means "no task row and no collapsed
+      // section still holding tasks" (otherwise collapsed sections would hide their own headers
+      // and leave no way to expand them).
       var hasTaskRows = rows.some(function (r) {
-        return r && r.kind !== 'section';
+        if (!r) return false;
+        if (r.kind !== 'section') return true;
+        return sectionShownCount(r) > 0;
       });
       if (!hasTaskRows) {
         body.appendChild(buildEmptyState());
