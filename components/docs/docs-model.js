@@ -1007,7 +1007,7 @@
   }
 
   function emptyIndex() {
-    return { v: 1, folders: [], docs: {} };
+    return { v: 1, folders: [], docs: {}, parents: {} };
   }
 
   /** Tolerant parse: anything unreadable gives an empty index; dangling parents / cycles are healed. */
@@ -1048,11 +1048,15 @@
     Object.keys(docs).forEach(function (k) {
       if (typeof docs[k] === 'string' && seen[docs[k]]) idx.docs[k] = docs[k];
     });
+    var parents = raw.parents && typeof raw.parents === 'object' ? raw.parents : {};
+    Object.keys(parents).forEach(function (k) {
+      if (typeof parents[k] === 'string' && parents[k] && parents[k] !== k) idx.parents[k] = parents[k];
+    });
     return idx;
   }
 
   function packFolderIndex(idx) {
-    return JSON.stringify({ v: 1, folders: idx.folders, docs: idx.docs });
+    return JSON.stringify({ v: 1, folders: idx.folders, docs: idx.docs, parents: idx.parents || {} });
   }
 
   function newFolderId() {
@@ -1132,26 +1136,64 @@
    * @param {string} [sort] one of SORTS (default 'date'); folders follow the name order, A→Z unless 'name-desc'
    * @returns {{type:'folder'|'doc', depth:number, folder?:object, doc?:object, count?:number, open?:boolean}[]}
    */
+  /** True when `target` is `docId` itself or sits somewhere below it (nesting `docId` there would loop). */
+  function isDocInside(idx, docId, target) {
+    var cur = target;
+    var hops = 0;
+    var parents = idx.parents || {};
+    while (cur && hops++ < 1000) {
+      if (cur === docId) return true;
+      cur = parents[cur];
+    }
+    return false;
+  }
+
   function folderRows(docs, idx, open, query, sort) {
     var q = fold(String(query || '').trim());
-    var isOpen = function (id) { return q ? true : !!(open && (open.has ? open.has(id) : open[id])); };
+    var isOpen = function (key, force) { return force || q ? true : !!(open && (open.has ? open.has(key) : open[key])); };
+    var parents = idx.parents || {};
+    var byId = {};
+    (docs || []).forEach(function (d) { byId[d.id] = d; });
+    // a document nests under its parent only when that parent exists and the chain does not loop back
+    function parentOf(d) {
+      var p = parents[d.id];
+      return p && byId[p] && !isDocInside(idx, d.id, p) ? p : '';
+    }
+    var kids = {};
     var byFolder = {};
     (docs || []).forEach(function (d) {
+      var p = parentOf(d);
+      if (p) {
+        (kids[p] = kids[p] || []).push(d);
+        return;
+      }
       var fid = idx.docs[d.id] && folderById(idx, idx.docs[d.id]) ? idx.docs[d.id] : '';
       (byFolder[fid] = byFolder[fid] || []).push(d);
     });
+    function docCount(d) {
+      return (kids[d.id] || []).reduce(function (n, k) { return n + docCount(k); }, 1);
+    }
+    function docMatches(d) {
+      return fold(d.title).indexOf(q) >= 0 || (kids[d.id] || []).some(docMatches);
+    }
     function countIn(fid) {
-      var n = (byFolder[fid] || []).length;
+      var n = (byFolder[fid] || []).reduce(function (m, d) { return m + docCount(d); }, 0);
       idx.folders.forEach(function (f) { if (f.parent === fid) n += countIn(f.id); });
       return n;
     }
     function matchesIn(fid) {
-      if ((byFolder[fid] || []).some(function (d) { return fold(d.title).indexOf(q) >= 0; })) return true;
+      if ((byFolder[fid] || []).some(docMatches)) return true;
       return idx.folders.some(function (f) { return f.parent === fid && matchesIn(f.id); });
     }
     var cmp = docComparator(sort);
     var dir = sort === 'name-desc' ? -1 : 1;
     var rows = [];
+    function pushDoc(d, depth) {
+      var ch = kids[d.id] || [];
+      var o = ch.length > 0 && isOpen('doc:' + d.id);
+      rows.push({ type: 'doc', depth: depth, doc: d, childCount: ch.length, open: o });
+      if (o) ch.slice().sort(cmp).forEach(function (k) { if (!q || docMatches(k)) pushDoc(k, depth + 1); });
+    }
     function walk(fid, depth) {
       idx.folders
         .filter(function (f) { return (f.parent || '') === fid; })
@@ -1163,8 +1205,8 @@
           if (o) walk(f.id, depth + 1);
         });
       (byFolder[fid] || []).slice().sort(cmp).forEach(function (d) {
-        if (q && fold(d.title).indexOf(q) < 0) return;
-        rows.push({ type: 'doc', depth: depth, doc: d });
+        if (q && !docMatches(d)) return;
+        pushDoc(d, depth);
       });
     }
     walk('', 0);
@@ -1202,6 +1244,7 @@
     folderPath: folderPath,
     removeFolderFrom: removeFolderFrom,
     folderRows: folderRows,
+    isDocInside: isDocInside,
     SORTS: SORTS,
     DEFAULT_TITLE: DEFAULT_TITLE,
     DEFAULT_BODY: DEFAULT_BODY,

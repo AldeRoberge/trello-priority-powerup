@@ -433,6 +433,7 @@
             openDocMenu(more, d.id);
           },
         }, [
+          docChev(r),
           icon('file-text', 'dc-item-icon'),
           h('span', { class: 'dc-item-main' }, [
             h('span', { class: 'dc-item-title', text: d.title }),
@@ -440,7 +441,7 @@
           ]),
           more,
         ]);
-        wireDrag(row, 'doc', d.id, state.idx.docs[d.id] || '');
+        wireDrag(row, 'doc', d.id, docFolderOf(d.id));
         list.appendChild(row);
       });
     }
@@ -451,6 +452,26 @@
       if (open) state.openFolders[id] = 1;
       else delete state.openFolders[id];
       remember(OPEN_KEY, JSON.stringify(state.openFolders));
+    }
+
+    /** Folder a document is shown in: its own, or that of the top document it is nested under. */
+    function docFolderOf(id) {
+      var cur = id;
+      var hops = 0;
+      var parents = state.idx.parents || {};
+      while (parents[cur] && hops++ < 1000) cur = parents[cur];
+      return state.idx.docs[cur] || '';
+    }
+
+    function docChev(r) {
+      if (!r.childCount) return h('span', { class: 'dc-chev-gap' });
+      var chev = icon(r.open ? 'chevron-down' : 'chevron-right', 'dc-folder-chev dc-doc-chev');
+      chev.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setFolderOpen('doc:' + r.doc.id, !state.openFolders['doc:' + r.doc.id]);
+        paintList();
+      });
+      return chev;
     }
 
     function folderRow(r) {
@@ -541,17 +562,33 @@
         drag = null;
         clearDropMarks();
       });
+      function nestable() {
+        return kind === 'doc' && drag && drag.kind === 'doc' && drag.id !== id && !DM().isDocInside(state.idx, drag.id, id);
+      }
       row.addEventListener('dragover', function (e) {
         if (!drag) return;
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
         clearDropMarks();
+        if (nestable()) {
+          row.classList.add('is-drop');
+          return;
+        }
         var target = dropFolder ? els.sideList.querySelector('[data-folder="' + dropFolder + '"]') : null;
         if (target) target.classList.add('is-drop');
         else els.sideList.classList.add('is-drop-root');
       });
       row.addEventListener('drop', function (e) {
+        if (nestable()) {
+          var src = drag.id;
+          drag = null;
+          clearDropMarks();
+          e.preventDefault();
+          e.stopPropagation();
+          askNest(src, id, dropFolder);
+          return;
+        }
         dropInto(e, dropFolder);
       });
     }
@@ -673,9 +710,54 @@
       editFolders(function (idx) {
         if (folderId && DM().folderById(idx, folderId)) idx.docs[docId] = folderId;
         else delete idx.docs[docId];
+        if (idx.parents) delete idx.parents[docId];
       }).then(function (ok) {
         if (ok && folderId) setFolderOpen(folderId, true);
         if (ok) paintList();
+      });
+    }
+
+    function docTitle(id) {
+      var d = state.docs.filter(function (x) { return x.id === id; })[0];
+      return d ? d.title : '';
+    }
+
+    /** Dropping a document on another one: ask whether to nest it, or just place it alongside. */
+    function askNest(docId, parentId, siblingFolder) {
+      dialog({
+        title: 'Imbriquer le document ?',
+        text: '« ' + docTitle(docId) + ' » deviendra un sous-document de « ' + docTitle(parentId) + ' ».',
+        ok: 'Imbriquer',
+        alt: 'Placer à côté',
+      }).then(function (ans) {
+        if (ans === true) nestDoc(docId, parentId);
+        else if (ans === 'alt') moveDocToFolder(docId, siblingFolder);
+      });
+    }
+
+    function nestDoc(docId, parentId) {
+      editFolders(function (idx) {
+        if (DM().isDocInside(idx, docId, parentId)) return;
+        idx.parents = idx.parents || {};
+        idx.parents[docId] = parentId;
+        delete idx.docs[docId];
+      }).then(function (ok) {
+        if (!ok) return;
+        setFolderOpen('doc:' + parentId, true);
+        paintList();
+      });
+    }
+
+    /** Takes a nested document out of its parent, leaving it in the parent's folder. */
+    function unnestDoc(docId) {
+      editFolders(function (idx) {
+        var p = idx.parents && idx.parents[docId];
+        if (!p) return;
+        var cur = p;
+        var hops = 0;
+        while (idx.parents[cur] && hops++ < 1000) cur = idx.parents[cur];
+        delete idx.parents[docId];
+        if (idx.docs[cur]) idx.docs[docId] = idx.docs[cur];
       });
     }
 
@@ -1910,6 +1992,10 @@
         item('copy', 'Dupliquer', function () { duplicateDoc(docId); }),
         item('download', 'Télécharger (.md)', function () { exportDoc(docId, 'download'); }),
         item('clipboard', 'Copier en Markdown', function () { exportDoc(docId, 'copy'); }),
+        item('file-plus', 'Nouveau sous-document', function () { newDoc(null, null, null, docId); }),
+        state.idx.parents && state.idx.parents[docId] && state.docs.some(function (x) { return x.id === state.idx.parents[docId]; })
+          ? item('arrow-bar-up', 'Sortir du document parent', function () { unnestDoc(docId); })
+          : null,
         item('folder-share', 'Déplacer vers un dossier…', function () {
           openFolderPicker(anchor, 'Déplacer le document vers', state.idx.docs[docId] || '', '', function (to) { moveDocToFolder(docId, to); });
         }),
@@ -1926,6 +2012,7 @@
           if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
           resolve(v);
         }
+        var alt = opts.alt ? h('button', { class: 'dc-btn', type: 'button', onclick: function () { done('alt'); } }, [opts.alt]) : null;
         var cancel = h('button', { class: 'dc-btn', type: 'button', onclick: function () { done(false); } }, [opts.cancel || 'Annuler']);
         var field = opts.input != null ? h('input', { class: 'dc-dialog-input', type: 'text', maxlength: String(DM().MAX_FOLDER_NAME), value: opts.input }) : null;
         var ok = h('button', { class: 'dc-btn ' + (opts.danger ? 'dc-btn--danger' : 'dc-btn--primary'), type: 'button', onclick: function () { done(field ? field.value : true); } }, [opts.ok || 'OK']);
@@ -1934,7 +2021,7 @@
           h('h2', { class: 'dc-dialog-title', text: opts.title }),
           h('p', { class: 'dc-dialog-text', text: opts.text }),
           field,
-          h('div', { class: 'dc-dialog-actions' }, [cancel, ok]),
+          h('div', { class: 'dc-dialog-actions' }, [cancel, alt, ok]),
         ]));
         overlay.addEventListener('keydown', function (e) { if (e.key === 'Escape') done(false); });
         overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) done(false); });
@@ -2135,7 +2222,7 @@
       }
     }
 
-    function newDoc(title, body, folderId) {
+    function newDoc(title, body, folderId, parentDocId) {
       if (state.busy) return;
       var go = state.current ? saveNow() : Promise.resolve(true);
       go.then(function () {
@@ -2152,6 +2239,8 @@
             if (folderId) {
               setFolderOpen(folderId, true);
               moveDocToFolder(doc.id, folderId);
+            } else if (parentDocId) {
+              nestDoc(doc.id, parentDocId);
             }
             openDoc(doc.id, { skipSave: true, focusTitle: !title });
           },

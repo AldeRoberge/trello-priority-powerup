@@ -86,4 +86,67 @@ describe('MindmapModel', () => {
     MM.layout(g.nodes, g.edges);
     assert.deepEqual([g.nodes[0].x, g.nodes[0].y], [500, -300]);
   });
+
+  describe('goal hierarchy', () => {
+    const goals = {
+      nodes: [
+        { id: 'g:v', level: 'vision', name: 'Vivre bien' },
+        { id: 'g:m', level: 'mission', name: 'Rester en forme' },
+        { id: 'g:o', level: 'goal', name: 'Courir 10 km' },
+        { id: 'g:w', level: 'work', name: 'Plan d’entraînement' },
+        { id: 'g:bad', level: 'nope', name: 'Inconnu' },
+        { id: 'g:v', level: 'vision', name: 'Doublon' },
+      ],
+      links: [
+        { from: 'g:m', to: 'g:v' },
+        { from: 'g:o', to: 'g:m' },
+        { from: 'g:w', to: 'g:o' },
+        { from: 't:a', to: 'g:w' },
+        { from: 'g:v', to: 'g:m' }, // upside down: ignored by buildGraph
+        { from: 't:zz', to: 'g:w' }, // unknown task: dropped
+      ],
+    };
+
+    it('normalizes stored goals (known levels, unique ids, no duplicate links)', () => {
+      const n = MM.normalizeGoals({ nodes: goals.nodes, links: goals.links.concat(goals.links) });
+      assert.equal(n.nodes.length, 4);
+      assert.equal(n.links.length, goals.links.length);
+      assert.deepEqual(MM.normalizeGoals(null), { nodes: [], links: [] });
+    });
+
+    it('adds goal nodes and "serves" edges, task → work → goal → mission → vision', () => {
+      const g = MM.buildGraph(records, { goals });
+      assert.equal(g.nodes.filter((n) => n.kind === 'goal').length, 4);
+      const serves = g.edges.filter((e) => e.kind === 'serves').map((e) => e.from + '>' + e.to).sort();
+      assert.deepEqual(serves, ['g:m>g:v', 'g:o>g:m', 'g:w>g:o', 't:a>g:w']);
+      assert.equal(MM.buildGraph(records, { goals, show: { goals: false } }).nodes.filter((n) => n.kind === 'goal').length, 0);
+    });
+
+    it('decides what a link between two nodes means', () => {
+      const t1 = { id: 't:a', kind: 'task' };
+      const t2 = { id: 't:b', kind: 'task' };
+      const m = { id: 'g:m', kind: 'goal', level: 'mission' };
+      const o = { id: 'g:o', kind: 'goal', level: 'goal' };
+      const o2 = { id: 'g:o2', kind: 'goal', level: 'goal' };
+      assert.deepEqual(MM.linkBetween(t1, t2), { kind: 'depends', from: 't:a', to: 't:b' });
+      assert.deepEqual(MM.linkBetween(m, o), { kind: 'serves', from: 'g:o', to: 'g:m' });
+      assert.deepEqual(MM.linkBetween(t1, m), { kind: 'serves', from: 't:a', to: 'g:m' });
+      assert.ok(MM.linkBetween(o, o2).error);
+      assert.ok(MM.linkBetween(t1, { id: 'p:x', kind: 'person' }).error);
+    });
+
+    it('lays the hierarchy out in rings: vision in the middle, tasks outside', () => {
+      const g = MM.buildGraph(records, { goals });
+      MM.layoutHierarchy(g.nodes, g.edges);
+      const r = (id) => {
+        const n = g.nodes.find((x) => x.id === id);
+        assert.ok(isFinite(n.x) && isFinite(n.y), id);
+        return Math.hypot(n.x, n.y);
+      };
+      assert.ok(r('g:v') < 1);
+      assert.ok(r('g:v') < r('g:m') && r('g:m') < r('g:o') && r('g:o') < r('g:w') && r('g:w') < r('t:a'));
+      // a task with no goal sits on the outermost ring
+      assert.ok(r('t:b') > r('t:a'));
+    });
+  });
 });

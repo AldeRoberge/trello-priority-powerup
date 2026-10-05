@@ -1080,3 +1080,11 @@ html[data-color-mode="dark"] .dc-root {
 .dc-folder-input:focus {
   outline: none;
 }
+.dc-chev-gap {
+  flex: none;
+  width: 14px;
+  margin-right: -4px;
+}
+.dc-doc-chev {
+  cursor: pointer;
+}

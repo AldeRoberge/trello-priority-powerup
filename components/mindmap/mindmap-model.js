@@ -2,8 +2,9 @@
  * Role: pure graph model of the Mindmap view. No Trello / DOM, so it is unit-tested
  * (test/mindmap-model.test.js). Input: the records of GanttTrello.loadBoard. Output: nodes and edges.
  *
- *   Node kinds  task | person | place
- *   Edge kinds  depends  task → task    "Dépend de"        (inputs.dependsOn: ids of the prerequisites)
+ *   Node kinds  task | person | place | goal (level vision | mission | goal | work, stored apart, see mindmap-goals-trello.js)
+ *   Edge kinds  serves   smaller → bigger  "Contribue à"   (task → work → goal → mission → vision, any levels skipped)
+ *               depends  task → task    "Dépend de"        (inputs.dependsOn: ids of the prerequisites)
  *               by       task → person  "Est fait par"     (assignees: Trello members + Hors Trello)
  *               at       task → place   "Est fait à"       (inputs.places.at)
  *               from / via / to         the stops of a trip (inputs.places.from / via[] / to)
@@ -23,6 +24,68 @@
     to: 'Arrivée à',
   };
   var PLACE_EDGES = ['at', 'from', 'via', 'to'];
+
+  // Goal hierarchy, highest to smallest. A task is the last level. "serves" edges point from the
+  // smaller thing to the bigger one it contributes to (task → unit of work → goal → mission → vision).
+  EDGE_LABELS.serves = 'Contribue à';
+  var LEVELS = [
+    { id: 'vision', label: 'Vision', icon: 'eye', hue: 275 },
+    { id: 'mission', label: 'Mission', icon: 'flag-3', hue: 330 },
+    { id: 'goal', label: 'Objectif', icon: 'target-arrow', hue: 25 },
+    { id: 'work', label: 'Unité de travail', icon: 'stack-2', hue: 45 },
+  ];
+  var TASK_RANK = LEVELS.length;
+
+  function levelById(id) {
+    for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
+    return null;
+  }
+
+  /** 0 (vision) … 3 (unit of work), 4 for a task, -1 for people / places. */
+  function rankOf(node) {
+    if (!node) return -1;
+    if (node.kind === 'task') return TASK_RANK;
+    if (node.kind === 'goal') {
+      for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === node.level) return i;
+    }
+    return -1;
+  }
+
+  /** Cleans the stored goal data: known levels, named nodes, unique ids, links without duplicates. */
+  function normalizeGoals(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var nodes = [];
+    var ids = Object.create(null);
+    (Array.isArray(src.nodes) ? src.nodes : []).forEach(function (n) {
+      var name = n && typeof n.name === 'string' ? n.name.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+      if (!name || !n.id || ids[n.id] || !levelById(n.level)) return;
+      ids[n.id] = true;
+      nodes.push({ id: String(n.id), level: n.level, name: name });
+    });
+    var links = [];
+    var seen = Object.create(null);
+    (Array.isArray(src.links) ? src.links : []).forEach(function (l) {
+      if (!l || typeof l.from !== 'string' || typeof l.to !== 'string' || l.from === l.to) return;
+      var key = l.from + '>' + l.to;
+      if (seen[key]) return;
+      seen[key] = true;
+      links.push({ from: l.from, to: l.to });
+    });
+    return { nodes: nodes, links: links };
+  }
+
+  /**
+   * What a drag from `a` to `b` means: { kind:'depends', from, to } for two tasks, { kind:'serves', from, to }
+   * (smaller → bigger) when one is a goal level and the other lower, or { error } otherwise.
+   */
+  function linkBetween(a, b) {
+    var ra = rankOf(a);
+    var rb = rankOf(b);
+    if (ra < 0 || rb < 0 || a.id === b.id) return { error: 'Ce lien n’est pas possible ici' };
+    if (ra === TASK_RANK && rb === TASK_RANK) return { kind: 'depends', from: a.id, to: b.id };
+    if (ra === rb) return { error: 'Reliez deux niveaux différents (ex. Mission → Objectif)' };
+    return ra > rb ? { kind: 'serves', from: a.id, to: b.id } : { kind: 'serves', from: b.id, to: a.id };
+  }
 
   function isClosed(rec) {
     return rec.category === 'completed' || rec.category === 'canceled';
@@ -81,7 +144,7 @@
     }
     function addEdge(kind, from, to) {
       var id = kind + ':' + from + '>' + to;
-      if (edgeSeen[id]) return;
+      if (edgeSeen[id] || !nodeById[from] || !nodeById[to]) return;
       edgeSeen[id] = true;
       edges.push({ id: id, kind: kind, from: from, to: to });
       nodeById[from].degree++;
@@ -91,6 +154,19 @@
     tasks.forEach(function (r) {
       addNode('t:' + r.id, 'task', r.name || '(sans titre)', r);
     });
+
+    if (show.goals !== false && opts.goals) {
+      var goals = normalizeGoals(opts.goals);
+      goals.nodes.forEach(function (g) {
+        var n = addNode(g.id, 'goal', g.name);
+        n.level = g.level;
+      });
+      goals.links.forEach(function (l) {
+        var a = nodeById[l.from];
+        var b = nodeById[l.to];
+        if (a && b && rankOf(a) > rankOf(b) && rankOf(b) >= 0) addEdge('serves', l.from, l.to);
+      });
+    }
 
     tasks.forEach(function (r) {
       var from = 't:' + r.id;
@@ -293,7 +369,107 @@
     return nodes;
   }
 
+  /**
+   * Radial "from the center" layout of the goal hierarchy: the vision(s) in the middle, then missions,
+   * goals, units of work and tasks on rings further out; every node sits in the angular wedge of its
+   * first parent (wedges are proportional to the number of leaves below). Tasks with no goal, people and
+   * places go on the outermost ring. Mutates and returns the nodes (x / y); sizes via opts.cardW / cardGap.
+   */
+  function layoutHierarchy(nodes, edges, opts) {
+    opts = opts || {};
+    var cardW = opts.cardW || 230;
+    var ringGap = opts.ringGap || 300;
+    var byId = Object.create(null);
+    nodes.forEach(function (n) {
+      byId[n.id] = n;
+    });
+    var parent = Object.create(null);
+    var kids = Object.create(null);
+    (edges || []).forEach(function (e) {
+      if (e.kind !== 'serves' || parent[e.from]) return;
+      parent[e.from] = e.to;
+      (kids[e.to] = kids[e.to] || []).push(e.from);
+    });
+    function inTree(n) {
+      return rankOf(n) >= 0 && (rankOf(n) < TASK_RANK || parent[n.id] || kids[n.id]);
+    }
+    var tree = nodes.filter(inTree);
+    var outer = nodes.filter(function (n) {
+      return !inTree(n);
+    });
+    var roots = tree.filter(function (n) {
+      return !parent[n.id];
+    });
+    var weight = Object.create(null);
+    function weigh(n, depth) {
+      if (weight[n.id]) return weight[n.id];
+      var ks = depth > 8 ? [] : kids[n.id] || [];
+      var w = 0;
+      ks.forEach(function (k) {
+        w += weigh(byId[k], depth + 1);
+      });
+      weight[n.id] = Math.max(1, w);
+      return weight[n.id];
+    }
+    roots.forEach(function (r) {
+      weigh(r, 0);
+    });
+    var angle = Object.create(null);
+    function spread(list, a0, a1, depth) {
+      var total = 0;
+      list.forEach(function (n) {
+        total += weight[n.id];
+      });
+      var a = a0;
+      list.forEach(function (n) {
+        var span = ((a1 - a0) * weight[n.id]) / total;
+        angle[n.id] = a + span / 2;
+        if (depth < 8 && kids[n.id]) spread(kids[n.id].map(function (k) { return byId[k]; }), a, a + span, depth + 1);
+        a += span;
+      });
+    }
+    roots.sort(function (a, b) {
+      return rankOf(a) - rankOf(b);
+    });
+    spread(roots, -Math.PI / 2, (Math.PI * 3) / 2, 0);
+    // ring radii: one ring per rank, widened when a ring holds too many cards for its circumference
+    var radius = [];
+    var counts = [];
+    tree.forEach(function (n) {
+      counts[rankOf(n)] = (counts[rankOf(n)] || 0) + 1;
+    });
+    var rootsOnTop = roots.length === 1 && rankOf(roots[0]) === 0;
+    for (var r = 0; r <= TASK_RANK; r++) {
+      var need = ((counts[r] || 0) * (cardW + 40)) / (2 * Math.PI);
+      var base = r === 0 ? (rootsOnTop ? 0 : need) : (radius[r - 1] || 0) + ringGap;
+      radius[r] = r === 0 && rootsOnTop ? 0 : Math.max(base, need);
+    }
+    tree.forEach(function (n) {
+      var rr = radius[rankOf(n)] || 0;
+      var a = angle[n.id] || 0;
+      n.x = Math.cos(a) * rr;
+      n.y = Math.sin(a) * rr;
+    });
+    var lastRank = 0;
+    for (var q = 0; q <= TASK_RANK; q++) if (counts[q]) lastRank = q;
+    var outerR = (radius[lastRank] || 0) + ringGap;
+    outerR = Math.max(outerR, (outer.length * (cardW + 40)) / (2 * Math.PI));
+    outer.forEach(function (n, i) {
+      var a = (i / Math.max(1, outer.length)) * Math.PI * 2 - Math.PI / 2;
+      n.x = Math.cos(a) * outerR;
+      n.y = Math.sin(a) * outerR;
+    });
+    return nodes;
+  }
+
   global.MindmapModel = {
+    LEVELS: LEVELS,
+    TASK_RANK: TASK_RANK,
+    levelById: levelById,
+    rankOf: rankOf,
+    normalizeGoals: normalizeGoals,
+    linkBetween: linkBetween,
+    layoutHierarchy: layoutHierarchy,
     EDGE_LABELS: EDGE_LABELS,
     PLACE_EDGES: PLACE_EDGES,
     buildGraph: buildGraph,

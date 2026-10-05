@@ -189,6 +189,22 @@
       for (var i = 0; i < state.graph.nodes.length; i++) if (state.graph.nodes[i].id === id) return state.graph.nodes[i];
       return null;
     }
+    function edgeById(id) {
+      for (var i = 0; i < state.graph.edges.length; i++) if (state.graph.edges[i].id === id) return state.graph.edges[i];
+      return null;
+    }
+    function levelOf(n) {
+      return n && n.kind === 'goal' ? MM().levelById(n.level) : null;
+    }
+    function kindLabel(n) {
+      if (!n) return '';
+      var lv = levelOf(n);
+      return lv ? lv.label : n.kind === 'task' ? 'Tâche' : n.kind === 'person' ? 'Personne' : 'Lieu';
+    }
+    function nodeIcon(n) {
+      var lv = levelOf(n);
+      return lv ? lv.icon : n.kind === 'task' ? 'checkbox' : n.kind === 'person' ? 'user' : 'map-pin';
+    }
 
     /* ── Toolbar ───────────────────────────────────────────────────── */
     function toggle(key, iconName, label) {
@@ -257,9 +273,9 @@
       }, [icon(HD.icon(state.hideDone)), HD.label(state.hideDone, doneCount)]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Recentrer', 'aria-label': 'Recentrer', onclick: fit }, [icon('focus-2')]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Réorganiser', 'aria-label': 'Réorganiser', onclick: function () { rebuild({ relayout: true, fresh: true }); } }, [icon('layout-grid')]));
-      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Actualiser', 'aria-label': 'Actualiser', onclick: function () { reload(); } }, [icon('refresh')]));
+      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Actualiser', 'aria-label': 'Actualiser', onclick: function () { reload().then(loadGoals); } }, [icon('refresh')]));
       els.bar.textContent = '';
-      kids.forEach(function (k) { els.bar.appendChild(k); });
+      kids.forEach(function (k) { if (k) els.bar.appendChild(k); });
       if (document.activeElement === document.body && state.filter) {
         // keep typing flow after a re-render triggered by the filter
         var f = els.bar.querySelector('.mm-filter');
@@ -272,7 +288,7 @@
       opts = opts || {};
       var prev = Object.create(null);
       state.graph.nodes.forEach(function (n) { if (isFinite(n.x)) prev[n.id] = { x: n.x, y: n.y }; });
-      var g = MM().buildGraph(state.records, { hideDone: state.hideDone, filter: state.filter, show: state.show });
+      var g = MM().buildGraph(state.records, { hideDone: state.hideDone, filter: state.filter, show: state.show, goals: state.goals });
       var anyNew = false;
       g.nodes.forEach(function (n) {
         measure(n);
@@ -280,10 +296,14 @@
         if (!opts.fresh && prev[n.id] && !opts.relayout) { n.x = prev[n.id].x; n.y = prev[n.id].y; n.pinned = true; n.fixed = true; }
         else anyNew = true;
       });
-      if (opts.relayout || anyNew) {
+      if (opts.relayout && state.layout === 'tree') {
+        MM().layoutHierarchy(g.nodes, g.edges, { cardW: 230, ringGap: 280 });
+        separate(g.nodes);
+      } else if (opts.relayout || anyNew) {
+        if (!opts.relayout) placeNearNeighbours(g);
         MM().layout(g.nodes, g.edges);
         // the model lays out points; cards are bigger, so open the layout up and then push overlaps apart
-        g.nodes.forEach(function (n) { if (!n.fixed) { n.x *= 1.5; n.y *= 1.3; } });
+        g.nodes.forEach(function (n) { if (!n.fixed && !n.placed) { n.x *= 1.5; n.y *= 1.3; } });
         separate(g.nodes);
       }
       g.nodes.forEach(function (n) { n.pinned = false; });
@@ -291,6 +311,8 @@
       state.cycles = {};
       MM().findCycles(g.edges).forEach(function (id) { state.cycles[id] = true; });
       if (state.selected && !nodeById(state.selected)) state.selected = null;
+      if (state.selectedEdge && !edgeById(state.selectedEdge)) state.selectedEdge = null;
+      if (state.relink && !edgeById(state.relink)) state.relink = null;
       if (state.linkFrom && !nodeById(state.linkFrom)) state.linkFrom = null;
       renderBar();
       renderGraph();
@@ -302,12 +324,39 @@
     function measure(n) {
       var rec = n.rec || {};
       var iconW = n.kind === 'task' ? 0 : 30;
-      n.w = n.kind === 'task' ? 210 : n.kind === 'person' ? 180 : 170;
+      n.w = n.kind === 'task' ? 210 : n.kind === 'person' ? 180 : n.kind === 'goal' ? 210 : 170;
       n.lines = wrap(n.label, Math.floor((n.w - 24 - iconW) / CHAR_W), 5);
       n.headH = Math.max(n.kind === 'task' ? 0 : 34, n.lines.length * LINE_H + HEAD_PAD * 2 - 2);
       var hasProgress = n.kind === 'task' && typeof rec.progress === 'number' && rec.progress > 0;
-      n.bodyH = n.kind === 'task' && (rec.listName || hasProgress) ? 26 : 0;
+      n.bodyH = n.kind === 'goal' ? 24 : n.kind === 'task' && (rec.listName || hasProgress) ? 26 : 0;
       n.h = n.headH + n.bodyH;
+    }
+
+    /** New cards (no stored position) start next to a card they are linked to, on the side away from the centre. */
+    function placeNearNeighbours(g) {
+      var byId = Object.create(null);
+      g.nodes.forEach(function (n) { byId[n.id] = n; });
+      var used = Object.create(null);
+      g.nodes.forEach(function (n) {
+        if (n.fixed) return;
+        var anchorNode = null;
+        g.edges.forEach(function (e) {
+          var other = e.from === n.id ? byId[e.to] : e.to === n.id ? byId[e.from] : null;
+          if (other && other.fixed && !anchorNode) anchorNode = other;
+        });
+        if (!anchorNode) return;
+        var k = (used[anchorNode.id] = (used[anchorNode.id] || 0) + 1);
+        var len = Math.sqrt(anchorNode.x * anchorNode.x + anchorNode.y * anchorNode.y) || 1;
+        var ux = anchorNode.x / len;
+        var uy = anchorNode.y / len;
+        if (len < 2) { ux = 1; uy = 0; }
+        // outward, fanned sideways for each further card on the same anchor
+        var side = (k % 2 ? 1 : -1) * Math.ceil(k / 2);
+        n.x = anchorNode.x + ux * 280 - uy * 150 * side;
+        n.y = anchorNode.y + uy * 280 + ux * 150 * side;
+        n.pinned = true;
+        n.placed = true;
+      });
     }
 
     function nodeBox(n) {
@@ -376,7 +425,7 @@
       edgeEls = Object.create(null);
       var graph = state.graph;
       graph.edges.forEach(function (e) {
-        var cls = e.kind === 'depends' ? 'depends' : e.kind === 'by' ? 'by' : 'at';
+        var cls = e.kind === 'depends' ? 'depends' : e.kind === 'by' ? 'by' : e.kind === 'serves' ? 'serves' : 'at';
         var glow = s('path', { class: 'mm-edge-glow mm-edge-glow--' + cls });
         var line = s('path', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : ''), 'marker-end': 'url(#mm-arrow-' + cls + ')' });
         var title = s('title');
@@ -385,15 +434,11 @@
         var label = s('text', { class: 'mm-edge-label', 'text-anchor': 'middle' });
         label.textContent = MM().EDGE_LABELS[e.kind] || e.kind;
         var wrapG = s('g', { class: 'mm-wire-group' }, [glow, line, label]);
-        if (e.kind === 'depends') {
-          // wide invisible stroke so a dependency is easy to click (select / remove it)
-          var hit = s('path', { class: 'mm-edge-hit' });
-          hit.addEventListener('click', function (ev) { ev.stopPropagation(); onEdgeClick(e); });
-          wrapG.appendChild(hit);
-          edgeEls[e.id] = { line: line, glow: glow, label: label, hit: hit, e: e };
-        } else {
-          edgeEls[e.id] = { line: line, glow: glow, label: label, e: e };
-        }
+        // wide invisible stroke so any link is easy to click (select / delete / change it)
+        var hit = s('path', { class: 'mm-edge-hit', 'data-edge': e.id });
+        hit.addEventListener('click', function (ev) { ev.stopPropagation(); onEdgeClick(e); });
+        wrapG.appendChild(hit);
+        edgeEls[e.id] = { line: line, glow: glow, label: label, hit: hit, e: e };
         gEdges.appendChild(wrapG);
       });
       graph.nodes.forEach(function (n) {
@@ -408,7 +453,8 @@
     function buildNodeEl(n) {
       var g = s('g', { class: 'mm-node mm-node--' + n.kind, tabindex: '0', role: 'button', 'aria-label': n.label, 'data-id': n.id });
       var rec = n.rec || {};
-      var accent = n.kind === 'task' ? (rec.color || 'hsl(210 62% 58%)') : n.kind === 'person' ? 'hsl(' + hueOf(n.label) + ' 55% 62%)' : 'hsl(150 50% 46%)';
+      var lv = levelOf(n);
+      var accent = n.kind === 'task' ? (rec.color || 'hsl(210 62% 58%)') : n.kind === 'person' ? 'hsl(' + hueOf(n.label) + ' 55% 62%)' : lv ? 'hsl(' + lv.hue + ' 70% 60%)' : 'hsl(150 50% 46%)';
       g.style.setProperty('--mm-accent', accent);
       if (n.bodyH) g.setAttribute('data-body', '');
       var x0 = -n.w / 2;
@@ -420,10 +466,10 @@
       if (n.kind !== 'task') {
         var cy = y0 + n.headH / 2;
         textX = x0 + 42;
-        if (n.kind === 'person') {
+        if (n.kind === 'person' || n.kind === 'goal') {
           g.appendChild(s('circle', { class: 'mm-avatar', cx: x0 + 24, cy: cy, r: 13 }));
           var it = s('text', { class: 'mm-initials', 'text-anchor': 'middle', x: x0 + 24, y: cy + 4 });
-          it.textContent = initials(n.label);
+          it.textContent = lv ? lv.label.charAt(0) : initials(n.label);
           g.appendChild(it);
         } else {
           g.appendChild(s('path', {
@@ -439,7 +485,11 @@
         tx.textContent = line;
         g.appendChild(tx);
       });
-      if (n.bodyH) {
+      if (n.kind === 'goal') {
+        var gt = s('text', { class: 'mm-sub mm-level', x: x0 + 12, y: y0 + n.headH + 16 });
+        gt.textContent = lv ? lv.label.toUpperCase() : '';
+        g.appendChild(gt);
+      } else if (n.bodyH) {
         var by = y0 + n.headH;
         var hasProgress = typeof rec.progress === 'number' && rec.progress > 0;
         if (rec.listName) {
@@ -457,7 +507,7 @@
           g.appendChild(pt);
         }
       }
-      if (n.kind === 'task') {
+      if (n.kind === 'task' || n.kind === 'goal') {
         Object.keys(SIDES).forEach(function (side) {
           var a = anchor({ x: 0, y: 0, w: n.w, h: n.h }, side);
           var pin = s('g', { class: 'mm-pin', transform: 'translate(' + a.x + ',' + a.y + ')', 'data-side': side });
@@ -501,11 +551,12 @@
 
     function applyFocus() {
       var focus = state.selected;
+      var selEdge = state.selectedEdge && edgeById(state.selectedEdge);
       var near = focus ? MM().neighbours(state.graph.edges, focus) : null;
       state.graph.nodes.forEach(function (n) {
         var g = nodeEls[n.id];
         if (!g) return;
-        var lit = !focus || n.id === focus || near[n.id];
+        var lit = selEdge ? n.id === selEdge.from || n.id === selEdge.to : !focus || n.id === focus || near[n.id];
         g.classList.toggle('is-dim', !lit);
         g.classList.toggle('is-selected', n.id === focus);
         g.classList.toggle('is-linking', n.id === state.linkFrom);
@@ -514,10 +565,13 @@
       state.graph.edges.forEach(function (e) {
         var ref = edgeEls[e.id];
         if (!ref) return;
-        var lit = !focus || e.from === focus || e.to === focus;
+        var chosen = !!selEdge && e.id === selEdge.id;
+        var lit = selEdge ? chosen : !focus || e.from === focus || e.to === focus;
         ref.line.classList.toggle('is-dim', !lit);
         ref.glow.classList.toggle('is-dim', !lit);
-        ref.label.classList.toggle('is-shown', !!focus && lit);
+        ref.line.classList.toggle('is-selected', chosen);
+        ref.glow.classList.toggle('is-selected', chosen);
+        ref.label.classList.toggle('is-shown', (!!focus || chosen) && lit);
       });
     }
 
@@ -556,7 +610,7 @@
       });
     }
 
-    /** Drag from a card's pin to another task: "source depends on target" (dropping on an existing link removes it). */
+    /** Drag from a card's pin to another card: two tasks → "depends on", else "contribue à" (dropping on an existing link removes it). */
     function startWireDrag(ev, n, side) {
       if (ev.button) return;
       ev.stopPropagation();
@@ -572,7 +626,7 @@
       }
       function targetAt(me) {
         var el = document.elementFromPoint(me.clientX, me.clientY);
-        var ng = el && el.closest && el.closest('.mm-node--task');
+        var ng = el && el.closest && el.closest('.mm-node--task, .mm-node--goal');
         var id = ng && ng.getAttribute('data-id');
         return id && id !== n.id ? id : null;
       }
@@ -597,7 +651,7 @@
         document.removeEventListener('pointerup', up);
         document.removeEventListener('pointercancel', cancel);
         finish();
-        if (target) toggleDependency(n.id.slice(2), target.slice(2));
+        if (target) applyLink(n.id, target);
       }
       function cancel() {
         document.removeEventListener('pointermove', move);
@@ -618,40 +672,284 @@
     }
 
     function onNodeClick(n) {
-      if (state.linkFrom && n.kind === 'task') {
+      if (state.relink) {
+        var edge = edgeById(state.relink);
+        if (edge && n.id === edge.from) return;
+        return retarget(edge, n);
+      }
+      if (state.linkFrom && MM().rankOf(n) >= 0) {
         if (n.id === state.linkFrom) return endLink();
-        return toggleDependency(state.linkFrom.slice(2), n.id.slice(2));
+        return applyLink(state.linkFrom, n.id);
       }
       select(n.id === state.selected ? null : n.id);
     }
 
     function onEdgeClick(e) {
-      select(e.from);
+      if (state.relink || state.linkFrom) return;
+      selectEdge(e.id);
     }
 
     function select(id) {
       state.selected = id;
+      state.selectedEdge = null;
+      state.confirmDelete = null;
       applyFocus();
       renderPanel();
     }
 
-    function startLink(nodeId) {
-      state.linkFrom = nodeId;
-      var n = nodeById(nodeId);
+    function selectEdge(id) {
+      state.selectedEdge = id;
+      state.selected = null;
+      state.confirmDelete = null;
+      applyFocus();
+      renderPanel();
+    }
+
+    function showHint(text) {
       els.hint.hidden = false;
       els.hint.textContent = '';
       els.hint.appendChild(icon('link'));
-      els.hint.appendChild(document.createTextNode(' Cliquez la tâche dont « ' + clip(n ? n.label : '', 40) + ' » dépend (re-cliquer une dépendance la retire). Échap pour terminer.'));
+      els.hint.appendChild(document.createTextNode(' ' + text + ' Échap pour terminer.'));
       root.classList.add('is-linking');
+    }
+
+    function startLink(nodeId) {
+      state.linkFrom = nodeId;
+      state.relink = null;
+      var n = nodeById(nodeId);
+      var what = n && n.kind === 'task'
+        ? 'Cliquez la tâche dont « ' + clip(n.label, 40) + ' » dépend, ou un objectif auquel elle contribue (re-cliquer un lien le retire).'
+        : 'Cliquez un élément d’un autre niveau à relier à « ' + clip(n ? n.label : '', 40) + ' » (re-cliquer un lien le retire).';
+      showHint(what);
+      renderBar();
+      applyFocus();
+    }
+    function startRelink(edgeId) {
+      state.relink = edgeId;
+      state.linkFrom = null;
+      showHint('Cliquez le nouvel élément auquel ce lien doit mener.');
       renderBar();
       applyFocus();
     }
     function endLink() {
       state.linkFrom = null;
+      state.relink = null;
       els.hint.hidden = true;
       root.classList.remove('is-linking');
       renderBar();
       applyFocus();
+    }
+
+    /** Adds / removes the link a drag or click from a to b means (see MindmapModel.linkBetween). */
+    function applyLink(aId, bId) {
+      var res = MM().linkBetween(nodeById(aId), nodeById(bId));
+      if (res.error) { setStatus(res.error, 'error'); return Promise.resolve(); }
+      if (res.kind === 'depends') return toggleDependency(res.from.slice(2), res.to.slice(2));
+      return toggleServes(res.from, res.to);
+    }
+
+    function edgesWithout(e) {
+      return state.graph.edges.filter(function (x) { return x.id !== e.id; });
+    }
+
+    /** Deletes a selected link (dependency or "Contribue à"); people and places are edited in the card. */
+    function removeEdge(e) {
+      if (!e) return Promise.resolve();
+      if (e.kind === 'depends') return setDependency(e.from.slice(2), e.to.slice(2), false);
+      if (e.kind === 'serves') return toggleServes(e.from, e.to);
+      setStatus('Ce lien se modifie dans la carte (Ouvrir la carte)', 'error');
+      return Promise.resolve();
+    }
+
+    /** Swaps the two ends of a dependency ("A dépend de B" becomes "B dépend de A"). */
+    function reverseEdge(e) {
+      if (!e || e.kind !== 'depends') return Promise.resolve();
+      if (MM().wouldCycle(edgesWithout(e), e.to, e.from)) {
+        setStatus('Impossible : cela créerait une boucle de dépendances', 'error');
+        return Promise.resolve();
+      }
+      return setDependency(e.from.slice(2), e.to.slice(2), false).then(function () {
+        return setDependency(e.to.slice(2), e.from.slice(2), true);
+      }).then(function () { selectEdge('depends:' + e.to + '>' + e.from); });
+    }
+
+    /** Points a link (same source) at another node. */
+    function retarget(e, n) {
+      endLink();
+      if (!e) return Promise.resolve();
+      if (e.kind === 'depends') {
+        if (n.kind !== 'task' || n.id === e.from || n.id === e.to) { setStatus('Choisissez une autre tâche', 'error'); return Promise.resolve(); }
+        if (MM().wouldCycle(edgesWithout(e), e.from, n.id)) {
+          setStatus('Impossible : cela créerait une boucle de dépendances', 'error');
+          return Promise.resolve();
+        }
+        return setDependency(e.from.slice(2), e.to.slice(2), false).then(function () {
+          return setDependency(e.from.slice(2), n.id.slice(2), true);
+        }).then(function () { selectEdge('depends:' + e.from + '>' + n.id); });
+      }
+      if (e.kind === 'serves') {
+        var from = nodeById(e.from);
+        if (n.kind !== 'goal' || MM().rankOf(from) <= MM().rankOf(n)) { setStatus('Choisissez un élément d’un niveau supérieur', 'error'); return Promise.resolve(); }
+        return saveGoals(goalsWith({ unlink: [e.from + '>' + e.to], link: [{ from: e.from, to: n.id }] })).then(function () { selectEdge('serves:' + e.from + '>' + n.id); });
+      }
+      setStatus('Ce lien se modifie dans la carte (Ouvrir la carte)', 'error');
+      return Promise.resolve();
+    }
+
+    /* ── Goal hierarchy: storage and edits ────────────────────────── */
+    function reasonText(err) {
+      var r = err && (err.reason || err.message);
+      if (r === 'conflict') return 'modifié ailleurs, actualisez la vue';
+      if (r === 'too-long') return 'trop de données (16 000 caractères max)';
+      if (r === 'not-authorized' || r === 'auth-failed') return 'Trello n’est pas autorisé';
+      return r || 'erreur';
+    }
+
+    /** Copy of the stored goals with some links removed ("from>to") and added. */
+    function goalsWith(change) {
+      var drop = Object.create(null);
+      (change.unlink || []).forEach(function (k) { drop[k] = true; });
+      return {
+        nodes: (change.nodes || state.goals.nodes).slice(),
+        links: (change.links || state.goals.links).filter(function (l) { return !drop[l.from + '>' + l.to]; }).concat(change.link || []),
+      };
+    }
+
+    function goalsEditable() {
+      if (state.goalsLoaded) return true;
+      setStatus('Autorisez Trello pour modifier les objectifs', 'error');
+      return false;
+    }
+
+    /** Applies the edit at once, then stores it; a failed save puts the previous data back. */
+    function saveGoals(next) {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG) { setStatus('Enregistrement indisponible', 'error'); return Promise.resolve(); }
+      var prev = state.goals;
+      state.goals = MM().normalizeGoals(next);
+      setStatus('Enregistrement…');
+      rebuild({ keepView: true });
+      return GG.save(t, state.goals).then(function (saved) {
+        state.goals = saved;
+        setStatus('Enregistré', 'ok');
+      }).catch(function (err) {
+        state.goals = prev;
+        rebuild({ keepView: true });
+        setStatus('Échec : ' + reasonText(err), 'error');
+      });
+    }
+
+    function toggleServes(from, to) {
+      if (!goalsEditable()) return Promise.resolve();
+      var key = from + '>' + to;
+      var has = state.goals.links.some(function (l) { return l.from + '>' + l.to === key; });
+      return saveGoals(has ? goalsWith({ unlink: [key] }) : goalsWith({ link: [{ from: from, to: to }] }));
+    }
+
+    function createGoal(level, name, parentId) {
+      if (!goalsEditable()) return Promise.resolve();
+      name = String(name || '').replace(/\s+/g, ' ').trim();
+      if (!name) { setStatus('Donnez un nom', 'error'); return Promise.resolve(); }
+      var id = global.MindmapGoalsTrello.newId();
+      var parent = parentId && nodeById(parentId);
+      var link = parent && MM().rankOf(parent) >= 0 && MM().rankOf(parent) < MM().rankOf({ kind: 'goal', level: level }) ? [{ from: id, to: parentId }] : [];
+      var p = saveGoals(goalsWith({ nodes: state.goals.nodes.concat([{ id: id, level: level, name: name }]), link: link }));
+      select(id); // the optimistic rebuild already created the node
+      return p;
+    }
+
+    function renameGoal(id, name) {
+      name = String(name || '').replace(/\s+/g, ' ').trim();
+      var cur = state.goals.nodes.filter(function (n) { return n.id === id; })[0];
+      if (!cur || !name || name === cur.name || !goalsEditable()) return Promise.resolve();
+      return saveGoals(goalsWith({ nodes: state.goals.nodes.map(function (n) { return n.id === id ? { id: n.id, level: n.level, name: name } : n; }) }));
+    }
+
+    function deleteGoal(id) {
+      if (!goalsEditable()) return Promise.resolve();
+      var drop = state.goals.links.filter(function (l) { return l.from === id || l.to === id; }).map(function (l) { return l.from + '>' + l.to; });
+      select(null);
+      return saveGoals(goalsWith({ nodes: state.goals.nodes.filter(function (n) { return n.id !== id; }), unlink: drop }));
+    }
+
+    function loadGoals() {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG || !global.SheetsTrello) { state.goalsAuth = null; return Promise.resolve(); }
+      return GG.isAuthorized(t).then(function (ok) {
+        state.goalsAuth = ok;
+        if (!ok) { renderBar(); return; }
+        return GG.load(t).then(function (data) {
+          state.goals = data;
+          state.goalsLoaded = true;
+          rebuild({ relayout: true });
+        });
+      }).catch(function (err) {
+        setStatus('Objectifs indisponibles : ' + reasonText(err), 'error');
+      });
+    }
+
+    /** Must run straight from the click (Trello's authorization popup). */
+    function authorizeGoals() {
+      global.MindmapGoalsTrello.authorize(t).then(function () { return loadGoals(); }, function (err) {
+        setStatus('Autorisation refusée : ' + reasonText(err), 'error');
+      });
+    }
+
+    /* ── New goal form ────────────────────────────────────────────── */
+    function closeComposer() {
+      els.composer.hidden = true;
+      els.composer.textContent = '';
+    }
+
+    /** level / parentId are optional defaults (e.g. the selected goal becomes the parent of the new one). */
+    function openComposer(level, parentId) {
+      if (!goalsEditable()) return;
+      var levels = MM().LEVELS;
+      if (!level) {
+        var have = {};
+        state.goals.nodes.forEach(function (n) { have[n.level] = true; });
+        level = (levels.filter(function (l) { return !have[l.id]; })[0] || levels[2]).id;
+      }
+      var levelSel = h('select', { class: 'mm-input', 'aria-label': 'Niveau' }, levels.map(function (l) {
+        return h('option', { value: l.id, text: l.label });
+      }));
+      levelSel.value = level;
+      var nameInput = h('input', { class: 'mm-input', type: 'text', placeholder: 'Nom', maxlength: '120', 'aria-label': 'Nom' });
+      var parentSel = h('select', { class: 'mm-input', 'aria-label': 'Contribue à' });
+      function fillParents() {
+        var rank = MM().rankOf({ kind: 'goal', level: levelSel.value });
+        parentSel.textContent = '';
+        parentSel.appendChild(h('option', { value: '', text: rank === 0 ? '— (niveau le plus haut)' : '— Aucun —' }));
+        state.graph.nodes.filter(function (n) { return n.kind === 'goal' && MM().rankOf(n) < rank; }).forEach(function (n) {
+          parentSel.appendChild(h('option', { value: n.id, text: kindLabel(n) + ' · ' + clip(n.label, 40) }));
+        });
+        parentSel.value = parentId && nodeById(parentId) && MM().rankOf(nodeById(parentId)) < rank ? parentId : '';
+        parentSel.disabled = rank === 0;
+      }
+      levelSel.addEventListener('change', fillParents);
+      fillParents();
+      els.composer.textContent = '';
+      [
+        h('div', { class: 'mm-composer-title', text: 'Nouvel élément' }),
+        h('label', { class: 'mm-field' }, [h('span', { text: 'Niveau' }), levelSel]),
+        h('label', { class: 'mm-field' }, [h('span', { text: 'Nom' }), nameInput]),
+        h('label', { class: 'mm-field' }, [h('span', { text: 'Contribue à' }), parentSel]),
+        h('div', { class: 'mm-composer-actions' }, [
+          h('button', { class: 'mm-btn', type: 'button', onclick: closeComposer }, ['Annuler']),
+          h('button', { class: 'mm-btn mm-btn--primary', type: 'submit' }, [icon('plus'), 'Créer']),
+        ]),
+      ].forEach(function (c) { els.composer.appendChild(c); });
+      els.composer.onsubmit = function (ev) {
+        ev.preventDefault();
+        if (!nameInput.value.trim()) { nameInput.focus(); return; }
+        var lv = levelSel.value;
+        var parent = parentSel.value;
+        closeComposer();
+        createGoal(lv, nameInput.value, parent);
+      };
+      els.composer.onkeydown = function (ev) { if (ev.key === 'Escape') { ev.stopPropagation(); closeComposer(); } };
+      els.composer.hidden = false;
+      nameInput.focus();
     }
 
     /** Adds the dependency "cardId depends on depId", or removes it when it already exists. */
@@ -666,6 +964,18 @@
       }
       if (at >= 0) current.splice(at, 1);
       else current.push(depId);
+      return saveDependsOn(rec, current);
+    }
+
+    /** Sets or clears one dependency ("cardId depends on depId"); nothing happens when it is already so. */
+    function setDependency(cardId, depId, on) {
+      var rec = recById(cardId);
+      if (!rec) return Promise.resolve();
+      var current = ((rec.inputs && rec.inputs.dependsOn) || []).slice();
+      var at = current.indexOf(depId);
+      if (on && at < 0) current.push(depId);
+      else if (!on && at >= 0) current.splice(at, 1);
+      else return Promise.resolve();
       return saveDependsOn(rec, current);
     }
 
@@ -709,7 +1019,7 @@
     function linkRow(label, node, removeFn) {
       var kids = [
         h('button', { class: 'mm-link', onclick: function () { select(node.id); }, title: 'Voir ' + node.label }, [
-          icon(node.kind === 'task' ? 'checkbox' : node.kind === 'person' ? 'user' : 'map-pin'),
+          icon(nodeIcon(node)),
           h('span', { text: clip(node.label, 36) }),
         ]),
       ];
@@ -728,15 +1038,72 @@
       ]);
     }
 
+    /** Panel of a selected link: its two ends and what can be done to it. */
+    function renderEdgePanel(e) {
+      els.panel.hidden = false;
+      var a = nodeById(e.from);
+      var b = nodeById(e.to);
+      els.panel.appendChild(h('div', { class: 'mm-panel-head' }, [
+        h('div', { class: 'mm-panel-kind', text: 'Lien' }),
+        h('h3', { text: MM().EDGE_LABELS[e.kind] || e.kind }),
+        h('button', { class: 'mm-x mm-panel-close', 'aria-label': 'Fermer', onclick: function () { select(null); } }, [icon('x')]),
+      ]));
+      els.panel.appendChild(section('De', [linkRow('', a)]));
+      els.panel.appendChild(section('Vers', [linkRow('', b)]));
+      var editable = e.kind === 'depends' || e.kind === 'serves';
+      var actions = h('div', { class: 'mm-actions' });
+      if (e.kind === 'depends') {
+        actions.appendChild(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { reverseEdge(e); } }, [icon('arrows-exchange'), 'Inverser le sens']));
+      }
+      if (editable) {
+        actions.appendChild(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startRelink(e.id); } }, [icon('replace'), 'Changer la cible…']));
+        actions.appendChild(h('button', { class: 'mm-btn mm-btn--small mm-btn--danger', onclick: function () { removeEdge(e); } }, [icon('trash'), 'Supprimer le lien']));
+        els.panel.appendChild(actions);
+      } else {
+        els.panel.appendChild(h('p', { class: 'mm-note', text: 'Ce lien vient de la carte (personnes et lieux) : modifiez-le dans la carte.' }));
+        if (a && a.rec) els.panel.appendChild(h('button', { class: 'mm-btn mm-btn--primary mm-open', onclick: function () { openCard(a.rec); } }, [icon('external-link'), 'Ouvrir la carte']));
+      }
+    }
+
+    /** Name field + delete (two clicks) of a goal-level node. */
+    function goalEditor(n) {
+      var input = h('input', { class: 'mm-input', type: 'text', value: n.label, maxlength: '120', 'aria-label': 'Nom' });
+      function commit() { renameGoal(n.id, input.value); }
+      input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); } });
+      input.addEventListener('change', commit);
+      var sure = state.confirmDelete === n.id;
+      var kids = [
+        h('label', { class: 'mm-field' }, [h('span', { text: 'Nom' }), input]),
+        h('button', {
+          class: 'mm-btn mm-btn--small' + (sure ? ' mm-btn--danger' : ''),
+          onclick: function () {
+            if (state.confirmDelete === n.id) return deleteGoal(n.id);
+            state.confirmDelete = n.id;
+            renderPanel();
+          },
+        }, [icon('trash'), sure ? 'Confirmer la suppression' : 'Supprimer']),
+      ];
+      var rank = MM().rankOf(n);
+      var lowerLevels = MM().LEVELS.filter(function (l, i) { return i > rank; });
+      if (lowerLevels.length) {
+        kids.push(h('div', { class: 'mm-actions' }, lowerLevels.map(function (l) {
+          return h('button', { class: 'mm-btn mm-btn--small', title: 'Créer ' + l.label.toLowerCase() + ' qui contribue à celui-ci', onclick: function () { openComposer(l.id, n.id); } }, [icon('plus'), l.label]);
+        })));
+      }
+      return h('div', { class: 'mm-sec' }, kids);
+    }
+
     function renderPanel() {
-      var n = state.selected && nodeById(state.selected);
       els.panel.textContent = '';
+      var edge = state.selectedEdge && edgeById(state.selectedEdge);
+      if (edge) return renderEdgePanel(edge);
+      var n = state.selected && nodeById(state.selected);
       if (!n) { els.panel.hidden = true; return; }
       els.panel.hidden = false;
       var edges = state.graph.edges;
       var head = h('div', { class: 'mm-panel-head' }, [
-        h('div', { class: 'mm-panel-kind', text: n.kind === 'task' ? 'Tâche' : n.kind === 'person' ? 'Personne' : 'Lieu' }),
-        h('h3', { text: n.label }),
+        h('div', { class: 'mm-panel-kind', text: kindLabel(n) }),
+        n.kind === 'goal' ? null : h('h3', { text: n.label }),
         h('button', { class: 'mm-x mm-panel-close', 'aria-label': 'Fermer', onclick: function () { select(null); } }, [icon('x')]),
       ]);
       els.panel.appendChild(head);
@@ -755,7 +1122,22 @@
         }).map(fn);
       }
       var sections = [];
-      if (n.kind === 'task') {
+      function servesUp(extraBtn) {
+        return section('Contribue à', pick('serves', 'out', function (e) {
+          return linkRow('', nodeById(e.to), function () { toggleServes(e.from, e.to); });
+        }), extraBtn);
+      }
+      function servesDown() {
+        return section('Reçoit', pick('serves', 'in', function (e) {
+          return linkRow('', nodeById(e.from), function () { toggleServes(e.from, e.to); });
+        }));
+      }
+      if (n.kind === 'goal') {
+        sections.push(goalEditor(n));
+        sections.push(servesUp(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('plus'), 'Relier…'])));
+        sections.push(servesDown());
+      } else if (n.kind === 'task') {
+        sections.push(servesUp(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('plus'), 'Contribue à…'])));
         sections.push(section('Dépend de', pick('depends', 'out', function (e) {
           var dep = nodeById(e.to);
           return linkRow('', dep, function () { toggleDependency(n.id.slice(2), dep.id.slice(2)); });
@@ -822,6 +1204,7 @@
       if (ev.button === 1) ev.preventDefault();
       var start = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y };
       var moved = false;
+      var edgeId = ev.target && ev.target.getAttribute ? ev.target.getAttribute('data-edge') : null; // pointer capture would retarget the click
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
       function move(me) {
         var dx = me.clientX - start.x;
@@ -836,7 +1219,9 @@
         svg.removeEventListener('pointermove', move);
         svg.removeEventListener('pointerup', up);
         svg.removeEventListener('pointercancel', up);
-        if (!moved && state.selected && ev.button === 0) select(null);
+        if (moved || ev.button !== 0) return;
+        if (edgeId && edgeById(edgeId)) onEdgeClick(edgeById(edgeId));
+        else if (state.selected || state.selectedEdge) select(null);
       }
       svg.addEventListener('pointermove', move);
       svg.addEventListener('pointerup', up);
@@ -856,6 +1241,12 @@
     }, { passive: false });
     root.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') { endLink(); select(null); }
+      var tag = ev.target && ev.target.tagName;
+      var typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+      if ((ev.key === 'Delete' || ev.key === 'Backspace') && state.selectedEdge && !typing) {
+        ev.preventDefault();
+        removeEdge(edgeById(state.selectedEdge));
+      }
     });
     global.addEventListener('resize', function () { if (!state.graph.nodes.length) fit(); });
 
@@ -880,7 +1271,7 @@
       rebuild({ relayout: true });
     });
     renderBar();
-    return reload();
+    return reload().then(loadGoals);
   }
 
   global.MindmapUI = { mount: mount };
