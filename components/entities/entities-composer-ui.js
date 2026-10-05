@@ -3,7 +3,7 @@
  * needs: a new place, a new type) and creates everything linked in one go. Logic: EntitiesComposer.
  *
  *   header   title, breadcrumb of the entities being composed (nested), close
- *   rail     the steps for the current entity (Quoi ? Nom, one per component, Liens, Résumé)
+ *   rail     the steps for the current entity (Nom et type, one per component, Liens, Résumé)
  *   main     the questions of the current step
  *   aside    live preview card (name, types, answers, links, what will be created too)
  *   footer   Retour | Passer/Suivant | Créer
@@ -155,11 +155,17 @@
     function steps() {
       var all = EC().stepsFor(st.schema, draft());
       var sub = isSub();
-      return all.filter(function (s) {
-        if (sub && (s.kind === 'links' || s.kind === 'review')) return false;
-        if (draft().preset && s.kind === 'start') return false;
-        return true;
-      });
+      var preset = !!draft().preset;
+      return all
+        .filter(function (s) {
+          if (sub && (s.kind === 'links' || s.kind === 'review')) return false;
+          if (preset && s.kind === 'start') return false;
+          if (!preset && s.kind === 'identity') return false; // merged into the first step
+          return true;
+        })
+        .map(function (s) {
+          return s.kind === 'start' ? Object.assign({}, s, { title: 'Nom et type' }) : s;
+        });
     }
     function stepIndex() {
       var list = steps();
@@ -187,6 +193,7 @@
         oninput: function () {
           setDraft(Object.assign({}, draft(), { intent: input.value }));
           paintUnderstood();
+          refresh(); // the footer's Suivant enables as soon as a sentence is typed
         },
         onblur: function () {
           applyIntentNow();
@@ -311,6 +318,8 @@
       box.appendChild(h('h2', { class: 'cp-q', text: 'Que voulez-vous ajouter ?' }));
       box.appendChild(input);
       box.appendChild(understood);
+      // (the name and aliases follow: this step replaces the old separate "Nom" step)
+      renderIdentity(box, true);
       box.appendChild(h('h3', { class: 'cp-sub', text: 'Qu’est-ce que c’est ?' }));
       box.appendChild(natureRow);
       if (natureInfo) box.appendChild(h('p', { class: 'cp-hint', text: natureInfo.hint }));
@@ -544,17 +553,20 @@
       nd.autoName = !base.name && nd.name ? nd.name : d.autoName;
       nd.intentApplied = text;
       setDraft(nd);
+      var nameField = els.main.querySelector('[data-name]');
+      if (nameField && nameField.value !== nd.name) nameField.value = nd.name;
     }
 
-    function renderIdentity(box) {
+    function renderIdentity(box, embedded) {
       var d = draft();
       var issuesBox = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
       var nameIn = h('input', {
         class: 'cp-input cp-input--big',
-        placeholder: 'Ex. : Ficus',
+        placeholder: embedded ? 'Rempli d’après la phrase, ou tapez-le' : 'Ex. : Ficus',
         value: d.name,
         'aria-label': 'Nom',
-        'data-autofocus': '1',
+        'data-name': '1',
+        'data-autofocus': embedded ? null : '1',
         oninput: function () {
           setDraft(Object.assign({}, draft(), { name: nameIn.value }));
           refresh();
@@ -636,10 +648,10 @@
         aliasBox.appendChild(aliasIn);
       }
       paintAliases();
-      box.appendChild(h('h2', { class: 'cp-q', text: 'Comment l’appelle-t-on ?' }));
+      box.appendChild(embedded ? h('h3', { class: 'cp-sub', text: 'Comment l’appelle-t-on ?' }) : h('h2', { class: 'cp-q', text: 'Comment l’appelle-t-on ?' }));
       box.appendChild(nameIn);
       box.appendChild(issuesBox);
-      box.appendChild(h('h3', { class: 'cp-sub', text: 'Alias' }));
+      box.appendChild(h('h3', { class: 'cp-sub', text: 'Alias (facultatif)' }));
       box.appendChild(h('p', { class: 'cp-hint', text: 'Les autres façons de le nommer : l’assistant retrouvera l’entité dans « arroser au travail » grâce à l’alias « travail ».' }));
       box.appendChild(aliasBox);
     }
@@ -850,7 +862,7 @@
         });
         var nd = EC().newDraft({ name: name, types: types });
         nd.preset = types.length > 0;
-        addDraft(nd, { id: draft().id, kind: multi ? 'answers' : 'answer', path: path }, types.length ? 'identity' : 'start');
+        addDraft(nd, { id: draft().id, kind: multi ? 'answers' : 'answer', path: path }, nd.preset ? 'identity' : 'start');
         render();
       }
       function paintPicked() {
@@ -871,7 +883,7 @@
         });
       }
       function edit(id) {
-        st.stack.push({ id: id, step: 'identity', from: null });
+        st.stack.push({ id: id, step: st.drafts[id].preset ? 'identity' : 'start', from: null });
         render();
       }
       function paintOptions() {
@@ -1090,9 +1102,9 @@
                 type: 'button',
                 onclick: function () {
                   if (d.id === frame().id) {
-                    frame().step = 'identity';
+                    frame().step = d.preset ? 'identity' : 'start';
                   } else {
-                    st.stack.push({ id: d.id, step: 'identity', from: null });
+                    st.stack.push({ id: d.id, step: d.preset ? 'identity' : 'start', from: null });
                   }
                   render();
                 },
@@ -1302,7 +1314,8 @@
         return;
       }
       var label = last && sub ? 'Ajouter et revenir' : !stepHasAnswer(step) ? 'Passer' : 'Suivant';
-      var blockedNext = step.kind === 'identity' && !draft().name.trim();
+      // on the first step a typed sentence counts: it becomes the name when Suivant is pressed
+      var blockedNext = !draft().name.trim() && (step.kind === 'identity' || (step.kind === 'start' && !(draft().intent || '').trim()));
       els.footer.appendChild(
         h(
           'button',
@@ -1361,8 +1374,8 @@
       var idx = stepIndex();
       var step = list[idx];
       if (step.kind === 'start') applyIntentNow();
-      if (step.kind === 'identity' && !draft().name.trim()) {
-        var n = els.main.querySelector('.cp-input--big');
+      if ((step.kind === 'identity' || step.kind === 'start') && !draft().name.trim()) {
+        var n = els.main.querySelector('[data-name]');
         if (n) n.focus();
         return;
       }
