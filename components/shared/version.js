@@ -107,7 +107,9 @@
     ]);
     if (!buildRes.ok) throw new Error('build info not found');
     const { builtAt } = await buildRes.json();
-    return resolveBuiltAt(builtAt, lastModifiedMs(buildRes), probeMs);
+    const resolved = resolveBuiltAt(builtAt, lastModifiedMs(buildRes), probeMs);
+    global.BuildVersion.current = resolved;
+    return resolved;
   }
 
   global.BuildVersion = {

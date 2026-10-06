@@ -2959,10 +2959,31 @@
     'getCompletion'
   ];
 
+  // App build stamp for "what version is running?". version.js sets
+  // BuildVersion.current once the popup/settings fetch it; otherwise fetch once here.
+  var appBuiltAtCache = null;
+  var appBuiltAtRequested = false;
+  function currentAppBuiltAt() {
+    var bv = global.BuildVersion;
+    if (bv && bv.current) return bv.current;
+    if (appBuiltAtCache) return appBuiltAtCache;
+    if (!appBuiltAtRequested && typeof global.fetch === 'function') {
+      appBuiltAtRequested = true;
+      try {
+        global.fetch('./build-info.json', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (j) { if (j && j.builtAt) appBuiltAtCache = j.builtAt; })
+          .catch(function () { /* ignore */ });
+      } catch (e) { /* ignore */ }
+    }
+    return null;
+  }
+
   function buildContext(bridge) {
     var ctx = {
       today: todayIsoLocal(),
       nowTime: nowTimeLocal(),
+      appBuiltAt: currentAppBuiltAt(),
       /** 'task' = card popup; 'project' = board-wide assistant window. */
       scope: ASSISTANT_SCOPES.TASK,
       cardName: '',
@@ -4090,7 +4111,12 @@
           '- cardPatches = faits locaux \u00e0 cette carte\u00a0; patches = faits r\u00e9utilisables au niveau projet / tableau.',
           'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu peux aider sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s) quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
         ];
-    return [identityLine, langLine]
+    var builtAt = context && context.appBuiltAt;
+    var buildLine = builtAt
+      ? 'App Cerveau : version / build en cours = ' + builtAt +
+        ' (UTC, horodatage du dernier déploiement). Si on te demande quelle version tourne, réponds avec cette date (il n\'y a pas de numéro sémantique). Ne dis JAMAIS que tu ne peux pas la voir.'
+      : 'App Cerveau : l\'horodatage du build n\'a pas pu être chargé ; si on te demande la version, dis seulement que l\'info de build n\'est pas disponible pour l\'instant.';
+    return [identityLine, langLine, buildLine]
       .concat(voiceLines)
       .concat(profileLines)
       .concat(peopleLines)
