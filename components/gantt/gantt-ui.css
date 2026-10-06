@@ -889,6 +889,7 @@
    cannot hide them. --gantt-off-* come from work day start/end. */
 .gantt-timeline--timed {
   --gantt-off-hours-fill: rgba(9, 30, 66, 0.14);
+  --gantt-off-edge: rgba(9, 30, 66, 0.28);
 }
 
 .gantt-timeline--timed.gantt-timeline--week .gantt-timeline-header,
@@ -909,8 +910,22 @@
       transparent calc(var(--gantt-day-w) - 1px),
       var(--gantt-grid-line) calc(var(--gantt-day-w) - 1px),
       var(--gantt-grid-line) var(--gantt-day-w)
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(var(--gantt-off-am-w) - 1px),
+      var(--gantt-off-edge) calc(var(--gantt-off-am-w) - 1px),
+      var(--gantt-off-edge) var(--gantt-off-am-w),
+      transparent var(--gantt-off-am-w),
+      transparent var(--gantt-off-pm-w),
+      var(--gantt-off-edge) var(--gantt-off-pm-w),
+      var(--gantt-off-edge) calc(var(--gantt-off-pm-w) + 1px),
+      transparent calc(var(--gantt-off-pm-w) + 1px)
     );
-  background-size: var(--gantt-off-unit-w) 100%, var(--gantt-day-w) 100%;
+  background-size:
+    var(--gantt-off-unit-w) 100%,
+    var(--gantt-day-w) 100%,
+    var(--gantt-off-unit-w) 100%;
 }
 
 .gantt-timeline--timed.gantt-timeline--day .gantt-timeline-header,
@@ -925,8 +940,19 @@
       transparent var(--gantt-off-pm-w),
       var(--gantt-off-hours-fill) var(--gantt-off-pm-w),
       var(--gantt-off-hours-fill) 100%
+    ),
+    linear-gradient(
+      to right,
+      transparent calc(var(--gantt-off-am-w) - 1px),
+      var(--gantt-off-edge) calc(var(--gantt-off-am-w) - 1px),
+      var(--gantt-off-edge) var(--gantt-off-am-w),
+      transparent var(--gantt-off-am-w),
+      transparent var(--gantt-off-pm-w),
+      var(--gantt-off-edge) var(--gantt-off-pm-w),
+      var(--gantt-off-edge) calc(var(--gantt-off-pm-w) + 1px),
+      transparent calc(var(--gantt-off-pm-w) + 1px)
     );
-  background-size: 100% 100%;
+  background-size: 100% 100%, 100% 100%;
 }
 
 .gantt-timeline-row {
