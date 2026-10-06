@@ -42,3 +42,36 @@ Every push to `main` deploys to GitHub Pages through `.github/workflows/static.y
 3. Send a `PushNotification` (load it with ToolSearch `select:PushNotification` if its schema is not loaded): "Live: <commit subject>" on success, or "Deploy failed: <commit subject>" with the failing step (`gh run view <id> --log-failed`) on failure. Also say it in the final reply.
 
 This is a rule for me, not a settings hook: hooks only run shell commands and cannot send the notification. Skip it only if `gh` is unavailable, and say so.
+
+
+## How to work on this app (distilled from past chats)
+
+The UI copy is French (Québec). The user writes short, informal requests and expects initiative.
+
+### Process
+
+1. Interpret intent, not literal words. Reuse the nearest existing feature's components and style (Tableau progress bar, the "II" pause button, the history panel) before building something new.
+2. **Keep views consistent.** A feature asked for in one view (progress slider, complete circle, blocked "II", show/hide completed, right-click menu, assistant dock, drag and drop, undo/history) must be checked in Table, Gantt, Kanban, Mindmap and Documents and implemented through shared code, not copies. Say which views were covered and which were skipped, and why.
+3. "Keep going" or "finish started work" means continue without asking. Ask only for decisions that are truly the user's; otherwise pick a sensible default and say what was chosen.
+4. Fix root causes and check nearby code for the same problem. New items must show immediately. A fix must not make something else vanish (the Entités tab did once): put shared things in shared code.
+5. Verify before reporting: `npm run test:unit`, add tests for changed logic, check in the browser pane (narrow widths; empty, completed, blocked and long-text states). Say plainly what was not run.
+
+### UX rules
+
+- Simple first, detail on demand: progressive disclosure, submenus, no walls of options. The user types first, suggestions come after.
+- Compact: no huge buttons, no wasted vertical space, no redundant labels (like "Quoi ?" then "Nom"), no stray lines or odd padding.
+- Direct manipulation: inline edits (double-click a title, click a progress bar or circle, drag sliders), no modal for simple edits, create in place. Archive acts immediately (Ctrl+Z undoes).
+- Every item has a right-click menu with consistent icons and all card actions. Middle mouse pans; Ctrl+A/C/V/Delete work; selection and snapping behave like Miro or Draw.io.
+- Reference apps: Apple (clean, calm), Linear, Miro, Draw.io, Trello. A confusing screen gets redesigned, not patched.
+- States: completed is grayed and not bold; blocked/paused is red with the "II" icon (click to unblock); blocked and completed together needs a deliberate look. Completed items are hidden by default with the same top-right toggle in every view. Text is never cropped (wrap it). Icons are homogeneous.
+- Empty values say "Cliquer pour ajouter…" and can be set right there, never just "Vide".
+
+### AI rules
+
+- AI features use the LLM with the real app context (cards, statuses, entities, dates, build), not keyword heuristics. The assistant knows what the app knows.
+- Messages must make sense to a non-developer (no "J'ai eu la réponse, je peux reprendre", no "en attente de rien") and must not refuse actions the app can do (like deleting a card).
+- Understand Québec French. No em dashes in agent-visible text.
+
+### Replies
+
+A few lines: what changed and where (file links), which views were covered, what was tested, decisions needed. No essays.
