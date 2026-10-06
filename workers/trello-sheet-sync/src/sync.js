@@ -257,6 +257,22 @@ async function applyFormatting(env, columns, lists, meta, themeName) {
       }
     }
     if (at('statut') > 0) {
+      // Completed tasks (Statut "✅ Terminé"): whole row grayed out and not bold.
+      let n = at('statut') + 1;
+      let letter = '';
+      for (; n > 0; n = Math.floor((n - 1) / 26)) letter = String.fromCharCode(65 + ((n - 1) % 26)) + letter;
+      req.push({
+        addConditionalFormatRule: {
+          index: 0,
+          rule: {
+            ranges: [{ sheetId, startRowIndex: 1, endRowIndex: 5000, startColumnIndex: 1, endColumnIndex: columns.length + 1 }],
+            booleanRule: {
+              condition: { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=ISNUMBER(SEARCH("✅",$${letter}2))` }] },
+              format: { textFormat: { foregroundColor: dark ? hex('#8c9bab') : rgb(0.6, 0.6, 0.6), bold: false } },
+            },
+          },
+        },
+      });
       const labels = [...new Set(lists.map((l) => statutLabelForList(l.name)))];
       req.push({
         setDataValidation: {
