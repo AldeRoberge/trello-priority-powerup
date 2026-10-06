@@ -316,7 +316,8 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
         data: {
           matiere: { etat: 'gel', volume: '50' },
           provenance: { fabricant: labo.id, prix: '8,5' },
-          produit: { marque: 'Nord', ingredients: [glycerine.id], peau: ['sèche', 'sensible'], peremption: '2027-03-01' },
+          produit: { marque: 'Nord', ingredients: [glycerine.id], peau: ['sèche', 'sensible'] },
+          consommable: { peremption: '2027-03-01' },
         },
       });
       assert.equal(M.getValue(cream, 'matiere.volume'), 50);

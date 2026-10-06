@@ -101,6 +101,38 @@
       ],
     },
     {
+      id: 'action',
+      name: 'Action',
+      can: ['être réalisée'],
+      fields: [
+        { key: 'verbe', label: 'Verbe', kind: 'text' },
+        { key: 'cible', label: 'Cible', kind: 'refs', refTypes: [] },
+      ],
+    },
+    {
+      id: 'assignation',
+      name: 'Assignation',
+      fields: [{ key: 'assigne_a', label: 'Assigné à', kind: 'ref', refTypes: ['personne'], rel: 'led-by' }],
+    },
+    {
+      id: 'aptitude',
+      name: 'Aptitude',
+      can: ['réaliser'],
+      fields: [
+        { key: 'sait_faire', label: 'Peut réaliser', kind: 'refs', refTypes: ['action'] },
+        { key: 'niveau', label: 'Niveau', kind: 'choice', options: ['débutant', 'autonome', 'expert'] },
+      ],
+    },
+    {
+      id: 'processus',
+      name: 'Processus',
+      fields: [
+        { key: 'entrants', label: 'Entrants', kind: 'refs', refTypes: [] },
+        { key: 'sortants', label: 'Sortants', kind: 'refs', refTypes: [] },
+        { key: 'etapes', label: 'Étapes', kind: 'longtext' },
+      ],
+    },
+    {
       id: 'risque',
       name: 'Risque',
       fields: [
@@ -126,6 +158,8 @@
     { group: 'purpose', id: 'risque', name: 'Risque', nature: 'abstract', icon: 'alert-triangle', parents: ['concept'], aliases: ['risk', 'menace', 'obstacle'], components: ['risque'], description: 'Ce qui pourrait empêcher un objectif ou un projet d’aboutir.' },
     { group: 'work', id: 'projet', name: 'Projet', nature: 'event', icon: 'stack-2', aliases: ['project', 'initiative', 'chantier'], components: ['temps', 'travail', 'projet', 'contribution'], description: 'Un ensemble organisé de travail vers un objectif. Le terminer ne prouve pas que l’objectif est atteint.' },
     { group: 'work', id: 'tache', name: 'Tâche', nature: 'event', icon: 'checkbox', aliases: ['task', 'carte', 'card', 'tâches'], components: ['travail', 'contribution'], description: 'Une unité de travail qu’on peut terminer seule, avec un résultat clair. Elle se décompose en sous-tâches et en actions.' },
+    { group: 'work', id: 'action', name: 'Action', nature: 'event', icon: 'bolt', aliases: ['action', 'verbe', 'activité'], components: ['action', 'temps', 'location', 'assignation'], description: 'Ce qui se fait : un verbe, sa cible, qui s’en charge, quand et où. Filmer, approuver, publier.' },
+    { group: 'work', id: 'processus', name: 'Processus', nature: 'event', icon: 'git-merge', aliases: ['process', 'procédé', 'production'], components: ['processus', 'travail', 'contribution'], description: 'Un enchaînement d’étapes qui transforme des entrants en sortants : une production vidéo.' },
     { group: 'work', id: 'jalon', name: 'Jalon', nature: 'event', icon: 'milestone', aliases: ['milestone', 'étape clé'], components: ['travail', 'contribution'], description: 'Un point de contrôle daté dans un projet.' },
     { group: 'work', id: 'livrable', name: 'Livrable', nature: 'matter', icon: 'package', parents: ['objet'], aliases: ['deliverable', 'extrant', 'résultat concret'], components: ['livrable', 'contribution'], description: 'La chose concrète qu’un projet ou une tâche remet : un document, un objet, un système.' },
   ];

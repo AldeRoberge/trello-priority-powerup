@@ -1644,7 +1644,27 @@
       EM()
         .ontologyIssues(state.schema, state.entities, e)
         .forEach(function (i) {
-          page.appendChild(h('div', { class: 'en-notice en-notice--' + i.level, role: 'note' }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), h('span', { text: i.message })]));
+          var fix =
+            i.code === 'relation-nature'
+              ? h(
+                  'button',
+                  {
+                    class: 'en-link',
+                    type: 'button',
+                    title: 'Garde le lien, mais avec le lien général « lié à »',
+                    onclick: function () {
+                      applyEntity(
+                        function (cur) {
+                          return EM().addRelation(EM().removeRelation(cur, i.relType, i.other), 'lié à', i.other);
+                        },
+                        { rebuild: true }
+                      );
+                    },
+                  },
+                  ['Remplacer par « lié à »']
+                )
+              : null;
+          page.appendChild(h('div', { class: 'en-notice en-notice--' + i.level, role: 'note' }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), h('span', { text: i.message }), fix]));
         });
       var ownIds = EM().componentIdsOf(state.schema, { types: e.types });
       var comps = EM()

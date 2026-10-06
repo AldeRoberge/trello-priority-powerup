@@ -211,6 +211,28 @@ describe('EntitiesReality', () => {
     assert.ok(mine.draft.types.includes('place') && mine.draft.types.length === 3);
   });
 
+  it('never builds a relation the natures reject: "sorte de" between two objects becomes "lié à", and the warning is plain', () => {
+    const raw = {
+      root: { types: ['objet'], confidence: 0.9 },
+      nodes: [{ ref: 'a', name: 'Système audio', types: ['objet'], confidence: 0.95 }],
+      links: [{ from: 'root', to: 'a', via: 'sorte de' }],
+    };
+    const c2 = Object.assign({}, ctx, { draft: C.newDraft({ name: 'Système de son' }) });
+    const plan = verified(R.addBranch(R.emptyPlan(), 'root', R.normalizeBranch(raw, c2, 'root'), {}));
+    assert.equal(R.tree(plan, c2, {})[0].via, 'Lié à'); // what the panel shows is what is built
+    const out = R.build(c2, plan, {});
+    assert.deepEqual(out.draft.relations.map((r) => r.type), ['lié à']);
+    assert.deepEqual(M.ontologyIssues(out.schema, [out.draft, ...out.extras].map((d) => C.pseudoEntity(out.schema, d)), C.pseudoEntity(out.schema, out.draft)).filter((i) => i.code === 'relation-nature'), []);
+    // the same bad link made by hand reads in plain French
+    const bad = M.createEntity(out.schema, { name: 'Système de son', types: ['objet'], relations: [{ type: 'sorte de', to: 'x' }] });
+    const other = M.createEntity(out.schema, { id: 'x', name: 'Système audio', types: ['objet'] });
+    const msg = M.ontologyIssues(out.schema, [bad, other], bad).filter((i) => i.code === 'relation-nature').map((i) => i.message);
+    assert.ok(msg.length > 0);
+    assert.match(msg[0], /^Le lien « sorte de » ne convient pas ici : « Système de son » est de nature « matière »/);
+    assert.match(msg[0], /« abstrait » ou « fait social »/);
+    assert.doesNotMatch(msg[0], /part d’habitude|vise d’habitude/);
+  });
+
   it('the new components are in the library', () => {
     ['contenant', 'identification', 'condition'].forEach((id) => assert.ok(L.COMPONENTS.some((c) => c.id === id), id));
   });

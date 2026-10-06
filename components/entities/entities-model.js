@@ -189,6 +189,13 @@
     }
     var out = { id: id, name: name || id, fields: fields.slice(0, MAX_FIELDS) };
     if (c.builtin === 'aliases') out.builtin = 'aliases';
+    // atomic composition: components this one cannot live without (Contenant requires Matière), and what it lets the thing do
+    var requires = uniqueStrings(c.requires, 6, MAX_NAME).map(slug).filter(function (r) {
+      return r && r !== id;
+    });
+    if (requires.length) out.requires = requires;
+    var can = uniqueStrings(c.can, 6, MAX_ALIAS);
+    if (can.length) out.can = can;
     return out;
   }
 
@@ -239,6 +246,14 @@
       seenC[NAMES_COMPONENT] = true;
       components.push({ id: NAMES_COMPONENT, name: 'Autres noms', fields: [], builtin: 'aliases' });
     }
+    // a requirement must name a component that exists
+    components.forEach(function (c) {
+      if (!c.requires) return;
+      c.requires = c.requires.filter(function (r) {
+        return !!seenC[r];
+      });
+      if (!c.requires.length) delete c.requires;
+    });
     var seenT = {};
     var types = [];
     (Array.isArray(s.types) ? s.types : []).forEach(function (t) {
@@ -275,7 +290,89 @@
     });
     var out = { version: VERSION, components: components.slice(0, MAX_COMPONENTS), types: types };
     if (relations.length) out.relations = relations;
+    var systems = normalizeSystems(s.systems, shell);
+    if (systems.length) out.systems = systems;
     return out;
+  }
+
+  // ---------------------------------------------------------------- 2a systems (declarative rules)
+  var MAX_SYSTEMS = 20;
+  var SYSTEM_OPS = ['eq', 'ne', 'gt', 'lt', 'set', 'empty', 'in', 'contains', 'past', 'soon', 'ago'];
+  var SYSTEM_LEVELS = ['info', 'warn', 'alert'];
+
+  /**
+   * A System is a rule over components: "every entity that carries the components in `on` and meets every
+   * condition in `when` gets a finding (and may propose a card)". Data only, so it lives in the schema.
+   *   { id, name, on:[componentId], when:[{path, op, value?}], then:{ text, level, card? }, enabled }
+   * Conditions whose path names a component outside `on` are dropped; a rule with no condition is dropped.
+   */
+  function normalizeSystem(raw, schema) {
+    if (!raw || typeof raw !== 'object') return null;
+    var name = str(raw.name, MAX_NAME);
+    var id = slug(raw.id || name);
+    if (!id) return null;
+    var on = uniqueStrings(raw.on, 6, MAX_NAME).map(slug).filter(Boolean);
+    var when = [];
+    (Array.isArray(raw.when) ? raw.when : []).slice(0, 6).forEach(function (w) {
+      if (!w || typeof w !== 'object' || SYSTEM_OPS.indexOf(w.op) < 0) return;
+      var path = String(w.path || '');
+      var cid = path.split('.')[0];
+      if (path.split('.').length !== 2 || on.indexOf(cid) < 0) return;
+      if (schema && schema.components && !fieldOf(schema, path)) return;
+      var c = { path: path, op: w.op };
+      if (w.value !== undefined && w.value !== null && w.value !== '') {
+        c.value = typeof w.value === 'number' || typeof w.value === 'boolean' || Array.isArray(w.value) ? w.value : str(w.value, MAX_ALIAS);
+      }
+      if (w.op === 'soon' || w.op === 'ago') {
+        if (!isFinite(Number(c.value))) return;
+        c.value = Math.max(0, Math.min(3650, Math.round(Number(c.value))));
+      }
+      when.push(c);
+    });
+    if (!on.length || !when.length) return null;
+    var then = raw.then && typeof raw.then === 'object' ? raw.then : {};
+    var out = {
+      id: id,
+      name: name || id,
+      on: on,
+      when: when,
+      then: { text: str(then.text, MAX_TEXT) || '{name}', level: SYSTEM_LEVELS.indexOf(then.level) >= 0 ? then.level : 'warn' },
+      enabled: raw.enabled !== false,
+    };
+    var card = str(then.card, MAX_NAME);
+    if (card) out.then.card = card;
+    return out;
+  }
+
+  function normalizeSystems(list, schema) {
+    var seen = {};
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (r) {
+      var ns = normalizeSystem(r, schema);
+      if (!ns || seen[ns.id]) return;
+      seen[ns.id] = true;
+      out.push(ns);
+    });
+    return out.slice(0, MAX_SYSTEMS);
+  }
+
+  function upsertSystem(schema, system) {
+    var ns = normalizeSystem(system, schema);
+    if (!ns) return schema;
+    var next = clone(schema);
+    var list = (next.systems || []).filter(function (x) {
+      return x.id !== ns.id;
+    });
+    next.systems = list.concat([ns]);
+    return normalizeSchema(next);
+  }
+
+  function removeSystem(schema, id) {
+    var next = clone(schema);
+    next.systems = (next.systems || []).filter(function (x) {
+      return x.id !== id;
+    });
+    return normalizeSchema(next);
   }
 
   /**
@@ -421,6 +518,13 @@
     (entity.components || []).forEach(function (cid) {
       if (out.indexOf(cid) < 0 && findById(schema.components, cid)) out.push(cid);
     });
+    // a component pulls in the ones it requires (Contenant needs Matière), transitively and without loops
+    for (var i = 0; i < out.length; i++) {
+      var comp = findById(schema.components, out[i]);
+      ((comp && comp.requires) || []).forEach(function (rid) {
+        if (out.indexOf(rid) < 0 && findById(schema.components, rid)) out.push(rid);
+      });
+    }
     return out;
   }
 
@@ -1395,10 +1499,10 @@
           level: 'warn',
           code: 'relation-nature',
           other: other.id,
+          relType: r.type,
           message:
-            side[0] === 'from'
-              ? '« ' + m.def.name + ' » part d’habitude de : ' + natureNames(expected) + ' ; « ' + side[1].name + ' » est ' + natureNames(ns) + '.'
-              : '« ' + m.def.name + ' » vise d’habitude : ' + natureNames(expected) + ' ; « ' + side[1].name + ' » est ' + natureNames(ns) + '.',
+            'Le lien « ' + r.type + ' » ne convient pas ici : « ' + side[1].name + ' » est de nature « ' + natureNames(ns) + ' », alors que ce lien relie d’habitude des choses de nature « ' + natureNames(expected).replace(/ \/ /g, ' » ou « ') + ' ». ' +
+            'Essayez « fait partie de » ou « lié à » (ou changez le type de « ' + side[1].name + ' »).',
         });
       });
     });
@@ -1863,6 +1967,12 @@
     describeEntry: describeEntry,
     fitHistory: fitHistory,
     matches: matches,
+    compare: compare,
+    normalizeSystem: normalizeSystem,
+    upsertSystem: upsertSystem,
+    removeSystem: removeSystem,
+    SYSTEM_OPS: SYSTEM_OPS,
+    SYSTEM_LEVELS: SYSTEM_LEVELS,
     query: query,
     resolveText: resolveText,
     describeEntity: describeEntity,

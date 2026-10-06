@@ -72,13 +72,24 @@
         { key: 'modele', label: 'Modèle', kind: 'text' },
         { key: 'ingredients', label: 'Ingrédients', kind: 'refs', refTypes: ['substance'], rel: 'made-of' },
         { key: 'peau', label: 'Type de peau', kind: 'multi', options: ['sèche', 'normale', 'mixte', 'grasse', 'sensible'] },
-        { key: 'peremption', label: 'Péremption', kind: 'date' },
         { key: 'usage', label: 'Mode d’emploi', kind: 'longtext' },
+      ],
+    },
+    {
+      id: 'consommable',
+      name: 'Consommable',
+      can: ['se consommer'],
+      fields: [
+        { key: 'peremption', label: 'Péremption', kind: 'date' },
+        { key: 'consomme', label: 'Consommé', kind: 'bool' },
+        { key: 'consomme_le', label: 'Consommé le', kind: 'date' },
       ],
     },
     {
       id: 'contenant',
       name: 'Contenant',
+      requires: ['matiere'],
+      can: ['contenir'],
       fields: [
         { key: 'contenu', label: 'Contenu', kind: 'refs', refTypes: ['substance', 'produit'] },
         { key: 'capacite', label: 'Capacité maximale', kind: 'number', unit: 'ml' },
@@ -228,7 +239,10 @@
 
   var TYPES = [
     { group: 'matter', id: 'objet', name: 'Objet', nature: 'matter', icon: 'box', aliases: ['object', 'chose', 'item', 'article'], components: ['matiere', 'provenance', 'propriete'], description: 'Une chose matérielle fabriquée ou trouvée.' },
-    { group: 'matter', id: 'produit', name: 'Produit', nature: 'matter', icon: 'bottle', parents: ['objet'], aliases: ['product', 'cosmétique', 'crème'], components: ['produit'], description: 'Un objet fait pour être utilisé ou consommé : crème pour les mains, savon, aliment.' },
+    { group: 'matter', id: 'produit', name: 'Produit', nature: 'matter', icon: 'bottle', parents: ['objet'], aliases: ['product', 'cosmétique', 'crème'], components: ['produit', 'consommable'], description: 'Un objet fait pour être utilisé ou consommé : crème pour les mains, savon, aliment.' },
+    { group: 'matter', id: 'consommable', name: 'Consommable', nature: 'matter', icon: 'hourglass', aliases: ['consumable', 'périssable'], components: ['consommable'], description: 'Ce qui se consomme ou se périme : un aliment, une pile, une cartouche.' },
+    { group: 'matter', id: 'contenant', name: 'Contenant', nature: 'matter', icon: 'package', parents: ['objet'], aliases: ['container', 'récipient'], components: ['contenant'], description: 'Un objet qui contient autre chose, avec une capacité et un niveau.' },
+    { group: 'matter', id: 'bouteille', name: 'Bouteille', nature: 'matter', icon: 'bottle', parents: ['produit', 'consommable', 'contenant'], aliases: ['bottle', 'gourde', 'flacon'], components: [], description: 'Un produit, consommable et contenant à la fois : rien de plus qu’une composition de composants.' },
     { group: 'matter', id: 'substance', name: 'Substance', nature: 'matter', icon: 'flask', aliases: ['ingrédient', 'ingredient', 'matière première', 'material'], components: ['matiere'], description: 'De la matière sans forme propre : glycérine, eau, pierre, bois.' },
     { group: 'living', id: 'etre_vivant', name: 'Être vivant', nature: 'living', icon: 'leaf', aliases: ['living', 'organisme', 'vivant'], components: ['vivant', 'propriete'], description: 'Ce qui naît, croît et meurt.' },
     { group: 'living', id: 'animal', name: 'Animal', nature: 'living', icon: 'paw', parents: ['etre_vivant'], aliases: ['pet', 'bête', 'animaux'], components: [], description: 'Un être vivant qui se déplace.' },

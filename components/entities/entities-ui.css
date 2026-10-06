@@ -1535,3 +1535,13 @@ button.en-typepill:hover {
     transition: none !important;
   }
 }
+.en-notice > span {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.45;
+}
+.en-notice > .en-link {
+  flex: none;
+  white-space: nowrap;
+  align-self: center;
+}

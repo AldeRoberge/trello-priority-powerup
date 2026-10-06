@@ -514,6 +514,18 @@
     return EM().findById(st.pool, id);
   }
 
+  /** Does the relation accept these two entities by nature? (subject = a, object = b) */
+  function relationFits(st, def, aRef, bRef, entityLike) {
+    function natures(ref) {
+      var ent = entityLike(st, st.refToId[ref]);
+      return ent ? EM().naturesOf(st.schema, { types: ent.types || [] }) : [];
+    }
+    var pairs = [[def.from, natures(aRef)], [def.to, natures(bRef)]];
+    return pairs.every(function (p) {
+      return !p[0] || !p[1].length || p[1].some(function (n) { return p[0].indexOf(n) >= 0; });
+    });
+  }
+
   /**
    * The plan applied to the entity being created. Pure: call it again after the user switches a node.
    * ctx = { schema, entities (existing + drafts of the interview, as pseudo entities), draft (the root), library }
@@ -622,13 +634,15 @@
           return;
         }
         var m = EM().matchRelation(e.via);
-        var name = m ? m.def.name : 'lié à';
         var a = e.from;
         var b = e.to;
         if (m && m.dir === 'inv') {
           a = e.to;
           b = e.from;
         }
+        // a relation between natures it does not link (a "sorte de" between two objects) becomes the generic "lié à"
+        if (m && !m.def.symmetric && !relationFits(st, m.def, a, b, entityLike)) m = null;
+        var name = m ? m.def.name : 'lié à';
         var holder = draftOf(a);
         if (!holder) {
           // the entity that should hold the link already exists and is never edited: store it from the other end
@@ -667,6 +681,27 @@
   function tree(plan, ctx, flags) {
     var choices = EC().archetypeChoices(ctx.schema, LIB(ctx));
     var rows = [];
+    // natures of a node from the genres in the plan (the root also has the genres the user chose)
+    function naturesOfRef(ref) {
+      var ids = ref === 'root' ? (ctx.draft ? ctx.draft.types : []).concat(plan.root.types || []) : plan.nodes[ref] ? plan.nodes[ref].types || [plan.nodes[ref].type] : [];
+      var out = [];
+      ids.forEach(function (id) {
+        var c = choices.filter(function (x) { return x.id === id; })[0];
+        if (c && c.nature && out.indexOf(c.nature) < 0) out.push(c.nature);
+      });
+      return out;
+    }
+    /** The label of a link as it will really be built: a relation the natures do not allow shows as "lié à". */
+    function effectiveVia(e) {
+      var m = e.via.indexOf('.') > 0 ? null : EM().matchRelation(e.via);
+      if (!m || m.def.symmetric) return e.via;
+      var a = m.dir === 'inv' ? e.to : e.from;
+      var b = m.dir === 'inv' ? e.from : e.to;
+      var ok = [[m.def.from, naturesOfRef(a)], [m.def.to, naturesOfRef(b)]].every(function (p) {
+        return !p[0] || !p[1].length || p[1].some(function (n) { return p[0].indexOf(n) >= 0; });
+      });
+      return ok ? e.via : 'lié à';
+    }
     function incoming(ref) {
       var hit = null;
       plan.edges.forEach(function (e) { if (!hit && e.to === ref) hit = e; });
@@ -688,7 +723,7 @@
           icon: c ? c.icon : 'stack-2',
           conf: n.conf,
           status: statusOf(plan, ref, flags),
-          via: link ? viaLabel(link.via).charAt(0).toUpperCase() + viaLabel(link.via).slice(1) : '',
+          via: link ? viaLabel(effectiveVia(link)).charAt(0).toUpperCase() + viaLabel(effectiveVia(link)).slice(1) : '',
           working: n.working,
           failed: n.failed,
           verified: n.verified === true,

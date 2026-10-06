@@ -112,11 +112,22 @@
     return out;
   }
 
+  /** The relations, each with the kinds of things it links when it is restricted ("sorte de [de : idée, fait social]"). */
   function relationNames() {
+    function names(list) {
+      return list
+        .map(function (n) { var x = EM().natureById(n); return x ? x.name.toLowerCase() : n; })
+        .join(', ');
+    }
     return EM()
       .RELATIONS.filter(function (r) { return r.id !== 'related'; })
-      .map(function (r) { return r.name; })
-      .concat(['lié à']);
+      .map(function (r) {
+        var limits = [];
+        if (r.from) limits.push('de : ' + names(r.from));
+        if (r.to) limits.push('vers : ' + names(r.to));
+        return r.name + (limits.length ? ' [' + limits.join(' ; ') + ']' : '');
+      })
+      .concat(['lié à (toujours permis)']);
   }
 
   var FORMAT = [
@@ -135,6 +146,7 @@
     'Un genre n’est qu’une LISTE DE COMPOSANTS, et une chose peut avoir plusieurs genres (un bâtiment est un lieu ET un objet; une bouteille est un produit ET un contenant) : donne 1 à 3 genres dans "types" (id de la liste, jamais autre chose), le plus important d’abord.',
     '- components : des id de la liste des composants que la chose porte (ex. contenant, produit, provenance, acquisition, identification, condition). facts : chemin exact (composant.champ) = valeur, seulement ce qui est sûr (pas de date ni de prix inventés).',
     '- nodes : les AUTRES choses qui existent à côté (le contenu, la marque, le fabricant, la société mère, les ingrédients). Un nom propre exact et singulier (« The Coca-Cola Company »). Jamais la chose elle-même.',
+    '- Respecte les crochets des relations : « sorte de », « instance de », « ancré dans » et « exprimé par » ne servent QU’entre idées ou faits sociaux, jamais entre objets, lieux ou personnes (un objet est « sorte de » quelque chose par son genre, pas par un lien). Pour des choses matérielles, utilise « fait partie de », « fait de », « fabriqué par » ou « lié à ».',
     '- links : from et to sont des ref (« root » = la chose). via = un chemin de champ de lien (ex. contenant.contenu, provenance.fabricant) ou une relation du vocabulaire. Une société mère se relie à sa filiale par « fait partie de » (de la filiale vers la mère).',
     '- confidence : 0.9 et plus seulement si tu es presque certain que c’est vrai et connu. Sous 0.5, ne l’écris pas. N’invente jamais : mieux vaut une carte courte et juste.',
     '- expand : true seulement si cette chose a elle-même une structure utile à explorer (une marque et sa société mère, un produit et ses ingrédients). Pas pour une chose générique.',
