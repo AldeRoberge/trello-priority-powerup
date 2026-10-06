@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --test-scheduled",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "secret:search": "wrangler secret put SEARCH_API_KEY"
   },
   "devDependencies": {
     "wrangler": "^4.34.0"

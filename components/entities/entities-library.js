@@ -52,10 +52,24 @@
       ],
     },
     {
+      id: 'acquisition',
+      name: 'Acquisition',
+      fields: [
+        { key: 'acquis_le', label: 'Acquis le', kind: 'date' },
+        { key: 'acquis_chez', label: 'Acquis chez', kind: 'text' },
+      ],
+    },
+    {
+      id: 'location',
+      name: 'Emplacement',
+      fields: [{ key: 'place', label: 'Lieu', kind: 'ref', refTypes: ['place'] }],
+    },
+    {
       id: 'produit',
       name: 'Produit',
       fields: [
         { key: 'marque', label: 'Marque', kind: 'text' },
+        { key: 'modele', label: 'Modèle', kind: 'text' },
         { key: 'ingredients', label: 'Ingrédients', kind: 'refs', refTypes: ['substance'], rel: 'made-of' },
         { key: 'peau', label: 'Type de peau', kind: 'multi', options: ['sèche', 'normale', 'mixte', 'grasse', 'sensible'] },
         { key: 'peremption', label: 'Péremption', kind: 'date' },
@@ -350,6 +364,17 @@
     return c ? EM().upsertComponent(schema, c) : schema;
   }
 
+  /** The schema with one preset field added to an installed component (unchanged when it is already there). */
+  function ensureField(schema, cid, key) {
+    var comp = EM().findById(schema.components, cid);
+    var preset = presetComponent(cid);
+    if (!comp || !preset) return schema;
+    if (comp.fields.some(function (f) { return f.key === key; })) return schema;
+    var field = preset.fields.filter(function (f) { return f.key === key; })[0];
+    if (!field) return schema;
+    return EM().upsertComponent(schema, Object.assign({}, comp, { fields: comp.fields.concat([field]) }));
+  }
+
   /**
    * What the People / Places bridge and the owner field need in every schema: the Propriété and Adresse
    * components (the Lieu type carries Adresse), and the Personne type when asked (opts.people). Existing
@@ -380,6 +405,7 @@
     dependencies: dependencies,
     install: install,
     ensureComponent: ensureComponent,
+    ensureField: ensureField,
     ensureBridge: ensureBridge,
   };
 })(typeof window !== 'undefined' ? window : this);

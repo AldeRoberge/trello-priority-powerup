@@ -73,6 +73,8 @@ const UNIT_FILES = [
   'entities-model.test.js',
   'entities-trello.test.js',
   'entities-composer.test.js',
+  'entities-interview.test.js',
+  'quick-parse-when.test.js',
   'entities-archetype.test.js',
   'entities-ontology.test.js',
   'agent-entities.test.js',

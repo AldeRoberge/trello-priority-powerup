@@ -31,6 +31,7 @@ import {
 } from './sync.js';
 import { describeAction, isDocumentAction, isEntityAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
+import { searchWeb } from './search.js';
 import { driveEnabled, syncDocumentCard, syncAllDocuments, docSyncStatus } from './drive.js';
 
 function corsHeaders(request, env) {
@@ -138,6 +139,9 @@ export default {
       if (url.pathname === '/alerts/ack' && request.method === 'POST') {
         await ackAlerts(env);
         return json(request, env, { ok: true });
+      }
+      if (url.pathname === '/search' && request.method === 'GET') {
+        return json(request, env, await searchWeb(env, url.searchParams.get('q')));
       }
       if (url.pathname === '/webhook/register' && request.method === 'POST') {
         const callback = `${url.origin}/webhook/${env.SYNC_SECRET}`;

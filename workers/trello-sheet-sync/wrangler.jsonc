@@ -12,5 +12,6 @@
   // Secrets (set by scripts/setup-sheet-sync.ps1 via `wrangler secret bulk`):
   // GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_SHEET_ID,
   // TRELLO_KEY, TRELLO_TOKEN, TRELLO_BOARD_ID, SYNC_SECRET, ALLOWED_ORIGINS
+  // Optional: SEARCH_API_KEY (Tavily) = web search for the Entity interview (npm run secret:search)
   // Optional (scripts/setup-documents-drive.ps1): GOOGLE_DRIVE_FOLDER_ID = Drive folder that receives the Documents view as .md files
 }
