@@ -1,6 +1,6 @@
 # Entités
 
-Onglet **Entités** (à côté de Gantt, Tableau, Kanban, Documents). On y décrit des objets nommés une fois (« Ficus », « Hôtel de Ville ») avec des types, des propriétés, des liens et un historique, puis l'assistant les retrouve à partir d'une phrase.
+Onglet **Entités** (à côté de Gantt, Tableau, Kanban, Documents). On y décrit des objets nommés une fois (« Monstera », « Hôtel de Ville ») avec des types, des propriétés, des liens et un historique, puis l'assistant les retrouve à partir d'une phrase.
 
 Exemple : « Arroser mes plantes au travail » devient le filtre *type Plante* + *lieu dont l'alias est « travail »*, soit exactement les plantes qui sont à l'Hôtel de Ville. Fonctionne aussi en anglais (« Water my plants at work ») grâce aux alias et aux pluriels.
 
@@ -18,7 +18,7 @@ Exemple : « Arroser mes plantes au travail » devient le filtre *type Plante* +
 | --- | --- | --- |
 | **Composant** | groupe de champs typés | *Entretien* : fréquence (nombre), dernier arrosage (date), santé (choix) |
 | **Archétype** (le « type ») | modèle prédéfini : des composants, des **valeurs par défaut**, une nature, des archétypes parents | *Plante* = Lieu + Entretien, arrosage par défaut 7 jours |
-| **Entité** | instance d'un ou plusieurs archétypes : ne stocke que ses **surcharges** (ce qui diffère du défaut), peut ajouter des composants à elle seule, a des alias, des liens, un historique | *Ficus*, lieu = Hôtel de Ville, arrosage = 3 jours |
+| **Entité** | instance d'un ou plusieurs archétypes : ne stocke que ses **surcharges** (ce qui diffère du défaut), peut ajouter des composants à elle seule, a des alias, des liens, un historique | *Monstera*, lieu = Hôtel de Ville, arrosage = 3 jours |
 
 Types de champ : texte, nombre, date, oui/non, choix, lien vers une entité, liens vers plusieurs entités. Un lieu est simplement une entité de type *Lieu* (fourni par défaut, avec le composant *Lieu*) ; donnez-lui des alias (`travail, work, bureau`) pour que « au travail » le retrouve.
 
@@ -51,7 +51,7 @@ En plus de l'archétype (le type), une entité peut être une **variante** d'une
 
 - Modifier une variante écrit une valeur propre ; l'archétype et les autres variantes ne bougent jamais.
 - Modifier l'archétype se répercute sur les variantes, sauf sur les champs qu'elles ont surchargés.
-- Chaque champ indique sa provenance (« hérité de Ficus » / « modifié ») ; **Réinitialiser** supprime la surcharge et revient à la valeur du modèle.
+- Chaque champ indique sa provenance (« hérité de Monstera » / « modifié ») ; **Réinitialiser** supprime la surcharge et revient à la valeur du modèle.
 - **Créer une variante** (hérite), **Dupliquer** (valeurs copiées, aucun lien) et **Détacher du modèle** (garde les valeurs actuelles, ne suit plus) sont dans le menu **•••** de la page ; la ligne repliée « Modèle et variantes » permet de choisir le modèle d'une entité existante et liste ses variantes. Les chaînes (variante d'une variante) fonctionnent ; les boucles sont refusées.
 - Supprimer un archétype fige les valeurs héritées de ses variantes. Alias, types et liens libres ne sont pas hérités ; les recherches (« mes plantes au travail ») et l'assistant voient les valeurs héritées.
 - Cela se fait depuis la page de l'entité ; le Composer ne le propose plus.

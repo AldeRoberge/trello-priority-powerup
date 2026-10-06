@@ -1,5 +1,5 @@
 /*
- * Role: pure Entity-Component model ("Entités"): rich things the user names once ("Ficus", "Hôtel de
+ * Role: pure Entity-Component model ("Entités"): rich things the user names once ("Monstera", "Hôtel de
  * Ville") and the assistant can then filter ("mes plantes au travail"). No Trello, no DOM.
  *
  * In the UI: an ARCHETYPE (internally a "type") is a predefined model: a bundle of components plus default

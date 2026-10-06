@@ -1,5 +1,5 @@
 /*
- * Role: UI of the Entities view ("Entités"): define rich things once ("Ficus", "Hôtel de Ville"), give them
+ * Role: UI of the Entities view ("Entités"): define rich things once ("Monstera", "Hôtel de Ville"), give them
  * types, typed properties, links and a history, then find them by describing them ("mes plantes au travail").
  *  - left: a source list (search box that also understands a request, type filter pills, entities grouped by type,
  *    one "+" menu to compose or create an empty one)
@@ -1650,7 +1650,7 @@
           class: 'en-empty-text',
           text: has
             ? 'Choisissez une entité dans la liste, ou composez-en une nouvelle.'
-            : 'Une entité est une chose nommée — « Ficus », « Hôtel de Ville » — avec un type, des propriétés et des liens. L’assistant s’en sert pour comprendre « arroser mes plantes au travail ».',
+            : 'Une entité est une chose nommée — « Monstera », « Hôtel de Ville » — avec un type, des propriétés et des liens. L’assistant s’en sert pour comprendre « arroser mes plantes au travail ».',
         }),
         h('button', { class: 'en-btn en-btn--primary', type: 'button', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
       ]);

@@ -7,12 +7,12 @@
  * instance that stores only overrides, and may add components of its own)
  *   draft   an entity being composed: { id, name, aliases[], types[], components[] (extra), answers{ "comp.field": value },
  *           relations[{type,to}], intent, seen{} }. Ids are assigned up front, so a draft can be the
- *           target of another draft's link ("Ficus" -> place "Salon" that does not exist yet) and
+ *           target of another draft's link ("Monstera" -> place "Salon" that does not exist yet) and
  *           everything is created together by finalize().
  *   steps   what to ask, derived from the draft's types: start -> identity -> one step per component
  *           (the union over the types: composable) -> links -> review.
  *
- * Smart parts: readIntent() understands "Ficus, une plante au travail" (name, type, linked place);
+ * Smart parts: readIntent() understands "Monstera, une plante au travail" (name, type, linked place);
  * suggest() proposes the values and links other entities of the same type already use; issues()
  * flags duplicates and ambiguous aliases; parseFieldSpec() lets a new type be described in one line.
  *
@@ -399,7 +399,7 @@
   var SPLIT_RE = /\s*(?:[,:;]|\s[-–—]\s|\s(?:est|is)\s(?:(?:un|une|a|an)\s)?)\s*/;
 
   /**
-   * Reads "Ficus, une plante au travail" -> name "Ficus", type Plante, linked place "Hôtel de Ville"
+   * Reads "Monstera, une plante au travail" -> name "Monstera", type Plante, linked place "Hôtel de Ville"
    * (through the type's place field when it has one, else a relation). Without a separator the whole
    * text is the name and nothing else is inferred (a name like "Plante verte" stays a name).
    * @returns {{name:string, types:string[], answers:object, relations:object[], mentions:object[]}}

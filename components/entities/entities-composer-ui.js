@@ -1,7 +1,7 @@
 /*
  * Role: UI of the Entity composer: ONE page to create an entity. An ARCHETYPE is a predefined model (a bundle of
  * components with default values); an ENTITY is an instance of it that stores only its overrides. The page:
- *   1. Name      one field ("Ficus, une plante au travail" is understood: name, archetype, place) + aliases
+ *   1. Name      one field ("Monstera, une plante au travail" is understood: name, archetype, place) + aliases
  *   2. Archetype pills grouped by nature (installed ones, ready-made library ones with a "+", a new one);
  *                several can be combined
  *   3. Components one card per component the archetypes bring, filled in place; "+ Composant" adds more
@@ -1273,8 +1273,6 @@
         [archetypeBlock(), componentsBlock(), linksBlock(), moreBlock(), remarksBlock()].forEach(function (b) {
           if (b) restBox.appendChild(b);
         });
-      } else {
-        restBox.appendChild(h('p', { class: 'cp-tip', text: 'Astuce : « Ficus, une plante au travail » reconnaît aussi le genre et le lieu.' }));
       }
       els.main.scrollTop = keep;
     }
@@ -1307,7 +1305,7 @@
         );
       });
       els.header.appendChild(h('div', { class: 'cp-title' }, [icon('wand'), h('span', { text: 'Composer une entité' })]));
-      els.header.appendChild(crumbs);
+      if (st.stack.length > 1) els.header.appendChild(crumbs);
       if (st.confirmClose) {
         els.header.appendChild(
           h('div', { class: 'cp-confirm' }, [
@@ -1418,7 +1416,8 @@
         return;
       }
       var off = blocked || noName ? true : null;
-      els.footer.appendChild(h('button', { class: 'cp-btn', type: 'button', disabled: off, onclick: function () { finish(true); } }, [icon('plus'), 'Créer et en ajouter une autre']));
+      if (!noName)
+        els.footer.appendChild(h('button', { class: 'cp-btn', type: 'button', disabled: off, onclick: function () { finish(true); } }, [icon('plus'), 'Créer et ajouter une autre']));
       els.footer.appendChild(
         h('button', { class: 'cp-btn cp-btn--primary', type: 'button', disabled: off, onclick: function () { finish(false); } }, [icon('check'), 'Créer ' + (all.length > 1 ? all.length + ' entités' : 'l’entité')])
       );
