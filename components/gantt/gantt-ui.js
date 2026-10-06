@@ -2786,7 +2786,11 @@
           ? 'Retirer le lien vers \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?'
           : 'Supprimer \u00ab\u00a0' + label + '\u00a0\u00bb\u00a0?';
       var verb = isBoardRootCard(row) ? 'Archiver' : isLinkedCardRow(row) ? 'Retirer le lien' : 'Supprimer';
-      confirmTrash(prompt, mouseEvent, verb).then(function (choice) {
+      // Archiving a board card is recoverable (history panel), so it goes straight through.
+      var decision = isBoardRootCard(row)
+        ? Promise.resolve('delete')
+        : confirmTrash(prompt, mouseEvent, verb);
+      decision.then(function (choice) {
         if (!choice || choice === 'cancel') return;
         if (choice === 'done') {
           markSubtaskDone(row);
