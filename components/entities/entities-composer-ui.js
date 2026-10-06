@@ -87,7 +87,11 @@
       filter: '', // archetype search
       libMsg: '', // outcome of the last library install
       focusName: true,
-      pillsOpen: null, // archetype list expanded? null = open until an archetype is chosen
+      pillsOpen: false, // full archetype list (grouped, searchable) shown instead of the few suggestions
+      showAlias: false, // optional sections stay hidden until asked for (or until they hold something)
+      showLinks: false,
+      showComps: false,
+      openComps: {}, // component cards the user opened
     };
 
     var els = {
@@ -179,6 +183,7 @@
       nd.intent = nd.name;
       nd.intentApplied = nd.name;
       setDraft(nd);
+      nameSec = null; // the field now shows only the name
       return !!structured;
     }
 
@@ -188,10 +193,11 @@
       var issuesBox = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
       var input = h('input', {
         class: 'cp-input cp-input--big',
-        placeholder: 'Nom : Ficus, ou Ficus, une plante au travail',
+        placeholder: 'Nom',
         'aria-label': 'Nom',
         'data-name': '1',
         'data-noenter': '1',
+        autocomplete: 'off',
         value: draft().intent || draft().name || '',
         oninput: function () {
           var text = input.value;
@@ -200,6 +206,7 @@
           paintUnderstood(r);
           paintIssues();
           refresh();
+          renderRest(true);
         },
         onblur: function () {
           if (commitIntent()) {
@@ -243,7 +250,7 @@
       var aliasBox = h('div', { class: 'cp-chipedit' });
       var aliasIn = h('input', {
         class: 'cp-chipedit-in',
-        placeholder: '+ alias (travail, work, bureau…)',
+        placeholder: 'Autres noms : travail, work, bureau…',
         'aria-label': 'Alias',
         'data-noenter': '1',
         onkeydown: function (ev) {
@@ -294,7 +301,7 @@
       paintIssues();
       sec.appendChild(input);
       sec.appendChild(understood);
-      sec.appendChild(aliasBox);
+      if (st.showAlias || draft().aliases.length) sec.appendChild(aliasBox);
       sec.appendChild(issuesBox);
       return sec;
     }
@@ -317,19 +324,47 @@
       refresh();
     }
 
+    /** A few archetypes worth proposing for what was typed: name matches first, then the most used ones. */
+    function suggestedChoices(all, d) {
+      var q = EM().normKey(d.name || '');
+      var used = {};
+      st.entities.forEach(function (e) {
+        (e.types || []).forEach(function (t) {
+          used[t] = (used[t] || 0) + 1;
+        });
+      });
+      var rest = all.filter(function (c) {
+        return d.types.indexOf(c.id) < 0;
+      });
+      function score(c) {
+        var n = EM().normKey(c.name);
+        var s = 0;
+        if (q && (q.indexOf(n) >= 0 || n.indexOf(q) >= 0)) s += 1000;
+        if (c.installed) s += 100 + Math.min(used[c.id] || 0, 99);
+        return s;
+      }
+      return rest
+        .map(function (c, i) {
+          return { c: c, i: i, s: score(c) };
+        })
+        .sort(function (a, b) {
+          return b.s - a.s || a.i - b.i;
+        })
+        .slice(0, 5)
+        .map(function (o) {
+          return o.c;
+        });
+    }
+
     function archetypeBlock() {
-      var sec = h('div', { class: 'cp-sec' });
+      var sec = h('div', { class: 'cp-sec cp-sec--arch' });
       var d = draft();
-      sec.appendChild(
-        h('div', { class: 'cp-sec-head' }, [
-          h('h3', { class: 'cp-sec-title', text: 'Archétype' }),
-          h('span', { class: 'cp-hint', text: 'Un modèle prêt : ses composants et ses valeurs par défaut. Combinez-en plusieurs.' }),
-        ])
-      );
+      var expanded = st.pillsOpen;
+      sec.appendChild(h('h3', { class: 'cp-sec-title', text: d.types.length ? 'Genre' : 'Quel genre de chose ?' }));
       var search = h('input', {
         class: 'cp-input cp-input--small',
         type: 'search',
-        placeholder: 'Chercher un archétype…',
+        placeholder: 'Chercher…',
         'aria-label': 'Chercher un archétype',
         'data-noenter': '1',
         value: st.filter,
@@ -338,17 +373,46 @@
           paintPills();
         },
       });
-      var expanded = st.pillsOpen === null ? !d.types.length : st.pillsOpen;
-      var pills = h('div', { class: 'cp-pgroups' });
+      var pills = h('div', { class: expanded ? 'cp-pgroups' : 'cp-pills' });
+      function pillFor(c) {
+        var on = d.types.indexOf(c.id) >= 0;
+        return h(
+          'button',
+          {
+            class: 'cp-pill' + (on ? ' is-on' : '') + (c.installed ? '' : ' is-lib'),
+            type: 'button',
+            'aria-pressed': c.installed ? (on ? 'true' : 'false') : null,
+            title: c.description || null,
+            onclick: function () {
+              commitIntent();
+              if (!c.installed) return installPreset(c.id);
+              var cur = draft().types.indexOf(c.id) >= 0;
+              setDraft(EC().pruneAnswers(st.schema, EC().toggleType(st.schema, draft(), c.id, !cur)));
+              renderMain();
+              refresh();
+            },
+          },
+          [icon(c.installed ? c.icon : 'plus'), c.name, c.role ? h('em', { text: ' rôle' }) : null]
+        );
+      }
       function paintPills() {
         pills.textContent = '';
+        var all = EC().archetypeChoices(st.schema, global.EntitiesLibrary);
+        if (!expanded) {
+          all
+            .filter(function (c) {
+              return d.types.indexOf(c.id) >= 0;
+            })
+            .concat(suggestedChoices(all, d))
+            .forEach(function (c) {
+              pills.appendChild(pillFor(c));
+            });
+          return;
+        }
         var q = EM().normKey(st.filter);
-        var list = EC()
-          .archetypeChoices(st.schema, global.EntitiesLibrary)
-          .filter(function (c) {
-            if (!expanded) return c.installed && d.types.indexOf(c.id) >= 0;
-            return !q || EM().normKey(c.name).indexOf(q) >= 0;
-          });
+        var list = all.filter(function (c) {
+          return !q || EM().normKey(c.name).indexOf(q) >= 0;
+        });
         var groups = {};
         var order = [];
         list.forEach(function (c) {
@@ -363,28 +427,7 @@
           var nat = EM().natureById(k);
           var row = h('div', { class: 'cp-pills' });
           groups[k].forEach(function (c) {
-            var on = d.types.indexOf(c.id) >= 0;
-            row.appendChild(
-              h(
-                'button',
-                {
-                  class: 'cp-pill' + (on ? ' is-on' : '') + (c.installed ? '' : ' is-lib'),
-                  type: 'button',
-                  'aria-pressed': c.installed ? (on ? 'true' : 'false') : null,
-                  title: c.description || null,
-                  onclick: function () {
-                    commitIntent();
-                    if (st.pillsOpen === null) st.pillsOpen = false;
-                    if (!c.installed) return installPreset(c.id);
-                    var cur = draft().types.indexOf(c.id) >= 0;
-                    setDraft(EC().pruneAnswers(st.schema, EC().toggleType(st.schema, draft(), c.id, !cur)));
-                    renderMain();
-                    refresh();
-                  },
-                },
-                [icon(c.installed ? c.icon : 'plus'), c.name, c.role ? h('em', { text: ' rôle' }) : null]
-              )
-            );
+            row.appendChild(pillFor(c));
           });
           pills.appendChild(
             h('div', { class: 'cp-pgroup' }, [h('span', { class: 'cp-pgroup-name' }, [nat ? icon(nat.icon) : null, nat ? nat.name : 'Autre']), row])
@@ -399,14 +442,14 @@
         h(
           'button',
           {
-            class: 'cp-pill cp-pill--new',
+            class: 'cp-quiet',
             type: 'button',
             onclick: function () {
               st.pillsOpen = !expanded;
               renderMain();
             },
           },
-          [icon(expanded ? 'chevron-up' : 'plus'), expanded ? 'Réduire' : d.types.length ? 'Changer ou combiner' : 'Choisir un archétype']
+          [expanded ? 'Moins de choix' : 'Voir tous les genres']
         ),
       ]);
       if (expanded) {
@@ -414,14 +457,14 @@
           h(
             'button',
             {
-              class: 'cp-pill cp-pill--new',
+              class: 'cp-quiet',
               type: 'button',
               onclick: function () {
                 st.newType = st.newType || { name: '', aliases: '', comps: [], fieldsText: '', nature: '', parents: [], role: false, error: '' };
                 renderMain();
               },
             },
-            [icon('plus'), 'Nouvel archétype']
+            ['Créer un nouveau genre']
           )
         );
       }
@@ -593,9 +636,13 @@
             });
         })
         .map(typeName);
-      var head = h('div', { class: 'cp-ccard-head' }, [
+      var filled = comp.fields.filter(function (f) {
+        return d.answers[cid + '.' + f.key] !== undefined;
+      }).length;
+      var head = h('summary', { class: 'cp-ccard-head' }, [
+        icon('chevron-right'),
         h('strong', { text: comp.name }),
-        h('span', { class: 'cp-chip', text: owners.length ? owners.join(' + ') : 'ajouté' }),
+        h('span', { class: 'cp-hint', text: filled ? filled + ' / ' + comp.fields.length : owners.join(' + ') }),
       ]);
       if (!owners.length) {
         head.appendChild(
@@ -605,7 +652,8 @@
               class: 'cp-x',
               type: 'button',
               'aria-label': 'Retirer le composant ' + comp.name,
-              onclick: function () {
+              onclick: function (ev) {
+                ev.preventDefault();
                 setDraft(EC().toggleComponent(st.schema, draft(), cid, false));
                 renderMain();
                 refresh();
@@ -627,23 +675,26 @@
           ])
         );
       });
-      return h('div', { class: 'cp-ccard' }, [head, grid]);
+      var card = h('details', { class: 'cp-ccard', open: filled || st.openComps[cid] ? true : null }, [head, grid]);
+      card.addEventListener('toggle', function () {
+        st.openComps[cid] = card.open;
+      });
+      return card;
     }
 
     function componentsBlock() {
-      var sec = h('div', { class: 'cp-sec' });
       var d = draft();
       var ids = EM().componentIdsOf(st.schema, d);
-      sec.appendChild(
-        h('div', { class: 'cp-sec-head' }, [
-          h('h3', { class: 'cp-sec-title', text: 'Composants' }),
-          h('span', { class: 'cp-hint', text: ids.length ? 'Tout est facultatif : un champ vide prend la valeur par défaut.' : 'Choisissez un archétype, ou ajoutez des composants un à un.' }),
-        ])
-      );
+      if (!ids.length && !st.showComps) return null;
+      var sec = h('div', { class: 'cp-sec' });
+      sec.appendChild(h('h3', { class: 'cp-sec-title', text: 'Détails' }));
+      var list = h('div', { class: 'cp-ccards' });
       ids.forEach(function (cid) {
         var card = componentCard(cid);
-        if (card) sec.appendChild(card);
+        if (card) list.appendChild(card);
       });
+      if (list.childNodes.length) sec.appendChild(list);
+      if (!st.showComps) return sec;
       var more = h('div', { class: 'cp-pills' });
       EC()
         .componentsAvailable(st.schema, d)
@@ -657,6 +708,7 @@
                 title: c.fields.map(function (x) { return x.label; }).join(', '),
                 onclick: function () {
                   setDraft(EC().toggleComponent(st.schema, draft(), c.id, true));
+                  st.openComps[c.id] = true;
                   renderMain();
                   refresh();
                 },
@@ -676,10 +728,10 @@
               renderMain();
             },
           },
-          [icon('plus'), 'Nouveau composant']
+          [icon('plus'), 'Nouveau']
         )
       );
-      sec.appendChild(h('div', { class: 'cp-addcomp' }, [h('span', { class: 'cp-pgroup-name', text: 'Ajouter un composant' }), more]));
+      sec.appendChild(more);
       if (st.newComp) sec.appendChild(newComponentForm());
       return sec;
     }
@@ -1004,7 +1056,6 @@
       var d = draft();
       var ask = EC().linksPrompt(st.schema, d);
       box.appendChild(h('h3', { class: 'cp-sec-title', text: ask.title }));
-      box.appendChild(h('p', { class: 'cp-hint', text: ask.hint }));
       var remarks = h('div', { class: 'cp-issues', 'aria-live': 'polite' });
       var linkError = h('p', { class: 'cp-error', role: 'alert', hidden: true });
       function paintRemarks() {
@@ -1071,7 +1122,7 @@
       relType.addEventListener('input', paintRelHint);
       paintRelHint();
       var relChips = h('div', { class: 'cp-quick' });
-      choices.slice(0, 8).forEach(function (c) {
+      choices.slice(0, 5).forEach(function (c) {
         relChips.appendChild(
           chip(c.label, false, function () {
             relType.value = c.label;
@@ -1145,7 +1196,8 @@
     }
 
     function linksBlock() {
-      var sec = h('div', { class: 'cp-sec' });
+      if (!st.showLinks && !draft().relations.length) return null;
+      var sec = h('div', { class: 'cp-sec cp-linksec' });
       renderLinks(sec);
       return sec;
     }
@@ -1165,16 +1217,77 @@
       return box;
     }
 
-    function renderMain() {
+    /** Quiet text buttons that reveal the optional parts: other names, details, links. */
+    function moreBlock() {
+      var row = h('div', { class: 'cp-more' });
+      function add(label, ic, fn) {
+        row.appendChild(h('button', { class: 'cp-quiet', type: 'button', onclick: fn }, [icon(ic), label]));
+      }
+      if (!st.showAlias && !draft().aliases.length)
+        add('Autres noms', 'tag', function () {
+          st.showAlias = true;
+          nameSec = null;
+          renderMain();
+          var i = els.main.querySelector('.cp-chipedit-in');
+          if (i) i.focus();
+        });
+      if (!st.showComps)
+        add('Détails', 'list-details', function () {
+          st.showComps = true;
+          renderMain();
+        });
+      if (!st.showLinks && !draft().relations.length)
+        add('Lien', 'link', function () {
+          st.showLinks = true;
+          renderMain();
+          var i = els.main.querySelector('.cp-linksec input[aria-label="Entité à lier"]');
+          if (i) i.focus();
+        });
+      return row.childNodes.length ? row : null;
+    }
+
+    var nameSec = null;
+    var nameFor = '';
+    var restBox = h('div', { class: 'cp-rest' });
+    var restShown = null;
+
+    function hasContent() {
+      var d = draft();
+      return !!(d.name.trim() || d.types.length);
+    }
+
+    /** Nothing worth previewing yet: just a name. The dialog stays compact and the preview card hidden. */
+    function isSolo() {
+      var d = draft();
+      return !d.types.length && !d.relations.length && !Object.keys(d.answers).length && !d.base;
+    }
+
+    /** Everything after the name. Empty until there is something typed: the page starts as one field. */
+    function renderRest(onlyIfRevealChanged) {
+      var shown = hasContent();
+      if (onlyIfRevealChanged && shown === restShown) return;
+      restShown = shown;
       var keep = els.main.scrollTop;
-      els.main.textContent = '';
-      els.main.appendChild(nameBlock());
-      els.main.appendChild(archetypeBlock());
-      els.main.appendChild(componentsBlock());
-      els.main.appendChild(linksBlock());
-      var remarks = remarksBlock();
-      if (remarks) els.main.appendChild(remarks);
+      restBox.textContent = '';
+      if (shown) {
+        [archetypeBlock(), componentsBlock(), linksBlock(), moreBlock(), remarksBlock()].forEach(function (b) {
+          if (b) restBox.appendChild(b);
+        });
+      } else {
+        restBox.appendChild(h('p', { class: 'cp-tip', text: 'Astuce : « Ficus, une plante au travail » reconnaît aussi le genre et le lieu.' }));
+      }
       els.main.scrollTop = keep;
+    }
+
+    function renderMain() {
+      if (!nameSec || nameFor !== frame().id) {
+        nameSec = nameBlock();
+        nameFor = frame().id;
+        els.main.textContent = '';
+        els.main.appendChild(nameSec);
+        els.main.appendChild(restBox);
+      }
+      renderRest();
       if (st.focusName) {
         st.focusName = false;
         var n = els.main.querySelector('[data-name]');
@@ -1313,12 +1426,15 @@
 
     function refresh() {
       gc();
+      dialog.classList.toggle('cp-dialog--solo', isSolo() && !isSub());
       renderHeader();
       renderAside();
       renderFooter();
     }
 
     function render() {
+      nameSec = null;
+      st.focusName = true;
       refresh();
       renderMain();
     }
