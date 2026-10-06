@@ -10091,8 +10091,18 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 
 .info-row-summary.is-empty {
   color: var(--text-muted);
+  opacity: 0.55;
   font-style: italic;
   font-weight: 400;
+}
+
+.info-row-summary.is-empty:hover {
+  opacity: 0.85;
+}
+
+.info-row-summary-plus {
+  flex: 0 0 auto;
+  font-size: 13px;
 }
 
 .info-row-chevron {

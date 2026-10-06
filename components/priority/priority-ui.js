@@ -11109,7 +11109,16 @@
         var plain = isNode ? (text.textContent || '').trim() : String(text || '').trim();
         var tip = (isNode && text.summaryTitle) || plain;
         if (isNode && plain) summary.replaceChildren(text);
-        else summary.textContent = plain || ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
+        else if (plain) summary.textContent = plain;
+        else {
+          var plus = document.createElement('i');
+          plus.className = 'ti ti-plus info-row-summary-plus';
+          plus.setAttribute('aria-hidden', 'true');
+          var hint = document.createElement('span');
+          hint.className = 'info-row-summary-main';
+          hint.textContent = ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
+          summary.replaceChildren(plus, hint);
+        }
         summary.classList.toggle('is-empty', !plain);
         summary.title = tip;
         row.dataset.rowEmpty = !plain && key !== 'title' ? '1' : '0';
