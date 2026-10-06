@@ -1941,6 +1941,19 @@
     return found ? normalizeCompletionData(normalized) : normalized;
   }
 
+  /** Append a top-level local subtask to a card's completion data. */
+  function addLocalItem(data, text) {
+    var normalized = normalizeCompletionData(data);
+    var item = normalizeItem({ id: generateId(), text: text, progress: PROGRESS_MIN });
+    if (!item) return { data: normalized, item: null };
+    return {
+      data: normalizeCompletionData(
+        Object.assign({}, normalized, { items: normalized.items.concat([item]) })
+      ),
+      item: item,
+    };
+  }
+
   function addChecklistItem(data, parentId, text, opts) {
     opts = opts || {};
     var pid = typeof parentId === 'string' ? parentId : '';
@@ -3067,6 +3080,7 @@
     applyChecklistItemText: applyChecklistItemText,
     applyItemText: applyItemText,
     addChecklistItem: addChecklistItem,
+    addLocalItem: addLocalItem,
     removeChecklistItem: removeChecklistItem,
     buildChildCompletionFromSubtask: buildChildCompletionFromSubtask,
     replaceSubtaskWithLinkedCard: replaceSubtaskWithLinkedCard,

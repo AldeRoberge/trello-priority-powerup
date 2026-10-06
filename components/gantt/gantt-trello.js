@@ -910,6 +910,41 @@
       var pt = PT();
       var nameOk = false;
       if (pt && typeof pt.restPutCard === 'function') {
+  /**
+   * Add a subtask under a row: a local item on a board card, or a checklist
+   * item under a local item. rowMeta is the parent row's meta.
+   */
+  async function addSubtask(t, rowMeta, text) {
+    var ct = CT();
+    if (!ct) return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+    var nextText = typeof text === 'string' ? text.trim() : '';
+    var max =
+      ct.ITEM_TEXT_MAX != null && isFinite(ct.ITEM_TEXT_MAX) ? ct.ITEM_TEXT_MAX : 500;
+    if (nextText.length > max) nextText = nextText.slice(0, max);
+    if (!nextText) return { ok: false, reason: 'empty' };
+
+    if (rowMeta.kind === 'card' && rowMeta.cardId) {
+      var cardId = String(rowMeta.cardId);
+      var data = await ct.getCardCompletionById(t, cardId);
+      var added = ct.addLocalItem(data, nextText);
+      if (!added.item) return { ok: false, reason: 'add-failed' };
+      await ct.saveCardCompletionById(t, cardId, added.data);
+      return { ok: true, parentCardId: cardId, itemId: added.item.id, name: nextText };
+    }
+
+    if (rowMeta.kind === 'local' && rowMeta.parentCardId && rowMeta.itemId) {
+      var pCard = String(rowMeta.parentCardId);
+      var cData = await ct.getCardCompletionById(t, pCard);
+      var res = ct.addChecklistItem(cData, rowMeta.itemId, nextText);
+      if (!res.item) return { ok: false, reason: 'add-failed' };
+      await ct.saveCardCompletionById(t, pCard, res.data);
+      return { ok: true, parentCardId: pCard, itemId: res.item.id, name: nextText };
+    }
+
+    return { ok: false, reason: 'unsupported-kind' };
+  }
+
         var auth = await ensureRestAuthorized(t);
         if (auth.ok) {
           try {
@@ -1177,3 +1212,4 @@
     removeTopLevelItem: removeTopLevelItem,
   };
 })(typeof window !== 'undefined' ? window : this);
+    addSubtask: addSubtask,

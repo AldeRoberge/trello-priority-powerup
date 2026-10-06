@@ -872,6 +872,7 @@
       if (e.type === 'archive') return 'archiv\u00e9e';
       if (e.type === 'delete') return e.label || 'supprim\u00e9e';
       if (e.type === 'move') return 'd\u00e9plac\u00e9e';
+      if (e.type === 'add') return 'sous-t\u00e2che ajout\u00e9e';
       if (e.type === 'dates') return 'dates modifi\u00e9es';
       if (e.type === 'progress') return 't\u00e2che ' + (e.afterVal ? 'termin\u00e9e' : 'rouverte');
       return (e.label || 'Champ') + ' modifi\u00e9';
@@ -917,7 +918,7 @@
         apply: applyEntry,
         verb: histVerb,
         canToggle: function (e) {
-          return e.type !== 'field' && e.type !== 'delete';
+          return e.type !== 'field' && e.type !== 'delete' && e.type !== 'add';
         },
         after: function () {
           return reload({ quiet: true });
@@ -3024,10 +3025,101 @@
               setStatus(state.authHint, true);
             } else {
               setStatus('\u00c9chec enregistrement (' + reason + ')', true);
+    /** Rows that can receive a new subtask: board cards, and local items (as a checklist item). */
+    function canAddSubtask(row) {
+      if (!row) return false;
+      if (row.kind === 'card' && row.cardId) return true;
+      return row.kind === 'local' && !!row.parentCardId && !!row.itemId;
+    }
+
+    function commitAddSubtask(row, text) {
+      var trimmed = typeof text === 'string' ? text.trim() : '';
+      if (!trimmed) {
+        renderChart();
+        return;
+      }
+      if (state.saving || !canAddSubtask(row)) return;
+      state.saving = true;
+      setStatus('Ajout…');
+      ganttTrello
+        .addSubtask(t, subtaskMeta(row), trimmed)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              'Échec ajout' + (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          state.expanded[row.id] = true;
+          record({
+            type: 'add',
+            targetId: res.itemId || '',
+            title: res.name || trimmed,
+            label: 'sous-tâche ajoutée',
+          });
+          setStatus('Sous-tâche ajoutée');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus('Erreur : ' + (err && err.message ? err.message : String(err)), true);
+          return reload();
+        });
+    }
+
+    /** Swaps the row title for an input; Enter adds the subtask, Escape cancels. */
+    function startAddSubtask(row, actionsEl) {
+      var labelCell = actionsEl && actionsEl.closest ? actionsEl.closest('.gantt-label-cell, .gantt-row') : null;
+      var nameEl = labelCell && labelCell.querySelector('.gantt-task-name');
+      if (state.saving || !canAddSubtask(row) || !nameEl || !nameEl.parentNode) return;
+      var input = el('input', 'gantt-rename-input', { type: 'text', maxlength: '500' });
+      input.placeholder = 'Nouvelle sous-tâche…';
+      input.setAttribute('aria-label', 'Nouvelle sous-tâche');
+      var finished = false;
+      function finish(save) {
+        if (finished) return;
+        finished = true;
+        if (save) commitAddSubtask(row, input.value);
+        else renderChart();
+      }
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', function () {
+        finish(true);
+      });
+      nameEl.parentNode.replaceChild(input, nameEl);
+      input.focus();
+    }
+
             }
             return reload();
           }
           if (prevDates && JSON.stringify(prevDates) !== JSON.stringify(parts)) {
+      var addBtn = el('button', 'gantt-action-btn gantt-action-btn--add', {
+        type: 'button',
+        title: 'Ajouter une sous-tâche',
+      });
+      addBtn.innerHTML = '<i class="ti ti-list-check" aria-hidden="true"></i>';
+      if (!canAddSubtask(row)) {
+        addBtn.disabled = true;
+        addBtn.classList.add('is-disabled');
+      } else {
+        addBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          startAddSubtask(row, actions);
+        });
+      }
+      actions.appendChild(addBtn);
+
             record({
               type: 'dates',
               targetId: row.cardId,
