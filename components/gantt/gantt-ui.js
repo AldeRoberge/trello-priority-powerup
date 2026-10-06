@@ -1146,7 +1146,8 @@
 
     // Year view, zoomed in: Monday lines + date labels inside the (then very
     // wide) month columns, so there is never a big empty stretch without a grid.
-    var MIN_WEEK_TICK_PX = 40;
+    var MIN_WEEK_TICK_PX = 8;
+    var MIN_WEEK_LABEL_PX = 40;
 
     function bindWeekScale(scroll, timelineCol, headerTimeline, r) {
       var days = model.rangeDayCount(r);
@@ -1160,7 +1161,8 @@
       headerTimeline.appendChild(labels);
       headerTimeline.classList.add('gantt-timeline-header--hours');
       var raf = 0;
-      var showMonth = dayPx * 7 >= 70;
+      var labelEvery = Math.max(1, Math.ceil(MIN_WEEK_LABEL_PX / (dayPx * 7)));
+      var showMonth = dayPx * 7 * labelEvery >= 70;
 
       function draw() {
         raf = 0;
@@ -1185,6 +1187,7 @@
             var line = el('div', 'gantt-hour-line');
             line.style.left = x + 'px';
             linesFrag.appendChild(line);
+            if (Math.round(d.getTime() / 604800000) % labelEvery) continue;
             var lab = el('span', 'gantt-hour-label', {
               text: showMonth && d.getDate() <= 7
                 ? d.getDate() + ' ' + d.toLocaleDateString('fr-FR', { month: 'short' })
