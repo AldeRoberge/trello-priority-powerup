@@ -586,7 +586,7 @@
           clearDropMarks();
           e.preventDefault();
           e.stopPropagation();
-          askNest(src, id, dropFolder);
+          askNest(src, id);
           return;
         }
         dropInto(e, dropFolder);
@@ -722,17 +722,9 @@
       return d ? d.title : '';
     }
 
-    /** Dropping a document on another one: ask whether to nest it, or just place it alongside. */
-    function askNest(docId, parentId, siblingFolder) {
-      dialog({
-        title: 'Imbriquer le document ?',
-        text: '« ' + docTitle(docId) + ' » deviendra un sous-document de « ' + docTitle(parentId) + ' ».',
-        ok: 'Imbriquer',
-        alt: 'Placer à côté',
-      }).then(function (ans) {
-        if (ans === true) nestDoc(docId, parentId);
-        else if (ans === 'alt') moveDocToFolder(docId, siblingFolder);
-      });
+    /** Dropping a document on another one nests it right away (easily undone by dragging it out). */
+    function askNest(docId, parentId) {
+      nestDoc(docId, parentId);
     }
 
     function nestDoc(docId, parentId) {
