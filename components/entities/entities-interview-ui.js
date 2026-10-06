@@ -190,38 +190,55 @@
         working ? h('button', { class: 'cp-link', type: 'button', title: 'Arrêter la recherche', onclick: function () { stopReality(); repaintMap(); } }, ['Arrêter']) : null,
       ]);
       var box = h('div', { class: 'iv-map' + (working ? ' iv-map--busy' : '') }, [head]);
-      var genres = r.plan && ER() ? ER().rootTypes(r.plan, { schema: st.schema, library: global.EntitiesLibrary }, r) : [];
-      if (r.open && genres.length > 1) {
-        // a genre is only a list of components: the thing can carry several, each one can be switched off
-        var line = h('div', { class: 'iv-genres' }, [h('span', { text: 'Genres' })]);
-        genres.forEach(function (g) {
-          line.appendChild(
-            h('button', { class: 'iv-genre' + (g.on ? ' is-on' : ''), type: 'button', 'aria-pressed': g.on ? 'true' : 'false', title: g.on ? 'Retirer ce genre' : 'Remettre ce genre', onclick: function () {
-              if (g.on) r.excluded['type:' + g.id] = true;
-              else delete r.excluded['type:' + g.id];
-              repaintMap();
-            } }, [icon(g.icon || 'stack-2'), g.name])
-          );
-        });
-        box.appendChild(line);
-      }
       if (!r.open || !rows.length) return box;
       var list = h('ul', { class: 'iv-map-list' });
+
+      // the entity itself, with its genres (a genre is only a list of components: it can carry several)
+      var genres = r.plan && ER() ? ER().rootTypes(r.plan, { schema: st.schema, library: global.EntitiesLibrary }, r) : [];
+      var rootBits = [h('strong', { class: 'iv-root-name', text: (st.draft && st.draft.name) || 'Cette entité' })];
+      if (genres.length) {
+        genres.forEach(function (g) {
+          rootBits.push(
+            h(
+              'button',
+              {
+                class: 'iv-genre' + (g.on ? ' is-on' : ''),
+                type: 'button',
+                'aria-pressed': g.on ? 'true' : 'false',
+                title: g.on ? 'Retirer ce genre' : 'Remettre ce genre',
+                onclick: function () {
+                  if (g.on) r.excluded['type:' + g.id] = true;
+                  else delete r.excluded['type:' + g.id];
+                  repaintMap();
+                },
+              },
+              [icon(g.icon || 'stack-2'), g.name]
+            )
+          );
+        });
+      }
+      list.appendChild(h('li', { class: 'iv-root' }, rootBits));
+
       rows.forEach(function (row) {
-        var verb = row.status === 'on' ? 'Retirer' : row.status === 'off' ? 'Remettre' : 'Ajouter';
+        var word = row.status === 'on' ? 'Retirer' : row.status === 'off' ? 'Remettre' : 'Ajouter';
+        var sub = [];
+        if (row.typeName) sub.push(row.typeName);
+        if (row.existing) sub.push('existe déjà');
+        if (row.source === 'web') sub.push('trouvé sur le web');
+        if (row.status === 'suggested' || row.status === 'pending') sub.push(row.status === 'pending' ? 'à vérifier' : 'à confirmer');
+        var action = row.working
+          ? h('span', { class: 'iv-node-spin', title: 'J’explore cette piste' }, [icon('loader-2'), 'Je creuse…'])
+          : row.status === 'on'
+            ? h('button', { class: 'iv-node-btn iv-node-btn--on', type: 'button', title: 'Retirer de la carte', 'aria-label': 'Retirer ' + row.name, onclick: function () { nodeAction(row); } }, [icon('check')])
+            : h('button', { class: 'iv-node-btn iv-node-btn--add', type: 'button', 'aria-label': word + ' ' + row.name, onclick: function () { nodeAction(row); } }, [icon(row.status === 'off' ? 'arrow-back-up' : 'plus'), word]);
         list.appendChild(
           h('li', { class: 'iv-node iv-node--' + row.status, style: '--depth:' + (row.depth - 1) }, [
-            icon(row.icon || 'stack-2'),
-            h('span', { class: 'iv-node-name', text: row.name }),
-            row.typeName ? h('em', { text: row.typeName }) : null,
-            row.via ? h('small', { text: row.via }) : null,
-            row.existing ? h('small', { class: 'iv-node-has', text: 'existe déjà' }) : null,
-            row.working ? h('span', { class: 'iv-node-spin', title: 'J’explore cette piste' }, [icon('loader-2')]) : null,
-            row.source === 'web' ? h('span', { class: 'iv-src', title: 'Trouvé sur le web' }, [icon('world')]) : null,
-            row.verified ? h('span', { class: 'iv-src', title: 'Vérifié' }, [icon('shield-check')]) : null,
-            h('button', { class: 'iv-node-btn', type: 'button', title: verb, 'aria-label': verb + ' ' + row.name, onclick: function () { nodeAction(row); } }, [
-              icon(row.status === 'on' ? 'check' : row.status === 'off' ? 'arrow-back-up' : 'plus'),
+            h('span', { class: 'iv-node-rel', text: row.via || '' }),
+            h('span', { class: 'iv-node-main' }, [
+              h('span', { class: 'iv-node-name' }, [icon(row.icon || 'stack-2'), row.name]),
+              sub.length ? h('span', { class: 'iv-node-sub', text: sub.join(' · ') }) : null,
             ]),
+            action,
           ])
         );
       });
