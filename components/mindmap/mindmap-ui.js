@@ -1905,7 +1905,52 @@
       svg.addEventListener('pointerup', up);
       svg.addEventListener('pointercancel', up);
     });
+    /** Double-click a card or goal title: edit it in place (Enter saves, Escape cancels). */
+    function editTitleInline(n) {
+      var rec = n.kind === 'task' ? n.rec : null;
+      if (n.kind === 'task' ? !rec || !global.TableTrello : n.kind !== 'goal' || !goalsEditable()) return;
+      if (els.canvas.querySelector('.mm-title-edit')) return;
+      var k = state.view.k;
+      var left = state.view.x + (n.x - n.w / 2 + 6) * k;
+      var top = state.view.y + (n.y - n.h / 2 + 4) * k;
+      var input = h('input', {
+        class: 'mm-title-edit',
+        type: 'text',
+        maxlength: '300',
+        'aria-label': 'Titre',
+        value: n.kind === 'task' ? rec.name || '' : n.label,
+        style: 'left:' + left.toFixed(1) + 'px;top:' + top.toFixed(1) + 'px;width:' + ((n.w - 12) * k).toFixed(1) + 'px;height:' + ((n.headH - 8) * k).toFixed(1) + 'px;font-size:' + (14 * k).toFixed(1) + 'px',
+      });
+      var done = false;
+      function finish(save) {
+        if (done) return;
+        done = true;
+        var v = input.value.replace(/\s+/g, ' ').trim();
+        if (input.parentNode) input.parentNode.removeChild(input);
+        if (!save || !v) return;
+        if (n.kind === 'task') {
+          if (v !== rec.name) runEdit(function () { return global.TableTrello.saveName(t, rec.id, v); });
+        } else {
+          renameGoal(n.id, v);
+        }
+      }
+      input.addEventListener('keydown', function (ev) {
+        ev.stopPropagation();
+        if (ev.key === 'Enter') { ev.preventDefault(); finish(true); } else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+      ['pointerdown', 'dblclick', 'wheel'].forEach(function (type) { input.addEventListener(type, function (ev) { ev.stopPropagation(); }); });
+      els.canvas.appendChild(input);
+      input.focus();
+      input.select();
+    }
     svg.addEventListener('dblclick', function (ev) {
+      var hit = ev.target.closest && ev.target.closest('.mm-node');
+      if (!ev.button && hit && !ev.target.closest('.mm-pin')) {
+        var hn = nodeById(hit.getAttribute('data-id'));
+        if (hn && (hn.kind === 'task' || hn.kind === 'goal')) { ev.preventDefault(); editTitleInline(hn); }
+        return;
+      }
       if (ev.button || (ev.target.closest && ev.target.closest('.mm-node, .mm-edge-hit'))) return;
       var r = svg.getBoundingClientRect();
       askNewTask(null, null, { x: (ev.clientX - r.left - state.view.x) / state.view.k, y: (ev.clientY - r.top - state.view.y) / state.view.k }, ev);
