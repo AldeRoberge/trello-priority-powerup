@@ -1545,3 +1545,72 @@ button.en-typepill:hover {
   white-space: nowrap;
   align-self: center;
 }
+
+/* Systems: the "à surveiller" strip, the AI "what changed" input and its proposals */
+.en-watch {
+  padding: 4px 8px 0;
+}
+.en-watch-box {
+  border-radius: 10px;
+  background: var(--en-set);
+}
+.en-watch-sum {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+}
+.en-watch-sum::-webkit-details-marker {
+  display: none;
+}
+.en-watch-sum > .ti:last-child {
+  margin-left: auto;
+  transition: transform 0.15s;
+}
+.en-watch-box[open] > .en-watch-sum > .ti:last-child {
+  transform: rotate(90deg);
+}
+.en-watch-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.en-watch-row:hover {
+  background: var(--en-hover, rgba(127, 127, 127, 0.12));
+}
+.en-watch-row--alert > .ti {
+  color: var(--tp-danger-text);
+}
+.en-watch-row--warn > .ti {
+  color: var(--en-warn);
+}
+.en-observe {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.en-proposal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.en-proposal-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

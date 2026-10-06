@@ -81,6 +81,8 @@ const UNIT_FILES = [
   'quick-parse-when.test.js',
   'entities-archetype.test.js',
   'entities-ontology.test.js',
+  'entities-systems.test.js',
+  'entities-systems-ai.test.js',
   'agent-entities.test.js',
   'dashboard-model.test.js',
   'dashboard-trello.test.js',

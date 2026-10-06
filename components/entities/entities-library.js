@@ -327,6 +327,16 @@
     return out;
   }
 
+  /** Adds a component id to `list` after the components it requires (a requirement must exist when it is installed). */
+  function requiredFirst(cid, list) {
+    if (list.indexOf(cid) >= 0) return;
+    var c = presetComponent(cid);
+    (c && c.requires ? c.requires : []).forEach(function (r) {
+      if (r !== cid) requiredFirst(r, list);
+    });
+    if (list.indexOf(cid) < 0) list.push(cid);
+  }
+
   /**
    * Adds preset types (one id or a list) to the schema, with their parents, components and link targets;
    * what already exists is left untouched (a user type with the same name is reused as the parent).
@@ -350,7 +360,7 @@
     all.forEach(function (pid) {
       if (map[pid]) return;
       presetType(pid).components.forEach(function (cid) {
-        if (compIds.indexOf(cid) < 0) compIds.push(cid);
+        requiredFirst(cid, compIds);
       });
     });
     compIds.forEach(function (cid) {
@@ -402,7 +412,12 @@
   function ensureComponent(schema, cid) {
     if (EM().findById(schema.components, cid)) return schema;
     var c = presetComponent(cid);
-    return c ? EM().upsertComponent(schema, c) : schema;
+    if (!c) return schema;
+    var next = schema;
+    (c.requires || []).forEach(function (r) {
+      if (r !== cid) next = ensureComponent(next, r);
+    });
+    return EM().upsertComponent(next, c);
   }
 
   /** The schema with one preset field added to an installed component (unchanged when it is already there). */

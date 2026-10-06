@@ -258,6 +258,7 @@
 
   global.EntitiesComposerAI = {
     available: available,
+    provider: provider,
     suggest: suggest,
     buildMessages: buildMessages,
     parse: parse,

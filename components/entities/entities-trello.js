@@ -222,6 +222,16 @@
     return String(created.id);
   }
 
+  /** A real, visible card in the board's first list (what a System proposes: "Racheter Eau"). Returns its id and url. */
+  async function createBoardCard(t, name, desc) {
+    var listId = await homeListId(t);
+    var created = need(
+      await ST().trelloRest(t, '/cards?idList=' + enc(listId) + '&name=' + enc(name) + '&pos=top&desc=' + enc(desc || ''), 'POST')
+    );
+    if (!created || !created.id) throw fail('no-card');
+    return { id: String(created.id), url: created.shortUrl || created.url || '' };
+  }
+
   async function remoteRev(t, cardId) {
     var cur = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=desc'));
     var obj = unpackJson(cur && cur.desc);
@@ -303,6 +313,7 @@
     peek: peek,
     invalidate: invalidate,
     commit: commit,
+    createBoardCard: createBoardCard,
     packJson: packJson,
     unpackJson: unpackJson,
   };

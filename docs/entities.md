@@ -28,6 +28,16 @@ Les **liens** sont de deux sortes : les champs « lien » (ex. lieu d'une plante
 
 L'**historique** garde les 40 derniers changements de chaque entité ; chacun peut être annulé (l'annulation s'ajoute à l'historique, rien n'est effacé).
 
+## Composants atomiques et Systèmes
+
+**Composants atomiques.** Un composant est une brique : *Consommable* (péremption, consommé), *Contenant* (contenu, capacité, niveau), *Action* (verbe, cible), *Assignation*, *Aptitude*, *Temps*, *Lieu*… Un type n'est qu'une recette : une **Bouteille** = Produit + Consommable + Contenant, sans composant à elle. Un composant peut déclarer `requires` (Contenant exige Matière : l'entité reçoit les deux) et `can` (ce qu'il permet : « contenir »). Le même composant sert à des types très différents ; la bibliothèque installe les exigences d'abord.
+
+**Systèmes (règles).** Une règle est une donnée du schéma : « toute entité qui porte ces composants et remplit ces conditions reçoit un constat, et peut proposer une carte ». Conditions : égal, différent, plus grand, plus petit, rempli, vide, contient, parmi, et pour les dates *passée*, *dans N jours*, *il y a plus de N jours*. Règles prêtes (Schéma > Règles) : Contenant vide (« Racheter Eau »), Bientôt périmé, Échéance dépassée, Sans responsable. Les constats sont calculés en direct, jamais enregistrés : la liste « N à surveiller » (colonne de gauche) et un avis sur la page de l'entité, avec « Créer la carte » (vraie carte dans la première liste du tableau). Les règles tournent dans l'application, page ouverte ; pas dans le Worker.
+
+**IA.** *Écrire* : une règle décrite en français (« prévenir quand une bouteille est vide, avec une carte pour la racheter ») devient une règle validée contre les vrais composants et champs, montrée avant d'être ajoutée. *Dire ce qui a changé* (colonne de gauche) : « j'ai fini l'eau » propose « Eau · Niveau : 120 ml → 0 ml », appliqué d'un clic (✓), et la règle « vide » se déclenche. Les liens ne sont jamais devinés. Le schéma signale aussi les champs en double entre composants (même libellé, même genre).
+
+Code : `entities-systems.js` (évaluation, règles prêtes, doublons), `entities-systems-ai.js` (écrire, observer), `normalizeSystem` et `componentIdsOf` (exigences) dans `entities-model.js`. Tests : `test/entities-systems.test.js`, `test/entities-systems-ai.test.js`.
+
 ## Ontologie
 
 Le modèle distingue la **nature** des choses (matière, vivant, agent, lieu, événement, fait social, abstrait), les **types parents** (une Ville est un Lieu), les **rôles**, des relations typées avec inverse (« situé dans » / « abrite »), une hiérarchie de contenance transitive et un contrôle d'**ancrage matériel** des abstraits. Une **bibliothèque** installe en un clic des types prêts (crème pour les mains, région, pays, ville, bâtiment, personne, travailleur, concept…). Étude et détails : [entities-ontologie.md](entities-ontologie.md).

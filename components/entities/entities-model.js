@@ -246,14 +246,6 @@
       seenC[NAMES_COMPONENT] = true;
       components.push({ id: NAMES_COMPONENT, name: 'Autres noms', fields: [], builtin: 'aliases' });
     }
-    // a requirement must name a component that exists
-    components.forEach(function (c) {
-      if (!c.requires) return;
-      c.requires = c.requires.filter(function (r) {
-        return !!seenC[r];
-      });
-      if (!c.requires.length) delete c.requires;
-    });
     var seenT = {};
     var types = [];
     (Array.isArray(s.types) ? s.types : []).forEach(function (t) {
@@ -492,6 +484,17 @@
       t.components = t.components.filter(function (c) {
         return c !== id;
       });
+    });
+    // what required it no longer does, and a rule that read it has nothing left to read
+    next.components.forEach(function (c) {
+      if (!c.requires) return;
+      c.requires = c.requires.filter(function (r) {
+        return r !== id;
+      });
+      if (!c.requires.length) delete c.requires;
+    });
+    next.systems = (next.systems || []).filter(function (x) {
+      return x.on.indexOf(id) < 0;
     });
     return normalizeSchema(next);
   }
@@ -1729,7 +1732,8 @@
    * @returns {{recognized:boolean, filter:object, entities:object[], mentions:object[]}}
    */
   function resolveText(schema, entities, text) {
-    var hay = stem(text);
+    // French elisions ("l'eau", "d'ordinateur") must not hide the word: drop the clitic before matching
+    var hay = stem(text).replace(/(^|\s)(?:l|d|j|m|n|s|t|c|qu)'(?=\S)/g, '$1');
     var mentions = [];
     var types = [];
     (schema.types || []).forEach(function (t) {

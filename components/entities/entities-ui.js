@@ -21,6 +21,12 @@
   var ET = function () {
     return global.EntitiesTrello;
   };
+  var ES = function () {
+    return global.EntitiesSystems;
+  };
+  var ESAI = function () {
+    return global.EntitiesSystemsAI;
+  };
 
   var SAVE_DELAY_MS = 700;
   var KIND_LABELS = {
@@ -147,6 +153,10 @@
       linkOpen: false, // the inline "add a link" form is showing
       refocus: '', // selector to focus after the next paintMain
       folds: {}, // schema editor: which type/component cards are expanded
+      handled: {}, // finding ids whose card was created (hidden for this session)
+      draftRule: null, // a rule the AI wrote, waiting for the user's yes
+      proposals: [], // value changes the AI deduced from a sentence, waiting for the user's yes
+      ai: false, // a model is configured
     };
     var saveTimer = null;
     var saving = false;
@@ -496,6 +506,7 @@
 
     function paintList(opts) {
       fillTypes();
+      paintWatch();
       schemaLink.classList.toggle('is-on', state.mode === 'schema');
       var vis = visibleEntities();
       chipBox.textContent = '';
@@ -592,6 +603,105 @@
       [icon('adjustments'), 'Types et composants']
     );
 
+    /* Systems: what the rules of the schema notice about the entities, and the AI "what changed" input. */
+    var watchBox = h('div', { class: 'en-watch' });
+    var observeBox = h('div', { class: 'en-observe', hidden: true });
+
+    function findings() {
+      if (!ES() || !(state.schema.systems || []).length) return [];
+      return ES()
+        .evaluate(state.schema, state.entities)
+        .filter(function (f) {
+          return !state.handled[f.id];
+        });
+    }
+
+    var LEVEL_ICON = { alert: 'alert-circle', warn: 'alert-triangle', info: 'info-circle' };
+
+    function paintWatch() {
+      var list = findings();
+      watchBox.textContent = '';
+      watchBox.hidden = !list.length;
+      if (!list.length) return;
+      var box = h('details', { class: 'en-watch-box' }, [h('summary', { class: 'en-watch-sum' }, [icon('eye'), list.length + ' à surveiller', icon('chevron-right')])]);
+      if (state.watchOpen) box.setAttribute('open', '');
+      box.addEventListener('toggle', function () {
+        state.watchOpen = box.open;
+      });
+      list.forEach(function (f) {
+        box.appendChild(
+          h('button', { class: 'en-watch-row en-watch-row--' + f.level, type: 'button', onclick: function () { openEntity(f.entityId); } }, [icon(LEVEL_ICON[f.level] || 'info-circle'), h('span', { text: f.text })])
+        );
+      });
+      watchBox.appendChild(box);
+    }
+
+    function createFindingCard(f) {
+      ET()
+        .createBoardCard(t, f.card, 'Proposée par la règle « ' + f.systemName + ' » pour ' + f.entityName + '.')
+        .then(
+          function () {
+            state.handled[f.id] = true;
+            toast('Carte créée : ' + f.card);
+            paintList();
+            paintMain();
+          },
+          failure
+        );
+    }
+
+    function paintObserve() {
+      observeBox.textContent = '';
+      observeBox.hidden = !state.ai || !ESAI();
+      if (observeBox.hidden) return;
+      var input = h('input', { class: 'en-input en-observe-input', placeholder: 'Dire ce qui a changé…', 'aria-label': 'Dire ce qui a changé' });
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' || !input.value.trim()) return;
+        var text = input.value;
+        input.disabled = true;
+        ESAI()
+          .observe(t, state.schema, state.entities, text)
+          .then(function (r) {
+            input.disabled = false;
+            if (r.error) return toast(r.error === 'no-ai' ? 'Aucun modèle configuré.' : 'Je n’ai pas pu analyser la phrase.', 'error');
+            if (!r.changes.length) return toast('Rien à changer pour les entités nommées.');
+            state.proposals = r.changes;
+            input.value = '';
+            paintObserve();
+          });
+      });
+      observeBox.appendChild(h('div', { class: 'en-search' }, [icon('sparkles'), input]));
+      state.proposals.forEach(function (c) {
+        function done() {
+          state.proposals = state.proposals.filter(function (x) {
+            return x !== c;
+          });
+          paintObserve();
+        }
+        observeBox.appendChild(
+          h('div', { class: 'en-proposal' }, [
+            h('span', { class: 'en-proposal-text', text: c.entityName + ' · ' + c.label + ' : ' + (c.from === undefined ? '' : EM().formatValue(EM().fieldOf(state.schema, c.path).field, c.from, state.entities) + ' → ') + c.display }),
+            h('button', {
+              class: 'en-icon-btn',
+              type: 'button',
+              title: 'Appliquer',
+              'aria-label': 'Appliquer',
+              onclick: function () {
+                state.entities = state.entities.map(function (e) {
+                  return e.id === c.entityId ? EM().setValue(state.schema, e, c.path, c.value) : e;
+                });
+                scheduleSave();
+                done();
+                paintList();
+                paintMain();
+              },
+            }, [icon('check')]),
+            h('button', { class: 'en-icon-btn', type: 'button', title: 'Ignorer', 'aria-label': 'Ignorer', onclick: done }, [icon('x')]),
+          ])
+        );
+      });
+    }
+
     function buildSide() {
       var newBtn = h(
         'button',
@@ -614,8 +724,9 @@
           chipBox,
         ])
       );
+      els.side.appendChild(watchBox);
       els.side.appendChild(listBox);
-      els.side.appendChild(h('div', { class: 'en-side-foot' }, [schemaLink]));
+      els.side.appendChild(h('div', { class: 'en-side-foot' }, [observeBox, schemaLink]));
       bindMenus();
     }
 
@@ -1666,6 +1777,16 @@
               : null;
           page.appendChild(h('div', { class: 'en-notice en-notice--' + i.level, role: 'note' }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), h('span', { text: i.message }), fix]));
         });
+      findings()
+        .filter(function (f) {
+          return f.entityId === e.id;
+        })
+        .forEach(function (f) {
+          var cardBtn = f.card
+            ? h('button', { class: 'en-link', type: 'button', onclick: function () { createFindingCard(f); } }, ['Créer la carte « ' + f.card + ' »'])
+            : null;
+          page.appendChild(h('div', { class: 'en-notice en-notice--' + (f.level === 'alert' ? 'error' : f.level), role: 'note' }, [icon(LEVEL_ICON[f.level] || 'info-circle'), h('span', { text: f.text }), cardBtn]));
+        });
       var ownIds = EM().componentIdsOf(state.schema, { types: e.types });
       var comps = EM()
         .componentIdsOf(state.schema, e)
@@ -2061,6 +2182,7 @@
         ])
       );
       if (global.EntitiesLibrary) main.appendChild(libraryCard());
+      if (ES()) main.appendChild(systemsCard());
       main.appendChild(relationsCard());
       main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Types (archétypes)' }));
       state.schema.types.forEach(function (ty) {
@@ -2096,6 +2218,104 @@
           [icon('plus'), 'Nouveau composant']
         )
       );
+    }
+
+    /** Rules (Systems): what to watch for, ready-made or written in plain French and approved by the user. */
+    function systemsCard() {
+      var card = h('div', { class: 'en-card' }, [h('h3', { class: 'en-h', text: 'Règles' })]);
+      (state.schema.systems || []).forEach(function (sys) {
+        var on = h('input', { type: 'checkbox', checked: sys.enabled ? true : null, 'aria-label': 'Activer ' + sys.name });
+        on.addEventListener('change', function () {
+          setSchema(EM().upsertSystem(state.schema, Object.assign({}, sys, { enabled: on.checked })));
+        });
+        card.appendChild(
+          h('div', { class: 'en-field-row' }, [
+            h('label', { class: 'en-check' }, [on, sys.name]),
+            h('span', { class: 'en-hint', text: ES().describe(state.schema, sys) }),
+            h('button', { class: 'en-link', type: 'button', 'aria-label': 'Supprimer la règle ' + sys.name, onclick: function () { setSchema(EM().removeSystem(state.schema, sys.id)); } }, [icon('x')]),
+          ])
+        );
+      });
+      var have = {};
+      (state.schema.systems || []).forEach(function (s) {
+        have[s.id] = true;
+      });
+      var presets = ES().PRESETS.filter(function (p) {
+        return !have[p.id];
+      });
+      if (presets.length) {
+        var row = h('div', { class: 'en-lib-row' });
+        presets.forEach(function (p) {
+          row.appendChild(
+            h('button', {
+              class: 'en-btn en-btn--small',
+              type: 'button',
+              onclick: function () {
+                var r = ES().install(state.schema, p.id);
+                if (r.error) return toast('Règle impossible : schéma trop grand ou composant manquant.', 'error');
+                setSchema(r.schema);
+              },
+            }, [icon('plus'), p.name])
+          );
+        });
+        card.appendChild(row);
+      }
+      if (state.ai && ESAI()) {
+        var input = h('input', { class: 'en-input', placeholder: 'Décrire une règle…', 'aria-label': 'Décrire une règle' });
+        var go = function () {
+          if (!input.value.trim()) return;
+          input.disabled = true;
+          ESAI()
+            .author(t, state.schema, input.value)
+            .then(function (r) {
+              if (r.error) {
+                input.disabled = false;
+                return toast(r.error === 'unclear' ? 'Je n’ai pas compris cette règle avec vos composants.' : 'Le modèle n’a pas répondu.', 'error');
+              }
+              state.draftRule = r.system;
+              paintMain();
+            });
+        };
+        input.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter') go();
+        });
+        card.appendChild(h('div', { class: 'en-link-add' }, [input, h('button', { class: 'en-btn', type: 'button', onclick: go }, [icon('sparkles'), 'Écrire'])]));
+      }
+      if (state.draftRule) {
+        var d = state.draftRule;
+        card.appendChild(
+          h('div', { class: 'en-notice en-notice--info' }, [
+            icon('sparkles'),
+            h('span', { text: d.name + ' : ' + ES().describe(state.schema, d) + ' → ' + d.then.text + (d.then.card ? ' (carte « ' + d.then.card + ' »)' : '') }),
+            h('button', { class: 'en-link', type: 'button', onclick: function () { var next = EM().upsertSystem(state.schema, d); state.draftRule = null; setSchema(next); } }, ['Ajouter']),
+            h('button', { class: 'en-link', type: 'button', onclick: function () { state.draftRule = null; paintMain(); } }, ['Annuler']),
+          ])
+        );
+      }
+      ES()
+        .duplicateFields(state.schema)
+        .slice(0, 3)
+        .forEach(function (dup) {
+          card.appendChild(
+            h('div', { class: 'en-notice en-notice--info' }, [
+              icon('copy'),
+              h('span', {
+                text:
+                  'Champ en double : ' +
+                  dup.label +
+                  ' (' +
+                  dup.paths
+                    .map(function (p) {
+                      var c = EM().findById(state.schema.components, p.split('.')[0]);
+                      return c ? c.name : p;
+                    })
+                    .join(', ') +
+                  ')',
+              }),
+            ])
+          );
+        });
+      return card;
     }
 
     var CATEGORY_LABELS = {
@@ -2574,6 +2794,13 @@
     buildSide();
     paintList();
     paintMain();
+    if (global.EntitiesComposerAI && global.EntitiesComposerAI.available) {
+      global.EntitiesComposerAI.available(t).then(function (ok) {
+        state.ai = ok;
+        paintObserve();
+        if (state.mode === 'schema') paintMain();
+      });
+    }
 
     function boot() {
       ET()
