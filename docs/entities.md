@@ -22,6 +22,8 @@ Exemple : « Arroser mes plantes au travail » devient le filtre *type Plante* +
 
 Types de champ : texte, nombre, date, oui/non, choix, lien vers une entité, liens vers plusieurs entités. Et la **jauge** (curseur) : un nombre entre 0 et un maximum, fixe ou lu dans un autre champ du composant (la capacité). Sur une bouteille, « Niveau » est un curseur de 0 à la capacité maximale, avec « Vide » et « Plein »; une pile ou un disque utilisent la même jauge (0 à 100 %). En une ligne : `Niveau (jauge: ml)`. Code : `levelBounds` (modèle), `entities-level-ui.js`. Un lieu est simplement une entité de type *Lieu* (fourni par défaut, avec le composant *Lieu*) ; donnez-lui des alias (`travail, work, bureau`) pour que « au travail » le retrouve.
 
+**Principe : un type n’est qu’une liste de composants** (avec des valeurs par défaut et, au besoin, « inclut aussi les composants de » un autre type). Une entité peut avoir **plusieurs types** : ses composants sont l’union de ceux de tous ses types, plus ceux qu’elle ajoute seule (« Bâtiment » = Lieu + Objet, une bouteille = Produit + Contenant). La carte du réel propose donc 1 à 3 types par chose.
+
 Les **liens** sont de deux sortes : les champs « lien » (ex. lieu d'une plante) et des relations libres nommées (« contient », « fait partie de »). Les liens entrants sont affichés sur l'entité liée. Supprimer une entité retire aussi les liens qui pointent vers elle (noté dans l'historique des autres entités).
 
 L'**historique** garde les 40 derniers changements de chaque entité ; chacun peut être annulé (l'annulation s'ajoute à l'historique, rien n'est effacé).
@@ -56,6 +58,10 @@ Dès que le nom est tapé dans l’entrevue, l’assistant construit en arrière
 - La carte ne touche pas aux réponses : elle est appliquée au moment de créer (et passée au composeur par « Tout voir »). Le genre et la marque trouvés alimentent aussi les suggestions des questions.
 
 Logique pure : `entities-reality.js` (`normalizeBranch`, `addBranch`, `applyVerdicts`, `statusOf`, `build`, `tree`); appels : `entities-reality-ai.js` (`run`); interface : panneau dans `entities-interview-ui.js`. Tests : `test/entities-reality.test.js`, `test/entities-reality-ai.test.js`.
+
+## Menu contextuel (clic droit)
+
+Sur la page Entités, comme dans les autres vues, le clic droit ouvre le menu de l’application (`ContextMenu`), plus le menu du navigateur : sur une **entité** (liste ou page) : Ouvrir, **Liens** (sortants et entrants, un clic ouvre l’autre entité), **Composants** (saute à la section), Historique, **Types** (coches : une entité peut en avoir plusieurs), Renommer, Ajouter un lien, Créer une variante, Dupliquer, Détacher du modèle, Copier le nom, **Supprimer l’entité** (deux temps : confirmation dans un sous-menu). Sur un **champ** : Modifier, Revenir à la valeur d’origine, Copier la valeur; sur un **lien** : Retirer le lien; sur un **composant** : Replier, Retirer de l’entité; sur le fond de la liste : Nouvelle entité, Types et composants. Les pages Documents et Mindmap chargent aussi le menu partagé (copier, tout sélectionner…) en dehors de leurs propres menus.
 
 ## Variantes (une entité comme modèle)
 

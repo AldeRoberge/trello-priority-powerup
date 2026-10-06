@@ -120,8 +120,8 @@
   }
 
   var FORMAT = [
-    'Forme : {"root":{"type":id,"components":[id],"facts":{"chemin":valeur},"aliases":[texte],"det":"le|la|l\'|les","confidence":0-1},',
-    '"nodes":[{"ref":texte court,"name":texte,"type":id,"confidence":0-1,"components":[id],"facts":{"chemin":valeur},"aliases":[texte],"expand":true|false,"why":texte court}],',
+    'Forme : {"root":{"types":[id],"components":[id],"facts":{"chemin":valeur},"aliases":[texte],"det":"le|la|l\'|les","confidence":0-1},',
+    '"nodes":[{"ref":texte court,"name":texte,"types":[id],"confidence":0-1,"components":[id],"facts":{"chemin":valeur},"aliases":[texte],"expand":true|false,"why":texte court}],',
     '"links":[{"from":ref,"to":ref,"via":chemin de champ ou relation,"confidence":0-1}]}.',
   ].join('\n');
 
@@ -132,7 +132,8 @@
     '  · personne : employeur, lieu d’habitation, organisations dont elle est membre. · organisation : société mère, siège. · lieu : ce dans quoi il est situé (ville, pays) et ce qu’il abrite.',
     '  · événement : lieu, organisateur, participants, ce qui le précède ou le suit. · idée ou concept abstrait : ce qui l’incarne ou l’exprime, sorte de, s’oppose à (pas de faits matériels).',
     '  · jauge : un champ « jauge » (niveau, charge, espace utilisé) se règle dans l’unité du champ, entre 0 et son maximum (souvent le champ capacité). Ne le donne que si tu le sais : une bouteille scellée est pleine (niveau = capacité), une pile neuve est à 100.',
-    '- type : un id de la liste des genres, jamais autre chose. components : des id de la liste des composants que la chose porte (ex. contenant, produit, provenance, acquisition, identification, condition). facts : chemin exact (composant.champ) = valeur, seulement ce qui est sûr (pas de date ni de prix inventés).',
+    'Un genre n’est qu’une LISTE DE COMPOSANTS, et une chose peut avoir plusieurs genres (un bâtiment est un lieu ET un objet; une bouteille est un produit ET un contenant) : donne 1 à 3 genres dans "types" (id de la liste, jamais autre chose), le plus important d’abord.',
+    '- components : des id de la liste des composants que la chose porte (ex. contenant, produit, provenance, acquisition, identification, condition). facts : chemin exact (composant.champ) = valeur, seulement ce qui est sûr (pas de date ni de prix inventés).',
     '- nodes : les AUTRES choses qui existent à côté (le contenu, la marque, le fabricant, la société mère, les ingrédients). Un nom propre exact et singulier (« The Coca-Cola Company »). Jamais la chose elle-même.',
     '- links : from et to sont des ref (« root » = la chose). via = un chemin de champ de lien (ex. contenant.contenu, provenance.fabricant) ou une relation du vocabulaire. Une société mère se relie à sa filiale par « fait partie de » (de la filiale vers la mère).',
     '- confidence : 0.9 et plus seulement si tu es presque certain que c’est vrai et connu. Sous 0.5, ne l’écris pas. N’invente jamais : mieux vaut une carte courte et juste.',
@@ -141,10 +142,10 @@
   ].join('\n');
 
   var EXAMPLE = [
-    'Exemple pour « Powerade » : {"root":{"type":"produit","components":["contenant","produit","provenance","acquisition","identification","condition"],"facts":{"contenant.scelle":"scellé","contenant.capacite":591,"contenant.quantite":591,"produit.marque":"Powerade"},"aliases":[],"det":"le","confidence":0.85},',
-    '"nodes":[{"ref":"a","name":"Powerade (boisson)","type":"substance","confidence":0.9,"components":[],"facts":{"matiere.etat":"liquide"},"expand":false,"why":"le liquide dans la bouteille"},',
-    '{"ref":"b","name":"Powerade","type":"organisation","confidence":0.85,"components":[],"facts":{},"expand":true,"why":"la marque qui le fabrique"},',
-    '{"ref":"c","name":"The Coca-Cola Company","type":"organisation","confidence":0.9,"components":[],"facts":{},"expand":false,"why":"société mère de la marque"}],',
+    'Exemple pour « Powerade » : {"root":{"types":["produit"],"components":["contenant","produit","provenance","acquisition","identification","condition"],"facts":{"contenant.scelle":"scellé","contenant.capacite":591,"contenant.quantite":591,"produit.marque":"Powerade"},"aliases":[],"det":"le","confidence":0.85},',
+    '"nodes":[{"ref":"a","name":"Powerade (boisson)","types":["substance"],"confidence":0.9,"components":[],"facts":{"matiere.etat":"liquide"},"expand":false,"why":"le liquide dans la bouteille"},',
+    '{"ref":"b","name":"Powerade","types":["organisation"],"confidence":0.85,"components":[],"facts":{},"expand":true,"why":"la marque qui le fabrique"},',
+    '{"ref":"c","name":"The Coca-Cola Company","types":["organisation"],"confidence":0.9,"components":[],"facts":{},"expand":false,"why":"société mère de la marque"}],',
     '"links":[{"from":"root","to":"a","via":"contenant.contenu","confidence":0.9},{"from":"root","to":"b","via":"provenance.fabricant","confidence":0.85},{"from":"b","to":"c","via":"fait partie de","confidence":0.9}]}',
   ].join('\n');
 

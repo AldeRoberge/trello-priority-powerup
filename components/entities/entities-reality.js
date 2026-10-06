@@ -101,7 +101,7 @@
   /* ── 2. Plan ─────────────────────────────────────────────────────── */
 
   function emptyPlan() {
-    return { root: { type: '', components: [], facts: {}, aliases: [], det: '', conf: 0 }, nodes: {}, order: [], edges: [], nextId: 1 };
+    return { root: { type: '', types: [], components: [], facts: {}, aliases: [], det: '', conf: 0 }, nodes: {}, order: [], edges: [], nextId: 1 };
   }
 
   function depthOf(plan, ref) {
@@ -152,6 +152,16 @@
    * Shape: { root?, nodes:[{lref, name, type, conf, components, facts, aliases, expand, why}], links:[{from, to, via, conf}] }
    * `anchor` is the ref the branch hangs from ('root' or a node ref); links may use it as an endpoint.
    */
+  /** The genres a thing has: "types" (a list) and/or "type" (one), valid ids only, at most 3. A type is just a list of components, so a thing may have several. */
+  function pickTypes(v, valid) {
+    var list = (v.type ? [v.type] : []).concat(Array.isArray(v.types) ? v.types : []);
+    var out = [];
+    list.forEach(function (id) {
+      if (typeof id === 'string' && valid.indexOf(id) >= 0 && out.indexOf(id) < 0) out.push(id);
+    });
+    return out.slice(0, 3);
+  }
+
   function normalizeBranch(raw, ctx, anchor) {
     var data = typeof raw === 'string' ? parseJson(raw) : raw;
     var out = { root: null, nodes: [], links: [] };
@@ -160,8 +170,10 @@
     var comps = componentIds(ctx);
     if (anchor === 'root' && data.root && typeof data.root === 'object') {
       var r = data.root;
+      var rootTypes = pickTypes(r, types);
       out.root = {
-        type: types.indexOf(r.type) >= 0 ? r.type : '',
+        type: rootTypes[0] || '',
+        types: rootTypes,
         components: strings(r.components, 8, 40).filter(function (c) { return comps.indexOf(c) >= 0; }),
         facts: scalarFacts(r.facts),
         aliases: strings(r.aliases, 3),
@@ -176,12 +188,14 @@
       var lref = trim(n.ref).slice(0, 24);
       var c = conf(n.confidence, 0.5);
       if (!name || !lref || seen[lref] || lref === 'root' || lref === anchor) return;
-      if (c < LIMITS.keep || types.indexOf(n.type) < 0) return;
+      var nodeTypes = pickTypes(n, types);
+      if (c < LIMITS.keep || !nodeTypes.length) return;
       seen[lref] = true;
       out.nodes.push({
         lref: lref,
         name: name,
-        type: n.type,
+        type: nodeTypes[0],
+        types: nodeTypes,
         conf: c,
         components: strings(n.components, 5, 40).filter(function (x) { return comps.indexOf(x) >= 0; }),
         facts: scalarFacts(n.facts),
@@ -240,6 +254,7 @@
         ex.conf = Math.max(ex.conf, n.conf);
         ex.expand = ex.expand || n.expand;
         ex.components = uniq(ex.components.concat(n.components));
+        ex.types = uniq((ex.types || [ex.type]).concat(n.types || [n.type]));
         map[n.lref] = same;
         return;
       }
@@ -253,6 +268,7 @@
         ref: ref,
         name: n.name,
         type: n.type,
+        types: (n.types || [n.type]).slice(),
         conf: n.conf,
         components: n.components.slice(),
         facts: Object.assign({}, n.facts),
@@ -512,11 +528,16 @@
 
     // the root: genre and components from the plan, only where the user has not decided
     var root = st.root;
-    if (!root.types.length && plan.root.type) {
-      var rt = typeFor(st.schema, lib, plan.root.type);
+    // a type is only a list of components, so the thing may take several: the first when it has none, the others when the map is confident
+    var wanted = plan.root.types && plan.root.types.length ? plan.root.types : plan.root.type ? [plan.root.type] : [];
+    wanted.forEach(function (id, i) {
+      if (flags && flags.excluded && flags.excluded['type:' + id]) return;
+      if (i > 0 && !(plan.root.conf >= LIMITS.auto)) return;
+      if (i === 0 && root.types.length && !(plan.root.conf >= LIMITS.auto)) return;
+      var rt = typeFor(st.schema, lib, id);
       st.schema = rt.schema;
-      if (rt.id) root = EC().toggleType(st.schema, root, rt.id, true);
-    }
+      if (rt.id && root.types.indexOf(rt.id) < 0) root = EC().toggleType(st.schema, root, rt.id, true);
+    });
     plan.root.components.forEach(function (cid) {
       var c = carry(st.schema, lib, root, cid);
       st.schema = c.schema;
@@ -542,10 +563,14 @@
         included.push(ref);
         return;
       }
-      var t = typeFor(st.schema, lib, n.type);
-      st.schema = t.schema;
-      if (!t.id) return;
-      var d = EC().newDraft({ name: n.name, types: [t.id], aliases: n.aliases.filter(function (a) { return key(a) !== key(n.name); }) });
+      var ids = [];
+      (n.types || [n.type]).forEach(function (tid) {
+        var t = typeFor(st.schema, lib, tid);
+        st.schema = t.schema;
+        if (t.id && ids.indexOf(t.id) < 0) ids.push(t.id);
+      });
+      if (!ids.length) return;
+      var d = EC().newDraft({ name: n.name, types: ids, aliases: n.aliases.filter(function (a) { return key(a) !== key(n.name); }) });
       n.components.forEach(function (cid) {
         var c = carry(st.schema, lib, d, cid);
         st.schema = c.schema;
@@ -651,14 +676,15 @@
       plan.order.forEach(function (ref) {
         var n = plan.nodes[ref];
         if (n.parent !== parent) return;
-        var c = choices.filter(function (x) { return x.id === n.type; })[0];
+        var named = (n.types || [n.type]).map(function (id) { return choices.filter(function (x) { return x.id === id; })[0]; }).filter(Boolean);
+        var c = named[0];
         var link = incoming(ref);
         var have = lookup(ctx.entities || [], n.name);
         rows.push({
           ref: ref,
           depth: depth,
           name: n.name,
-          typeName: c ? c.name : '',
+          typeName: named.map(function (x) { return x.name; }).join(' + '),
           icon: c ? c.icon : 'stack-2',
           conf: n.conf,
           status: statusOf(plan, ref, flags),
@@ -677,10 +703,24 @@
     return rows;
   }
 
+  /** The genres the map gives the root: [{id, name, on}] ("on" unless the user switched it off). */
+  function rootTypes(plan, ctx, flags) {
+    var choices = EC().archetypeChoices(ctx.schema, LIB(ctx));
+    return (plan.root.types || [])
+      .map(function (id) {
+        var c = choices.filter(function (x) { return x.id === id; })[0];
+        return c ? { id: id, name: c.name, icon: c.icon, on: !(flags && flags.excluded && flags.excluded['type:' + id]) } : null;
+      })
+      .filter(Boolean);
+  }
+
   /** Interview hints from the plan: the genre of the root and the maker as the brand to propose. */
   function hintsFromPlan(plan, ctx) {
     var out = { det: plan.root.det || '', types: [], candidates: {}, ask: [] };
-    if (plan.root.type && typeIds(ctx).indexOf(plan.root.type) >= 0) out.types.push({ id: plan.root.type, confidence: plan.root.conf || 0.7, source: 'ia' });
+    var valid = typeIds(ctx);
+    (plan.root.types && plan.root.types.length ? plan.root.types : plan.root.type ? [plan.root.type] : []).forEach(function (id) {
+      if (valid.indexOf(id) >= 0) out.types.push({ id: id, confidence: plan.root.conf || 0.7, source: 'ia' });
+    });
     plan.edges.forEach(function (e) {
       if (e.from !== 'root' || !plan.nodes[e.to]) return;
       var made = e.via === 'provenance.fabricant' || (EM().matchRelation(e.via) && EM().matchRelation(e.via).def.id === 'made-by');
@@ -709,5 +749,6 @@
     build: build,
     tree: tree,
     hintsFromPlan: hintsFromPlan,
+    rootTypes: rootTypes,
   };
 })(typeof window !== 'undefined' ? window : this);

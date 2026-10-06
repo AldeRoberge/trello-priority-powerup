@@ -548,6 +548,7 @@
                 {
                   class: 'en-row' + (on ? ' is-on' : ''),
                   type: 'button',
+                  'data-id': e.id,
                   'aria-current': on ? 'true' : null,
                   onclick: function (ev) {
                     openEntity(e.id, { focus: ev.detail === 0 });
@@ -615,6 +616,7 @@
       );
       els.side.appendChild(listBox);
       els.side.appendChild(h('div', { class: 'en-side-foot' }, [schemaLink]));
+      bindMenus();
     }
 
     /** Opens the guided interview; what it creates (and any new type) is saved like any other edit. */
@@ -714,9 +716,9 @@
       var box = h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') + (collapsedSections[title] ? ' is-collapsed' : '') });
       var toggle = h('button', { class: 'en-sec-toggle', type: 'button', 'aria-expanded': String(!collapsedSections[title]) }, [
         icon('chevron-right'),
+        iconName ? h('span', { class: 'en-sec-ico' }, [icon(iconName)]) : null,
         h('h3', { class: 'en-sec-title', text: title }),
       ]);
-        iconName ? h('span', { class: 'en-sec-ico' }, [icon(iconName)]) : null,
       toggle.addEventListener('click', function () {
         var collapsed = !box.classList.contains('is-collapsed');
         box.classList.toggle('is-collapsed', collapsed);
@@ -1151,13 +1153,7 @@
                 return;
               }
               closePop();
-              state.entities = EM().deleteEntity(state.schema, state.entities, e.id);
-              if (global.EntitiesDirectories) global.EntitiesDirectories.forget(t, e); // its People / Places record goes too
-              state.selId = null;
-              state.confirm = '';
-              scheduleSave();
-              paintList();
-              paintMain();
+              deleteEntityNow(e);
             },
             { danger: true, keepOpen: true }
           );
@@ -1165,6 +1161,284 @@
         },
         { align: 'end' }
       );
+    }
+
+    function deleteEntityNow(e) {
+      state.entities = EM().deleteEntity(state.schema, state.entities, e.id);
+      if (global.EntitiesDirectories) global.EntitiesDirectories.forget(t, e); // its People / Places record goes too
+      if (state.selId === e.id) state.selId = null;
+      state.confirm = '';
+      scheduleSave();
+      paintList();
+      paintMain();
+    }
+
+    /* ── Right-click menus (the app's shared ContextMenu) ──────────── */
+
+    function CM() {
+      return global.ContextMenu && typeof global.ContextMenu.show === 'function' ? global.ContextMenu : null;
+    }
+
+    function copyToClipboard(text, what) {
+      try {
+        navigator.clipboard.writeText(String(text)).then(
+          function () { toast(what + ' copié'); },
+          function () { toast('Copie impossible', 'error'); }
+        );
+      } catch (err) {
+        toast('Copie impossible', 'error');
+      }
+    }
+
+    function scrollToSection(title) {
+      var heads = els.main.querySelectorAll('.en-sec-title');
+      for (var i = 0; i < heads.length; i++) {
+        if (heads[i].textContent !== title) continue;
+        var box = heads[i].closest('.en-sec');
+        if (box.classList.contains('is-collapsed')) box.querySelector('.en-sec-toggle').click();
+        box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        return;
+      }
+    }
+
+    /** The links of an entity as menu rows: what it points to, then what points to it. Each opens the other entity. */
+    function linkItems(e) {
+      var out = [];
+      e.relations.forEach(function (r) {
+        var other = EM().findById(state.entities, r.to);
+        if (other) out.push({ id: 'open-linked:' + r.type + r.to, label: cap(r.type) + ' : ' + other.name, icon: 'arrow-up-right', action: function () { openEntity(other.id); } });
+      });
+      // links held in the entity's own link fields (Contenu, Fabriqué par, Lieu...)
+      EM()
+        .componentIdsOf(state.schema, e)
+        .forEach(function (cid) {
+          var comp = EM().findById(state.schema.components, cid);
+          if (!comp) return;
+          comp.fields.forEach(function (f) {
+            if (f.kind !== 'ref' && f.kind !== 'refs') return;
+            var v = EM().effectiveValue(state.entities, e, cid + '.' + f.key, state.schema);
+            (Array.isArray(v) ? v : v ? [v] : []).forEach(function (id) {
+              var other = EM().findById(state.entities, id);
+              if (other) out.push({ id: 'open-linked:' + cid + f.key + id, label: f.label + ' : ' + other.name, icon: 'arrow-up-right', action: function () { openEntity(other.id); } });
+            });
+          });
+        });
+      EM()
+        .linksOf(state.schema, state.entities, e.id)
+        .filter(function (l) {
+          return l.dir === 'in' && l.via !== 'variante de';
+        })
+        .forEach(function (l) {
+          var other = EM().findById(state.entities, l.other);
+          if (!other) return;
+          var via = String(l.via);
+          var label = l.inverse && l.inverse !== via ? l.inverse : via.indexOf(' / ') >= 0 ? 'Utilisé comme « ' + via.split(' / ').pop() + ' » par' : '← ' + via;
+          out.push({ id: 'open-linked:in' + l.other + via, label: cap(label) + ' : ' + other.name, icon: 'corner-down-left', action: function () { openEntity(other.id); } });
+        });
+      return out;
+    }
+
+    /** Everything one entity offers: open, see its links and components, create, rename, copy, delete. */
+    function entityItems(e) {
+      var links = linkItems(e);
+      var comps = EM()
+        .componentIdsOf(state.schema, e)
+        .map(function (cid) { return EM().findById(state.schema.components, cid); })
+        .filter(Boolean);
+      function here(fn) {
+        return function () {
+          if (state.selId !== e.id || state.mode !== 'entity') openEntity(e.id);
+          fn();
+        };
+      }
+      var items = [];
+      if (state.selId !== e.id || state.mode !== 'entity') items.push({ id: 'open-card', label: 'Ouvrir', icon: 'arrow-up-right', group: 'Ouvrir', action: function () { openEntity(e.id); } });
+      items.push({
+        id: 'show-links',
+        label: 'Liens',
+        icon: 'link',
+        group: 'Ouvrir',
+        hint: links.length ? String(links.length) : '',
+        children: links.length ? links : [{ id: 'no-links', label: 'Aucun lien', disabled: true }],
+        action: links.length ? null : function () {},
+        disabled: !links.length,
+      });
+      items.push({
+        id: 'show-components',
+        label: 'Composants',
+        icon: 'layout-list',
+        group: 'Ouvrir',
+        hint: comps.length ? String(comps.length) : '',
+        children: comps.length
+          ? comps.map(function (c) {
+              return {
+                id: 'component:' + c.id,
+                label: c.name,
+                icon: 'box',
+                hint: c.fields.length ? c.fields.length + ' champ' + (c.fields.length > 1 ? 's' : '') : '',
+                action: here(function () { scrollToSection(c.name); }),
+              };
+            })
+          : [{ id: 'no-components', label: 'Aucun composant', disabled: true }],
+        disabled: !comps.length,
+        action: comps.length ? null : function () {},
+      });
+      items.push({ id: 'open-history', label: 'Historique', icon: 'history', group: 'Ouvrir', action: here(function () { var d = els.main.querySelector('.en-sec--disc .en-disc:last-of-type, .en-sec--disc .en-disc'); if (d) { d.scrollIntoView({ block: 'center' }); if (!d.classList.contains('is-open')) d.click(); } }) });
+      // a type is just a list of components: an entity can carry several, switched here with a check
+      items.push({
+        id: 'show-types',
+        label: 'Types',
+        icon: 'category',
+        group: 'Modifier',
+        hint: e.types.length ? String(e.types.length) : '',
+        children: state.schema.types.map(function (ty) {
+          var has = e.types.indexOf(ty.id) >= 0;
+          return {
+            id: 'type:' + ty.id,
+            label: ty.name,
+            icon: ty.icon || 'stack-2',
+            checked: has,
+            action: here(function () {
+              applyEntity(
+                function (cur) {
+                  var set = has
+                    ? cur.types.filter(function (x) { return x !== ty.id; })
+                    : cur.types.concat([ty.id]);
+                  return EM().setTypes(state.schema, cur, set);
+                },
+                { rebuild: true }
+              );
+            }),
+          };
+        }),
+      });
+      items.push({ sep: true });
+      items.push({
+        id: 'add-link',
+        label: 'Ajouter un lien…',
+        icon: 'plus',
+        group: 'Créer',
+        action: function () {
+          openEntity(e.id);
+          state.linkOpen = true;
+          state.refocus = '.en-link-type';
+          paintMain();
+        },
+      });
+      items.push({ id: 'create-variant', label: 'Créer une variante', icon: 'git-fork', group: 'Créer', action: here(function () { cloneSelected(false); }) });
+      items.push({ id: 'duplicate', label: 'Dupliquer', icon: 'copy', group: 'Créer', action: here(function () { cloneSelected(true); }) });
+      if (e.base) {
+        items.push({
+          id: 'detach',
+          label: 'Détacher du modèle',
+          icon: 'unlink',
+          group: 'Modifier',
+          action: here(function () {
+            applyEntity(function (cur) { return EM().detachEntity(state.entities, cur); }, { rebuild: true });
+          }),
+        });
+      }
+      items.push({
+        id: 'edit',
+        label: 'Renommer',
+        icon: 'edit',
+        group: 'Modifier',
+        action: here(function () {
+          var input = els.main.querySelector('.en-name');
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        }),
+      });
+      items.push({ sep: true });
+      items.push({ id: 'copy', label: 'Copier le nom', icon: 'copy', group: 'Presse-papiers', action: function () { copyToClipboard(e.name, 'Nom'); } });
+      items.push({ sep: true });
+      items.push({
+        id: 'delete',
+        label: 'Supprimer l’entité',
+        icon: 'trash',
+        danger: true,
+        group: 'Suppression',
+        children: [
+          {
+            id: 'delete-confirm',
+            label: 'Confirmer la suppression',
+            icon: 'trash',
+            danger: true,
+            hint: 'Retire aussi les liens qui pointent vers elle',
+            action: function () { deleteEntityNow(e); },
+          },
+        ],
+      });
+      return items;
+    }
+
+    function listItems() {
+      var items = [
+        { id: 'new-entity', label: 'Nouvelle entité', icon: 'plus', group: 'Créer', action: function () { openComposer(); } },
+        { id: 'open-schema', label: 'Types et composants', icon: 'settings', group: 'Ouvrir', action: function () { schemaLink.click(); } },
+      ];
+      if (state.query) items.push({ id: 'filter-clear', label: 'Effacer la recherche', icon: 'x', group: 'Filtres', action: function () { setQuery(''); } });
+      return items;
+    }
+
+    /** What a right-click on the page offers: the field, link or section under the pointer, then the entity. */
+    function mainItems(ev) {
+      var e = selected();
+      if (!e || state.mode !== 'entity') return listItems();
+      var items = [];
+      var target = ev.target;
+      var row = target.closest && target.closest('.en-prop');
+      var sec = target.closest && target.closest('.en-sec');
+      var chip = target.closest && target.closest('.en-ref');
+      if (chip) {
+        items.push({ id: 'open-card', label: 'Ouvrir ' + chip.textContent, icon: 'arrow-up-right', group: 'Ouvrir', action: function () { chip.click(); } });
+        items.push({ sep: true });
+      }
+      if (row) {
+        var label = row.querySelector('.en-prop-label');
+        var control = row.querySelector('.en-prop-value input:not([type=checkbox]), .en-prop-value select, .en-prop-value textarea');
+        var reset = row.querySelector('.en-reset');
+        var shown = control ? (control.tagName === 'SELECT' ? control.options[control.selectedIndex].text : control.value) : row.querySelector('.en-prop-value') ? row.querySelector('.en-prop-value').innerText.trim() : '';
+        if (control && !control.disabled) items.push({ id: 'edit', label: 'Modifier ' + (label ? label.textContent.toLowerCase() : 'la valeur'), icon: 'edit', group: 'Modifier', action: function () { control.focus(); } });
+        if (reset) items.push({ id: 'revert', label: row.classList.contains('en-prop--link') ? 'Retirer le lien' : 'Revenir à la valeur d’origine', icon: row.classList.contains('en-prop--link') ? 'x' : 'history', group: 'Modifier', action: function () { reset.click(); } });
+        if (shown && shown !== '—') items.push({ id: 'copy-value', label: 'Copier la valeur', icon: 'copy', group: 'Presse-papiers', action: function () { copyToClipboard(shown, 'Valeur'); } });
+        if (items.length && !items[items.length - 1].sep) items.push({ sep: true });
+      }
+      if (sec && sec.querySelector('.en-sec-title')) {
+        var toggle = sec.querySelector('.en-sec-toggle');
+        var remove = Array.prototype.filter.call(sec.querySelectorAll('.en-sec-head .en-link'), function (b) { return b.textContent === 'Retirer'; })[0];
+        items.push({
+          id: 'toggle-expand',
+          label: sec.classList.contains('is-collapsed') ? 'Déplier « ' + sec.querySelector('.en-sec-title').textContent + ' »' : 'Replier « ' + sec.querySelector('.en-sec-title').textContent + ' »',
+          icon: 'layout-list',
+          group: 'Affichage',
+          action: function () { toggle.click(); },
+        });
+        if (remove) items.push({ id: 'remove', label: 'Retirer ce composant de l’entité', icon: 'x', group: 'Suppression', action: function () { remove.click(); } });
+        items.push({ sep: true });
+      }
+      return items.concat(entityItems(e));
+    }
+
+    function bindMenus() {
+      listBox.addEventListener('contextmenu', function (ev) {
+        var cm = CM();
+        if (!cm) return;
+        var rowEl = ev.target.closest && ev.target.closest('.en-row');
+        var e = rowEl && EM().findById(state.entities, rowEl.getAttribute('data-id'));
+        ev.preventDefault();
+        ev.stopPropagation();
+        cm.show(ev, e ? entityItems(e) : listItems());
+      });
+      els.main.addEventListener('contextmenu', function (ev) {
+        var cm = CM();
+        if (!cm || cm.isNativeEditableTarget(ev.target)) return; // text fields keep the shared copy / paste menu
+        ev.preventDefault();
+        ev.stopPropagation();
+        cm.show(ev, mainItems(ev));
+      });
     }
 
     /** Title block: type icon, big editable name, type pills, aliases. */
@@ -2063,8 +2337,8 @@
         h('div', { class: 'en-field' }, [h('label', { text: 'Description' }), desc]),
         h('div', { class: 'en-field' }, [h('label', { text: 'Nature' }), nature]),
         h('div', { class: 'en-field' }, [h('label', { class: 'en-check' }, [role, 'Rôle (une entité l’est dans un contexte, pas par nature)'])]),
-        ty.parents.length || state.schema.types.length > 1 ? h('div', { class: 'en-field' }, [h('label', { text: 'Est une sorte de' }), parentBox]) : null,
-        h('div', { class: 'en-field' }, [h('label', { text: 'Composants (les archétypes parents apportent les leurs)' }), checks]),
+        ty.parents.length || state.schema.types.length > 1 ? h('div', { class: 'en-field' }, [h('label', { text: 'Inclut aussi les composants de' }), parentBox]) : null,
+        h('div', { class: 'en-field' }, [h('label', { text: 'Composants de ce type (un type n’est qu’une liste de composants; une entité peut en avoir plusieurs)' }), checks]),
         defaultsEditor(ty),
         h(
           'button',

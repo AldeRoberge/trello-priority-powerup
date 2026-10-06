@@ -190,6 +190,21 @@
         working ? h('button', { class: 'cp-link', type: 'button', title: 'Arrêter la recherche', onclick: function () { stopReality(); repaintMap(); } }, ['Arrêter']) : null,
       ]);
       var box = h('div', { class: 'iv-map' + (working ? ' iv-map--busy' : '') }, [head]);
+      var genres = r.plan && ER() ? ER().rootTypes(r.plan, { schema: st.schema, library: global.EntitiesLibrary }, r) : [];
+      if (r.open && genres.length > 1) {
+        // a genre is only a list of components: the thing can carry several, each one can be switched off
+        var line = h('div', { class: 'iv-genres' }, [h('span', { text: 'Genres' })]);
+        genres.forEach(function (g) {
+          line.appendChild(
+            h('button', { class: 'iv-genre' + (g.on ? ' is-on' : ''), type: 'button', 'aria-pressed': g.on ? 'true' : 'false', title: g.on ? 'Retirer ce genre' : 'Remettre ce genre', onclick: function () {
+              if (g.on) r.excluded['type:' + g.id] = true;
+              else delete r.excluded['type:' + g.id];
+              repaintMap();
+            } }, [icon(g.icon || 'stack-2'), g.name])
+          );
+        });
+        box.appendChild(line);
+      }
       if (!r.open || !rows.length) return box;
       var list = h('ul', { class: 'iv-map-list' });
       rows.forEach(function (row) {

@@ -186,6 +186,31 @@ describe('EntitiesReality', () => {
     assert.equal(h.candidates['produit.marque'][0].label, 'Powerade');
   });
 
+  it('a type is only a list of components: a thing can have several, in the plan and in what is built', () => {
+    const raw = {
+      root: { types: ['produit', 'objet', 'zzz'], components: ['contenant'], confidence: 0.85 },
+      nodes: [{ ref: 'a', name: 'Bouteille Powerade', types: ['objet', 'substance'], confidence: 0.9 }, { ref: 'b', name: 'Rien', types: ['zzz'], confidence: 0.9 }],
+      links: [{ from: 'root', to: 'a', via: 'lié à' }],
+    };
+    const b = R.normalizeBranch(raw, ctx, 'root');
+    assert.deepEqual(b.root.types, ['produit', 'objet']);
+    assert.deepEqual(b.nodes.map((n) => n.types), [['objet', 'substance']]); // a node with no valid genre is dropped
+    const plan = verified(R.addBranch(R.emptyPlan(), 'root', b, {}));
+    const out = R.build(ctx, plan, {});
+    assert.equal(out.draft.types.length, 2);
+    assert.equal(out.extras[0].types.length, 2);
+    // the components of the entity are the union of those of its types
+    const comps = M.componentIdsOf(out.schema, out.draft);
+    ['produit', 'matiere', 'provenance', 'propriete', 'contenant'].forEach((c) => assert.ok(comps.includes(c), c));
+    // the user can switch one genre off, and a genre the user chose stays
+    const off = R.build(ctx, plan, { excluded: { 'type:objet': true } });
+    assert.equal(off.draft.types.length, 1);
+    assert.deepEqual(R.rootTypes(plan, ctx, { excluded: { 'type:objet': true } }).map((t) => t.on), [true, false]);
+    assert.deepEqual(R.hintsFromPlan(plan, ctx).types.map((t) => t.id), ['produit', 'objet']);
+    const mine = R.build(Object.assign({}, ctx, { draft: C.newDraft({ name: 'Powerade', types: ['place'] }) }), plan, {});
+    assert.ok(mine.draft.types.includes('place') && mine.draft.types.length === 3);
+  });
+
   it('the new components are in the library', () => {
     ['contenant', 'identification', 'condition'].forEach((id) => assert.ok(L.COMPONENTS.some((c) => c.id === id), id));
   });
