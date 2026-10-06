@@ -901,6 +901,138 @@
       historyBox.appendChild(set);
     }
 
+    /** The type a new entity gets when created from a link field (first allowed type the schema knows). */
+    function refCreateType(field) {
+      var ids = (field.refTypes || []).filter(function (id) {
+        return EM().findById(state.schema.types, id);
+      });
+      return ids[0] || '';
+    }
+
+    /** Search / link / create popover for link fields. `pick(id)` receives the chosen (or newly created) entity id; `picked` are ids to hide. */
+    function refPicker(anchor, e, field, pool, picked, pick) {
+      var tid = refCreateType(field);
+      var kind = tid ? typeName(tid).toLowerCase() : 'entité';
+      openPop(
+        anchor,
+        function (el, close) {
+          var search = h('input', { class: 'en-pop-search', type: 'search', placeholder: 'Chercher ou créer…', 'aria-label': 'Chercher ou créer', autocomplete: 'off' });
+          var listEl = h('div', { class: 'en-pop-list' });
+          function create(name) {
+            var ne;
+            try {
+              ne = EM().createEntity(state.schema, { name: name, types: tid ? [tid] : [] });
+            } catch (err) {
+              toast('Création refusée : ' + (err && err.message), 'error');
+              return;
+            }
+            state.entities = state.entities.concat([ne]);
+            scheduleSave();
+            close();
+            pick(ne.id);
+            toast('« ' + name + ' » créé et lié.');
+          }
+          function fill() {
+            var raw = search.value.trim();
+            var q = fold(raw);
+            listEl.textContent = '';
+            var n = 0;
+            var exact = false;
+            pool.forEach(function (x) {
+              if (picked.indexOf(x.id) >= 0) return;
+              if (fold(x.name) === q) exact = true;
+              if (q && fold(x.name + ' ' + (x.aliases || []).join(' ')).indexOf(q) < 0) return;
+              n += 1;
+              var ty = EM().findById(state.schema.types, x.types[0]);
+              listEl.appendChild(
+                menuItem((ty && ty.icon) || 'map-pin', x.name, ty ? ty.name : '', function () {
+                  pick(x.id);
+                })
+              );
+            });
+            if (!n) listEl.appendChild(h('p', { class: 'en-list-hint', text: raw ? 'Aucun résultat.' : 'Rien à lier pour l’instant.' }));
+            if (raw && !exact) {
+              listEl.appendChild(
+                menuItem('plus', 'Créer « ' + raw + ' »', 'Nouveau ' + kind, function () {
+                  create(raw);
+                })
+              );
+            }
+          }
+          search.addEventListener('input', fill);
+          search.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter') return;
+            ev.preventDefault();
+            var first = listEl.querySelector('.en-menu-item');
+            if (first) first.click();
+          });
+          el.appendChild(search);
+          el.appendChild(listEl);
+          fill();
+        },
+        { className: 'en-pop--picker', role: 'dialog' }
+      );
+    }
+
+    /** Single link field: the linked entity as a chip (open, rename, unlink) or a button that opens the picker. */
+    function refControl(e, field, aria, val, pool, commit) {
+      var linked = val ? EM().findById(state.entities, val) : null;
+      var trigger;
+      function choose(id) {
+        commit(id || '', true);
+      }
+      function openPicker() {
+        refPicker(trigger, e, field, pool, [], choose);
+      }
+      if (!linked) {
+        trigger = h(
+          'button',
+          { class: 'en-ctl en-ref-btn is-empty', type: 'button', 'aria-label': aria, 'aria-haspopup': 'dialog', onclick: openPicker },
+          [h('span', { text: 'Cliquer pour ajouter…' }), icon('search')]
+        );
+        return trigger;
+      }
+      var ty = EM().findById(state.schema.types, linked.types[0]);
+      trigger = h(
+        'button',
+        { class: 'en-ctl en-ref-btn', type: 'button', 'aria-label': aria + ' : changer', title: 'Changer', 'aria-haspopup': 'dialog', onclick: openPicker },
+        [icon((ty && ty.icon) || 'map-pin'), h('span', { class: 'en-ref-name', text: linked.name }), icon('selector')]
+      );
+      var row = h('div', { class: 'en-ref-row' }, [trigger]);
+      function mini(ic, label, fn) {
+        return h('button', { class: 'en-iconlink en-ref-act', type: 'button', title: label, 'aria-label': label, onclick: fn }, [icon(ic)]);
+      }
+      row.appendChild(
+        mini('pencil', 'Renommer', function () {
+          var inp = h('input', { class: 'en-ctl', type: 'text', maxlength: '80', 'aria-label': 'Renommer ' + linked.name, value: linked.name });
+          var done = false;
+          function save(apply) {
+            if (done) return;
+            done = true;
+            if (apply && inp.value.trim() && inp.value.trim() !== linked.name) {
+              state.entities = state.entities.map(function (x) {
+                return x.id === linked.id ? EM().renameEntity(x, inp.value) : x;
+              });
+              scheduleSave();
+            }
+            commit(val, true);
+          }
+          inp.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') save(true);
+            else if (ev.key === 'Escape') save(false);
+          });
+          inp.addEventListener('blur', function () { save(true); });
+          row.textContent = '';
+          row.appendChild(inp);
+          inp.focus();
+          inp.select();
+        })
+      );
+      row.appendChild(mini('arrow-up-right', 'Ouvrir ' + linked.name, function () { openEntity(linked.id); }));
+      row.appendChild(mini('x', 'Retirer le lien', function () { choose(''); }));
+      return row;
+    }
+
     function fieldInput(e, comp, field) {
       var path = comp.id + '.' + field.key;
       var val = EM().effectiveValue(state.entities, e, path, state.schema);
@@ -949,15 +1081,7 @@
           .sort(function (a, b) {
             return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true });
           });
-        if (field.kind === 'ref') {
-          var rs = h('select', { class: 'en-ctl', 'aria-label': aria, onchange: function () { commit(rs.value); } });
-          rs.appendChild(h('option', { value: '', text: '—' }));
-          pool.forEach(function (x) {
-            rs.appendChild(h('option', { value: x.id, text: x.name }));
-          });
-          rs.value = val || '';
-          return selectWrap(rs);
-        }
+        if (field.kind === 'ref') return refControl(e, field, aria, val, pool, commit);
         var cur = Array.isArray(val) ? val.slice() : [];
         var wrap = h('div', { class: 'en-refs' });
         cur.forEach(function (id) {
@@ -985,23 +1109,22 @@
             ])
           );
         });
-        var rest = pool.filter(function (x) {
-          return cur.indexOf(x.id) < 0;
-        });
-        if (rest.length) {
-          var add = h('select', {
+        var addBtn = h(
+          'button',
+          {
             class: 'en-ctl en-ctl--add',
+            type: 'button',
             'aria-label': aria + ' : ajouter',
-            onchange: function () {
-              if (add.value) commit(cur.concat([add.value]), true);
+            'aria-haspopup': 'dialog',
+            onclick: function () {
+              refPicker(addBtn, e, field, pool, cur, function (id) {
+                if (id && cur.indexOf(id) < 0) commit(cur.concat([id]), true);
+              });
             },
-          });
-          add.appendChild(h('option', { value: '', text: cur.length ? '+ Ajouter' : '+ Ajouter…' }));
-          rest.forEach(function (x) {
-            add.appendChild(h('option', { value: x.id, text: x.name }));
-          });
-          wrap.appendChild(add);
-        }
+          },
+          [icon('plus'), cur.length ? 'Ajouter' : 'Ajouter…']
+        );
+        wrap.appendChild(addBtn);
         return wrap;
       }
       if (field.kind === 'multi') {

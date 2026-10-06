@@ -1137,6 +1137,53 @@ button.en-typepill:hover {
   font-size: 13px;
   color: var(--tp-text-muted);
 }
+.en-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.en-ref-row > .en-ctl {
+  flex: 1;
+}
+.en-ref-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.en-ref-btn .en-ref-name,
+.en-ref-btn > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.en-ref-btn.is-empty {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+}
+.en-ref-btn.is-empty:hover {
+  opacity: 0.85;
+}
+.en-ref-act {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--tp-text-muted);
+}
+.en-ref-act:hover {
+  color: var(--en-accent);
+}
+.en-ctl--add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+}
 .en-iconlink {
   flex: none;
   display: inline-flex;
