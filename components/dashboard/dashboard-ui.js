@@ -91,6 +91,7 @@
       draftHtml: '', // capture editor content, kept across section switches
       files: {}, // pending attachments of the capture editor: id → { file, thumb }
       authOk: true,
+      landed: false, // first load decides the landing section once
     };
     var statusTimer = null;
     var reloadTimer = null;
@@ -755,12 +756,46 @@
         }, [h('b', { text: r.name }), h('span', { text: DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end) })]));
       });
       var pct = Math.min(100, Math.round((used / state.capacity) * 100));
+      var next = DM().nextAction(state.rows, today);
+      var sugg = DM().suggestions(state.rows, today, 5);
+      var nowCard = next ? h('section', { class: 'db-now' }, [
+        h('div', { class: 'db-now-k' }, [icon('target-arrow'), document.createTextNode(next.from === 'today' ? ' Prochaine action' : ' Rien de prévu : je suggère')]),
+        h('div', { class: 'db-now-name', text: next.row.name, onclick: function () { openCard(next.row); } }),
+        h('div', { class: 'db-now-meta' }, [
+          next.row.due && next.row.due < today && DM().isOpen(next.row) ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
+          prioBadge(next.row),
+          estChip(next.row),
+          dueChip(next.row),
+        ]),
+        h('div', { class: 'db-now-actions' }, [
+          next.from === 'backlog' ? h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () { plan(next.row, today); } }, [icon('sun'), document.createTextNode('Faire aujourd’hui')]) : null,
+          h('button', { class: 'db-btn', type: 'button', onclick: function () {
+            next.row.dueDone = true;
+            write(DT().complete(t, next.row, state.lists, true), '« ' + next.row.name + ' » terminée');
+            render();
+          } }, [icon('circle-check'), document.createTextNode('Terminer')]),
+          h('button', { class: 'db-btn', type: 'button', onclick: function () { openCard(next.row); } }, [icon('external-link'), document.createTextNode('Ouvrir')]),
+        ]),
+      ]) : null;
+      var suggBox = sugg.length ? h('section', { class: 'db-sugg' }, [
+        h('h3', { class: 'db-sugg-h' }, [icon('bulb'), document.createTextNode(' À planifier · par priorité')]),
+        h('div', { class: 'db-list' }, sugg.map(function (r) {
+          return h('div', { class: 'db-row' }, [
+            h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+            prioBadge(r),
+            estChip(r),
+            h('button', { class: 'db-btn', type: 'button', title: 'Ajouter à aujourd’hui', onclick: function () { plan(r, today); } }, [icon('plus'), document.createTextNode('Aujourd’hui')]),
+          ]);
+        })),
+      ]) : null;
       els.main.appendChild(h('div', { class: 'db-page db-page--wide' }, [
         pageHead('Aujourd’hui', DAYS_FR[new Date().getDay()] + ' ' + TM().formatDay(today),h('div', { class: 'db-load' }, [
           capChip(used),
           h('div', { class: 'db-meter' + (used > state.capacity ? ' is-over' : '') }, [h('div', { class: 'db-meter-fill', style: 'width:' + pct + '%' })]),
         ])),
+        nowCard,
         h('div', { class: 'db-today' }, [h('div', { class: 'db-today-l' }, [focus]), h('div', { class: 'db-today-r' }, [grid])]),
+        suggBox,
       ]));
     }
 
@@ -807,6 +842,11 @@
         if (!root.contains(shell)) { root.innerHTML = ''; root.appendChild(shell); }
         state.lists = res.lists;
         state.rows = res.rows;
+        // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Capture.
+        if (!state.landed) {
+          state.landed = true;
+          if (DM().todayList(state.rows, today).length) state.section = 'today';
+        }
         render();
       }).catch(function (err) {
         root.innerHTML = '';

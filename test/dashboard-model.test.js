@@ -163,6 +163,23 @@ describe('DashboardModel', () => {
     assert.deepEqual(DM.todayList(rows, '2026-10-06').map((r) => r.id), ['l', 't']);
   });
 
+  it('nextAction prefers today\'s list (late first), else the best unplanned task', () => {
+    const rows = [row('t', { due: '2026-10-06', priority: 9 }), row('l', { due: '2026-10-05', priority: 1 }), row('u', { priority: 8 })];
+    assert.deepEqual(DM.nextAction(rows, '2026-10-06'), { row: rows[1], from: 'today' });
+    const none = [row('u1', { priority: 3 }), row('u2', { priority: 8 }), row('done', { dueDone: true })];
+    const n = DM.nextAction(none, '2026-10-06');
+    assert.equal(n.row.id, 'u2');
+    assert.equal(n.from, 'backlog');
+    assert.equal(DM.nextAction([row('d', { dueDone: true })], '2026-10-06'), null);
+  });
+
+  it('suggestions lists the best unplanned work without repeating the next action', () => {
+    const rows = [row('a', { priority: 9 }), row('b', { priority: 7 }), row('c', { priority: 5 }), row('x', { due: '2026-10-06' })];
+    assert.deepEqual(DM.suggestions(rows, '2026-10-06', 5).map((r) => r.id), ['a', 'b', 'c']);
+    const onlyBacklog = [row('a', { priority: 9 }), row('b', { priority: 7 })];
+    assert.deepEqual(DM.suggestions(onlyBacklog, '2026-10-06', 5).map((r) => r.id), ['b']);
+  });
+
   it('timeline stacks blocks from 09:00', () => {
     const tl = DM.timeline([row('a', { estimate: 90 }), row('b', { estimate: 30 })]);
     assert.deepEqual(tl, [

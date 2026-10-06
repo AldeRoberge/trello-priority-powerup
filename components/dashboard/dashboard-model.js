@@ -295,6 +295,25 @@
     return overdue(rows, today).concat(tasksOn(rows, today));
   }
 
+  /**
+   * "What now?": the single best task to do next. Today's list first (late work, then today's);
+   * when nothing is planned, the best unplanned task. { row, from: 'today' | 'backlog' } or null.
+   */
+  function nextAction(rows, today) {
+    var t = todayList(rows, today)[0];
+    if (t) return { row: t, from: 'today' };
+    var u = unplanned(rows)[0];
+    return u ? { row: u, from: 'backlog' } : null;
+  }
+
+  /** Unplanned work worth pulling into today, best first (skips the task `nextAction` already shows). */
+  function suggestions(rows, today, limit) {
+    var next = nextAction(rows, today);
+    return unplanned(rows)
+      .filter(function (r) { return !next || r.id !== next.row.id; })
+      .slice(0, limit > 0 ? limit : 5);
+  }
+
   /** Sequential time blocks from 09:00 for a task list: [{ id, start, end }] in minutes since midnight. */
   function timeline(tasks, dayStart) {
     var at = dayStart == null ? DAY_START : dayStart;
@@ -356,6 +375,8 @@
     weekPlan: weekPlan,
     autoPlan: autoPlan,
     todayList: todayList,
+    nextAction: nextAction,
+    suggestions: suggestions,
     timeline: timeline,
     hhmm: hhmm,
     formatMinutes: formatMinutes,
