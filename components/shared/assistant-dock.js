@@ -32,7 +32,7 @@
 
   function mount(opts) {
     opts = opts || {};
-    var dock = { open: false, mounted: false, height: 340, poll: null, body: null };
+    var dock = { open: false, mounted: false, height: 220, poll: null, body: null };
     try {
       var saved = parseInt(global.localStorage.getItem(HEIGHT_KEY) || global.localStorage.getItem(LEGACY_HEIGHT_KEY), 10);
       if (saved >= MIN_H) dock.height = saved;

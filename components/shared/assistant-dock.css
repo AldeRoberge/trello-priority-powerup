@@ -284,3 +284,25 @@ html[data-color-mode='dark'] .ad-dock .ad-dock-body .agent-msg--user .agent-msg-
 }
 .ad-dock-arrow:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
 .ad-dock-arrow:disabled { opacity: 0.35; cursor: default; }
+
+/* Compact pass: hover controls overlay the line instead of taking grid rows; no stray gaps. */
+.ad-dock .ad-dock-body .agent-msg { position: relative; row-gap: 0; min-height: 0; margin: 0; }
+.ad-dock .ad-dock-body .agent-msg > .agent-msg-feedback,
+.ad-dock .ad-dock-body .agent-msg > .agent-msg-copy,
+.ad-dock .ad-dock-body .agent-msg > .agent-msg-edit,
+.ad-dock .ad-dock-body .agent-msg > .tp-spell-revert {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  grid-column: auto;
+  margin: 0;
+  background: var(--tp-surface);
+  order: 0;
+}
+.ad-dock .ad-dock-body .agent-msg > .agent-msg-copy { right: 56px; }
+.ad-dock .ad-dock-body .agent-msg > .agent-msg-edit { right: 56px; }
+.ad-dock .ad-dock-body .agent-msg-bubble { line-height: 1.4; min-height: 0; }
+.ad-dock .ad-dock-body .agent-messages { padding-top: 2px; padding-bottom: 2px; }
+.ad-dock .ad-dock-body .agent-messages > :first-child { margin-top: auto; }
+.ad-dock .ad-dock-body .agent-messages > * { flex: 0 0 auto; }
+.ad-dock .ad-dock-body .agent-chat-panel { gap: 4px; }
