@@ -716,6 +716,7 @@
         icon('chevron-right'),
         h('h3', { class: 'en-sec-title', text: title }),
       ]);
+        iconName ? h('span', { class: 'en-sec-ico' }, [icon(iconName)]) : null,
       toggle.addEventListener('click', function () {
         var collapsed = !box.classList.contains('is-collapsed');
         box.classList.toggle('is-collapsed', collapsed);
