@@ -4364,6 +4364,33 @@
         scroll.addEventListener('pointerup', onUp);
         scroll.addEventListener('pointercancel', onUp);
       });
+      // Mouse wheel over the timeline zooms between the view modes
+      // (wheel up = zoom in: year > month > week > day). The task list on the
+      // left keeps scrolling rows; shift + wheel still pans sideways.
+      var ZOOM_ORDER = ['year', 'month', 'week', 'day'];
+      var lastWheelZoom = 0;
+      scroll.addEventListener(
+        'wheel',
+        function (ev) {
+          if (ev.shiftKey || !ev.deltaY) return;
+          if (state.splitDrag || state.drag || state.paint) return;
+          ev.preventDefault();
+          var now = Date.now();
+          if (now - lastWheelZoom < 250) return; // one step per wheel notch / trackpad burst
+          var idx = ZOOM_ORDER.indexOf(state.viewMode);
+          if (idx < 0) return;
+          var next = Math.max(
+            0,
+            Math.min(ZOOM_ORDER.length - 1, idx + (ev.deltaY < 0 ? 1 : -1))
+          );
+          if (next === idx) return;
+          lastWheelZoom = now;
+          state.viewMode = ZOOM_ORDER[next];
+          state.scrollToToday = true;
+          render();
+        },
+        { passive: false }
+      );
       // Prevent the browser's native middle-click autoscroll affordance
       // from also kicking in over the timeline.
       scroll.addEventListener('auxclick', function (ev) {
