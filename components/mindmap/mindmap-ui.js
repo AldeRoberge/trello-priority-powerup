@@ -560,9 +560,9 @@
             g.appendChild(ring);
           }
           g.appendChild(s('rect', { class: 'mm-progress-track', x: px, y: by + 11, width: pw, height: 4, rx: 2 }));
-          var fillEl = s('rect', { class: 'mm-progress', x: px, y: by + 11, width: pw * prog / 100, height: 4, rx: 2 });
+          var fillEl = s('rect', { class: 'mm-progress' + (rec.blocked ? ' is-blocked' : ''), x: px, y: by + 11, width: pw * prog / 100, height: 4, rx: 2 });
           g.appendChild(fillEl);
-          var pt = s('text', { class: 'mm-sub', x: x0 + n.w - 12, y: by + 16, 'text-anchor': 'end' });
+          var pt = s('text', { class: 'mm-sub' + (rec.blocked ? ' is-blocked' : ''), x: x0 + n.w - 12, y: by + 16, 'text-anchor': 'end' });
           pt.textContent = Math.round(prog) + '%';
           g.appendChild(pt);
           // drag the slider in place (without moving the card)

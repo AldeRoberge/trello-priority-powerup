@@ -162,6 +162,9 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-progress-track { fill: color-mix(in srgb, var(--tp-text) 14%, transparent); pointer-events: none; }
 .mm-progress { fill: var(--tp-success); pointer-events: none; }
 .mm-progress-hit { fill: transparent; cursor: ew-resize; }
+/* Blocked (paused) card: the bar and the % use the same red as the pause (II) icon. */
+.mm-progress.is-blocked,
+.mm-sub.is-blocked { fill: var(--tp-danger-text, #ae2e24); }
 
 /* Pins (drag from one to another task to link): faint dot that swells and glows on hover */
 .mm-pin { cursor: crosshair; }
