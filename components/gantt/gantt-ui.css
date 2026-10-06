@@ -1397,6 +1397,46 @@ html:has(body.tp-page--gantt) body {
   accent-color: var(--tp-primary, #0c66e4);
 }
 
+.gantt-prog-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name pct' 'range range';
+  align-items: center;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--tp-border, #091e4224);
+}
+
+.gantt-prog-row:last-child {
+  border-bottom: 0;
+}
+
+.gantt-prog-row.is-focus .gantt-prog-name {
+  color: var(--tp-primary, #0c66e4);
+}
+
+.gantt-prog-name {
+  grid-area: name;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-prog-pct {
+  grid-area: pct;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gantt-prog-range {
+  grid-area: range;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--tp-primary, #0c66e4);
+}
+
 /* ---- Toolbar groups: Vue · Période · Affichage · Outils ---- */
 .gantt-toolbar {
   gap: 8px 0;

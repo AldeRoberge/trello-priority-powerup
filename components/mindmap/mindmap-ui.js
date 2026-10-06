@@ -161,11 +161,13 @@
     var gNodes = s('g', { class: 'mm-nodes' });
     var gBox = s('g', { class: 'mm-selbox' }); // bounding box of the multi-selection (behind the wires and cards)
     var gTop = s('g', { class: 'mm-top' }); // rubber-band rectangle
+    var gGuides = s('g', { class: 'mm-guides' }); // alignment guides shown while dragging cards
     var gHandles = s('g', { class: 'mm-handles' }); // grab handles on the two ends of the selected link
     gView.appendChild(gBox);
     gView.appendChild(gEdges);
     gView.appendChild(gNodes);
     gView.appendChild(gHandles);
+    gView.appendChild(gGuides);
     gView.appendChild(gTop);
     svg.appendChild(gView);
     els.canvas.appendChild(svg);
@@ -300,6 +302,9 @@
         title: HD.title(state.hideDone),
         onclick: function () { HD.set(!state.hideDone); },
       }, [icon(HD.icon(state.hideDone)), HD.label(state.hideDone, doneCount)]));
+      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Dézoomer', 'aria-label': 'Dézoomer', onclick: function () { zoomBy(1 / 1.25); } }, [icon('minus')]));
+      kids.push(h('button', { class: 'mm-btn mm-zoom', title: 'Zoom 100 %', onclick: function () { zoomBy(1 / state.view.k); } }, [Math.round(state.view.k * 100) + ' %']));
+      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Zoomer', 'aria-label': 'Zoomer', onclick: function () { zoomBy(1.25); } }, [icon('plus')]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Recentrer', 'aria-label': 'Recentrer', onclick: fit }, [icon('focus-2')]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Réorganiser', 'aria-label': 'Réorganiser', onclick: function () { rebuild({ relayout: true, fresh: true }); } }, [icon('layout-grid')]));
       kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Actualiser', 'aria-label': 'Actualiser', onclick: function () { reload().then(loadGoals); } }, [icon('refresh')]));
@@ -747,9 +752,36 @@
       var x0 = lead.x, y0 = lead.y;
       var ids = {};
       nodes.forEach(function (m) { ids[m.id] = true; });
+      var others = state.graph.nodes.filter(function (m) { return !ids[m.id] && (m.kind === 'task' || m.kind === 'goal'); });
+      var bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity; // bounding box of the dragged group at the start
+      nodes.forEach(function (m) {
+        var b = nodeBox(m);
+        bx0 = Math.min(bx0, m.x - b.w / 2); bx1 = Math.max(bx1, m.x + b.w / 2);
+        by0 = Math.min(by0, m.y - b.h / 2); by1 = Math.max(by1, m.y + b.h / 2);
+      });
       return function (x, y, free) {
         if (state.snap && !free) { x = Math.round(x / GRID) * GRID; y = Math.round(y / GRID) * GRID; }
         var dx = x - x0, dy = y - y0;
+        gGuides.textContent = '';
+        if (!free && others.length) {
+          // smart guides (like Miro / draw.io): snap edges and centres to those of the other cards
+          var tol = 6 / state.view.k;
+          var gx = null, gy = null;
+          var mx = [bx0 + dx, (bx0 + bx1) / 2 + dx, bx1 + dx];
+          var my = [by0 + dy, (by0 + by1) / 2 + dy, by1 + dy];
+          others.forEach(function (o) {
+            var b = nodeBox(o);
+            var ox = [o.x - b.w / 2, o.x, o.x + b.w / 2];
+            var oy = [o.y - b.h / 2, o.y, o.y + b.h / 2];
+            mx.forEach(function (v) { ox.forEach(function (w) { var d = w - v; if (Math.abs(d) <= tol && (!gx || Math.abs(d) < Math.abs(gx.d))) gx = { d: d, at: w }; }); });
+            my.forEach(function (v) { oy.forEach(function (w) { var d = w - v; if (Math.abs(d) <= tol && (!gy || Math.abs(d) < Math.abs(gy.d))) gy = { d: d, at: w }; }); });
+          });
+          if (gx) dx += gx.d;
+          if (gy) dy += gy.d;
+          var top = by0 + dy - 40, bottom = by1 + dy + 40, left = bx0 + dx - 40, right = bx1 + dx + 40;
+          if (gx) gGuides.appendChild(s('line', { class: 'mm-guide', x1: gx.at, x2: gx.at, y1: top, y2: bottom }));
+          if (gy) gGuides.appendChild(s('line', { class: 'mm-guide', y1: gy.at, y2: gy.at, x1: left, x2: right }));
+        }
         origin.forEach(function (o) { o.n.x = o.x + dx; o.n.y = o.y + dy; positionNode(o.n); });
         state.graph.edges.forEach(function (e) { if (ids[e.from] || ids[e.to]) positionEdge(e); });
         drawSelectionBox();
@@ -787,6 +819,7 @@
           rect.removeEventListener('pointermove', move);
           rect.removeEventListener('pointerup', up);
           rect.removeEventListener('pointercancel', up);
+          gGuides.textContent = '';
           if (!moved) select(null);
         }
         rect.addEventListener('pointermove', move);
@@ -866,6 +899,7 @@
           g.removeEventListener('pointermove', move);
           g.removeEventListener('pointerup', up);
           g.removeEventListener('pointercancel', up);
+          gGuides.textContent = '';
           if (!moved) { if (modKey && !state.relink && !state.linkFrom) toggleMulti(n); else onNodeClick(n); }
         }
         g.addEventListener('pointermove', move);
@@ -1957,10 +1991,21 @@
     /* ── Pan / zoom ───────────────────────────────────────────────── */
     function applyView() {
       var v = state.view;
+      var zl = els.bar && els.bar.querySelector('.mm-zoom');
+      if (zl) zl.textContent = Math.round(v.k * 100) + ' %';
       gView.setAttribute('transform', 'translate(' + v.x.toFixed(1) + ',' + v.y.toFixed(1) + ') scale(' + v.k.toFixed(3) + ')');
       // the dot grid pans and zooms with the graph
       els.canvas.style.backgroundSize = (18 * v.k).toFixed(2) + 'px ' + (18 * v.k).toFixed(2) + 'px';
       els.canvas.style.backgroundPosition = v.x.toFixed(1) + 'px ' + v.y.toFixed(1) + 'px';
+    }
+
+    /** Zooms around the centre of the canvas and keeps the percentage in the toolbar current. */
+    function zoomBy(f) {
+      var v = state.view;
+      var k = Math.max(0.1, Math.min(3, v.k * f));
+      var cx = (els.canvas.clientWidth || 800) / 2, cy = (els.canvas.clientHeight || 500) / 2;
+      state.view = { k: k, x: cx - (cx - v.x) * (k / v.k), y: cy - (cy - v.y) * (k / v.k) };
+      applyView();
     }
 
     function fit() {

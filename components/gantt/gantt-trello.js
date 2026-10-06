@@ -766,6 +766,67 @@
   }
 
   /**
+   * Set an arbitrary progress (0-100) on a local / checklist subtask or a card, then persist.
+   * rowMeta is the same shape as setSubtaskDone.
+   */
+  async function setSubtaskProgress(t, rowMeta, percent) {
+    var ct = CT();
+    if (!ct) return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+    var pct = ct.clampProgress(percent);
+
+    if (rowMeta.kind === 'local') {
+      if (!rowMeta.parentCardId || !rowMeta.itemId) {
+        return { ok: false, reason: 'missing-ids' };
+      }
+      var data = await ct.getCardCompletionById(t, rowMeta.parentCardId);
+      await ct.saveCardCompletionById(
+        t,
+        rowMeta.parentCardId,
+        ct.applyItemProgress(data, rowMeta.itemId, pct)
+      );
+      return { ok: true };
+    }
+
+    if (rowMeta.kind === 'checklist') {
+      if (!rowMeta.parentCardId || !rowMeta.parentItemId || !rowMeta.itemId) {
+        return { ok: false, reason: 'missing-ids' };
+      }
+      var checkData = await ct.getCardCompletionById(t, rowMeta.parentCardId);
+      await ct.saveCardCompletionById(
+        t,
+        rowMeta.parentCardId,
+        ct.applyChecklistItemProgress(
+          checkData,
+          rowMeta.parentItemId,
+          rowMeta.itemId,
+          pct
+        )
+      );
+      return { ok: true };
+    }
+
+    if (rowMeta.kind === 'card' && rowMeta.cardId) {
+      var cardId = String(rowMeta.cardId);
+      var cardData = ct.normalizeCompletionData(
+        (await ct.getCardCompletionById(t, cardId)) || { items: [] }
+      );
+      var next =
+        cardData.items && cardData.items.length
+          ? ct.normalizeCompletionData(
+              Object.assign({}, cardData, {
+                items: ct.applyMasterProgress(cardData.items, pct),
+              })
+            )
+          : ct.normalizeCompletionData(Object.assign({}, cardData, { progress: pct }));
+      await ct.saveCardCompletionById(t, cardId, next);
+      return { ok: true };
+    }
+
+    return { ok: false, reason: 'unsupported-kind' };
+  }
+
+  /**
    * Delete a local/checklist subtask, unlink a nested linked card,
    * or archive a top-level board card (closed: true).
    */
@@ -1213,3 +1274,4 @@
   };
 })(typeof window !== 'undefined' ? window : this);
     addSubtask: addSubtask,
+    setSubtaskProgress: setSubtaskProgress,

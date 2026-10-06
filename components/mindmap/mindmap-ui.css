@@ -340,3 +340,7 @@ html[data-color-mode] .tp-page--mindmap {
 
 /* Inline title editor (double-click a card or goal) */
 .mm-title-edit { position: absolute; z-index: 5; box-sizing: border-box; padding: 0 6px; font: inherit; font-weight: 600; color: var(--tp-text); background: var(--tp-input-bg); border: 0; border-radius: 5px; box-shadow: 0 0 0 2px var(--tp-primary); outline: none; }
+
+/* Smart guides while dragging, zoom percentage */
+.mm-guide { stroke: #f06292; stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.mm-zoom { min-width: 52px; font-variant-numeric: tabular-nums; justify-content: center; }

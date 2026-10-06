@@ -2245,8 +2245,105 @@
       openCardField('blocked', row, anchor);
     }
 
+    /** Root node (top-level card) of the tree that contains rowId. */
+    function findRootOf(rowId) {
+      var roots = state.tree || [];
+      for (var i = 0; i < roots.length; i++) {
+        if (model.findNodeById([roots[i]], rowId)) return roots[i];
+      }
+      return null;
+    }
+
+    /**
+     * Progress popover for a whole tree: the root card and every descendant, each with its own
+     * slider. Opens from any row (root or child) and always shows the full parent/children view.
+     */
     function openMiniProgress(row, anchor) {
-      openCardField('progress', row, anchor);
+      if (!row || !anchor) return;
+      var rootNode = findRootOf(row.id);
+      if (!rootNode) return;
+      var focusId = row.id;
+      var rootId = rootNode.id;
+      var body = null;
+      var dragging = false;
+      var queue = Promise.resolve();
+
+      function paint() {
+        if (!body || dragging) return;
+        var current = findRootOf(focusId) || model.findNodeById(state.tree, rootId);
+        if (!current) return;
+        body.textContent = '';
+        model.flattenAll([current]).forEach(function (node) {
+          var line = el(
+            'div',
+            'gantt-prog-row' + (node.id === focusId ? ' is-focus' : '')
+          );
+          line.style.paddingLeft = Math.max(0, node.depth - current.depth) * 14 + 'px';
+          line.appendChild(el('span', 'gantt-prog-name', { text: node.name, title: node.name }));
+          var pctEl = el('span', 'gantt-prog-pct', {
+            text: Math.round(node.progress || 0) + ' %',
+          });
+          var range = el('input', 'gantt-prog-range', {
+            type: 'range',
+            min: '0',
+            max: '100',
+            step: '1',
+          });
+          range.value = String(Math.round(node.progress || 0));
+          range.setAttribute('aria-label', 'Progrès ' + node.name);
+          range.addEventListener('pointerdown', function () {
+            dragging = true;
+          });
+          range.addEventListener('input', function () {
+            pctEl.textContent = range.value + ' %';
+          });
+          range.addEventListener('change', function () {
+            dragging = false;
+            var meta = subtaskMeta(node);
+            var pct = +range.value;
+            queue = queue
+              .then(function () {
+                return ganttTrello.setSubtaskProgress(t, meta, pct);
+              })
+              .then(function (r) {
+                if (!r || !r.ok) {
+                  setStatus('Erreur progrès : ' + ((r && r.reason) || ''), true);
+                  return;
+                }
+                record({
+                  type: 'field',
+                  label: 'Progrès',
+                  targetId: node.cardId || node.parentCardId,
+                  title: node.name,
+                });
+                setStatus('Progrès enregistré');
+                return reload({ quiet: true });
+              })
+              .then(paint, function (err) {
+                setStatus('Erreur progrès : ' + (err && err.message ? err.message : err), true);
+                paint();
+              });
+          });
+          range.addEventListener('pointerup', function () {
+            dragging = false;
+          });
+          line.appendChild(pctEl);
+          line.appendChild(range);
+          body.appendChild(line);
+        });
+      }
+
+      openMiniEditor({
+        anchor: anchor,
+        title: 'Progrès · ' + rootNode.name,
+        hideFull: true,
+        mount: function (bodyEl) {
+          body = bodyEl;
+          bodyEl.classList.add('gantt-prog-tree');
+          paint();
+          return { destroy: function () { body = null; } };
+        },
+      });
     }
 
     function buildDetailIcons(row) {
@@ -2335,11 +2432,17 @@
         slot(
           'is-progress',
           (function () {
-            var span = el('span', 'gantt-progress-text', {
+            var span = el('button', 'gantt-progress-text gantt-progress-text--btn', {
+              type: 'button',
               title: 'Progr\u00e8s ' + localPct + '%',
             });
             span.appendChild(progressRingEl(localPct));
             return span;
+            span.addEventListener('click', function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              openMiniProgress(row, span);
+            });
           })()
         );
         slot('is-due', null);
