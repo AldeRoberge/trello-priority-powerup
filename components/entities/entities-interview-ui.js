@@ -147,16 +147,14 @@
       els.head.appendChild(h('button', { class: 'cp-x cp-x--lg', type: 'button', 'aria-label': 'Fermer', onclick: requestClose }, [icon('x')]));
     }
 
-    function paintThread() {
-      var items = st.stage === 'ask' ? EI().thread(cx()) : [];
-      if (!items.length) return null;
-      return h(
-        'div',
-        { class: 'iv-thread', 'aria-label': 'Réponses données' },
-        items.map(function (it) {
-          return h('button', { class: 'iv-done', type: 'button', title: 'Modifier', onclick: function () { reopen(it.path); } }, [h('em', { text: it.label }), h('span', { text: it.display })]);
-        })
-      );
+    /** Thin bar: answers given out of the questions still to come. */
+    function paintProgress() {
+      if (st.stage !== 'ask') return null;
+      var done = EI().thread(cx()).length;
+      var total = done + EI().remaining(cx());
+      if (!total) return null;
+      var pct = Math.min(100, Math.round((done / total) * 100));
+      return h('div', { class: 'iv-progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, [h('span', { style: 'width:' + pct + '%' })]);
     }
 
     var STATE_WORDS = {
@@ -299,8 +297,7 @@
       var rd = dateHint();
       if (rd) box.appendChild(rd);
       if (st.error) box.appendChild(h('p', { class: 'iv-error', role: 'alert', text: st.error }));
-      var left = st.stage === 'ask' ? EI().remaining(cx()) : 0;
-      var status = st.loading ? 'Je cherche des idées…' : left > 1 && c.kind === 'field' ? 'Encore ' + left + ' questions, Entrée pour garder la suggestion.' : '';
+      var status = st.loading ? 'Je cherche des idées…' : '';
       box.appendChild(h('p', { class: 'iv-status', text: status }));
       return box;
     }
@@ -354,8 +351,8 @@
     function paint() {
       paintHead();
       els.body.textContent = '';
-      var th = paintThread();
-      if (th) els.body.appendChild(th);
+      var pg = paintProgress();
+      if (pg) els.body.appendChild(pg);
       els.body.appendChild(st.stage === 'name' ? paintName() : paintCard());
       els.body.appendChild(paintMap());
       paintFoot();
