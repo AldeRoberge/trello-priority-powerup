@@ -918,10 +918,10 @@
         function (el, close) {
           var search = h('input', { class: 'en-pop-search', type: 'search', placeholder: 'Chercher ou créer…', 'aria-label': 'Chercher ou créer', autocomplete: 'off' });
           var listEl = h('div', { class: 'en-pop-list' });
-          function create(name) {
+          function create(name, typeId) {
             var ne;
             try {
-              ne = EM().createEntity(state.schema, { name: name, types: tid ? [tid] : [] });
+              ne = EM().createEntity(state.schema, { name: name, types: typeId || tid ? [typeId || tid] : [] });
             } catch (err) {
               toast('Création refusée : ' + (err && err.message), 'error');
               return;
@@ -957,6 +957,13 @@
                   create(raw);
                 })
               );
+              if (field.alsoType) {
+                listEl.appendChild(
+                  menuItem('users-group', 'Créer « ' + raw + ' » comme groupe', 'Plusieurs personnes sous un nom', function () {
+                    create(raw, field.alsoType);
+                  })
+                );
+              }
             }
           }
           search.addEventListener('input', fill);
@@ -1467,6 +1474,7 @@
           if (!other) return;
           var via = String(l.via);
           var label = l.inverse && l.inverse !== via ? l.inverse : via.indexOf(' / ') >= 0 ? 'Utilisé comme « ' + via.split(' / ').pop() + ' » par' : '← ' + via;
+          if (l.role) label += ' (' + l.role + ')';
           out.push({ id: 'open-linked:in' + l.other + via, label: cap(label) + ' : ' + other.name, icon: 'corner-down-left', action: function () { openEntity(other.id); } });
         });
       return out;
@@ -1959,6 +1967,8 @@
       if (!comps.length) page.appendChild(h('p', { class: 'en-hint en-hint--lead', text: 'Pas encore de champs : choisissez un type pour en obtenir (ex. Plante : arrosage, santé), ou ajoutez-en.' }));
       var addFields = addFieldsRow(e, !comps.length);
       if (addFields) page.appendChild(addFields);
+      var people = peopleSection(e);
+      if (people) page.appendChild(people);
       page.appendChild(linksSection(e));
       var ctx = contextSection(e);
       if (ctx) page.appendChild(ctx);
@@ -2060,10 +2070,109 @@
       return section('Contexte', h('div', { class: 'en-set' }, rows), null, null, sectionIcon('contexte'));
     }
 
+    /** The schema type id of a library type (installed on demand), or '' when the library cannot provide it. */
+    function libraryTypeId(presetId) {
+      var EL = global.EntitiesLibrary;
+      if (!EL) return '';
+      var have = EL.installedAs(state.schema, presetId);
+      if (have) return have.id;
+      var r = EL.install(state.schema, presetId);
+      if (!r || r.error) return '';
+      state.schema = r.schema;
+      scheduleSave();
+      return (r.typeIds && r.typeIds[presetId]) || presetId;
+    }
+
+    /** Sets the roles a person holds here ([] = just listed, null = removed): one relation per role, the same person may hold several. */
+    function setPersonRoles(spec, toId, roles) {
+      applyEntity(
+        function (cur) {
+          var next = cur;
+          cur.relations.forEach(function (r) {
+            if (r.to === toId && EM().normKey(r.type) === EM().normKey(spec.rel)) next = EM().removeRelation(next, r.type, toId, undefined, r.role);
+          });
+          if (roles === null) return next; // roles === null: take the person out
+          (roles.length ? roles : ['']).forEach(function (role) {
+            next = EM().addRelation(next, spec.rel, toId, undefined, role);
+          });
+          return next;
+        },
+        { rebuild: true }
+      );
+    }
+
+    /** "Participants" of an event / "Membres" of a group: people with their role, added by search or created on the spot. */
+    function peopleSection(e) {
+      var spec = EM().peopleSpec(state.schema, e);
+      if (!spec) return null;
+      var order = [];
+      var roles = {};
+      EM().peopleRelations(state.schema, e).forEach(function (r) {
+        if (!roles[r.to]) {
+          roles[r.to] = [];
+          order.push(r.to);
+        }
+        if (r.role) roles[r.to].push(r.role);
+      });
+      var known = [];
+      state.entities.forEach(function (x) {
+        (x.relations || []).forEach(function (r) {
+          if (r.role && known.indexOf(r.role) < 0) known.push(r.role);
+        });
+      });
+      var roleList = h('datalist', { id: 'en-roles' }, known.map(function (r) { return h('option', { value: r }); }));
+      var rows = [roleList];
+      order.forEach(function (toId) {
+        var other = EM().findById(state.entities, toId);
+        var current = roles[toId].join(', ');
+        var input = h('input', { class: 'en-people-role', type: 'text', value: current, placeholder: 'Rôle…', 'aria-label': 'Rôle de ' + (other ? other.name : ''), list: 'en-roles', autocomplete: 'off' });
+        input.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter') input.blur();
+        });
+        input.addEventListener('change', function () {
+          if (input.value.trim() === current) return;
+          setPersonRoles(
+            spec,
+            toId,
+            input.value
+              .split(',')
+              .map(function (s) { return s.trim(); })
+              .filter(Boolean)
+          );
+        });
+        rows.push(
+          h('div', { class: 'en-prop en-prop--link en-prop--people' }, [
+            h('span', { class: 'en-prop-label' }, [input]),
+            h('div', { class: 'en-prop-value' }, [other ? entityChip(other) : h('span', { class: 'en-hint', text: '(supprimée)' })]),
+            h('span', { class: 'en-prop-meta' }, [
+              h('button', { class: 'en-reset', type: 'button', title: 'Retirer', 'aria-label': 'Retirer ' + (other ? other.name : ''), onclick: function (ev) { ev.stopPropagation(); setPersonRoles(spec, toId, null); } }, [icon('x')]),
+            ]),
+          ])
+        );
+      });
+      var addBtn = h('button', { class: 'en-set-add', type: 'button', 'aria-haspopup': 'dialog' }, [icon('plus'), spec.add]);
+      addBtn.addEventListener('click', function () {
+        var personType = libraryTypeId('personne');
+        var groupType = libraryTypeId('groupe');
+        var pool = state.entities.filter(function (x) {
+          if (x.id === e.id) return false;
+          var ns = EM().naturesOf(state.schema, x);
+          return ns.indexOf('agent') >= 0 || ns.indexOf('social') >= 0;
+        });
+        refPicker(addBtn, e, { refTypes: personType ? [personType] : [], alsoType: groupType }, pool, order, function (id) {
+          setPersonRoles(spec, id, []);
+        });
+      });
+      rows.push(addBtn);
+      return section(spec.title, h('div', { class: 'en-set' }, rows), null, null, 'users');
+    }
+
     /** Free relations ("situé dans", "fait de"…) and the ones that point here, as a list with an inline "add". */
     function linksSection(e) {
       var rows = [];
+      var shownAsPeople = EM().peopleRelations(state.schema, e);
       e.relations.forEach(function (r) {
+        if (shownAsPeople.indexOf(r) >= 0) return;
         var other = EM().findById(state.entities, r.to);
         rows.push(
           h('div', { class: 'en-prop en-prop--link' }, [
@@ -2102,6 +2211,7 @@
           if (!other) return;
           var via = String(l.via);
           var label = l.inverse && l.inverse !== via ? l.inverse : via.indexOf(' / ') >= 0 ? 'Utilisé comme « ' + via.split(' / ').pop() + ' » par' : '← ' + via;
+          if (l.role) label += ' (' + l.role + ')';
           rows.push(
             h('div', { class: 'en-prop en-prop--link is-in' }, [
               h('span', { class: 'en-prop-label', text: cap(label) }),

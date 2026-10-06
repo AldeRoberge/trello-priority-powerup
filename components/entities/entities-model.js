@@ -49,6 +49,7 @@
   var MAX_ENTITIES = 500;
   var MAX_RELATIONS = 30;
   var MAX_REL_TYPE = 40;
+  var MAX_ROLE = 60;
   var MAX_CHOICES = 20;
   var MAX_HISTORY = 40;
   var MAX_PROMPT_CHARS = 2400;
@@ -779,14 +780,15 @@
     (Array.isArray(raw.relations) ? raw.relations : []).forEach(function (r) {
       if (!r || typeof r.to !== 'string' || !r.to) return;
       var type = str(r.type, MAX_REL_TYPE) || 'lié à';
+      var role = str(r.role, MAX_ROLE);
       if (
         relations.some(function (x) {
-          return x.to === r.to && normKey(x.type) === normKey(type);
+          return x.to === r.to && normKey(x.type) === normKey(type) && normKey(x.role || '') === normKey(role);
         })
       ) {
         return;
       }
-      relations.push({ type: type, to: r.to });
+      relations.push(role ? { type: type, to: r.to, role: role } : { type: type, to: r.to });
     });
     var history = (Array.isArray(raw.history) ? raw.history : [])
       .map(normalizeHistoryEntry)
@@ -1121,29 +1123,39 @@
   }
 
   // ---------------------------------------------------------------- 5 relations
-  function addRelation(entity, type, toId, opts) {
+  /** A relation may carry a `role` ("Ingénieur" for a participant of an event): the same person can hold several. */
+  function sameRelation(r, type, toId, role) {
+    return r.to === toId && normKey(r.type) === normKey(type) && normKey(r.role || '') === normKey(role || '');
+  }
+
+  function relationRecord(type, toId, role) {
+    return role ? { type: type, to: toId, role: role } : { type: type, to: toId };
+  }
+
+  function addRelation(entity, type, toId, opts, role) {
     var t = str(type, MAX_REL_TYPE) || 'lié à';
+    var ro = str(role, MAX_ROLE);
     if (!toId || toId === entity.id) return entity;
     var exists = entity.relations.some(function (r) {
-      return r.to === toId && normKey(r.type) === normKey(t);
+      return sameRelation(r, t, toId, ro);
     });
     if (exists || entity.relations.length >= MAX_RELATIONS) return entity;
     var next = clone(entity);
-    next.relations.push({ type: t, to: toId });
-    pushHistory(next, { op: 'relate', after: { type: t, to: toId } }, opts);
+    next.relations.push(relationRecord(t, toId, ro));
+    pushHistory(next, { op: 'relate', after: relationRecord(t, toId, ro) }, opts);
     return next;
   }
 
-  function removeRelation(entity, type, toId, opts) {
+  function removeRelation(entity, type, toId, opts, role) {
     var hit = entity.relations.filter(function (r) {
-      return r.to === toId && normKey(r.type) === normKey(type);
+      return sameRelation(r, type, toId, str(role, MAX_ROLE));
     })[0];
     if (!hit) return entity;
     var next = clone(entity);
     next.relations = next.relations.filter(function (r) {
-      return !(r.to === hit.to && r.type === hit.type);
+      return r !== hit && !(r.to === hit.to && r.type === hit.type && (r.role || '') === (hit.role || ''));
     });
-    pushHistory(next, { op: 'unrelate', before: { type: hit.type, to: hit.to } }, opts);
+    pushHistory(next, { op: 'unrelate', before: relationRecord(hit.type, hit.to, hit.role) }, opts);
     return next;
   }
 
@@ -1154,13 +1166,13 @@
     var self = findById(entities, id);
     if (!self) return out;
     self.relations.forEach(function (r) {
-      out.push({ dir: 'out', via: r.type, other: r.to });
+      out.push({ dir: 'out', via: r.type, other: r.to, role: r.role || '' });
     });
     entities.forEach(function (e) {
       if (e.id === id) return;
       if (e.base === id) out.push({ dir: 'in', via: 'variante de', other: e.id });
       e.relations.forEach(function (r) {
-        if (r.to === id) out.push({ dir: 'in', via: r.type, inverse: inverseLabel(r.type), other: e.id });
+        if (r.to === id) out.push({ dir: 'in', via: r.type, inverse: inverseLabel(r.type), other: e.id, role: r.role || '' });
       });
       Object.keys(e.data).forEach(function (cid) {
         Object.keys(e.data[cid]).forEach(function (key) {
@@ -1208,7 +1220,7 @@
       // variants of the deleted archetype keep what they inherited (it becomes their own)
       if (cur.base === id) cur = detachEntity(entities, cur, opts);
       cur.relations.forEach(function (r) {
-        if (r.to === id) cur = removeRelation(cur, r.type, id, opts);
+        if (r.to === id) cur = removeRelation(cur, r.type, id, opts, r.role);
       });
       Object.keys(cur.data).forEach(function (cid) {
         Object.keys(cur.data[cid]).forEach(function (key) {
@@ -1251,6 +1263,7 @@
     { id: 'made-by', name: 'fabriqué par', inverse: 'a fabriqué', category: 'production', to: ['agent', 'social'], aliases: ['créé par', 'produit par', 'made by'] },
     { id: 'owned-by', name: 'appartient à', inverse: 'possède', category: 'social', to: ['agent', 'social'], aliases: ['propriété de', 'owned by'] },
     { id: 'member-of', name: 'membre de', inverse: 'a pour membre', category: 'social', from: ['agent', 'social'], to: ['social', 'agent'], aliases: ['member of'] },
+    { id: 'participates-in', name: 'participe à', inverse: 'a pour participant', category: 'social', from: ['agent', 'social'], to: ['event'], aliases: ['invité à', 'participates in'], inverseAliases: ['a pour invité', 'participants'] },
     { id: 'works-for', name: 'travaille pour', inverse: 'emploie', category: 'social', from: ['agent'], to: ['social', 'agent'], aliases: ['works for', 'travaille chez'], inverseAliases: ['employs'] },
     { id: 'instance-of', name: 'instance de', inverse: 'a pour instance', category: 'taxonomic', to: ['abstract', 'social'], aliases: ['exemple de', 'instance of'], inverseAliases: ['a pour exemple'] },
     { id: 'grounded-in', name: 'ancré dans', inverse: 'ancre', category: 'grounding', from: ['abstract', 'social'], aliases: ['basé sur', 'grounded in'] },
@@ -1321,6 +1334,27 @@
       }
     });
     return specific.concat(generic).concat([relationById('related')]);
+  }
+
+  /**
+   * The people an entity gathers, when it is the kind of thing that gathers some: the participants of an event
+   * (each with a role: Ingénieur, Vidéaste) or the members of a group or an organization.
+   * @returns {{kind:'event'|'group', rel:string, title:string, add:string}|null}
+   */
+  function peopleSpec(schema, entity) {
+    var closure = typeClosure(schema, (entity && entity.types) || []);
+    if (closure.indexOf('groupe') >= 0 || closure.indexOf('organisation') >= 0) return { kind: 'group', rel: 'a pour membre', title: 'Membres', add: 'Ajouter un membre' };
+    if (naturesOf(schema, entity).indexOf('event') >= 0) return { kind: 'event', rel: 'a pour participant', title: 'Participants', add: 'Ajouter un participant' };
+    return null;
+  }
+
+  /** Relations of an entity that peopleSpec lists (they are shown there, not in the general links). */
+  function peopleRelations(schema, entity) {
+    var spec = peopleSpec(schema, entity);
+    if (!spec) return [];
+    return (entity.relations || []).filter(function (r) {
+      return normKey(r.type) === normKey(spec.rel);
+    });
   }
 
   /**
@@ -1572,10 +1606,10 @@
         next = setComponents(schema, entity, h.before, opts);
         break;
       case 'relate':
-        next = removeRelation(entity, h.after.type, h.after.to, opts);
+        next = removeRelation(entity, h.after.type, h.after.to, opts, h.after.role);
         break;
       case 'unrelate':
-        next = addRelation(entity, h.before.type, h.before.to, opts);
+        next = addRelation(entity, h.before.type, h.before.to, opts, h.before.role);
         break;
       default:
         return entity;
@@ -1601,7 +1635,7 @@
     }
     function relName(r) {
       var e = findById(entities, r.to);
-      return r.type + ' ' + (e ? e.name : '?');
+      return r.type + ' ' + (e ? e.name : '?') + (r.role ? ' (' + r.role + ')' : '');
     }
     var prefix = h.undoOf ? 'Annulé : ' : '';
     switch (h.op) {
@@ -1860,7 +1894,7 @@
     });
     entity.relations.forEach(function (r) {
       var o = findById(entities, r.to);
-      parts.push(r.type + ': ' + (o ? o.name : '?'));
+      parts.push(r.type + ': ' + (o ? o.name : '?') + (r.role ? ' (' + r.role + ')' : ''));
     });
     var containers = pathOf(schema, entities, entity.id).slice(0, -1);
     if (containers.length) {
@@ -1942,6 +1976,8 @@
     removeType: removeType,
     componentIdsOf: componentIdsOf,
     componentFits: componentFits,
+    peopleSpec: peopleSpec,
+    peopleRelations: peopleRelations,
     COMPONENT_NATURES: COMPONENT_NATURES,
     archetypeDefaults: archetypeDefaults,
     setComponents: setComponents,

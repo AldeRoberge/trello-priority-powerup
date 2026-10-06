@@ -938,6 +938,27 @@ button.en-typepill:hover {
   color: var(--tp-danger-text);
   background: var(--en-fill);
 }
+.en-people-role {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--tp-text-subtle);
+  font: inherit;
+}
+.en-people-role::placeholder {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+}
+.en-people-role:hover::placeholder,
+.en-people-role:focus::placeholder {
+  opacity: 0.8;
+}
+.en-people-role:focus {
+  outline: none;
+  color: var(--tp-text);
+}
 .en-prov {
   display: inline-flex;
   align-items: center;

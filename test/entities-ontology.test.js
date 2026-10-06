@@ -581,6 +581,30 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       assert.deepEqual(M.componentIdsOf(s, jonny), ['personne']);
     });
 
+    it('an event lists its participants with roles; a group lists its members', () => {
+      const s = M.normalizeSchema({
+        types: [
+          { id: 'evenement', name: 'Événement', nature: 'event' },
+          { id: 'personne', name: 'Personne', nature: 'agent' },
+          { id: 'groupe', name: 'Groupe de personnes', nature: 'social' },
+        ],
+      });
+      let ev = M.createEntity(s, { name: 'Tournage', types: ['evenement'] });
+      const jonny = M.createEntity(s, { name: 'Jonny', types: ['personne'] });
+      assert.equal(M.peopleSpec(s, ev).rel, 'a pour participant');
+      assert.equal(M.peopleSpec(s, M.createEntity(s, { name: 'Équipe', types: ['groupe'] })).rel, 'a pour membre');
+      assert.equal(M.peopleSpec(s, jonny), null);
+      ev = M.addRelation(ev, 'a pour participant', jonny.id, undefined, 'Ingénieur');
+      ev = M.addRelation(ev, 'a pour participant', jonny.id, undefined, 'Vidéaste');
+      ev = M.addRelation(ev, 'a pour participant', jonny.id, undefined, 'ingénieur'); // same role: no duplicate
+      assert.deepEqual(ev.relations.map((r) => r.role), ['Ingénieur', 'Vidéaste']);
+      assert.equal(M.peopleRelations(s, ev).length, 2);
+      const back = M.linksOf(s, [ev, jonny], jonny.id).filter((l) => l.dir === 'in');
+      assert.deepEqual(back.map((l) => [l.inverse, l.role]), [['participe à', 'Ingénieur'], ['participe à', 'Vidéaste']]);
+      ev = M.removeRelation(ev, 'a pour participant', jonny.id, undefined, 'Ingénieur');
+      assert.deepEqual(ev.relations.map((r) => r.role), ['Vidéaste']);
+    });
+
     it('an entity can carry extra components, with history and undo', () => {
       const s = plantSchema();
       let e = M.createEntity(s, { name: 'Ficus', types: ['plante'] });
