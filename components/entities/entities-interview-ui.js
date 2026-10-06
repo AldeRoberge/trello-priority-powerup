@@ -8,6 +8,11 @@
  * Usage: EntitiesInterviewUI.open({ t?, schema, entities, initialText?, initialTypes?, onDone(result), onClose? })
  *   result = { schema, entities, created, rootId, again, types }   (same as EntitiesComposerUI)
  *
+ * REALITY MAP: as soon as the name is typed, EntitiesRealityAI builds in the background the map of what defines the
+ * thing (contents, maker, parent company...) with parallel branch agents and a verifying orchestrator. The "Carte"
+ * panel shows it growing; confident and verified nodes are built with the entity, the others wait for a click, any can
+ * be switched off. The map never edits the answers: it is applied on top of the draft when the entity is created.
+ *
  * Keys: Enter validate | ↑ ↓ choose | 1-9 pick (empty field) | Backspace on empty field: previous question |
  *       Alt+→ skip | Ctrl+Enter create now | Esc close
  *
@@ -24,6 +29,9 @@
   }
   function EI() {
     return global.EntitiesInterview;
+  }
+  function ER() {
+    return global.EntitiesReality;
   }
 
   /* ── 1. Helpers ──────────────────────────────────────────────────── */
@@ -75,6 +83,7 @@
       loading: false,
       confirmClose: false,
       seq: 0,
+      reality: { plan: null, state: 'idle', excluded: {}, accepted: {}, open: true, run: null, hints: null },
     };
     var opener = document.activeElement;
     var timer = null;
@@ -94,6 +103,18 @@
     }
     function cx() {
       return { schema: st.schema, entities: pool(), draft: st.draft, hints: st.hints, now: new Date(), library: global.EntitiesLibrary };
+    }
+    /** The draft, its answers and the map applied on top: what is really created (see EntitiesReality.build). */
+    function overlay() {
+      var base = { schema: st.schema, draft: st.draft, extras: st.extras, reused: [] };
+      var r = st.reality;
+      if (!r.plan || !ER() || !st.draft) return base;
+      try {
+        var b = ER().build({ schema: st.schema, entities: pool(), draft: st.draft, library: global.EntitiesLibrary }, r.plan, r);
+        return { schema: b.schema, draft: b.draft, extras: st.extras.concat(b.extras), reused: b.reused };
+      } catch (e) {
+        return base;
+      }
     }
     function snapshot() {
       st.history.push({ schema: clone(st.schema), draft: clone(st.draft), extras: clone(st.extras), hints: st.hints, card: st.card, stage: st.stage });
@@ -136,6 +157,68 @@
           return h('button', { class: 'iv-done', type: 'button', title: 'Modifier', onclick: function () { reopen(it.path); } }, [h('em', { text: it.label }), h('span', { text: it.display })]);
         })
       );
+    }
+
+    var STATE_WORDS = {
+      planning: 'Je cherche ce qui définit cette chose…',
+      exploring: 'J’explore plusieurs pistes en même temps…',
+      verifying: 'Je vérifie la carte…',
+    };
+
+    function nodeAction(row) {
+      var r = st.reality;
+      if (row.status === 'on') r.excluded[row.ref] = true;
+      else if (row.status === 'off') delete r.excluded[row.ref];
+      else r.accepted[row.ref] = true;
+      if (st.card && st.card.kind === 'done') paint();
+      else repaintMap();
+    }
+
+    function paintMap() {
+      var r = st.reality;
+      var rows = r.plan && ER() ? ER().tree(r.plan, { schema: st.schema, entities: pool(), library: global.EntitiesLibrary }, r) : [];
+      var working = !!STATE_WORDS[r.state];
+      if (st.stage !== 'ask' || (!rows.length && !working)) return h('div', { class: 'iv-map iv-map--empty' });
+      var on = rows.filter(function (x) { return x.status === 'on'; }).length;
+      var wait = rows.filter(function (x) { return x.status === 'suggested' || x.status === 'pending'; }).length;
+      var status = working ? STATE_WORDS[r.state] : on + ' ajouté' + (on > 1 ? 's' : '') + (wait ? ', ' + wait + ' à confirmer' : '');
+      var head = h('div', { class: 'iv-map-head' }, [
+        h('button', { class: 'iv-map-toggle', type: 'button', 'aria-expanded': r.open ? 'true' : 'false', onclick: function () { r.open = !r.open; repaintMap(); } }, [
+          icon(working ? 'loader-2' : 'sitemap'),
+          h('strong', { text: 'Carte' }),
+          h('span', { text: status }),
+          icon(r.open ? 'chevron-up' : 'chevron-down'),
+        ]),
+        working ? h('button', { class: 'cp-link', type: 'button', title: 'Arrêter la recherche', onclick: function () { stopReality(); repaintMap(); } }, ['Arrêter']) : null,
+      ]);
+      var box = h('div', { class: 'iv-map' + (working ? ' iv-map--busy' : '') }, [head]);
+      if (!r.open || !rows.length) return box;
+      var list = h('ul', { class: 'iv-map-list' });
+      rows.forEach(function (row) {
+        var verb = row.status === 'on' ? 'Retirer' : row.status === 'off' ? 'Remettre' : 'Ajouter';
+        list.appendChild(
+          h('li', { class: 'iv-node iv-node--' + row.status, style: '--depth:' + (row.depth - 1) }, [
+            icon(row.icon || 'stack-2'),
+            h('span', { class: 'iv-node-name', text: row.name }),
+            row.typeName ? h('em', { text: row.typeName }) : null,
+            row.via ? h('small', { text: row.via }) : null,
+            row.existing ? h('small', { class: 'iv-node-has', text: 'existe déjà' }) : null,
+            row.working ? h('span', { class: 'iv-node-spin', title: 'J’explore cette piste' }, [icon('loader-2')]) : null,
+            row.source === 'web' ? h('span', { class: 'iv-src', title: 'Trouvé sur le web' }, [icon('world')]) : null,
+            row.verified ? h('span', { class: 'iv-src', title: 'Vérifié' }, [icon('shield-check')]) : null,
+            h('button', { class: 'iv-node-btn', type: 'button', title: verb, 'aria-label': verb + ' ' + row.name, onclick: function () { nodeAction(row); } }, [
+              icon(row.status === 'on' ? 'check' : row.status === 'off' ? 'arrow-back-up' : 'plus'),
+            ]),
+          ])
+        );
+      });
+      box.appendChild(list);
+      return box;
+    }
+
+    function repaintMap() {
+      var old = els.body.querySelector('.iv-map');
+      if (old) old.parentNode.replaceChild(paintMap(), old);
     }
 
     function paintOptions(card) {
@@ -183,7 +266,8 @@
         box.appendChild(
           h('p', { class: 'cp-hint', text: th.length ? th.map(function (x) { return x.label + ' : ' + x.display; }).join(' · ') : 'Vous pourrez compléter la fiche plus tard.' })
         );
-        if (st.extras.length) box.appendChild(h('p', { class: 'cp-hint', text: 'Sera aussi créé : ' + EI().reachable(st.draft.id, [st.draft].concat(st.extras)).slice(1).map(function (d) { return d.name; }).join(', ') + '.' }));
+        var also = allDrafts().slice(1).map(function (d) { return d.name; });
+        if (also.length) box.appendChild(h('p', { class: 'cp-hint', text: 'Sera aussi créé : ' + also.join(', ') + '.' }));
       } else {
         var opts = paintOptions(c);
         if (opts) box.appendChild(opts);
@@ -273,6 +357,7 @@
       var th = paintThread();
       if (th) els.body.appendChild(th);
       els.body.appendChild(st.stage === 'name' ? paintName() : paintCard());
+      els.body.appendChild(paintMap());
       paintFoot();
       if (input) {
         input.focus();
@@ -314,6 +399,7 @@
         global.EntitiesInterviewAI.enrich(ctx.t, cx()).then(function (hints) {
           if (mine !== st.seq || !els.overlay.parentNode) return;
           st.loading = false;
+          hints = withRealityHints(hints);
           var changed = JSON.stringify(hints) !== JSON.stringify(st.hints);
           st.hints = hints;
           if (changed && st.card && !st.text && !st.picked && st.card.kind !== 'sub') {
@@ -324,6 +410,52 @@
           } else refreshStatus();
         });
       }, 350);
+    }
+
+    /** The model's hints plus what the map knows (the genre, the maker as brand): the map's ideas come first. */
+    function withRealityHints(hints) {
+      var rh = st.reality.hints;
+      if (!rh) return hints;
+      var out = global.EntitiesInterviewAI ? global.EntitiesInterviewAI.merge(hints, rh) : hints;
+      Object.keys(rh.candidates).forEach(function (path) {
+        var rest = ((hints.candidates || {})[path] || []).filter(function (c) {
+          return !rh.candidates[path].some(function (x) { return EM().normKey(x.label) === EM().normKey(c.label); });
+        });
+        out.candidates[path] = rh.candidates[path].concat(rest);
+      });
+      return out;
+    }
+
+    function startReality() {
+      stopReality();
+      var RAI = global.EntitiesRealityAI;
+      if (!ctx.t || !RAI || !st.draft || !st.draft.name) return;
+      var r = (st.reality = { plan: null, state: 'planning', excluded: {}, accepted: {}, open: true, run: null, hints: null });
+      r.run = RAI.run(
+        ctx.t,
+        { schema: st.schema, entities: pool(), name: st.draft.name, types: st.draft.types, library: global.EntitiesLibrary, now: new Date() },
+        {
+          onUpdate: function (plan, state) {
+            if (st.reality !== r || !els.overlay.parentNode) return;
+            r.plan = plan;
+            r.state = state;
+            r.hints = ER().hintsFromPlan(plan, cx());
+            var next = withRealityHints(st.hints);
+            var changed = JSON.stringify(next) !== JSON.stringify(st.hints);
+            st.hints = next;
+            if (changed && st.card && !st.text && !st.picked && !st.card.parent && st.card.kind !== 'done') {
+              setCard(EI().next(cx()));
+              paint();
+            } else if (st.card && st.card.kind === 'done') paint();
+            else repaintMap();
+          },
+        }
+      );
+    }
+
+    function stopReality() {
+      if (st.reality.run) st.reality.run.cancel();
+      st.reality.state = st.reality.plan ? 'done' : 'idle';
     }
 
     function refreshStatus() {
@@ -349,6 +481,7 @@
       st.stage = 'ask';
       st.text = '';
       advance();
+      startReality();
     }
 
     function apply(res) {
@@ -412,17 +545,19 @@
     }
 
     function allDrafts() {
-      return EI().reachable(st.draft.id, [st.draft].concat(st.extras));
+      var o = overlay();
+      return EI().reachable(o.draft.id, [o.draft].concat(o.extras));
     }
 
     function finish(again) {
       if (!st.draft || !st.draft.name) return;
-      var r = EC().finalize(st.schema, st.entities, allDrafts());
+      var o = overlay();
+      var r = EC().finalize(o.schema, st.entities, allDrafts());
       if (r.skipped.length) {
         st.error = 'Impossible de créer : un nom manque ou existe déjà. Ouvrez « Tout voir » pour corriger.';
         return paint();
       }
-      var res = { schema: st.schema, entities: r.entities, created: r.created, rootId: st.draft.id, again: !!again, types: st.draft.types.slice() };
+      var res = { schema: o.schema, entities: r.entities, created: r.created, rootId: st.draft.id, again: !!again, types: o.draft.types.slice() };
       teardown();
       if (ctx.onDone) ctx.onDone(res);
     }
@@ -431,10 +566,11 @@
     function seeAll() {
       if (!global.EntitiesComposerUI || !st.draft) return;
       var drafts = allDrafts();
+      var seeSchema = overlay().schema;
       teardown();
       global.EntitiesComposerUI.open({
         t: ctx.t,
-        schema: st.schema,
+        schema: seeSchema,
         entities: st.entities,
         initialDrafts: drafts,
         onDone: ctx.onDone,
@@ -451,6 +587,7 @@
     function teardown() {
       clearTimeout(timer);
       st.seq++;
+      stopReality();
       document.removeEventListener('keydown', onKey, true);
       if (els.overlay.parentNode) els.overlay.parentNode.removeChild(els.overlay);
       try {

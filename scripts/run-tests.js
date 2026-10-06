@@ -75,6 +75,8 @@ const UNIT_FILES = [
   'entities-composer.test.js',
   'entities-interview.test.js',
   'entities-interview-ai.test.js',
+  'entities-reality.test.js',
+  'entities-reality-ai.test.js',
   'quick-parse-when.test.js',
   'entities-archetype.test.js',
   'entities-ontology.test.js',

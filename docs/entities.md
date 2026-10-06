@@ -45,6 +45,18 @@ Logique pure et testée : `components/entities/entities-composer.js` (`readInten
 
 Dans l'éditeur de **Schéma**, chaque archétype a une section « Valeurs par défaut » (champs hors liens). Sur la page d'une entité, un champ affiche sa provenance (« par défaut », « hérité », ou ↩ quand il a été modifié) et « Ajouter des champs » ajoute un composant à cette entité seulement. Un champ « lien vers une entité » propose aussi les entités des sous-types (un Bâtiment est un Lieu).
 
+## Carte du réel (construction automatique)
+
+Dès que le nom est tapé dans l’entrevue, l’assistant construit en arrière-plan la **carte de ce qui définit la chose**. Exemple : « Powerade » devient une bouteille (Produit) avec un composant *Contenant* dont le *Contenu* est « Powerade (boisson) », une marque « Powerade » comme *Fabriqué par*, elle-même *fait partie de* « The Coca-Cola Company ». Le panneau **Carte** (sous la question) montre la carte qui se remplit.
+
+- **Planificateur** : un premier appel donne le genre, les composants que la chose porte (identité, physique, temps, propriété, contenu, état : composants *Contenant*, *Identification*, *État*, *Provenance*, *Acquisition*…) et le premier cercle de choses liées, chacune avec une confiance.
+- **Agents de branche** : une fois par chose qui mérite d’être creusée (une marque, ses ingrédients), un agent l’explore **en parallèle** (4 à la fois, jusqu’à 2 cercles, 24 éléments au plus), avec les résultats web du Worker quand il peut chercher.
+- **Orchestrateur** : après chaque vague, un appel vérifie la carte fusionnée (inventions, doublons, mauvais liens) et rend des verdicts.
+- **Confiance** : un élément est créé tout seul s’il est vérifié et à 0,75 ou plus (ou à 0,9 et plus); entre 0,5 et là, il est seulement **proposé** (bouton +); sous 0,5, il est écarté. Chaque élément peut être retiré ou remis. Une entité qui existe déjà (nom ou alias) est réutilisée et jamais modifiée; les réponses de l’utilisateur ne sont jamais écrasées.
+- La carte ne touche pas aux réponses : elle est appliquée au moment de créer (et passée au composeur par « Tout voir »). Le genre et la marque trouvés alimentent aussi les suggestions des questions.
+
+Logique pure : `entities-reality.js` (`normalizeBranch`, `addBranch`, `applyVerdicts`, `statusOf`, `build`, `tree`); appels : `entities-reality-ai.js` (`run`); interface : panneau dans `entities-interview-ui.js`. Tests : `test/entities-reality.test.js`, `test/entities-reality-ai.test.js`.
+
 ## Variantes (une entité comme modèle)
 
 En plus de l'archétype (le type), une entité peut être une **variante** d'une autre entité (son modèle). Elle hérite de toutes ses valeurs et ne stocke que ses **surcharges** :

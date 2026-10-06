@@ -262,5 +262,7 @@
     buildMessages: buildMessages,
     parse: parse,
     apply: apply,
+    coerce: coerce,
+    findEntityByName: findEntityByName,
   };
 })(typeof window !== 'undefined' ? window : this);
