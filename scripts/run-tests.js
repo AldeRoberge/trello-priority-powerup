@@ -80,6 +80,7 @@ const UNIT_FILES = [
   'entities-ontology.test.js',
   'agent-entities.test.js',
   'dashboard-model.test.js',
+  'dashboard-trello.test.js',
 ];
 
 function listTests() {

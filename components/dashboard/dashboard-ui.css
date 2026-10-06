@@ -281,5 +281,8 @@ div.db-capture { resize: none; overflow: auto; max-height: 50vh; white-space: pr
 .db-sugg-h { margin: 0; padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--tp-text-muted); border-bottom: 1px solid var(--tp-border); display: flex; align-items: center; gap: 4px; }
 .db-sugg .db-row:last-child { border-bottom: 0; }
 
+.db-banner { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 1px var(--tp-border-strong); }
+.db-banner > span { flex: 1; }
+.db-banner > .ti { color: var(--tp-text-muted); }
 button.db-prio { border: 0; font-family: inherit; cursor: pointer; }
 .db-prio--btn:hover { filter: brightness(1.12); }

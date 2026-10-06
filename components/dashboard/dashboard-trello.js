@@ -50,6 +50,35 @@
     return null;
   }
 
+  /**
+   * Makes sure the board has a triage list: an existing list whose name reads like one ("Inbox", "À trier"...)
+   * is assigned the triage Statut, otherwise an "Inbox" list is created at the left of the board.
+   */
+  async function ensureInbox(t, lists) {
+    var SM = global.StatutMatch;
+    var ST = global.StatutTrello;
+    var plain = (lists || []).map(function (l) { return { id: String(l.id), name: l.name }; });
+    var found = null;
+    if (SM && typeof SM.detectFromLists === 'function') {
+      var cats = SM.detectFromLists(plain).listCategories || {};
+      found = Object.keys(cats).filter(function (id) { return cats[id] === 'triage'; })[0] || null;
+    }
+    var created = false;
+    if (!found) {
+      var boardId = (await t.board('id')).id;
+      var res = await global.SheetsTrello.trelloRest(t, '/lists?name=' + encodeURIComponent('Inbox') + '&idBoard=' + encodeURIComponent(boardId) + '&pos=top', 'POST');
+      if (!res.ok || !res.data || !res.data.id) throw Object.assign(new Error(res.reason || 'list-create-failed'), { reason: res.reason });
+      found = String(res.data.id);
+      created = true;
+    }
+    var settings = await ST.readStatutSettings(t);
+    settings.listCategories = Object.assign({}, settings.listCategories);
+    settings.listCategories[found] = 'triage';
+    settings.initialized = true;
+    await ST.saveStatutSettings(t, settings);
+    return { listId: found, created: created };
+  }
+
   async function restAuth(t) {
     var api = await t.getRestApi();
     if (!(await api.isAuthorized())) throw Object.assign(new Error('not-authorized'), { reason: 'not-authorized' });
@@ -82,8 +111,8 @@
    * best effort: a failure is reported in `failed` and never loses the card.
    */
   async function ingest(t, tasks, lists) {
-    var list = listFor(lists, ['triage', 'backlog', 'unstarted']) || lists[0];
-    if (!list) throw new Error('Aucune liste disponible');
+    var list = listFor(lists, ['triage']);
+    if (!list) throw Object.assign(new Error('no-triage-list'), { reason: 'no-triage-list' });
     var created = [];
     var failed = [];
     for (var i = 0; i < tasks.length; i++) {
@@ -191,6 +220,7 @@
     load: load,
     listFor: listFor,
     ingest: ingest,
+    ensureInbox: ensureInbox,
     attachFile: attachFile,
     attachUrl: attachUrl,
     moveToCategory: moveToCategory,

@@ -122,6 +122,38 @@
       }
     }
 
+    /* ── Triage list (where Capture drops cards and Triage reads from) ── */
+    function hasTriage() {
+      return !!DT().listFor(state.lists, ['triage']);
+    }
+
+    function activateInbox() {
+      if (state.busy) return;
+      state.busy = true;
+      setStatus('Préparation de la boîte de triage…', 'busy');
+      DT().ensureInbox(t, state.lists).then(function (res) {
+        // Trello's client cache can lag behind a REST list creation: reload until the list shows up.
+        function again(n) {
+          return reload({ quiet: true }).then(function () {
+            if (hasTriage() || n >= 5) return;
+            return new Promise(function (r) { setTimeout(r, 700); }).then(function () { return again(n + 1); });
+          });
+        }
+        return again(0).then(function () {
+          state.busy = false;
+          setStatus(res.created ? 'Liste « Inbox » créée.' : 'Liste de triage activée.', 'ok');
+        });
+      }, function (err) { state.busy = false; fail(err); });
+    }
+
+    function inboxBanner() {
+      return h('div', { class: 'db-banner' }, [
+        icon('alert-circle'),
+        h('span', { text: 'Ce tableau n’a pas de liste de triage : les tâches capturées n’auraient nulle part où arriver.' }),
+        h('button', { class: 'db-btn', type: 'button', onclick: activateInbox }, [icon('inbox'), document.createTextNode('Créer la boîte « Inbox »')]),
+      ]);
+    }
+
     function fail(err) {
       var reason = err && (err.reason || err.message);
       if (reason === 'not-authorized' || reason === 'no-token' || reason === 'auth-failed') {
@@ -444,6 +476,7 @@
       function submit() {
         var tasks = captureTasks(ed);
         if (!tasks.length || state.busy) return;
+        if (!hasTriage()) return setStatus('Créez d’abord la boîte de triage (bandeau ci-dessus).', 'error', 5000);
         state.busy = true;
         var nFiles = tasks.reduce(function (n, x) { return n + x.files.length; }, 0);
         setStatus(nFiles ? 'Création et envoi des pièces jointes…' : 'Création…', 'busy');
@@ -452,7 +485,7 @@
           Object.keys(state.files).forEach(dropFile);
           state.draftHtml = '';
           var msg = tasks.length + (tasks.length > 1 ? ' tâches ajoutées' : ' tâche ajoutée') + ' dans « ' + res.list.name + ' »';
-          if (res.failed.length) setStatus(msg + ' (échec : ' + res.failed.join(', ') + ')', 'error');
+          if (res.failed && res.failed.length) setStatus(msg + ' (échec : ' + res.failed.join(', ') + ')', 'error');
           else setStatus(msg, 'ok');
           return reload({ quiet: true });
         }, function (err) { state.busy = false; fail(err); });
@@ -520,6 +553,7 @@
       refresh();
       els.main.appendChild(h('div', { class: 'db-page' }, [
         pageHead('Capture', 'Videz votre tête : tout arrive dans la liste de triage.'),
+        hasTriage() ? null : inboxBanner(),
         h('div', { class: 'db-card' }, [
           ed,
           h('div', { class: 'db-actions' }, [
@@ -555,7 +589,8 @@
       if (!q.length) {
         els.main.appendChild(h('div', { class: 'db-page' }, [
           pageHead('Triage', 'Rien à trier.'),
-          h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: 'Boîte de triage vide. Bien joué.' }),
+          hasTriage() ? null : inboxBanner(),
+          h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: hasTriage() ? 'Boîte de triage vide. Bien joué.' : 'Aucune liste de triage sur ce tableau.' }),
             h('button', { class: 'db-btn', type: 'button', onclick: function () { go('ingest'); } }, [icon('plus'), document.createTextNode('Capturer des tâches')])]),
         ]));
         return;

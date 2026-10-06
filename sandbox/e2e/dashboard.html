@@ -96,7 +96,7 @@
     DashboardTrello.ingest = function (t, names) {
       names.forEach(function (n) { rows.push(mk('n' + seq, typeof n === 'string' ? n : n.title, 'l0')); });
       log.push(['ingest', names]);
-      return Promise.resolve({ list: lists[0], created: names });
+      return Promise.resolve({ list: lists[0], created: names, failed: [] });
     };
     DashboardTrello.moveToCategory = function (t, row, ls, cats) {
       var l = DashboardTrello.listFor(lists, cats), r = find(row.id);
@@ -104,6 +104,7 @@
       log.push(['move', row.id, cats[0]]);
       return Promise.resolve(l);
     };
+    DashboardTrello.ensureInbox = function () { lists[0].category = 'triage'; lists[0].icon = 'circle-arrow-down'; log.push(['inbox']); return Promise.resolve({ listId: 'l0', created: true }); };
     DashboardTrello.savePriority = function (t, id, p) { log.push(['prio', id, p]); return Promise.resolve(); };
     DashboardTrello.saveEstimate = function (t, id, m) { var r = find(id); if (r) r.estimate = m; log.push(['est', id, m]); return Promise.resolve(); };
     DashboardTrello.planDay = function (t, id, iso) { var r = find(id); if (r) { r.start = iso; r.due = iso; } log.push(['plan', id, iso]); return Promise.resolve(); };
