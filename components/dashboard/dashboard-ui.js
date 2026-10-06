@@ -244,10 +244,52 @@
       return chip;
     }
 
+    /** Chip that opens a menu next to itself (shared ContextMenu). */
+    function menuChip(cls, title, iconName, text, buildItems) {
+      var chip = h('button', { class: 'db-chip db-chip--btn ' + cls, type: 'button', title: title, onclick: function (e) {
+        e.stopPropagation();
+        var CM = global.ContextMenu;
+        if (!CM || typeof CM.show !== 'function') return;
+        var r = chip.getBoundingClientRect();
+        CM.show({ clientX: r.left, clientY: r.bottom + 4 }, buildItems());
+      } }, [icon(iconName), document.createTextNode(text)]);
+      return chip;
+    }
+
+    /** Clickable day chip: plans the card on the chosen day (icons follow the day). */
     function dueChip(row) {
-      if (!row.due) return null;
-      var late = row.due < today && DM().isOpen(row);
-      return h('span', { class: 'db-chip' + (late ? ' is-late' : ''), title: 'Échéance' }, [icon('calendar-event'), document.createTextNode(TM().formatDay(row.due))]);
+      var late = !!row.due && row.due < today && DM().isOpen(row);
+      var label = !row.due ? 'Planifier…' : row.due === today ? 'Aujourd’hui' : dayLabel(row.due, today);
+      return menuChip(late ? 'is-late' : '', 'Cliquer pour changer le jour', row.due ? dayIconName(row.due, today) : 'calendar-plus', label, function () {
+        var items = [];
+        for (var n = 0; n <= 7; n++) {
+          (function (iso) {
+            items.push({
+              id: 'plan:' + iso,
+              label: dayLabel(iso, today),
+              icon: dayIconName(iso, today),
+              checked: row.due === iso,
+              action: function () { plan(row, iso); },
+            });
+          })(DM().addDays(today, n));
+        }
+        return items;
+      });
+    }
+
+    /** Clickable "used / capacity" chip: sets the daily capacity. */
+    function capChip(used) {
+      return menuChip('', 'Cliquer pour changer la capacité par jour', 'gauge', DM().formatMinutes(used) + ' / ' + DM().formatMinutes(state.capacity), function () {
+        return [3, 4, 5, 6, 7, 8].map(function (hrs) {
+          return {
+            id: 'cap:' + hrs,
+            label: hrs + ' h par jour',
+            icon: 'clock-hour-' + Math.min(hrs, 12),
+            checked: state.capacity === hrs * 60,
+            action: function () { state.capacity = hrs * 60; DT().setCapacity(state.capacity); render(); },
+          };
+        });
+      });
     }
 
     function openCard(row) {
@@ -604,10 +646,10 @@
       render();
     }
 
-    function taskCard(row) {
+    function taskCard(row, showDue) {
       var el = h('div', { class: 'db-task', draggable: 'true', title: row.name }, [
         h('div', { class: 'db-task-name', text: row.name }),
-        h('div', { class: 'db-task-meta' }, [prioBadge(row), estChip(row)]),
+        h('div', { class: 'db-task-meta' }, [prioBadge(row), estChip(row), showDue === true ? dueChip(row) : null]),
       ]);
       el.addEventListener('dragstart', function (e) {
         e.dataTransfer.setData('text/plain', row.id);
@@ -645,13 +687,13 @@
         render();
         write(moves.reduce(function (p, m) { return p.then(function () { return DT().planDay(t, m.id, m.date); }); }, Promise.resolve()), moves.length + (moves.length > 1 ? ' tâches planifiées' : ' tâche planifiée'));
       } }, [icon('wand'), document.createTextNode('Planifier auto')]);
-      var poolEl = dropZone(h('div', { class: 'db-pool' }, pool.length ? pool.map(taskCard) : [h('div', { class: 'db-muted db-pad', text: 'Tout est planifié.' })]), '');
+      var poolEl = dropZone(h('div', { class: 'db-pool' }, pool.length ? pool.map(function (r) { return taskCard(r, true); }) : [h('div', { class: 'db-muted db-pad', text: 'Tout est planifié.' })]), '');
       var days = week.map(function (d) {
         var pct = Math.min(100, Math.round((d.used / d.capacity) * 100));
         return dropZone(h('section', { class: 'db-day' + (d.date === today ? ' is-today' : '') }, [
           h('header', { class: 'db-day-head' }, [
             h('span', { class: 'db-day-name' }, [icon(dayIconName(d.date, today), 'db-day-icon'), document.createTextNode(' ' + dayLabel(d.date, today))]),
-            h('span', { class: 'db-muted', text: DM().formatMinutes(d.used) + ' / ' + DM().formatMinutes(d.capacity) }),
+            capChip(d.used),
           ]),
           h('div', { class: 'db-meter' + (d.over ? ' is-over' : '') }, [h('div', { class: 'db-meter-fill', style: 'width:' + pct + '%' })]),
           h('div', { class: 'db-day-body' }, d.tasks.map(taskCard)),
@@ -691,7 +733,8 @@
           late ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
           prioBadge(r),
           estChip(r),
-          h('button', { class: 'db-icon-btn', type: 'button', title: 'Reporter à demain', onclick: function () { plan(r, DM().addDays(today, 1)); } }, [icon('arrow-right')]),
+          dueChip(r),
+          h('button', { class: 'db-icon-btn', type: 'button', title: 'Reporter à demain', onclick: function () { plan(r, DM().addDays(today, 1)); } }, [icon('arrow-curve-right')]),
         ]);
       }) : [h('div', { class: 'db-empty' }, [icon('sun'), h('p', { text: 'Rien de prévu aujourd’hui.' }),
         h('button', { class: 'db-btn', type: 'button', onclick: function () { go('orchestrator'); } }, [icon('calendar-event'), document.createTextNode('Ouvrir l’orchestrateur')])])]);
@@ -714,7 +757,7 @@
       var pct = Math.min(100, Math.round((used / state.capacity) * 100));
       els.main.appendChild(h('div', { class: 'db-page db-page--wide' }, [
         pageHead('Aujourd’hui', DAYS_FR[new Date().getDay()] + ' ' + TM().formatDay(today),h('div', { class: 'db-load' }, [
-          h('span', { class: 'db-muted', text: DM().formatMinutes(used) + ' / ' + DM().formatMinutes(state.capacity) }),
+          capChip(used),
           h('div', { class: 'db-meter' + (used > state.capacity ? ' is-over' : '') }, [h('div', { class: 'db-meter-fill', style: 'width:' + pct + '%' })]),
         ])),
         h('div', { class: 'db-today' }, [h('div', { class: 'db-today-l' }, [focus]), h('div', { class: 'db-today-r' }, [grid])]),
