@@ -54,6 +54,7 @@
   <script src="/components/shared/view-tabs.js"></script>
   <script src="/components/shared/card-fields.js"></script>
   <script src="/components/table/table-menu.js"></script>
+  <script src="/components/docs/docs-model.js"></script>
   <script src="/components/dashboard/dashboard-model.js"></script>
   <script src="/components/dashboard/dashboard-trello.js"></script>
   <script src="/components/dashboard/dashboard-ui.js"></script>
@@ -92,7 +93,7 @@
       return Promise.resolve({ lists: lists, rows: rows.map(function (r) { return Object.assign({}, r); }) });
     };
     DashboardTrello.ingest = function (t, names) {
-      names.forEach(function (n) { rows.push(mk('n' + seq, n, 'l0')); });
+      names.forEach(function (n) { rows.push(mk('n' + seq, typeof n === 'string' ? n : n.title, 'l0')); });
       log.push(['ingest', names]);
       return Promise.resolve({ list: lists[0], created: names });
     };

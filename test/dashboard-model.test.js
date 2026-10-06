@@ -20,6 +20,77 @@ describe('DashboardModel', () => {
     assert.deepEqual(out, ['Appeler Paul', 'Payer facture', 'Écrire rapport', 'Ranger']);
   });
 
+  describe('parseCapture', () => {
+    const T = (a) => DM.captureToken(a);
+
+    it('plain lines separated by blank lines are one task each, no description', () => {
+      const out = DM.parseCapture('Appeler Paul\n\nPayer facture');
+      assert.deepEqual(out.map((t) => [t.title, t.desc]), [['Appeler Paul', ''], ['Payer facture', '']]);
+    });
+
+    it('a list block becomes one task per item', () => {
+      const out = DM.parseCapture('- Lait\n- Pain\n- Oeufs');
+      assert.deepEqual(out.map((t) => t.title), ['Lait', 'Pain', 'Oeufs']);
+    });
+
+    it('bold and links keep their Markdown in the description, title is plain text', () => {
+      const [t] = DM.parseCapture('Appeler **Paul** avant [le contrat](https://ex.com/c).');
+      assert.equal(t.title, 'Appeler Paul avant le contrat.');
+      assert.equal(t.desc, 'Appeler **Paul** avant [le contrat](https://ex.com/c).');
+      assert.deepEqual(t.urls, ['https://ex.com/c']);
+    });
+
+    it('extra lines of a block are the description', () => {
+      const [t] = DM.parseCapture('Réserver la salle\nCapacité 12 personnes\nPrévoir le café');
+      assert.equal(t.title, 'Réserver la salle');
+      assert.equal(t.desc, 'Capacité 12 personnes\n\nPrévoir le café');
+    });
+
+    it('a bare URL becomes a task titled after the site and keeps the link', () => {
+      const [t] = DM.parseCapture('https://www.example.com/articles/42?utm=1');
+      assert.equal(t.title, 'example.com/articles/42');
+      assert.deepEqual(t.urls, ['https://www.example.com/articles/42?utm=1']);
+      assert.ok(t.desc.includes('https://www.example.com'));
+    });
+
+    it('attachment tokens are removed from the text and listed', () => {
+      const [t] = DM.parseCapture('Corriger ce bug ' + T('a1') + '\nvoir capture ' + T('a2'), { a1: 'x.png' });
+      assert.equal(t.title, 'Corriger ce bug');
+      assert.deepEqual(t.aids, ['a1', 'a2']);
+      assert.equal(t.desc, 'voir capture');
+    });
+
+    it('a block with only an attachment is named after the file', () => {
+      const out = DM.parseCapture(T('a1') + '\n\nAutre', { a1: 'Capture d’écran.png' });
+      assert.equal(out[0].title, 'Capture d’écran');
+      assert.deepEqual(out[0].aids, ['a1']);
+      assert.equal(out[0].desc, '');
+      assert.equal(out[1].title, 'Autre');
+    });
+
+    it('a long first line is cut at a word and kept whole in the description', () => {
+      const long = ('mot '.repeat(60)).trim();
+      const [t] = DM.parseCapture(long);
+      assert.ok(t.title.length <= 141 && t.title.endsWith('…'));
+      assert.equal(t.desc, long);
+    });
+
+    it('headings, quotes and escaped characters do not leak into titles', () => {
+      const out = DM.parseCapture('## Titre\n\n> citation\n\nPrix 5\\.00 \\(taxes\\)');
+      assert.deepEqual(out.map((t) => t.title), ['Titre', 'citation', 'Prix 5.00 (taxes)']);
+      assert.equal(out[2].desc, '');
+    });
+
+    it('empty-paragraph markers are ignored and escaped bullets are stripped', () => {
+      const out = DM.parseCapture('Un\n\n<!--blank-->\n\n\\- Lait\n\n2\\. Pain');
+      assert.deepEqual(out.map((t) => [t.title, t.desc]), [['Un', ''], ['Lait', ''], ['Pain', '']]);
+    });
+
+    it('extractUrls dedupes and strips trailing punctuation', () => {
+      assert.deepEqual(DM.extractUrls('voir https://a.io/x, puis https://a.io/x. et http://b.io'), ['https://a.io/x', 'http://b.io']);
+    });
+  });
+
   it('addDays / nextDays cross month ends', () => {
     assert.equal(DM.addDays('2026-10-31', 1), '2026-11-01');
     assert.deepEqual(DM.nextDays('2026-10-30', 3), ['2026-10-30', '2026-10-31', '2026-11-01']);

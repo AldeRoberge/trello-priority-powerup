@@ -32,6 +32,130 @@
     return out;
   }
 
+  /* ── Rich capture: Markdown (from DocsModel.domToMd) → tasks ───────────────────────────── */
+
+  var MAX_FILE_BYTES = 10 * 1024 * 1024; // Trello's attachment limit on free workspaces
+  var MAX_TITLE = 140;
+  var TOKEN_RE = /⟦([A-Za-z0-9_-]+)⟧/g; // ⟦id⟧ stands for an attachment chip inside the text
+  var URL_RE = /https?:\/\/[^\s<>()\[\]]+/g;
+  var LIST_LINE_RE = /^\s*(?:\\?[-*•]|\d+\\?[.)])\s+/; // "\-" and "1\." are how DocsModel escapes typed bullets
+  var BLANK = '<!--blank-->'; // DocsModel.domToMd marker of an empty paragraph
+
+  function token(aid) {
+    return '⟦' + aid + '⟧';
+  }
+
+  /** Markdown line → plain text (formatting, link targets and block prefixes dropped). */
+  function plainText(md) {
+    return String(md || '')
+      .replace(/^\s*(?:#{1,6}\s+|>\s*|(?:\\?[-*•]|\d+\\?[.)])\s+(?:\[[ xX]?\]\s*)?)+/, '')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=$|[\s).,;:!?])/g, '$1$2')
+      .replace(/~~([^~]+)~~/g, '$1')
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/\\([\\`*_{}\[\]()#+\-.!~|>])/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** Distinct http(s) links of a Markdown text, trailing punctuation removed. */
+  function extractUrls(md) {
+    var seen = {};
+    var out = [];
+    (String(md || '').match(URL_RE) || []).forEach(function (u) {
+      u = u.replace(/[.,;:!?'"»]+$/, '');
+      if (u && !seen[u]) {
+        seen[u] = true;
+        out.push(u);
+      }
+    });
+    return out;
+  }
+
+  function titleFromUrl(url) {
+    var m = /^https?:\/\/(?:www\.)?([^\/?#]+)([^?#]*)/.exec(url);
+    if (!m) return url;
+    var s = m[1] + (m[2] && m[2] !== '/' ? m[2].replace(/\/$/, '') : '');
+    return s.length > 60 ? s.slice(0, 59) + '…' : s;
+  }
+
+  function cutTitle(s) {
+    if (s.length <= MAX_TITLE) return { text: s, cut: false };
+    var head = s.slice(0, MAX_TITLE);
+    var sp = head.lastIndexOf(' ');
+    return { text: (sp > 60 ? head.slice(0, sp) : head).replace(/[ ,;:.]+$/, '') + '…', cut: true };
+  }
+
+  /** Splits Markdown into task blocks: blank lines separate tasks, a block made only of list items is one task per item. */
+  function captureBlocks(md) {
+    var out = [];
+    String(md || '')
+      .replace(/\r\n?/g, '\n')
+      .split(/\n{2,}/)
+      .forEach(function (block) {
+        var lines = block.split('\n').filter(function (l) {
+          return l.trim() !== '' && l.trim() !== BLANK;
+        });
+        if (!lines.length) return;
+        if (lines.length > 1 && lines.every(function (l) { return LIST_LINE_RE.test(l); })) {
+          lines.forEach(function (l) { out.push([l]); });
+        } else {
+          out.push(lines);
+        }
+      });
+    return out;
+  }
+
+  /**
+   * Capture Markdown → tasks [{ title, desc, urls, aids }].
+   *  - first line = title (plain text), following lines = description (Markdown)
+   *  - a first line with formatting / links / a cut title keeps its full Markdown in the description
+   *  - every link also lands in `urls` (added as a Trello link attachment)
+   *  - ⟦id⟧ tokens (attachment chips) are removed from the text and listed in `aids`
+   *  - a block with only attachments becomes a task named after its first file (names = { aid: fileName })
+   */
+  function parseCapture(md, names) {
+    names = names || {};
+    var tasks = [];
+    captureBlocks(md).forEach(function (lines) {
+      var aids = [];
+      var clean = lines
+        .map(function (l) {
+          return l.replace(TOKEN_RE, function (all, id) {
+            aids.push(id);
+            return ' ';
+          }).replace(/[ \t]+/g, ' ').trim();
+        })
+        .filter(function (l) {
+          return l !== '' && l !== BLANK;
+        });
+      if (!clean.length && !aids.length) return;
+      var urls = extractUrls(clean.join('\n'));
+      var first = clean[0] || '';
+      var title = plainText(first);
+      var cut = { text: title, cut: false };
+      if (!title && aids.length) {
+        title = String(names[aids[0]] || 'Pièce jointe').replace(/\.[A-Za-z0-9]{1,5}$/, '');
+        cut = { text: title, cut: false };
+      } else if (/^https?:\/\/\S+$/.test(title)) {
+        title = titleFromUrl(title);
+        cut = { text: title, cut: false };
+      } else {
+        cut = cutTitle(title);
+      }
+      var rest = clean.slice(1);
+      var firstMd = first.replace(LIST_LINE_RE, '');
+      var desc = '';
+      if (!clean.length) desc = '';
+      else if (cut.cut || firstMd.replace(/\\(.)/g, '$1') !== title) desc = [firstMd].concat(rest).join('\n\n');
+      else if (rest.length) desc = rest.join('\n\n');
+      tasks.push({ title: cut.text, desc: desc, urls: urls, aids: aids });
+    });
+    return tasks;
+  }
+
   function isoOf(d) {
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
@@ -212,6 +336,11 @@
     DAY_START: DAY_START,
     PENDING: PENDING,
     parseLines: parseLines,
+    parseCapture: parseCapture,
+    plainText: plainText,
+    extractUrls: extractUrls,
+    captureToken: token,
+    MAX_FILE_BYTES: MAX_FILE_BYTES,
     addDays: addDays,
     nextDays: nextDays,
     isoOf: isoOf,

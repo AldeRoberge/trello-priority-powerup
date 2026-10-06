@@ -29,7 +29,8 @@
     ['au-plus-vite', 'Au plus vite'],
   ];
   var ESTIMATES = [0, 15, 30, 60, 120, 240];
-  var DAYS_FR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+  var QUICK_ESTIMATES = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 0];
+  var DAYS_FR =['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   var HORIZON = 7;
 
   function h(tag, attrs, children) {
@@ -63,6 +64,13 @@
     return '<div class="db-root" aria-busy="true"><div class="db-side"></div><div class="db-main">' + rows + '</div></div>';
   }
 
+  /** Icon for a day relative to today (circle-dot, jumping arrow, two arrows, calendars). */
+  function dayIconName(iso, today) {
+    var days = Math.round((new Date(iso + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+    var CM = global.ContextMenu;
+    return CM && CM.dayIcon ? CM.dayIcon(days) : 'calendar-event';
+  }
+
   function dayLabel(iso, today) {
     if (iso === today) return 'Aujourd’hui';
     if (iso === DM().addDays(today, 1)) return 'Demain';
@@ -80,7 +88,8 @@
       busy: false,
       status: '',
       statusKind: '',
-      draft: '',
+      draftHtml: '', // capture editor content, kept across section switches
+      files: {}, // pending attachments of the capture editor: id → { file, thumb }
       authOk: true,
     };
     var statusTimer = null;
@@ -203,8 +212,36 @@
       return h('span', { class: 'db-prio db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)), title: row.tier || 'Priorité', text: String(row.priority) });
     }
 
+    function setEstimate(row, minutes) {
+      row.estimate = minutes;
+      write(DT().saveEstimate(t, row.id, minutes));
+      render();
+    }
+
+    /** Clickable estimate chip: opens a duration menu (same menu everywhere in the app). */
     function estChip(row) {
-      return h('span', { class: 'db-chip', title: 'Estimation' }, [icon('clock'), document.createTextNode(row.estimate ? DM().formatMinutes(row.estimate) : '—')]);
+      var chip = h('button', {
+        class: 'db-chip db-chip--btn',
+        type: 'button',
+        title: 'Cliquer pour changer l’estimation',
+        onclick: function (e) {
+          e.stopPropagation();
+          var CM = global.ContextMenu;
+          if (!CM || typeof CM.show !== 'function') return;
+          var r = chip.getBoundingClientRect();
+          var items = QUICK_ESTIMATES.map(function (m) {
+            return {
+              id: 'est:' + m,
+              label: m ? DM().formatMinutes(m) : 'Non estimée',
+              icon: m ? 'clock' : 'clock-off',
+              checked: (row.estimate || 0) === m,
+              action: function () { setEstimate(row, m); },
+            };
+          });
+          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, items);
+        },
+      }, [icon('clock'), document.createTextNode(row.estimate ? DM().formatMinutes(row.estimate) : 'Estimer…')]);
+      return chip;
     }
 
     function dueChip(row) {
@@ -220,40 +257,144 @@
       }
     }
 
-    /* ── 1. Ingest ─────────────────────────────────────────────────── */
+    /* ── 1. Ingest (rich capture) ──────────────────────────────────── */
+    var attSeq = 0;
+
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function sizeLabel(n) {
+      return n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+    }
+
+    /** Inline chip for a pasted / dropped file; `data-aid` links it to state.files. */
+    function chipHtml(aid, att) {
+      var visual = att.thumb
+        ? '<img class="db-att-img" alt="" src="' + escHtml(att.thumb) + '">'
+        : '<i class="ti ti-' + (att.file.type === 'application/pdf' ? 'file-type-pdf' : 'file') + '"></i>';
+      return (
+        '<span class="db-att" contenteditable="false" data-aid="' + aid + '" title="' + escHtml(att.file.name) + '">' +
+        visual +
+        '<span class="db-att-name">' + escHtml(att.file.name) + '</span>' +
+        '<span class="db-att-size">' + sizeLabel(att.file.size) + '</span>' +
+        '<button class="db-att-x" type="button" tabindex="-1" aria-label="Retirer">×</button></span>'
+      );
+    }
+
+    function addFile(file) {
+      if (file.size > DM().MAX_FILE_BYTES) {
+        setStatus('« ' + file.name + ' » dépasse 10 Mo (limite de Trello).', 'error', 5000);
+        return null;
+      }
+      var aid = 'a' + ++attSeq;
+      var isImg = /^image\/(png|jpe?g|gif|webp|bmp|svg\+xml)$/.test(file.type);
+      var att = { file: file, thumb: isImg && global.URL && URL.createObjectURL ? URL.createObjectURL(file) : '' };
+      if (!file.name || file.name === 'image.png') {
+        var d = new Date();
+        var stamp = ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2);
+        var ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+        try { att.file = new File([file], 'Capture ' + stamp + '.' + ext, { type: file.type }); } catch (e) { /* keep the original name */ }
+      }
+      state.files[aid] = att;
+      return chipHtml(aid, att);
+    }
+
+    function dropFile(aid) {
+      var att = state.files[aid];
+      if (att && att.thumb) try { URL.revokeObjectURL(att.thumb); } catch (e) { /* ignore */ }
+      delete state.files[aid];
+    }
+
+    /** Editor content → Markdown, each chip replaced by its ⟦id⟧ token (DocsModel.domToMd does the formatting). */
+    function editorMarkdown(ed) {
+      var clone = ed.cloneNode(true);
+      Array.prototype.forEach.call(clone.querySelectorAll('.db-att'), function (c) {
+        c.replaceWith(document.createTextNode(' ' + DM().captureToken(c.getAttribute('data-aid')) + ' '));
+      });
+      return global.DocsModel.domToMd(clone);
+    }
+
+    function captureTasks(ed) {
+      var names = {};
+      Object.keys(state.files).forEach(function (k) { names[k] = state.files[k].file.name; });
+      return DM().parseCapture(editorMarkdown(ed), names).map(function (task) {
+        task.files = task.aids.map(function (id) { return state.files[id] && state.files[id].file; }).filter(Boolean);
+        return task;
+      });
+    }
+
     function renderIngest() {
       var recent = DM().triageQueue(state.rows).slice(-5).reverse();
-      var ta = h('textarea', {
+      var DOCS = global.DocsModel;
+      var ed = h('div', {
         class: 'db-capture',
-        rows: '6',
-        placeholder: 'Une tâche par ligne…\nEntrée pour ajouter, Maj+Entrée pour une nouvelle ligne',
-        spellcheck: 'false',
-        oninput: function (e) { state.draft = e.target.value; refreshCount(); },
-        onkeydown: function (e) {
-          e.stopPropagation();
-          if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
-        },
+        contenteditable: 'true',
+        role: 'textbox',
+        'aria-multiline': 'true',
+        'aria-label': 'Capture',
+        'data-placeholder': 'Une tâche par ligne. Collez du texte, des liens, des images ou des documents.',
+        spellcheck: 'true',
       });
-      ta.value = state.draft;
+      try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { /* browser default separator */ }
+      ed.innerHTML = state.draftHtml || '';
       var count = h('span', { class: 'db-muted' });
-      function refreshCount() {
-        var n = DM().parseLines(ta.value).length;
+      function refresh() {
+        var empty = !ed.textContent.trim() && !ed.querySelector('.db-att, img');
+        ed.classList.toggle('is-empty', empty);
+        state.draftHtml = empty ? '' : ed.innerHTML;
+        var n = empty ? 0 : captureTasks(ed).length;
         count.textContent = n ? n + (n > 1 ? ' tâches' : ' tâche') : '';
       }
+      function insertHtml(html) {
+        ed.focus();
+        document.execCommand('insertHTML', false, html);
+        refresh();
+      }
+      function paste(e) {
+        var cd = e.clipboardData;
+        if (!cd) return;
+        var files = Array.prototype.slice.call(cd.files || []);
+        if (files.length) {
+          e.preventDefault();
+          insertHtml(files.map(addFile).filter(Boolean).join(''));
+          return;
+        }
+        var html = cd.getData('text/html');
+        var text = cd.getData('text/plain');
+        if (!html && !text) return;
+        e.preventDefault();
+        var out;
+        if (html && DOCS) {
+          // Same sanitizer as the Documents editor: HTML → Markdown → whitelisted HTML (bold, italic, links, lists...).
+          out = DOCS.mdToHtml(DOCS.domToMd(new DOMParser().parseFromString(html, 'text/html').body));
+          var single = /^<p>((?:(?!<\/?p>)[\s\S])*)<\/p>$/.exec(out);
+          if (single) out = single[1];
+        } else {
+          var lines = text.replace(/\r\n?/g, '\n').split('\n').filter(function (l) { return l.trim(); });
+          // One line stays inline (the caret remains on it, so a file pasted next joins this task).
+          out = lines.length === 1 ? escHtml(lines[0]) : lines.map(function (l) { return '<p>' + escHtml(l) + '</p>'; }).join('');
+        }
+        insertHtml(out);
+      }
       function submit() {
-        var names = DM().parseLines(ta.value);
-        if (!names.length || state.busy) return;
+        var tasks = captureTasks(ed);
+        if (!tasks.length || state.busy) return;
         state.busy = true;
-        setStatus('Création…', 'busy');
-        DT().ingest(t, names, state.lists).then(function (res) {
+        var nFiles = tasks.reduce(function (n, x) { return n + x.files.length; }, 0);
+        setStatus(nFiles ? 'Création et envoi des pièces jointes…' : 'Création…', 'busy');
+        DT().ingest(t, tasks, state.lists).then(function (res) {
           state.busy = false;
-          state.draft = '';
-          setStatus(names.length + (names.length > 1 ? ' tâches ajoutées' : ' tâche ajoutée') + ' dans « ' + res.list.name + ' »', 'ok');
+          Object.keys(state.files).forEach(dropFile);
+          state.draftHtml = '';
+          var msg = tasks.length + (tasks.length > 1 ? ' tâches ajoutées' : ' tâche ajoutée') + ' dans « ' + res.list.name + ' »';
+          if (res.failed.length) setStatus(msg + ' (échec : ' + res.failed.join(', ') + ')', 'error');
+          else setStatus(msg, 'ok');
           return reload({ quiet: true });
         }, function (err) { state.busy = false; fail(err); });
       }
       function askAI() {
-        var text = ta.value.trim();
+        var text = ed.innerText.trim();
         var AI = global.KanbanAI;
         if (!text || state.busy) return;
         if (!AI) return setStatus('IA indisponible', 'error');
@@ -261,29 +402,80 @@
         setStatus('IA en cours…', 'busy');
         AI.run(t, { text: 'Crée une tâche par élément (sépare le texte en tâches distinctes), dans la liste de triage : ' + text, rows: state.rows, lists: state.lists }).then(function (res) {
           state.busy = false;
-          if (res.applied.length) state.draft = '';
+          if (res.applied.length) { state.draftHtml = ''; Object.keys(state.files).forEach(dropFile); }
           setStatus(res.applied.length ? 'IA : ' + res.applied.join(', ') : res.message || 'Rien à créer.', res.applied.length ? 'ok' : 'error', 6000);
           return reload({ quiet: true });
         }, function (err) { state.busy = false; fail(err); });
       }
-      refreshCount();
+      function format(cmd) {
+        ed.focus();
+        document.execCommand(cmd);
+        refresh();
+      }
+      var picker = h('input', {
+        type: 'file',
+        multiple: true,
+        hidden: true,
+        onchange: function (e) {
+          var html = Array.prototype.map.call(e.target.files, addFile).filter(Boolean).join('');
+          e.target.value = '';
+          if (html) insertHtml(html);
+        },
+      });
+
+      ed.addEventListener('input', refresh);
+      ed.addEventListener('paste', paste);
+      ed.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
+        else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
+      });
+      ed.addEventListener('click', function (e) {
+        var x = e.target.closest && e.target.closest('.db-att-x');
+        if (!x) return;
+        var chip = x.closest('.db-att');
+        dropFile(chip.getAttribute('data-aid'));
+        chip.remove();
+        refresh();
+      });
+      ed.addEventListener('dragover', function (e) {
+        if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0) { e.preventDefault(); ed.classList.add('is-drop'); }
+      });
+      ed.addEventListener('dragleave', function () { ed.classList.remove('is-drop'); });
+      ed.addEventListener('drop', function (e) {
+        ed.classList.remove('is-drop');
+        var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+        if (!files.length) return;
+        e.preventDefault();
+        insertHtml(files.map(addFile).filter(Boolean).join(''));
+      });
+
+      function tool(iconName, title, fn) {
+        return h('button', { class: 'db-icon-btn', type: 'button', title: title, 'aria-label': title, onmousedown: function (e) { e.preventDefault(); }, onclick: fn }, [icon(iconName)]);
+      }
+      refresh();
       els.main.appendChild(h('div', { class: 'db-page' }, [
         pageHead('Capture', 'Videz votre tête : tout arrive dans la liste de triage.'),
         h('div', { class: 'db-card' }, [
-          ta,
+          ed,
           h('div', { class: 'db-actions' }, [
+            tool('bold', 'Gras (Ctrl+B)', function () { format('bold'); }),
+            tool('italic', 'Italique (Ctrl+I)', function () { format('italic'); }),
+            tool('paperclip', 'Joindre des fichiers', function () { picker.click(); }),
+            picker,
             count,
             h('span', { class: 'db-spacer' }),
             h('button', { class: 'db-btn', type: 'button', onclick: askAI }, [icon('sparkles'), document.createTextNode('Demander à l’IA')]),
-            h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: submit }, [icon('plus'), document.createTextNode('Ajouter')]),
+            h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: submit }, [icon('plus'), document.createTextNode('Ajouter'), h('kbd', { text: 'Ctrl+↵' })]),
           ]),
         ]),
+        h('p', { class: 'db-hint', text: 'Entrée : nouvelle tâche. Maj+Entrée : ligne suivante dans la même tâche (devient la description). Les images et documents collés ou déposés sont joints à la tâche de la ligne où ils se trouvent.' }),
         recent.length ? h('div', { class: 'db-section-title', text: 'Derniers ajouts' }) : null,
         recent.length ? h('div', { class: 'db-list' }, recent.map(function (r) {
           return h('div', { class: 'db-row', onclick: function () { state.selected = r.id; go('triage'); } }, [statusIcon(r), h('span', { class: 'db-row-name', text: r.name })]);
         })) : null,
       ]));
-      setTimeout(function () { ta.focus(); }, 0);
+      setTimeout(function () { ed.focus(); }, 0);
     }
 
     function pageHead(title, sub, right) {
@@ -458,7 +650,7 @@
         var pct = Math.min(100, Math.round((d.used / d.capacity) * 100));
         return dropZone(h('section', { class: 'db-day' + (d.date === today ? ' is-today' : '') }, [
           h('header', { class: 'db-day-head' }, [
-            h('span', { class: 'db-day-name', text: dayLabel(d.date, today) }),
+            h('span', { class: 'db-day-name' }, [icon(dayIconName(d.date, today), 'db-day-icon'), document.createTextNode(' ' + dayLabel(d.date, today))]),
             h('span', { class: 'db-muted', text: DM().formatMinutes(d.used) + ' / ' + DM().formatMinutes(d.capacity) }),
           ]),
           h('div', { class: 'db-meter' + (d.over ? ' is-over' : '') }, [h('div', { class: 'db-meter-fill', style: 'width:' + pct + '%' })]),

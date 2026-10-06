@@ -50,16 +50,74 @@
     return null;
   }
 
-  /** Creates one card per name in the triage list (fallback: backlog, then the first list). */
-  async function ingest(t, names, lists) {
+  async function restAuth(t) {
+    var api = await t.getRestApi();
+    if (!(await api.isAuthorized())) throw Object.assign(new Error('not-authorized'), { reason: 'not-authorized' });
+    var cfg = global.PriorityRestConfig;
+    var token = await api.getToken();
+    if (!cfg || !cfg.appKey || !token) throw Object.assign(new Error('no-token'), { reason: 'no-token' });
+    return '?key=' + encodeURIComponent(cfg.appKey) + '&token=' + encodeURIComponent(token);
+  }
+
+  /** Uploads a File (image, document...) as a Trello attachment of the card. */
+  async function attachFile(t, cardId, file) {
+    var auth = await restAuth(t);
+    var form = new FormData();
+    form.append('file', file, file.name || 'fichier');
+    form.append('name', file.name || 'fichier');
+    var res = await fetch('https://api.trello.com/1/cards/' + encodeURIComponent(cardId) + '/attachments' + auth, { method: 'POST', body: form });
+    if (!res.ok) throw new Error('Pièce jointe refusée (' + res.status + ')');
+  }
+
+  /** Adds a link as a Trello attachment (Trello shows a preview). */
+  async function attachUrl(t, cardId, url) {
+    var auth = await restAuth(t);
+    var res = await fetch('https://api.trello.com/1/cards/' + encodeURIComponent(cardId) + '/attachments' + auth + '&url=' + encodeURIComponent(url), { method: 'POST' });
+    if (!res.ok) throw new Error('Lien refusé (' + res.status + ')');
+  }
+
+  /**
+   * Creates one card per task in the triage list (fallback: backlog, then the first list).
+   * A task is a name or { title, desc, urls: [string], files: [File] }; description and attachments are
+   * best effort: a failure is reported in `failed` and never loses the card.
+   */
+  async function ingest(t, tasks, lists) {
     var list = listFor(lists, ['triage', 'backlog', 'unstarted']) || lists[0];
     if (!list) throw new Error('Aucune liste disponible');
     var created = [];
-    for (var i = 0; i < names.length; i++) {
-      var res = await TT().createRow(t, names[i], list.id);
-      created.push(res && res.cardId);
+    var failed = [];
+    for (var i = 0; i < tasks.length; i++) {
+      var task = typeof tasks[i] === 'string' ? { title: tasks[i] } : tasks[i];
+      var res = await TT().createRow(t, task.title, list.id);
+      var id = res && res.cardId;
+      created.push(id);
+      if (!id) continue;
+      if (task.desc) {
+        try {
+          var put = await PT().restPutCard(t, id, { desc: task.desc });
+          if (put && put.ok === false) throw new Error(put.reason);
+        } catch (e) {
+          failed.push('description de « ' + task.title + ' »');
+        }
+      }
+      var urls = task.urls || [];
+      for (var u = 0; u < urls.length; u++) {
+        try {
+          await attachUrl(t, id, urls[u]);
+        } catch (e) {
+          failed.push('lien ' + urls[u]);
+        }
+      }
+      var files = task.files || [];
+      for (var f = 0; f < files.length; f++) {
+        try {
+          await attachFile(t, id, files[f]);
+        } catch (e) {
+          failed.push((files[f] && files[f].name) || 'fichier');
+        }
+      }
     }
-    return { list: list, created: created };
+    return { list: list, created: created, failed: failed };
   }
 
   async function moveToCategory(t, row, lists, cats) {
@@ -126,6 +184,8 @@
     load: load,
     listFor: listFor,
     ingest: ingest,
+    attachFile: attachFile,
+    attachUrl: attachUrl,
     moveToCategory: moveToCategory,
     savePriority: savePriority,
     saveEstimate: saveEstimate,
