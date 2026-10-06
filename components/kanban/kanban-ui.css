@@ -185,6 +185,7 @@ html[data-color-mode] .tp-page--kanban {
   text-align: center;
   font-size: 12px;
   color: var(--tp-text-muted);
+  opacity: 0.6;
   border-radius: 6px;
   border: 1px dashed var(--tp-border-strong);
 }

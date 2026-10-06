@@ -658,6 +658,7 @@ body {
 .overview-title.is-empty .overview-title-text {
   font-weight: 500;
   color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .overview-metrics {
@@ -1209,6 +1210,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 .overview-cell-value.is-empty {
   font-weight: 500;
   color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .overview-cell--nolabel .overview-cell-head {
@@ -1687,6 +1689,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-title-input::placeholder {
   color: var(--text-muted);
+  opacity: 0.55;
   font-weight: 400;
 }
 
@@ -1975,10 +1978,12 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-desc-preview.is-empty {
   color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .info-desc-placeholder {
   color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .info-desc-input {
@@ -1994,6 +1999,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 
 .info-desc-input::placeholder {
   color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .info-desc-input:focus {
@@ -2019,6 +2025,7 @@ html[data-color-mode='dark'] .overview-composer-input {
 .info-desc-rich.is-empty::before {
   content: attr(data-placeholder);
   color: var(--text-muted);
+  opacity: 0.55;
   pointer-events: none;
 }
 

@@ -241,7 +241,7 @@ button.db-chip { background: none; font: inherit; font-size: 11px; cursor: point
 
 /* ── Rich capture ────────────────────────────────────────────────────── */
 div.db-capture { resize: none; overflow: auto; max-height: 50vh; white-space: pre-wrap; overflow-wrap: anywhere; }
-.db-capture.is-empty::before { content: attr(data-placeholder); color: var(--tp-text-muted); pointer-events: none; float: left; height: 0; }
+.db-capture.is-empty::before { content: attr(data-placeholder); color: var(--tp-text-muted); opacity: 0.6; pointer-events: none; float: left; height: 0; }
 .db-capture.is-drop { background: var(--tp-surface-active); }
 .db-capture p { margin: 0 0 6px; }
 .db-capture ul, .db-capture ol { margin: 0 0 6px; padding-left: 22px; }
