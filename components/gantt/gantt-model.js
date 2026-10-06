@@ -282,10 +282,11 @@
         cursor = addDays(cursor, 1);
       }
     } else {
-      start = startOfYear(a);
-      end = endOfYear(a);
-      for (var mi = 0; mi < 12; mi++) {
-        cursor = new Date(a.getFullYear(), mi, 1);
+      // Previous, current and next year: 36 month columns.
+      start = new Date(a.getFullYear() - 1, 0, 1);
+      end = new Date(a.getFullYear() + 1, 11, 31);
+      for (var mi = 0; mi < 36; mi++) {
+        cursor = new Date(a.getFullYear() - 1, mi, 1);
         colEnd = endOfMonth(cursor);
         columns.push({
           key: cursor.getFullYear() + '-' + pad2(mi + 1),

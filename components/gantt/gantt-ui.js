@@ -1407,7 +1407,7 @@
       var title = el('div', 'gantt-title');
       var r = range();
       if (state.viewMode === 'year') {
-        title.textContent = String(r.start.getFullYear());
+        title.textContent = r.start.getFullYear() + ' – ' + r.end.getFullYear();
       } else if (state.viewMode === 'month') {
         title.textContent =
           r.start.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
@@ -4370,6 +4370,10 @@
               ? String(col.start.getDate())
               : col.label,
         });
+        if (state.viewMode === 'year' && col.start instanceof Date && col.start.getMonth() === 0) {
+          cell.classList.add('gantt-col-head--year-start');
+          cell.appendChild(el('span', 'gantt-col-date', { text: String(col.start.getFullYear()) }));
+        }
         if (state.viewMode === 'week' && col.start instanceof Date) {
           // "Lundi 28": the weekday alone does not say which date it is ("1 oct." on a month's first day).
           var dom = col.start.getDate();

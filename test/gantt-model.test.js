@@ -94,11 +94,11 @@ describe('GanttModel', () => {
     assert.equal(range.columns.length, 31);
   });
 
-  it('viewRange year has 12 month columns', () => {
+  it('viewRange year spans previous, current and next year (36 month columns)', () => {
     const range = GanttModel.viewRange('year', '2026-07-15');
-    assert.equal(GanttModel.toIsoDate(range.start), '2026-01-01');
-    assert.equal(GanttModel.toIsoDate(range.end), '2026-12-31');
-    assert.equal(range.columns.length, 12);
+    assert.equal(GanttModel.toIsoDate(range.start), '2025-01-01');
+    assert.equal(GanttModel.toIsoDate(range.end), '2027-12-31');
+    assert.equal(range.columns.length, 36);
   });
 
   it('resolveBarInterval uses start→due when both set', () => {
