@@ -90,7 +90,6 @@
       name: 'Personne',
       fields: [
         { key: 'naissance', label: 'Naissance', kind: 'date' },
-        { key: 'deces', label: 'Décès', kind: 'date' },
         { key: 'residence', label: 'Habite à', kind: 'ref', refTypes: ['place'], rel: 'lives-in' },
         { key: 'courriel', label: 'Courriel', kind: 'text' },
         { key: 'telephone', label: 'Téléphone', kind: 'text' },
