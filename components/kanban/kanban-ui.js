@@ -362,15 +362,21 @@
       if (badges.length) kids.push(h('div', { class: 'kb-badges' }, badges));
       if (typeof row.progress === 'number') {
         var p = Math.max(0, Math.min(100, row.progress));
+        var ring = global.ProgressRing ? global.ProgressRing.create(p, row.blocked) : null;
+        if (ring && row.blocked) {
+          ring.setAttribute('aria-label', 'Bloqué — cliquer pour débloquer');
+          ring.appendChild(Object.assign(document.createElementNS('http://www.w3.org/2000/svg', 'title'), { textContent: 'Bloqué — cliquer pour débloquer' }));
+        }
         var prog = h('button', {
           class: 'kb-prog' + (p >= 100 ? ' is-done' : ''),
           title: 'Progrès · cliquer pour modifier',
           onclick: function (e) {
             e.stopPropagation();
+            if (row.blocked && e.target.closest && e.target.closest('.pg-ring')) return unblockRow(row);
             openEditor(row, 'progress', e.currentTarget);
           },
         }, [
-          global.ProgressRing ? global.ProgressRing.create(p) : null,
+          ring,
           h('span', { class: 'kb-prog-bar' }, [h('i', { style: 'width:' + p + '%' })]),
           h('span', { class: 'kb-prog-num', text: p + '%' }),
         ]);
@@ -626,6 +632,20 @@
         }
         return again(0).then(function () { setStatus('Carte créée dans « ' + list.name + ' »', 'ok'); });
       });
+    }
+
+    /** Clears Bloqué on a card (the red II on its progress ring). */
+    function unblockRow(row) {
+      setStatus('Déblocage…');
+      return global.GanttTrello.setCardBlocked(t, row.id, false).then(function (res) {
+        if (!res || !res.ok) {
+          setStatus('Échec du déblocage' + (res && res.reason ? ' (' + res.reason + ')' : ''), 'error');
+        } else {
+          record({ type: 'edit', key: 'blocked', label: 'Blocage', targetId: row.id, title: row.name, before: 'Bloqué', after: 'Non', beforeVal: true, afterVal: false });
+          setStatus('Carte débloquée', 'ok');
+        }
+        return reload({ quiet: true });
+      }, fail);
     }
 
     /* ── Loading ───────────────────────────────────────────────────── */

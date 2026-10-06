@@ -533,12 +533,23 @@
           var pw = 50;
           var px = x0 + n.w - 12 - pw - 30;
           if (global.ProgressRing) {
-            var ring = global.ProgressRing.create(prog);
+            var ring = global.ProgressRing.create(prog, rec.blocked);
             ring.setAttribute('x', px - 20);
             ring.setAttribute('y', by + 6);
             ring.setAttribute('width', 14);
             ring.setAttribute('height', 14);
-            ring.style.pointerEvents = 'none';
+            if (rec.blocked) {
+              var ringTitle = s('title');
+              ringTitle.textContent = 'Bloqué — cliquer pour débloquer';
+              ring.appendChild(ringTitle);
+              ring.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+              ring.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                runEdit(function () { return global.GanttTrello.setCardBlocked(t, rec.id, false); });
+              });
+            } else {
+              ring.style.pointerEvents = 'none';
+            }
             g.appendChild(ring);
           }
           g.appendChild(s('rect', { class: 'mm-progress-track', x: px, y: by + 11, width: pw, height: 4, rx: 2 }));

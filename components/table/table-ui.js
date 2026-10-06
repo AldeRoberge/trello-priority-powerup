@@ -801,8 +801,14 @@
     function richValue(row, key) {
       if (key === 'progress' && typeof row.progress === 'number') {
         var p = Math.max(0, Math.min(100, row.progress));
+        var ring = row.blocked && global.ProgressRing ? global.ProgressRing.create(p, true) : progressRing(p);
+        if (row.blocked && global.ProgressRing) {
+          ring.classList.add('tb-prog-ring');
+          ring.setAttribute('aria-label', 'Bloqué — cliquer pour débloquer');
+          ring.appendChild(Object.assign(document.createElementNS('http://www.w3.org/2000/svg', 'title'), { textContent: 'Bloqué — cliquer pour débloquer' }));
+        }
         return h('span', { class: 'tb-prog' + (p >= 100 ? ' is-done' : '') }, [
-          progressRing(p),
+          ring,
           h('span', { class: 'tb-prog-bar' }, [h('i', { style: 'width:' + p + '%' })]),
           h('span', { class: 'tb-prog-num', text: p + '%' }),
         ]);
@@ -836,6 +842,7 @@
         ringEl.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
         ringEl.addEventListener('click', function (e) {
           e.stopPropagation();
+          if (row.blocked) return unblockRow(row);
           saveProgress(row, row.progress >= 100 ? 0 : 100);
         });
       }
@@ -874,6 +881,21 @@
         document.addEventListener('pointerup', up);
         document.addEventListener('pointercancel', up);
       });
+    }
+
+    /** Clears Bloqué on a card (the red II on its progress ring). */
+    function unblockRow(row) {
+      setStatus('Déblocage…');
+      return global.GanttTrello.setCardBlocked(t, row.id, false).then(function (res) {
+        if (!res || !res.ok) {
+          setStatus('Échec du déblocage' + (res && res.reason ? ' (' + res.reason + ')' : ''), 'error');
+        } else {
+          record({ type: 'edit', key: 'blocked', label: 'Blocage', targetId: row.id, title: row.name, before: 'Bloqué', after: 'Non', beforeVal: true, afterVal: false });
+          setStatus('Carte débloquée', 'ok');
+          schedulePush();
+        }
+        return reload({ quiet: true });
+      }, fail);
     }
 
     /** Master progress over subtasks, else the card's own progress. Rejects if the editor is unavailable. */

@@ -94,6 +94,7 @@
       tier: enabled ? rec.priorityLabel || '' : '',
       tierI: enabled && typeof rec.priorityTierI === 'number' ? rec.priorityTierI : null,
       progress: typeof rec.progress === 'number' ? Math.round(rec.progress) : null,
+      blocked: !!rec.blocked,
       desc: splitVisible(rec.desc),
       due: rec.dueDate || '',
       link: rec.url || '',

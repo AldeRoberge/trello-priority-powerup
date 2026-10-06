@@ -2261,13 +2261,14 @@
         var isBlocked = !!row.blocked;
         var blockedBtn = iconButton(
           'ti-player-pause',
-          isBlocked ? 'Bloqu\u00e9 \u2014 modifier' : 'Bloquer',
+          isBlocked ? 'Bloqu\u00e9 \u2014 cliquer pour d\u00e9bloquer' : 'Bloquer',
           isBlocked ? 'is-blocked' : 'is-blocked-ghost'
         );
         blockedBtn.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();
-          openMiniBlocked(row, blockedBtn);
+          if (isBlocked) toggleCardBlocked(row);
+          else openMiniBlocked(row, blockedBtn);
         });
         slot('is-blocked', blockedBtn);
 

@@ -34,3 +34,24 @@ button:hover > .pg-ring .pg-track,
 .pg-ring:hover .pg-track {
   stroke: var(--tp-text-subtle);
 }
+/* Blocked: red pause (II), same colour as the Gantt pause button; clicking it unblocks the card. */
+.pg-pause {
+  display: none;
+  fill: var(--tp-danger-text, #ae2e24);
+}
+.pg-ring.is-blocked {
+  cursor: pointer;
+  border-radius: 4px;
+}
+.pg-ring.is-blocked:hover {
+  background: color-mix(in srgb, var(--tp-danger-text, #ae2e24) 14%, transparent);
+}
+.pg-ring.is-blocked .pg-pause {
+  display: block;
+}
+.pg-ring.is-blocked .pg-track,
+.pg-ring.is-blocked .pg-arc,
+.pg-ring.is-blocked .pg-disc,
+.pg-ring.is-blocked .pg-check {
+  display: none;
+}
