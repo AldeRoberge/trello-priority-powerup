@@ -65,6 +65,7 @@ The UI copy is French (Québec). The user writes short, informal requests and ex
 - Reference apps: Apple (clean, calm), Linear, Miro, Draw.io, Trello. A confusing screen gets redesigned, not patched.
 - States: completed is grayed and not bold; blocked/paused is red with the "II" icon (click to unblock); blocked and completed together needs a deliberate look. Completed items are hidden by default with the same top-right toggle in every view. Text is never cropped (wrap it). Icons are homogeneous.
 - Empty values say "Cliquer pour ajouter…" and can be set right there, never just "Vide".
+- **Visual hierarchy: less relevant means less present, everywhere.** Empty placeholders and hints ("Cliquer pour ajouter…", empty columns, input placeholders) are dimmed (opacity about 0.55, muted color), prefixed with a `+` icon (`ti ti-plus`) when they invite an action, and brighten slightly on hover. Same for other secondary info (completed, metadata, helper text): quieter than the content that matters. Apply it through shared CSS and check every view, not just the one asked about.
 
 ### AI rules
 
