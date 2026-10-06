@@ -276,13 +276,14 @@
     var next = clone(draft);
     next.components = (next.components || []).filter(function (c) { return c !== cid; });
     if (on && EM().findById(schema.components, cid)) next.components.push(cid);
+    if (!on && cid === EM().NAMES_COMPONENT) next.aliases = []; // the other names go with their component
     return on ? next : pruneAnswers(schema, next);
   }
 
   /** Components not carried yet (neither by the archetypes nor added): what "+ Composant" can offer. */
   function componentsAvailable(schema, draft) {
     var have = EM().componentIdsOf(schema, draft);
-    return schema.components.filter(function (c) { return have.indexOf(c.id) < 0; });
+    return schema.components.filter(function (c) { return have.indexOf(c.id) < 0 && !(c.id === EM().NAMES_COMPONENT && (draft.aliases || []).length); });
   }
 
   /**

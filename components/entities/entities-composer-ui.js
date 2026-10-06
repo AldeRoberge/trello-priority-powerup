@@ -195,8 +195,23 @@
     /** "Autres noms" as a component card, like the others in Détails (same collapsible card and field grid). */
     function aliasCard() {
       var n = draft().aliases.length;
+      var fromType = EM().componentIdsOf(st.schema, { types: draft().types }).indexOf(EM().NAMES_COMPONENT) >= 0;
+      var removeX = fromType
+        ? null
+        : h('button', {
+            class: 'cp-x',
+            type: 'button',
+            'aria-label': 'Retirer le composant Autres noms',
+            onclick: function (ev) {
+              ev.preventDefault();
+              setDraft(EC().toggleComponent(st.schema, draft(), EM().NAMES_COMPONENT, false));
+              nameSec = null;
+              renderMain();
+              refresh();
+            },
+          }, [icon('x')]);
       var card = h('details', { class: 'cp-ccard', open: n || st.openComps.aliases ? true : null }, [
-        h('summary', { class: 'cp-ccard-head' }, [icon('chevron-right'), h('strong', { text: 'Autres noms' }), h('span', { class: 'cp-hint', text: n ? String(n) : 'alias, traductions' })]),
+        h('summary', { class: 'cp-ccard-head' }, [icon('chevron-right'), h('strong', { text: 'Autres noms' }), h('span', { class: 'cp-hint', text: n ? String(n) : 'alias, traductions' }), removeX]),
         h('div', { class: 'cp-fields' }, [h('div', { class: 'cp-field cp-field--wide' }, [h('label', { class: 'cp-field-label', text: 'Alias' }), aliasEditor])]),
       ]);
       card.addEventListener('toggle', function () {
@@ -704,13 +719,14 @@
     function componentsBlock() {
       var d = draft();
       var ids = EM().componentIdsOf(st.schema, d);
-      var showAlias = !!(aliasEditor && (st.showAlias || d.aliases.length));
+      var showAlias = !!(aliasEditor && (ids.indexOf(EM().NAMES_COMPONENT) >= 0 || d.aliases.length));
       if (!ids.length && !st.showComps && !showAlias) return null;
       var sec = h('div', { class: 'cp-sec' });
       sec.appendChild(h('h3', { class: 'cp-sec-title', text: 'Détails' }));
       var list = h('div', { class: 'cp-ccards' });
       if (showAlias) list.appendChild(aliasCard());
       ids.forEach(function (cid) {
+        if (cid === EM().NAMES_COMPONENT) return; // drawn above by aliasCard
         var card = componentCard(cid);
         if (card) list.appendChild(card);
       });
@@ -729,7 +745,7 @@
                 title: c.fields.map(function (x) { return x.label; }).join(', '),
                 onclick: function () {
                   setDraft(EC().toggleComponent(st.schema, draft(), c.id, true));
-                  st.openComps[c.id] = true;
+                  st.openComps[c.id === EM().NAMES_COMPONENT ? 'aliases' : c.id] = true;
                   renderMain();
                   refresh();
                 },
@@ -1253,9 +1269,9 @@
       function add(label, ic, fn) {
         row.appendChild(h('button', { class: 'cp-quiet', type: 'button', onclick: fn }, [icon(ic), label]));
       }
-      if (!st.showAlias && !draft().aliases.length)
+      if (EM().componentIdsOf(st.schema, draft()).indexOf(EM().NAMES_COMPONENT) < 0 && !draft().aliases.length)
         add('Autres noms', 'tag', function () {
-          st.showAlias = true;
+          setDraft(EC().toggleComponent(st.schema, draft(), EM().NAMES_COMPONENT, true));
           st.openComps.aliases = true;
           renderMain();
           var i = els.main.querySelector('.cp-chipedit-in');

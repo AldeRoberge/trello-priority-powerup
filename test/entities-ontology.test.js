@@ -522,10 +522,10 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       let d = C.toggleType(s, C.newDraft({ name: 'Ficus' }), 'plante', true);
       assert.deepEqual(C.defaultFor(s, [], d, 'entretien.every'), { value: 7, source: 'archetype', from: 'Plante' });
       assert.equal(C.defaultFor(s, [], d, 'note.txt'), null);
-      assert.deepEqual(C.componentsAvailable(s, d).map((c) => c.id), ['location', 'note']);
+      assert.deepEqual(C.componentsAvailable(s, d).map((c) => c.id), ['location', 'names', 'note']);
       d = C.toggleComponent(s, d, 'note', true);
       d = C.setAnswer(d, 'note.txt', 'ok');
-      assert.deepEqual(C.componentsAvailable(s, d).map((c) => c.id), ['location']);
+      assert.deepEqual(C.componentsAvailable(s, d).map((c) => c.id), ['location', 'names']);
       const done = C.finalize(s, [], [d]);
       assert.deepEqual(done.created[0].components, ['note']);
       assert.deepEqual(done.created[0].data, { note: { txt: 'ok' } }, 'defaults are not copied into the entity');

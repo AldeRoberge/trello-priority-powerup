@@ -207,3 +207,26 @@ describe('EntitiesModel', () => {
     assert.ok(big.length <= 2500);
   });
 });
+
+describe('Autres noms as a built-in component', () => {
+  let EM;
+  before(() => {
+    loadComponent('entities/entities-model.js');
+    EM = global.EntitiesModel;
+  });
+  it('every schema has the "names" component; it cannot be removed', () => {
+    const s = EM.normalizeSchema({ components: [], types: [] });
+    assert.ok(EM.findById(s.components, 'names').builtin === 'aliases');
+    assert.ok(EM.findById(EM.removeComponent(s, 'names').components, 'names'));
+  });
+  it('an entity with aliases carries the component; clearing and removing it works', () => {
+    const s = EM.normalizeSchema({});
+    let e = EM.createEntity(s, { name: 'Bureau', aliases: ['travail'] });
+    assert.ok(EM.componentIdsOf(s, e).includes('names'));
+    const none = EM.createEntity(s, { name: 'Salon' });
+    assert.ok(!EM.componentIdsOf(s, none).includes('names'));
+    e = EM.setComponents(s, EM.setAliases(e, []), []);
+    assert.deepEqual(e.aliases, []);
+    assert.ok(!EM.componentIdsOf(s, e).includes('names'));
+  });
+});

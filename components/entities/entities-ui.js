@@ -1237,7 +1237,7 @@
     }
 
     /** "Autres noms" as a section of the entity page, laid out like a component's property rows. */
-    function aliasesSection(e) {
+    function aliasesSection(e, removeBtn) {
       var aliasBox = h('div', { class: 'en-aliases' });
       function setAliasList(list, refocus) {
         applyEntity(function (cur) {
@@ -1290,7 +1290,7 @@
       }
       fillAliases();
       var row = h('div', { class: 'en-prop en-prop--stack' }, [h('label', { class: 'en-prop-label', text: 'Alias' }), h('div', { class: 'en-prop-value' }, [aliasBox]), h('span', { class: 'en-prop-meta' })]);
-      return section('Autres noms', h('div', { class: 'en-set' }, [row]));
+      return section('Autres noms', h('div', { class: 'en-set' }, [row]), removeBtn);
     }
 
     function paintMain() {
@@ -1331,7 +1331,6 @@
         .forEach(function (i) {
           page.appendChild(h('div', { class: 'en-notice en-notice--' + i.level, role: 'note' }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), h('span', { text: i.message })]));
         });
-      page.appendChild(aliasesSection(e));
       var ownIds = EM().componentIdsOf(state.schema, { types: e.types });
       var comps = EM()
         .componentIdsOf(state.schema, e)
@@ -1351,13 +1350,15 @@
                 onclick: function () {
                   applyEntity(
                     function (cur) {
-                      return EM().setComponents(
+                      var base = comp.builtin === 'aliases' ? EM().setAliases(cur, []) : cur; // the other names go with their component
+                      var left = EM().setComponents(
                         state.schema,
-                        cur,
+                        base,
                         (cur.components || []).filter(function (x) {
                           return x !== comp.id;
                         })
                       );
+                      return left;
                     },
                     { rebuild: true }
                   );
@@ -1366,6 +1367,10 @@
               ['Retirer']
             )
           : null;
+        if (comp.builtin === 'aliases') {
+          page.appendChild(aliasesSection(e, removeBtn));
+          return;
+        }
         var rows = comp.fields.map(function (f) {
           return propRow(e, comp, f);
         });
@@ -1387,7 +1392,7 @@
     function addFieldsRow(e, first) {
       var have = EM().componentIdsOf(state.schema, e);
       var avail = state.schema.components.filter(function (c) {
-        return have.indexOf(c.id) < 0 && c.fields.length;
+        return have.indexOf(c.id) < 0 && (c.fields.length || c.builtin);
       });
       if (!avail.length) return null;
       return h('div', { class: 'en-addrow' }, [
@@ -2040,7 +2045,14 @@
     }
 
     function componentCard(c) {
-      var name = h('input', { class: 'en-input', value: c.name, 'aria-label': 'Nom du composant' });
+      if (c.builtin) {
+        return foldCard(
+          'comp:' + c.id,
+          [h('span', { class: 'en-fold-name', text: c.name }), h('span', { class: 'en-fold-meta', text: 'intégré' })],
+          [h('p', { class: 'en-hint', text: 'Composant intégré : les autres noms d’une entité (« travail », « work »). Ajoutez-le à un archétype ou à une entité comme n’importe quel composant.' })]
+        );
+      }
+      var name =h('input', { class: 'en-input', value: c.name, 'aria-label': 'Nom du composant' });
       function build(fields) {
         return { id: c.id, name: name.value, fields: fields };
       }

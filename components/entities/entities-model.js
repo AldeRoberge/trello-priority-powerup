@@ -178,8 +178,13 @@
         if (f.key === 'place' && f.kind === 'ref' && !f.rel) f.rel = 'located-in';
       });
     }
-    return { id: id, name: name || id, fields: fields.slice(0, MAX_FIELDS) };
+    var out = { id: id, name: name || id, fields: fields.slice(0, MAX_FIELDS) };
+    if (c.builtin === 'aliases') out.builtin = 'aliases';
+    return out;
   }
+
+  /** Built-in component whose value is the entity's own alias list ("Autres noms"); added or removed like any other. */
+  var NAMES_COMPONENT = 'names';
 
   function normalizeType(t) {
     if (!t || typeof t !== 'object') return null;
@@ -221,6 +226,10 @@
       seenC[nc.id] = true;
       components.push(nc);
     });
+    if (!seenC[NAMES_COMPONENT]) {
+      seenC[NAMES_COMPONENT] = true;
+      components.push({ id: NAMES_COMPONENT, name: 'Autres noms', fields: [], builtin: 'aliases' });
+    }
     var seenT = {};
     var types = [];
     (Array.isArray(s.types) ? s.types : []).forEach(function (t) {
@@ -369,6 +378,7 @@
   /** Removes a component from the schema and from every type (entity data of it stays dormant). */
   function removeComponent(schema, id) {
     var next = clone(schema);
+    if (id === NAMES_COMPONENT) return schema;
     next.components = next.components.filter(function (c) {
       return c.id !== id;
     });
@@ -597,6 +607,9 @@
     var extra = uniqueStrings(raw.components, MAX_COMPONENTS, MAX_NAME).map(slug).filter(function (c) {
       return !!c && (!schema || !!findById(schema.components, c));
     });
+    var aliasList = uniqueStrings(raw.aliases, MAX_ALIASES, MAX_ALIAS);
+    // an entity that already has other names carries the "Autres noms" component
+    if (aliasList.length && extra.indexOf(NAMES_COMPONENT) < 0 && (!schema || !!findById(schema.components, NAMES_COMPONENT))) extra.push(NAMES_COMPONENT);
     var data = {};
     var src = raw.data && typeof raw.data === 'object' ? raw.data : {};
     Object.keys(src).forEach(function (cid) {
@@ -637,7 +650,7 @@
       id: String(raw.id),
       name: name,
       base: raw.base && String(raw.base) !== String(raw.id) ? String(raw.base) : '',
-      aliases: uniqueStrings(raw.aliases, MAX_ALIASES, MAX_ALIAS),
+      aliases: aliasList,
       types: types,
       components: extra,
       data: data,
@@ -816,6 +829,7 @@
     var next = clone(entity);
     pushHistory(next, { op: 'aliases', before: entity.aliases, after: list }, opts);
     next.aliases = list;
+    if (list.length && (next.components || []).indexOf(NAMES_COMPONENT) < 0) next.components = (next.components || []).concat([NAMES_COMPONENT]);
     return next;
   }
 
@@ -1788,6 +1802,7 @@
     createEntity: createEntity,
     renameEntity: renameEntity,
     setAliases: setAliases,
+    NAMES_COMPONENT: NAMES_COMPONENT,
     setTypes: setTypes,
     setValue: setValue,
     getValue: getValue,
