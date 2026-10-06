@@ -271,6 +271,40 @@
     return Math.max(LABELS_W_MIN, Math.min(max, w));
   }
 
+  /**
+   * Text colour that reads best on a bar of colour `bg` (white or dark navy,
+   * whichever contrasts more). Bar colours are user-configurable and can be
+   * pale. Returns null when `bg` is not a hex / rgb() colour.
+   */
+  function barTextColor(bg) {
+    var s = typeof bg === 'string' ? bg.trim() : '';
+    var rgb = null;
+    var hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
+    if (hex) {
+      var h = hex[1];
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      rgb = [
+        parseInt(h.slice(0, 2), 16),
+        parseInt(h.slice(2, 4), 16),
+        parseInt(h.slice(4, 6), 16),
+      ];
+    } else {
+      var fn = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(s);
+      if (fn) rgb = [Number(fn[1]), Number(fn[2]), Number(fn[3])];
+    }
+    if (!rgb) return null;
+    var lin = rgb.map(function (v) {
+      var c = Math.min(255, v) / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    var lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    var dark = '#172b4d';
+    var darkLum = 0.0246; // relative luminance of #172b4d
+    var onWhite = 1.05 / (lum + 0.05);
+    var onDark = (lum + 0.05) / (darkLum + 0.05);
+    return onWhite >= onDark ? '#ffffff' : dark;
+  }
+
   function minColumnWidth(mode) {
     var m =
       GM() && typeof GM().normalizeViewMode === 'function'
@@ -283,11 +317,13 @@
    * Timeline pixel width for the current zoom: fill the scrollport when possible,
    * otherwise expand so each header column keeps a readable minimum width.
    */
-  function computeTimelineWidth(availPx, mode, columnCount) {
+  function computeTimelineWidth(availPx, mode, columnCount, zoom) {
     var avail = Math.max(0, Math.round(Number(availPx) || 0));
     var cols = Math.max(1, Math.round(Number(columnCount) || 1));
     var minContent = cols * minColumnWidth(mode);
-    return Math.max(avail, minContent, 1);
+    var z = Number(zoom);
+    if (!(z >= 1) || !isFinite(z)) z = 1;
+    return Math.max(Math.round(Math.max(avail, minContent) * z), 1);
   }
 
   function el(tag, className, attrs) {
@@ -390,6 +426,10 @@
       authHint: '',
       restAuthorized: null, // null = not checked yet
       timelineWidth: MIN_TIMELINE_W,
+      // Continuous zoom (mouse wheel): multiplier on the natural width of the
+      // current view mode, 1 = the mode's own fit. See applyZoomPx().
+      zoom: 1,
+      pendingFocal: null,
       labelsWidth: readStoredLabelsWidth(),
       widthMeasured: false,
       pendingScrollLeft: null,
@@ -614,6 +654,7 @@
             hideUndated: !!state.hideUndated,
             onViewMode: function (mode) {
               state.viewMode = mode;
+              state.zoom = 1;
               render();
             },
             onPrev: function () {
@@ -703,7 +744,8 @@
       var nextW = computeTimelineWidth(
         avail,
         state.viewMode,
-        r.columns && r.columns.length
+        r.columns && r.columns.length,
+        state.zoom
       );
       if (!force && Math.abs(nextW - state.timelineWidth) <= 2) {
         state.widthMeasured = true;
@@ -969,6 +1011,216 @@
       return { timeWarp: warp };
     }
 
+    // ---- Continuous zoom (mouse wheel) -------------------------------------
+    // The zoom is a pixels-per-day value. The year / month / week views are the
+    // coarse "levels"; inside a level `state.zoom` stretches the timeline, and
+    // when the scale crosses the next level's natural scale we swap to that view
+    // (keeping the date under the cursor fixed), so zooming never jumps. Past the
+    // week view the week keeps stretching and an hour / minute scale appears.
+    var ZOOM_LEVELS = ['year', 'month', 'week'];
+    var MAX_WEEK_ZOOM = 100;
+    var zoomAnim = { raf: 0, targetP: 0, curP: 0, clientX: 0 };
+
+    function levelInfo(mode, anchorIso, avail, zoom) {
+      var rr = model.viewRange(mode, anchorIso);
+      var days = Math.max(1, model.rangeDayCount(rr));
+      var cols = (rr.columns && rr.columns.length) || 1;
+      return {
+        range: rr,
+        days: days,
+        width: computeTimelineWidth(avail, mode, cols, zoom),
+        natural: computeTimelineWidth(avail, mode, cols, 1) / days,
+      };
+    }
+
+    function currentPxPerDay() {
+      return state.timelineWidth / Math.max(1, model.rangeDayCount(range()));
+    }
+
+    /**
+     * Zoom so the timeline shows `targetP` pixels per day, keeping the instant
+     * under `clientX` where it is. Returns the pixels per day actually applied
+     * (clamped to the year view ... week view x MAX_WEEK_ZOOM), or null.
+     */
+    function applyZoomPx(targetP, clientX) {
+      var scroll = body.querySelector('.gantt-timeline-scroll');
+      var head = body.querySelector('.gantt-timeline-header');
+      if (!scroll || !head || state.loading) return null;
+      var avail = availableTimelineWidth(scroll);
+      if (avail < 1) return null;
+
+      var r = range();
+      var headRect = head.getBoundingClientRect();
+      var scrollRect = scroll.getBoundingClientRect();
+      var focal = model.xToDateTime(
+        clientX - headRect.left,
+        r,
+        state.timelineWidth,
+        timelineMapOptions()
+      );
+      if (!focal) return null;
+      var focalIso = model.toIsoDate(focal);
+
+      var minP = levelInfo('year', focalIso, avail, 1).natural;
+      var maxP = levelInfo('week', focalIso, avail, 1).natural * MAX_WEEK_ZOOM;
+      var p = Math.max(minP, Math.min(maxP, targetP));
+      var mode = ZOOM_LEVELS[0];
+      for (var i = 0; i < ZOOM_LEVELS.length; i++) {
+        if (levelInfo(ZOOM_LEVELS[i], focalIso, avail, 1).natural <= p * 1.0001) {
+          mode = ZOOM_LEVELS[i];
+        }
+      }
+      var modeChanged = mode !== state.viewMode;
+      var anchorIso = modeChanged ? focalIso : state.anchor;
+      var info = levelInfo(mode, anchorIso, avail, 1);
+      var z = Math.max(1, p / info.natural);
+      var width = levelInfo(mode, anchorIso, avail, z).width;
+
+      state.viewMode = mode;
+      state.anchor = anchorIso;
+      state.zoom = z;
+      state.timelineWidth = width;
+      state.widthMeasured = true;
+      state.pendingFocal = {
+        ms: focal.getTime(),
+        vx: clientX - scrollRect.left,
+        off: headRect.left - scrollRect.left + scroll.scrollLeft,
+      };
+      if (modeChanged) render();
+      else renderChart();
+      return p;
+    }
+
+    function onWheelZoom(ev) {
+      var unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 120 : 1;
+      var f = Math.exp(-ev.deltaY * unit * 0.002);
+      f = Math.max(0.6, Math.min(1.6, f));
+      if (!zoomAnim.raf) {
+        zoomAnim.curP = currentPxPerDay();
+        zoomAnim.targetP = zoomAnim.curP;
+      }
+      zoomAnim.targetP *= f;
+      zoomAnim.clientX = ev.clientX;
+      if (!zoomAnim.raf) zoomAnim.raf = requestAnimationFrame(zoomTick);
+    }
+
+    // Ease the scale toward the wheel's target a bit every frame, so a notched
+    // wheel glides instead of jumping a whole step.
+    function zoomTick() {
+      zoomAnim.raf = 0;
+      var ratio = zoomAnim.targetP / zoomAnim.curP;
+      if (!isFinite(ratio) || ratio <= 0) return;
+      var done = Math.abs(Math.log(ratio)) < 0.004;
+      var next = done ? zoomAnim.targetP : zoomAnim.curP * Math.pow(ratio, 0.3);
+      var applied = applyZoomPx(next, zoomAnim.clientX);
+      if (applied == null) return;
+      if (Math.abs(applied - next) > 1e-6) {
+        // Hit the closest / farthest zoom: stop pushing past it.
+        zoomAnim.targetP = applied;
+        done = true;
+      }
+      zoomAnim.curP = applied;
+      if (!done) zoomAnim.raf = requestAnimationFrame(zoomTick);
+    }
+
+    // Hour / minute scale of the week view once a day is wide enough: tick
+    // labels in the header, faint lines through the rows, and the day labels
+    // kept in view while the day is wider than the screen. Only the ticks near
+    // the visible part are built, and they are rebuilt while scrolling.
+    var HOUR_STEPS = [360, 180, 60, 30, 15, 5];
+    var MIN_TICK_PX = 52;
+
+    function hourStepFor(dayPx) {
+      var step = 0;
+      for (var i = 0; i < HOUR_STEPS.length; i++) {
+        if ((dayPx * HOUR_STEPS[i]) / 1440 >= MIN_TICK_PX) step = HOUR_STEPS[i];
+      }
+      return step;
+    }
+
+    function fmtTick(minutes) {
+      var h = Math.floor(minutes / 60);
+      var m = minutes % 60;
+      return m ? h + 'h' + (m < 10 ? '0' : '') + m : h + 'h';
+    }
+
+    function bindHourScale(scroll, timelineCol, headerTimeline, r, mapOpts) {
+      var days = model.rangeDayCount(r);
+      var dayPx = state.timelineWidth / days;
+      if (state.viewMode !== 'week' || !hourStepFor(dayPx)) return;
+      var step = hourStepFor(dayPx);
+      var cells = headerTimeline.children;
+      var first = model.startOfDay(r.start);
+      var lines = el('div', 'gantt-hour-lines');
+      var labels = el('div', 'gantt-hour-labels');
+      timelineCol.appendChild(lines);
+      headerTimeline.appendChild(labels);
+      headerTimeline.classList.add('gantt-timeline-header--hours');
+      var raf = 0;
+
+      function xOf(date) {
+        return model.dateTimeToX(date, r, state.timelineWidth, mapOpts);
+      }
+
+      function dayAt(d, minutes) {
+        return new Date(
+          first.getFullYear(),
+          first.getMonth(),
+          first.getDate() + d,
+          Math.floor(minutes / 60),
+          minutes % 60
+        );
+      }
+
+      function draw() {
+        raf = 0;
+        var left = scroll.scrollLeft - 200;
+        var right = scroll.scrollLeft + scroll.clientWidth + 200;
+        var linesFrag = document.createDocumentFragment();
+        var labelsFrag = document.createDocumentFragment();
+        for (var d = 0; d < days; d++) {
+          var x0 = xOf(dayAt(d, 0));
+          var x1 = d === days - 1 ? state.timelineWidth : xOf(dayAt(d + 1, 0));
+          // The day label follows the visible part of its (very wide) day.
+          var cell = cells[d];
+          if (cell && cell.classList.contains('gantt-col-head')) {
+            var shift = Math.max(
+              0,
+              Math.min(scroll.scrollLeft - x0, x1 - x0 - 150)
+            );
+            cell.style.paddingLeft = shift + 8 + 'px';
+          }
+          if (x1 < left || x0 > right) continue;
+          var lastX = x0;
+          for (var m = step; m < 1440; m += step) {
+            var x = xOf(dayAt(d, m));
+            if (x < left || x > right) continue;
+            var minor = m % 60 ? ' is-minor' : '';
+            var line = el('div', 'gantt-hour-line' + minor);
+            line.style.left = x + 'px';
+            linesFrag.appendChild(line);
+            if (x - lastX >= MIN_TICK_PX && x1 - x >= 24) {
+              var lab = el('span', 'gantt-hour-label' + minor, {
+                text: fmtTick(m),
+              });
+              lab.style.left = x + 'px';
+              labelsFrag.appendChild(lab);
+              lastX = x;
+            }
+          }
+        }
+        lines.textContent = '';
+        labels.textContent = '';
+        lines.appendChild(linesFrag);
+        labels.appendChild(labelsFrag);
+      }
+
+      draw();
+      scroll.addEventListener('scroll', function () {
+        if (!raf) raf = requestAnimationFrame(draw);
+      });
+    }
+
     function formatIntervalTitle(interval) {
       if (!interval) return '';
       var start = model.toIsoDate(interval.start);
@@ -1111,6 +1363,7 @@
         btn.appendChild(document.createTextNode(spec.label));
         btn.addEventListener('click', function () {
           state.viewMode = spec.mode;
+          state.zoom = 1;
           state.scrollToToday = true;
           render();
         });
@@ -2436,13 +2689,14 @@
               type: 'button',
               title: 'Progr\u00e8s ' + localPct + '%',
             });
+            span.setAttribute('aria-label', 'Progr\u00e8s ' + localPct + '%');
             span.appendChild(progressRingEl(localPct));
-            return span;
             span.addEventListener('click', function (e) {
               e.preventDefault();
               e.stopPropagation();
               openMiniProgress(row, span);
             });
+            return span;
           })()
         );
         slot('is-due', null);
@@ -3024,9 +3278,100 @@
       input.select();
     }
 
+    /** Rows that can receive a new subtask: board cards, and local items (as a checklist item). */
+    function canAddSubtask(row) {
+      if (!row) return false;
+      if (row.kind === 'card' && row.cardId) return true;
+      return row.kind === 'local' && !!row.parentCardId && !!row.itemId;
+    }
+
+    function commitAddSubtask(row, text) {
+      var trimmed = typeof text === 'string' ? text.trim() : '';
+      if (!trimmed) {
+        renderChart();
+        return;
+      }
+      if (state.saving || !canAddSubtask(row)) return;
+      state.saving = true;
+      setStatus('Ajout…');
+      ganttTrello
+        .addSubtask(t, subtaskMeta(row), trimmed)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              'Échec ajout' + (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          state.expanded[row.id] = true;
+          record({
+            type: 'add',
+            targetId: res.itemId || '',
+            title: res.name || trimmed,
+            label: 'sous-tâche ajoutée',
+          });
+          setStatus('Sous-tâche ajoutée');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus('Erreur : ' + (err && err.message ? err.message : String(err)), true);
+          return reload();
+        });
+    }
+
+    /** Swaps the row title for an input; Enter adds the subtask, Escape cancels. */
+    function startAddSubtask(row, actionsEl) {
+      var labelCell = actionsEl && actionsEl.closest ? actionsEl.closest('.gantt-label-cell, .gantt-row') : null;
+      var nameEl = labelCell && labelCell.querySelector('.gantt-task-name');
+      if (state.saving || !canAddSubtask(row) || !nameEl || !nameEl.parentNode) return;
+      var input = el('input', 'gantt-rename-input', { type: 'text', maxlength: '500' });
+      input.placeholder = 'Nouvelle sous-tâche…';
+      input.setAttribute('aria-label', 'Nouvelle sous-tâche');
+      var finished = false;
+      function finish(save) {
+        if (finished) return;
+        finished = true;
+        if (save) commitAddSubtask(row, input.value);
+        else renderChart();
+      }
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', function () {
+        finish(true);
+      });
+      nameEl.parentNode.replaceChild(input, nameEl);
+      input.focus();
+    }
+
     function buildSubtaskActions(row) {
       var actions = el('div', 'gantt-row-actions');
       var editable = canEditSubtask(row);
+
+      var addBtn = el('button', 'gantt-action-btn gantt-action-btn--add', {
+        type: 'button',
+        title: 'Ajouter une sous-tâche',
+      });
+      addBtn.innerHTML = '<i class="ti ti-list-check" aria-hidden="true"></i>';
+      if (!canAddSubtask(row)) {
+        addBtn.disabled = true;
+        addBtn.classList.add('is-disabled');
+      } else {
+        addBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          startAddSubtask(row, actions);
+        });
+      }
+      actions.appendChild(addBtn);
 
       var doneBtn = el(
         'button',
@@ -3789,10 +4134,6 @@
       barEl.style.width = width + 'px';
       barEl.title =
         (row.name || '') + ' \u00b7 ' + formatIntervalTitle(interval);
-      var fill = barEl.querySelector('.gantt-bar-fill');
-      if (fill) {
-        fill.style.width = Math.max(0, Math.min(100, row.progress || 0)) + '%';
-      }
       var labelEl = barEl.querySelector('.gantt-bar-label');
       if (labelEl) {
         labelEl.textContent = formatBarLabel(row, interval);
@@ -3845,6 +4186,18 @@
     function renderChart() {
       var restoreLeft = state.pendingScrollLeft;
       state.pendingScrollLeft = null;
+      if (state.pendingFocal) {
+        // Zooming: put the instant that was under the cursor back under it.
+        var pf = state.pendingFocal;
+        state.pendingFocal = null;
+        var fx = model.dateTimeToX(
+          new Date(pf.ms),
+          range(),
+          state.timelineWidth,
+          timelineMapOptions()
+        );
+        restoreLeft = Math.max(0, pf.off + fx - pf.vx);
+      }
       if (restoreLeft == null) {
         var prevScroll = body.querySelector('.gantt-timeline-scroll');
         if (prevScroll) restoreLeft = prevScroll.scrollLeft;
@@ -4449,6 +4802,8 @@
             bar.style.left = geo.left + 'px';
             bar.style.width = geo.width + 'px';
             bar.style.backgroundColor = row.color || 'var(--tp-primary, #0c66e4)';
+            var barText = barTextColor(row.color);
+            if (barText) bar.style.color = barText;
             if (row.category) bar.setAttribute('data-category', row.category);
             bar.title =
               (row.name || '') +
@@ -4457,10 +4812,6 @@
               (row.kind === 'card'
                 ? '\nCliquer pour modifier \u00b7 glisser pour d\u00e9placer'
                 : '');
-
-            var fill = el('div', 'gantt-bar-fill');
-            fill.style.width = Math.max(0, Math.min(100, row.progress || 0)) + '%';
-            bar.appendChild(fill);
 
             var label = el('span', 'gantt-bar-label', {
               text: formatBarLabel(row, interval),
@@ -4538,6 +4889,9 @@
       scroll.appendChild(timelineCol);
       chart.appendChild(scroll);
       body.appendChild(chart);
+      // Apply the restored scroll now (not only next frame) so a zoom does not flash.
+      if (restoreLeft != null && isFinite(restoreLeft)) scroll.scrollLeft = restoreLeft;
+      bindHourScale(scroll, timelineCol, headerTimeline, r, mapOpts);
 
       labelsCol.style.width = clampLabelsWidth(state.labelsWidth, chart) + 'px';
       state.labelsWidth = clampLabelsWidth(state.labelsWidth, chart);
@@ -4593,30 +4947,16 @@
         scroll.addEventListener('pointerup', onUp);
         scroll.addEventListener('pointercancel', onUp);
       });
-      // Mouse wheel over the timeline zooms between the view modes
-      // (wheel up = zoom in: year > month > week > day). The task list on the
-      // left keeps scrolling rows; shift + wheel still pans sideways.
-      var ZOOM_ORDER = ['year', 'month', 'week', 'day'];
-      var lastWheelZoom = 0;
+      // Mouse wheel over the timeline zooms continuously (year > month > week >
+      // hours, see applyZoomPx); the task list on the left keeps scrolling rows,
+      // and shift + wheel still pans sideways.
       scroll.addEventListener(
         'wheel',
         function (ev) {
           if (ev.shiftKey || !ev.deltaY) return;
           if (state.splitDrag || state.drag || state.paint) return;
           ev.preventDefault();
-          var now = Date.now();
-          if (now - lastWheelZoom < 250) return; // one step per wheel notch / trackpad burst
-          var idx = ZOOM_ORDER.indexOf(state.viewMode);
-          if (idx < 0) return;
-          var next = Math.max(
-            0,
-            Math.min(ZOOM_ORDER.length - 1, idx + (ev.deltaY < 0 ? 1 : -1))
-          );
-          if (next === idx) return;
-          lastWheelZoom = now;
-          state.viewMode = ZOOM_ORDER[next];
-          state.scrollToToday = true;
-          render();
+          onWheelZoom(ev);
         },
         { passive: false }
       );
@@ -4632,7 +4972,7 @@
           scroll.scrollLeft = restoreLeft;
         }
         var avail = availableTimelineWidth(scroll);
-        var nextW = computeTimelineWidth(avail, state.viewMode, colCount);
+        var nextW = computeTimelineWidth(avail, state.viewMode, colCount, state.zoom);
         if (!state.widthMeasured || Math.abs(nextW - state.timelineWidth) > 2) {
           if (applyTimelineWidth(nextW, scroll.scrollLeft)) {
             renderChart(); // width changed: the next pass (stable width) does the centering
@@ -4772,6 +5112,7 @@
   global.GanttUI = {
     mountGantt: mountGantt,
     clampLabelsWidth: clampLabelsWidth,
+    barTextColor: barTextColor,
     minColumnWidth: minColumnWidth,
     computeTimelineWidth: computeTimelineWidth,
     readStoredLabelsWidth: readStoredLabelsWidth,

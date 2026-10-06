@@ -39,6 +39,17 @@ describe('GanttUI helpers', () => {
     );
   });
 
+  it('barTextColor picks the text colour that contrasts with the bar', () => {
+    assert.equal(GanttUI.barTextColor('#0c66e4'), '#ffffff'); // saturated blue
+    assert.equal(GanttUI.barTextColor('#626f86'), '#ffffff'); // grey
+    assert.equal(GanttUI.barTextColor('#9ec5ff'), '#172b4d'); // pale blue
+    assert.equal(GanttUI.barTextColor('#f5cd47'), '#172b4d'); // yellow
+    assert.equal(GanttUI.barTextColor('#fff'), '#172b4d'); // shorthand hex
+    assert.equal(GanttUI.barTextColor('rgb(20, 30, 40)'), '#ffffff');
+    assert.equal(GanttUI.barTextColor('var(--tp-primary)'), null);
+    assert.equal(GanttUI.barTextColor(undefined), null);
+  });
+
   it('store/read labels width round-trips via localStorage', () => {
     assert.equal(GanttUI.readStoredLabelsWidth(), GanttUI.LABELS_W_DEFAULT);
     GanttUI.storeLabelsWidth(640);
@@ -178,5 +189,9 @@ describe('GanttUI helpers', () => {
     assert.equal(GanttUI.computeTimelineWidth(500, 'day', 24), 24 * 32);
     assert.equal(GanttUI.computeTimelineWidth(600, 'month', 31), 31 * 30);
     assert.equal(GanttUI.computeTimelineWidth(800, 'year', 12), 12 * 72);
+    // Wheel zoom stretches the natural width; below 1 it is ignored.
+    assert.equal(GanttUI.computeTimelineWidth(1000, 'week', 7, 2.5), 2500);
+    assert.equal(GanttUI.computeTimelineWidth(400, 'week', 7, 2), 2 * 7 * 88);
+    assert.equal(GanttUI.computeTimelineWidth(1000, 'week', 7, 0.5), 1000);
   });
 });

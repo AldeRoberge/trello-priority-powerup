@@ -1006,17 +1006,6 @@
   z-index: 3;
 }
 
-.gantt-bar-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.28);
-  pointer-events: none;
-  border-radius: inherit;
-  overflow: hidden;
-}
-
 .gantt-bar-label {
   position: relative;
   z-index: 1;
@@ -1599,4 +1588,58 @@ html:has(body.tp-page--gantt) body {
 }
 .gantt-progress-text--btn {
   padding: 0;
+}
+
+/* Hour / minute scale of the week view when zoomed in with the wheel. */
+.gantt-hour-lines {
+  position: absolute;
+  top: 36px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gantt-hour-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--gantt-grid-line);
+  opacity: 0.75;
+}
+
+.gantt-hour-line.is-minor {
+  opacity: 0.35;
+}
+
+.gantt-hour-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.gantt-hour-label {
+  position: absolute;
+  bottom: 2px;
+  height: 11px;
+  padding-left: 3px;
+  border-left: 1px solid var(--gantt-grid-line);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 11px;
+  color: var(--tp-text-subtle, #44546f);
+  white-space: nowrap;
+}
+
+.gantt-hour-label.is-minor {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.gantt-timeline-header--hours .gantt-col-head {
+  text-align: left;
+  padding: 3px 0 0 8px;
 }
