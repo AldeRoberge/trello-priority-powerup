@@ -190,6 +190,21 @@
       return !!structured;
     }
 
+    var aliasEditor = null;
+
+    /** "Autres noms" as a component card, like the others in Détails (same collapsible card and field grid). */
+    function aliasCard() {
+      var n = draft().aliases.length;
+      var card = h('details', { class: 'cp-ccard', open: n || st.openComps.aliases ? true : null }, [
+        h('summary', { class: 'cp-ccard-head' }, [icon('chevron-right'), h('strong', { text: 'Autres noms' }), h('span', { class: 'cp-hint', text: n ? String(n) : 'alias, traductions' })]),
+        h('div', { class: 'cp-fields' }, [h('div', { class: 'cp-field cp-field--wide' }, [h('label', { class: 'cp-field-label', text: 'Alias' }), aliasEditor])]),
+      ]);
+      card.addEventListener('toggle', function () {
+        st.openComps.aliases = card.open;
+      });
+      return card;
+    }
+
     function nameBlock() {
       var sec = h('div', { class: 'cp-sec cp-sec--name' });
       var understood = h('div', { class: 'cp-understood', 'aria-live': 'polite' });
@@ -305,7 +320,7 @@
       paintIssues();
       sec.appendChild(input);
       sec.appendChild(understood);
-      if (st.showAlias || draft().aliases.length) sec.appendChild(aliasBox);
+      aliasEditor = aliasBox; // shown as the "Autres noms" component card (see aliasCard)
       sec.appendChild(issuesBox);
       return sec;
     }
@@ -689,10 +704,12 @@
     function componentsBlock() {
       var d = draft();
       var ids = EM().componentIdsOf(st.schema, d);
-      if (!ids.length && !st.showComps) return null;
+      var showAlias = !!(aliasEditor && (st.showAlias || d.aliases.length));
+      if (!ids.length && !st.showComps && !showAlias) return null;
       var sec = h('div', { class: 'cp-sec' });
       sec.appendChild(h('h3', { class: 'cp-sec-title', text: 'Détails' }));
       var list = h('div', { class: 'cp-ccards' });
+      if (showAlias) list.appendChild(aliasCard());
       ids.forEach(function (cid) {
         var card = componentCard(cid);
         if (card) list.appendChild(card);
@@ -1230,7 +1247,7 @@
       if (!st.showAlias && !draft().aliases.length)
         add('Autres noms', 'tag', function () {
           st.showAlias = true;
-          nameSec = null;
+          st.openComps.aliases = true;
           renderMain();
           var i = els.main.querySelector('.cp-chipedit-in');
           if (i) i.focus();

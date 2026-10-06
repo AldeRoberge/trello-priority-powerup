@@ -738,12 +738,7 @@ button.en-typepill:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-top: 10px;
   font-size: 13px;
-}
-.en-aliases-label {
-  color: var(--tp-text-muted);
-  margin-right: 2px;
 }
 .en-token {
   display: inline-flex;

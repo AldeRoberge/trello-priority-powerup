@@ -1232,6 +1232,11 @@
         );
       }
 
+      return h('header', { class: 'en-hero' }, [h('div', { class: 'en-hero-top' }, [tile(e, 'lg'), nameInput, moreBtn]), typesRow]);
+    }
+
+    /** "Autres noms" as a section of the entity page, laid out like a component's property rows. */
+    function aliasesSection(e) {
       var aliasBox = h('div', { class: 'en-aliases' });
       function setAliasList(list, refocus) {
         applyEntity(function (cur) {
@@ -1246,7 +1251,6 @@
       function fillAliases() {
         var cur = selected() || e;
         aliasBox.textContent = '';
-        aliasBox.appendChild(h('span', { class: 'en-aliases-label', text: 'Aussi appelé' }));
         cur.aliases.forEach(function (a) {
           aliasBox.appendChild(
             h('span', { class: 'en-token' }, [
@@ -1284,8 +1288,8 @@
         aliasBox.appendChild(input);
       }
       fillAliases();
-
-      return h('header', { class: 'en-hero' }, [h('div', { class: 'en-hero-top' }, [tile(e, 'lg'), nameInput, moreBtn]), typesRow, aliasBox]);
+      var row = h('div', { class: 'en-prop en-prop--stack' }, [h('label', { class: 'en-prop-label', text: 'Alias' }), h('div', { class: 'en-prop-value' }, [aliasBox]), h('span', { class: 'en-prop-meta' })]);
+      return section('Autres noms', h('div', { class: 'en-set' }, [row]));
     }
 
     function paintMain() {
@@ -1326,6 +1330,7 @@
         .forEach(function (i) {
           page.appendChild(h('div', { class: 'en-notice en-notice--' + i.level, role: 'note' }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), h('span', { text: i.message })]));
         });
+      page.appendChild(aliasesSection(e));
       var ownIds = EM().componentIdsOf(state.schema, { types: e.types });
       var comps = EM()
         .componentIdsOf(state.schema, e)
