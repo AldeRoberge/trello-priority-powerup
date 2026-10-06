@@ -119,7 +119,7 @@
   function coerce(field, v, entities) {
     if (v === undefined || v === null || v === '') return undefined;
     var k = field.kind;
-    if (k === 'number') {
+    if (k === 'number' || k === 'level') {
       var n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
       return isFinite(n) ? n : undefined;
     }

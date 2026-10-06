@@ -84,6 +84,7 @@
   var KIND_WORDS = {
     texte: 'text', text: 'text', note: 'text',
     nombre: 'number', number: 'number', num: 'number', numero: 'number', quantite: 'number',
+    niveau: 'level', jauge: 'level', curseur: 'level', level: 'level', gauge: 'level', slider: 'level',
     date: 'date',
     'oui-non': 'bool', 'oui/non': 'bool', 'oui non': 'bool', bool: 'bool', booleen: 'bool', yesno: 'bool', 'yes-no': 'bool',
     choix: 'choice', choice: 'choice', liste: 'choice',
@@ -129,7 +130,13 @@
       var kind = KIND_WORDS[kindWord] || KIND_WORDS[(m[2] || '').toLowerCase().trim()] || 'text';
       var f = { key: key, label: label, kind: kind };
       var arg = trim(m[3]);
-      if (kind === 'number' && arg) f.unit = arg.slice(0, 12);
+      if ((kind === 'number' || kind === 'level') && arg) f.unit = arg.slice(0, 12);
+      if (kind === 'level') {
+        // "Niveau (jauge: ml)" is a gauge from 0; the maximum is a sibling field named "capacité" or "maximum" when there is one
+        var cap = fields.filter(function (x) { return x.kind === 'number' && /capacit|maxim/i.test(x.key); })[0];
+        if (cap) f.maxField = cap.key;
+        else f.max = 100;
+      }
       if (kind === 'choice' || kind === 'multi') {
         f.options = arg
           .split(/[\/|]/)
@@ -154,14 +161,14 @@
   function fieldSpecText(fields) {
     var names = {
       text: 'texte', number: 'nombre', date: 'date', bool: 'oui-non', choice: 'choix', ref: 'lien', refs: 'liens',
-      multi: 'choix-multiple', longtext: 'texte-long', geo: 'geo', url: 'url',
+      multi: 'choix-multiple', longtext: 'texte-long', geo: 'geo', url: 'url', level: 'jauge',
     };
     return (fields || [])
       .map(function (f) {
         var arg =
           f.kind === 'choice' || f.kind === 'multi'
             ? ': ' + (f.options || []).join('/')
-            : f.kind === 'number' && f.unit
+            : (f.kind === 'number' || f.kind === 'level') && f.unit
               ? ': ' + f.unit
               : (f.kind === 'ref' || f.kind === 'refs') && f.refTypes && f.refTypes.length
                 ? ': ' + f.refTypes.join('/')

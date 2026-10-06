@@ -62,7 +62,7 @@
   var RELATION_CATEGORIES = ['spatial', 'mereological', 'composition', 'production', 'social', 'taxonomic', 'grounding', 'causal', 'temporal', 'conceptual', 'generic'];
   /** The description card of the schema holds 16 384 chars; stay well under it. */
   var MAX_SCHEMA_CHARS = 15000;
-  var FIELD_KINDS = ['text', 'number', 'date', 'bool', 'choice', 'ref', 'refs', 'multi', 'longtext', 'geo', 'url'];
+  var FIELD_KINDS = ['text', 'number', 'date', 'bool', 'choice', 'ref', 'refs', 'multi', 'longtext', 'geo', 'url', 'level'];
 
   /**
    * What a type of thing fundamentally IS. realm: 'material' (has a body, a place or a time: matter, living,
@@ -152,6 +152,15 @@
     var out = { key: key, label: label || key, kind: kind };
     if (kind === 'choice' || kind === 'multi') out.options = uniqueStrings(f.options, MAX_CHOICES, MAX_ALIAS);
     if (kind === 'number' && f.unit) out.unit = str(f.unit, MAX_UNIT);
+    if (kind === 'level') {
+      // a gauge: a number between a minimum (0) and a maximum, either fixed or read from a sibling field (the capacity)
+      if (f.unit) out.unit = str(f.unit, MAX_UNIT);
+      var lo = Number(f.min);
+      if (isFinite(lo) && lo !== 0) out.min = lo;
+      var hi = Number(f.max);
+      if (isFinite(hi) && f.max !== null && f.max !== '' && hi > (out.min || 0)) out.max = hi;
+      if (f.maxField) out.maxField = slug(f.maxField);
+    }
     if (kind === 'ref' || kind === 'refs') {
       out.refTypes = uniqueStrings(f.refTypes, MAX_TYPES, MAX_NAME).map(slug).filter(Boolean);
       // the field IS a relation of the vocabulary (e.g. a plant's place is "located in")
@@ -528,6 +537,14 @@
         var n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
         return isFinite(n) ? n : undefined;
       }
+      case 'level': {
+        var lv = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+        if (!isFinite(lv)) return undefined;
+        var floor = isFinite(field.min) ? field.min : 0;
+        lv = Math.max(floor, lv);
+        if (!field.maxField && isFinite(field.max)) lv = Math.min(field.max, lv);
+        return lv;
+      }
       case 'bool':
         return v === true || /^(true|1|oui|yes|vrai)$/i.test(String(v));
       case 'date': {
@@ -776,8 +793,26 @@
     if (field.kind === 'refs') return value.map(nameOf).join(', ');
     if (field.kind === 'multi') return value.join(', ');
     if (field.kind === 'bool') return value ? 'oui' : 'non';
-    if (field.kind === 'number' && field.unit) return value + ' ' + field.unit;
+    if ((field.kind === 'number' || field.kind === 'level') && field.unit) return value + ' ' + field.unit;
     return String(value);
+  }
+
+  /**
+   * The range of a gauge field: { min, max, known, unit }. The maximum is the value of the sibling field named by
+   * `maxField` (the capacity), else the field's own `max`, else 100 (`known` is false: the scale is only a guess).
+   * `read(key)` gives the value of a sibling field of the same component.
+   */
+  function levelBounds(field, read) {
+    var min = isFinite(field.min) ? field.min : 0;
+    var max = NaN;
+    if (field.maxField && typeof read === 'function') {
+      var v = read(field.maxField);
+      var n = typeof v === 'number' ? v : parseFloat(v);
+      if (isFinite(n) && n > min) max = n;
+    }
+    if (!isFinite(max) && isFinite(field.max)) max = field.max;
+    var known = isFinite(max);
+    return { min: min, max: known ? max : 100, known: known, unit: field.unit || (known ? '' : '%') };
   }
 
   // ---------------------------------------------------------------- 4 mutations
@@ -1798,6 +1833,7 @@
     groundingOf: groundingOf,
     ontologyIssues: ontologyIssues,
     fieldOf: fieldOf,
+    levelBounds: levelBounds,
     findById: findById,
     createEntity: createEntity,
     renameEntity: renameEntity,

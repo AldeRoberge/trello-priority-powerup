@@ -33,6 +33,7 @@
     refs: 'Liens vers des entités',
     multi: 'Choix multiple',
     longtext: 'Texte long',
+    level: 'Jauge (curseur)',
     geo: 'Coordonnées (lat, lon)',
     url: 'Lien web',
   };
@@ -909,6 +910,18 @@
         ta.value = val == null ? '' : String(val);
         return ta;
       }
+      if (field.kind === 'level' && global.EntitiesLevelUI) {
+        // a gauge: a slider between 0 and the capacity (how full, how charged)
+        return global.EntitiesLevelUI.create({
+          field: field,
+          label: aria,
+          value: val,
+          bounds: EM().levelBounds(field, function (k) {
+            return EM().effectiveValue(state.entities, e, comp.id + '.' + k, state.schema);
+          }),
+          onChange: function (v) { commit(v); },
+        });
+      }
       var type = field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : field.kind === 'url' ? 'url' : 'text';
       var inp = h('input', {
         class: 'en-ctl' + (val == null || val === '' ? ' is-empty' : ''),
@@ -918,7 +931,8 @@
         'aria-label': aria + (field.unit ? ' (' + field.unit + ')' : ''),
         value: val == null ? '' : String(val),
         onchange: function () {
-          commit(inp.value);
+          // the maximum of a gauge of this component (the capacity) changes the slider's scale
+          commit(inp.value, comp.fields.some(function (f2) { return f2.kind === 'level' && f2.maxField === field.key; }));
         },
       });
       if (field.kind === 'url' && val) {
@@ -1929,8 +1943,8 @@
           } else {
             ctl = h('input', {
               class: 'en-input',
-              type: fd.kind === 'number' ? 'number' : fd.kind === 'date' ? 'date' : 'text',
-              step: fd.kind === 'number' ? 'any' : null,
+              type: fd.kind === 'number' || fd.kind === 'level' ? 'number' : fd.kind === 'date' ? 'date' : 'text',
+              step: fd.kind === 'number' || fd.kind === 'level' ? 'any' : null,
               'aria-label': 'Défaut : ' + fd.label,
               value: Array.isArray(cur) ? cur.join(', ') : cur == null ? '' : String(cur),
             });
@@ -2089,6 +2103,17 @@
         var extra = null;
         if (f.kind === 'choice' || f.kind === 'multi') {
           extra = h('input', { class: 'en-input', value: (f.options || []).join(', '), placeholder: 'choix : bonne, fragile, morte', 'aria-label': 'Choix possibles' });
+        } else if (f.kind === 'level') {
+          extra = h('span', { class: 'en-field-pair' }, [
+            h('input', { class: 'en-input', value: f.unit || '', placeholder: 'unité : ml, %', 'aria-label': 'Unité' }),
+            h('input', {
+              class: 'en-input',
+              value: f.maxField || (f.max != null ? String(f.max) : ''),
+              placeholder: 'maximum : 100 ou champ',
+              'aria-label': 'Maximum de la jauge',
+              title: 'Un nombre fixe, ou la clé d’un champ nombre du même composant (ex. capacite). Le minimum est 0.',
+            }),
+          ]);
         } else if (f.kind === 'number') {
           extra = h('input', { class: 'en-input', value: f.unit || '', placeholder: 'unité : kg, ml, $', 'aria-label': 'Unité' });
         } else if (f.kind === 'ref' || f.kind === 'refs') {
@@ -2105,6 +2130,14 @@
           var nf = { key: f.key, label: label.value, kind: kind.value };
           if (f.rel) nf.rel = f.rel;
           if (kind.value === 'number') nf.unit = extra && f.kind === 'number' ? extra.value : f.unit || '';
+          if (kind.value === 'level') {
+            var keep = extra && f.kind === 'level';
+            nf.unit = keep ? extra.firstChild.value : f.unit || '';
+            var mv = keep ? extra.lastChild.value.trim() : f.maxField || (f.max != null ? String(f.max) : '');
+            if (/^\d+([.,]\d+)?$/.test(mv)) nf.max = parseFloat(mv.replace(',', '.'));
+            else if (mv) nf.maxField = mv;
+            if (f.min) nf.min = f.min;
+          }
           if (kind.value === 'choice' || kind.value === 'multi') nf.options = extra && (f.kind === 'choice' || f.kind === 'multi') ? splitList(extra.value) : f.options || [];
           if (kind.value === 'ref' || kind.value === 'refs') nf.refTypes = extra && f.kind === kind.value ? splitList(extra.value) : f.refTypes || [];
           next[i] = nf;

@@ -77,6 +77,7 @@ const UNIT_FILES = [
   'entities-interview-ai.test.js',
   'entities-reality.test.js',
   'entities-reality-ai.test.js',
+  'entities-level.test.js',
   'quick-parse-when.test.js',
   'entities-archetype.test.js',
   'entities-ontology.test.js',

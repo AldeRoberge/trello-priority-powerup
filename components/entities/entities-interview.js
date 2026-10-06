@@ -151,7 +151,7 @@
     'personne.residence',
     'adresse.adresse',
   ];
-  var SKIP_KINDS = { geo: 1, longtext: 1, url: 1, multi: 1 };
+  var SKIP_KINDS = { geo: 1, longtext: 1, url: 1, multi: 1, level: 1 };
 
   function isPreset(cid) {
     var lib = global.EntitiesLibrary;

@@ -1,0 +1,82 @@
+/* Gauge slider (kind "level"), shared by the entity page and the composer. */
+.lv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+.lv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lv-range {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 3px;
+  cursor: pointer;
+  background: linear-gradient(to right, var(--tp-primary) var(--lv-fill, 0%), var(--tp-surface-active) var(--lv-fill, 0%));
+}
+.lv--unset .lv-range {
+  opacity: 0.55;
+}
+.lv-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tp-surface);
+  box-shadow: 0 0 0 2px var(--tp-primary), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.lv-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tp-surface);
+  box-shadow: 0 0 0 2px var(--tp-primary), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.lv-end,
+.lv-clear {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+}
+.lv-end:hover,
+.lv-clear:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+.lv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lv-read {
+  font-size: 12px;
+  color: var(--tp-text);
+  overflow-wrap: anywhere;
+}
+.lv--unset .lv-read,
+.lv-hint {
+  color: var(--tp-text-muted);
+}
+.lv-hint {
+  font-size: 11px;
+}
+.en-field-pair {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}

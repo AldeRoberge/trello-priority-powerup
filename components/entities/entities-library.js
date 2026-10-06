@@ -81,8 +81,8 @@
       name: 'Contenant',
       fields: [
         { key: 'contenu', label: 'Contenu', kind: 'refs', refTypes: ['substance', 'produit'] },
-        { key: 'capacite', label: 'Capacité', kind: 'number', unit: 'ml' },
-        { key: 'quantite', label: 'Quantité restante', kind: 'number', unit: 'ml' },
+        { key: 'capacite', label: 'Capacité maximale', kind: 'number', unit: 'ml' },
+        { key: 'quantite', label: 'Niveau', kind: 'level', unit: 'ml', maxField: 'capacite' },
         { key: 'scelle', label: 'Scellé', kind: 'choice', options: ['scellé', 'ouvert'] },
         { key: 'ouvert_le', label: 'Ouvert le', kind: 'date' },
         { key: 'materiau', label: 'Matériau', kind: 'text' },
@@ -100,7 +100,6 @@
       id: 'condition',
       name: 'État',
       fields: [
-        { key: 'niveau', label: 'Niveau', kind: 'choice', options: ['plein', 'entamé', 'vide'] },
         { key: 'validite', label: 'Validité', kind: 'choice', options: ['valide', 'expiré'] },
         { key: 'integrite', label: 'Intégrité', kind: 'choice', options: ['intact', 'endommagé'] },
         { key: 'temperature', label: 'Température', kind: 'text' },

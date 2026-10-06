@@ -467,7 +467,13 @@
   /** Facts on a draft: only fields the draft carries, only values that fit, never over an answer already there. */
   function setFacts(st, draft, facts) {
     var d = draft;
-    Object.keys(facts || {}).forEach(function (path) {
+    // gauges last: their maximum (the capacity) must be known to clamp them
+    var paths = Object.keys(facts || {}).sort(function (a, b) {
+      var fa = EM().fieldOf(st.schema, a);
+      var fb = EM().fieldOf(st.schema, b);
+      return (fa && fa.field.kind === 'level' ? 1 : 0) - (fb && fb.field.kind === 'level' ? 1 : 0);
+    });
+    paths.forEach(function (path) {
       var cid = path.split('.')[0];
       if (d.answers[path] !== undefined) return;
       var c = carry(st.schema, st.lib, d, cid);
@@ -476,6 +482,11 @@
       var f = EM().fieldOf(st.schema, path);
       if (!f || f.field.kind === 'geo' || f.field.kind === 'ref' || f.field.kind === 'refs') return;
       var v = CAI() ? CAI().coerce(f.field, facts[path], st.pool) : typeof facts[path] === 'string' ? facts[path] : undefined;
+      if (v !== undefined && f.field.kind === 'level') {
+        var cid2 = path.split('.')[0];
+        var b = EM().levelBounds(f.field, function (k) { return d.answers[cid2 + '.' + k]; });
+        v = Math.max(b.min, b.known ? Math.min(b.max, v) : v);
+      }
       if (v !== undefined) d = EC().setAnswer(d, path, v);
     });
     return d;

@@ -921,6 +921,18 @@
         wrap.appendChild(ta);
         return wrap;
       }
+      if (f.kind === 'level' && global.EntitiesLevelUI) {
+        var cid = path.split('.')[0];
+        wrap.appendChild(
+          global.EntitiesLevelUI.create({
+            field: f,
+            value: val,
+            bounds: EM().levelBounds(f, function (k) { return draft().answers[cid + '.' + k]; }),
+            onChange: function (v) { answer(path, v); },
+          })
+        );
+        return wrap;
+      }
       var type = f.kind === 'number' ? 'number' : f.kind === 'date' ? 'date' : f.kind === 'url' ? 'url' : 'text';
       var inp = h('input', {
         class: 'cp-input',

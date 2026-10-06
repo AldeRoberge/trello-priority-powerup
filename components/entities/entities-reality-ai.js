@@ -81,7 +81,13 @@
     function add(c) {
       if (seen[c.id]) return;
       seen[c.id] = true;
-      out.push(c.id + ' | ' + c.name + ' | ' + c.fields.filter(function (f) { return f.kind !== 'geo'; }).map(function (f) { return f.key; }).join(', '));
+      out.push(
+        c.id + ' | ' + c.name + ' | ' +
+          c.fields
+            .filter(function (f) { return f.kind !== 'geo'; })
+            .map(function (f) { return f.kind === 'level' ? f.key + ' (jauge de 0 à ' + (f.maxField || f.max || 100) + (f.unit ? ' ' + f.unit : '') + ')' : f.key; })
+            .join(', ')
+      );
     }
     ctx.schema.components.forEach(add);
     if (lib(ctx)) lib(ctx).COMPONENTS.forEach(add);
@@ -121,7 +127,11 @@
 
   var RULES = [
     'Tu construis la CARTE DU RÉEL d’une chose : tout ce qui la définit dans la vie. Réponds par un objet JSON seulement, en français du Québec.',
-    'La chose est un exemplaire concret quand le nom en désigne un (une bouteille, une tablette) : identité, forme et état physiques, dates, propriétaire, contenu, fabricant, lieu. Pense en groupes : Identité, Physique, Temps, Propriété, Contenu, Relations, État.',
+    'Décide d’abord quelle sorte de chose c’est, puis cherche ce qui la définit pour CETTE sorte, sans rien forcer :',
+    '  · objet ou équipement (bouteille, caméra, ordinateur) : identité (code-barres, série), fabricant et marque, pièces et accessoires, contenu, état (neuf, plein, scellé), dates (fabriqué, acheté, ouvert, meilleur avant), propriétaire, lieu, achat.',
+    '  · personne : employeur, lieu d’habitation, organisations dont elle est membre. · organisation : société mère, siège. · lieu : ce dans quoi il est situé (ville, pays) et ce qu’il abrite.',
+    '  · événement : lieu, organisateur, participants, ce qui le précède ou le suit. · idée ou concept abstrait : ce qui l’incarne ou l’exprime, sorte de, s’oppose à (pas de faits matériels).',
+    '  · jauge : un champ « jauge » (niveau, charge, espace utilisé) se règle dans l’unité du champ, entre 0 et son maximum (souvent le champ capacité). Ne le donne que si tu le sais : une bouteille scellée est pleine (niveau = capacité), une pile neuve est à 100.',
     '- type : un id de la liste des genres, jamais autre chose. components : des id de la liste des composants que la chose porte (ex. contenant, produit, provenance, acquisition, identification, condition). facts : chemin exact (composant.champ) = valeur, seulement ce qui est sûr (pas de date ni de prix inventés).',
     '- nodes : les AUTRES choses qui existent à côté (le contenu, la marque, le fabricant, la société mère, les ingrédients). Un nom propre exact et singulier (« The Coca-Cola Company »). Jamais la chose elle-même.',
     '- links : from et to sont des ref (« root » = la chose). via = un chemin de champ de lien (ex. contenant.contenu, provenance.fabricant) ou une relation du vocabulaire. Une société mère se relie à sa filiale par « fait partie de » (de la filiale vers la mère).',
@@ -131,7 +141,7 @@
   ].join('\n');
 
   var EXAMPLE = [
-    'Exemple pour « Powerade » : {"root":{"type":"produit","components":["contenant","produit","provenance","acquisition","identification","condition"],"facts":{"contenant.scelle":"scellé","produit.marque":"Powerade"},"aliases":[],"det":"le","confidence":0.85},',
+    'Exemple pour « Powerade » : {"root":{"type":"produit","components":["contenant","produit","provenance","acquisition","identification","condition"],"facts":{"contenant.scelle":"scellé","contenant.capacite":591,"contenant.quantite":591,"produit.marque":"Powerade"},"aliases":[],"det":"le","confidence":0.85},',
     '"nodes":[{"ref":"a","name":"Powerade (boisson)","type":"substance","confidence":0.9,"components":[],"facts":{"matiere.etat":"liquide"},"expand":false,"why":"le liquide dans la bouteille"},',
     '{"ref":"b","name":"Powerade","type":"organisation","confidence":0.85,"components":[],"facts":{},"expand":true,"why":"la marque qui le fabrique"},',
     '{"ref":"c","name":"The Coca-Cola Company","type":"organisation","confidence":0.9,"components":[],"facts":{},"expand":false,"why":"société mère de la marque"}],',
