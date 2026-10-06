@@ -161,7 +161,6 @@
     function renderSide() {
       var c = DM().counts(state.rows, today);
       els.side.textContent = '';
-      els.side.appendChild(h('div', { class: 'db-brand' }, [icon('layout-dashboard'), h('span', { text: 'Dashboard' })]));
       SECTIONS.forEach(function (s) {
         var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : 0;
         els.side.appendChild(h('button', {
