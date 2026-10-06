@@ -159,6 +159,7 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-pinhole { fill: var(--tp-surface-subtle); pointer-events: none; }
 .mm-progress-track { fill: color-mix(in srgb, var(--tp-text) 14%, transparent); pointer-events: none; }
 .mm-progress { fill: var(--tp-success); pointer-events: none; }
+.mm-progress-hit { fill: transparent; cursor: ew-resize; }
 
 /* Pins (drag from one to another task to link): faint dot that swells and glows on hover */
 .mm-pin { cursor: crosshair; }

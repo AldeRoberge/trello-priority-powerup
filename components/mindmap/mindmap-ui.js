@@ -356,8 +356,7 @@
       n.w = n.kind === 'task' ? 210 : n.kind === 'person' ? 180 : n.kind === 'goal' ? 210 : 170;
       n.lines = wrap(n.label, Math.floor((n.w - 24 - iconW) / CHAR_W), 5);
       n.headH = Math.max(n.kind === 'task' ? 0 : 34, n.lines.length * LINE_H + HEAD_PAD * 2 - 2);
-      var hasProgress = n.kind === 'task' && typeof rec.progress === 'number' && rec.progress > 0;
-      n.bodyH = n.kind === 'goal' ? 24 : n.kind === 'task' && (rec.listName || hasProgress) ? 26 : 0;
+      n.bodyH = n.kind === 'goal' ? 24 : n.kind === 'task' ? 26 : 0;
       n.h = n.headH + n.bodyH;
     }
 
@@ -523,7 +522,8 @@
         g.appendChild(gt);
       } else if (n.bodyH) {
         var by = y0 + n.headH;
-        var hasProgress = typeof rec.progress === 'number' && rec.progress > 0;
+        var hasProgress = n.kind === 'task';
+        var prog = typeof rec.progress === 'number' ? Math.max(0, Math.min(100, rec.progress)) : 0;
         if (rec.listName) {
           var lt = s('text', { class: 'mm-sub', x: x0 + 12, y: by + 17 });
           lt.textContent = clip(rec.listName, hasProgress ? 12 : 30);
@@ -533,7 +533,7 @@
           var pw = 50;
           var px = x0 + n.w - 12 - pw - 30;
           if (global.ProgressRing) {
-            var ring = global.ProgressRing.create(rec.progress);
+            var ring = global.ProgressRing.create(prog);
             ring.setAttribute('x', px - 20);
             ring.setAttribute('y', by + 6);
             ring.setAttribute('width', 14);
@@ -542,10 +542,45 @@
             g.appendChild(ring);
           }
           g.appendChild(s('rect', { class: 'mm-progress-track', x: px, y: by + 11, width: pw, height: 4, rx: 2 }));
-          g.appendChild(s('rect', { class: 'mm-progress', x: px, y: by + 11, width: Math.max(0, pw * Math.min(100, rec.progress) / 100), height: 4, rx: 2 }));
+          var fillEl = s('rect', { class: 'mm-progress', x: px, y: by + 11, width: pw * prog / 100, height: 4, rx: 2 });
+          g.appendChild(fillEl);
           var pt = s('text', { class: 'mm-sub', x: x0 + n.w - 12, y: by + 16, 'text-anchor': 'end' });
-          pt.textContent = Math.round(rec.progress) + '%';
+          pt.textContent = Math.round(prog) + '%';
           g.appendChild(pt);
+          // drag the slider in place (without moving the card)
+          var sliderHit = s('rect', { class: 'mm-progress-hit', x: px - 4, y: by + 4, width: pw + 8, height: 18 });
+          var sliderTitle = s('title');
+          sliderTitle.textContent = 'Glisser pour régler le progrès';
+          sliderHit.appendChild(sliderTitle);
+          sliderHit.addEventListener('pointerdown', function (ev) {
+            if (ev.button) return;
+            ev.stopPropagation();
+            ev.preventDefault();
+            var val = Math.round(prog);
+            function at(x) {
+              var r = sliderHit.getBoundingClientRect();
+              var pad = r.width * 4 / (pw + 8);
+              var inner = r.width - 2 * pad;
+              return inner > 0 ? Math.max(0, Math.min(100, Math.round((x - r.left - pad) / inner * 100))) : val;
+            }
+            function move(e) {
+              val = at(e.clientX);
+              fillEl.setAttribute('width', pw * val / 100);
+              pt.textContent = val + '%';
+              if (ring && global.ProgressRing.set) global.ProgressRing.set(ring, val);
+            }
+            function up() {
+              document.removeEventListener('pointermove', move);
+              document.removeEventListener('pointerup', up);
+              document.removeEventListener('pointercancel', up);
+              if (val !== Math.round(prog)) runEdit(function () { return writeProgressTo(rec.id, val); });
+            }
+            move(ev);
+            document.addEventListener('pointermove', move);
+            document.addEventListener('pointerup', up);
+            document.addEventListener('pointercancel', up);
+          });
+          g.appendChild(sliderHit);
         }
       }
       if (n.kind === 'task' || n.kind === 'goal') {
