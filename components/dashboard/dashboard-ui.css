@@ -267,7 +267,6 @@ div.db-capture { resize: none; overflow: auto; max-height: 50vh; white-space: pr
 .db-att-size { color: var(--tp-text-muted); font-size: 11px; }
 .db-att-x { font: inherit; border: 0; background: transparent; color: var(--tp-text-muted); cursor: pointer; border-radius: 4px; padding: 0 5px; }
 .db-att-x:hover { background: var(--tp-surface-hover); color: var(--tp-danger-text); }
-.db-hint { margin: 8px 2px 0; font-size: 12px; color: var(--tp-text-muted); }
 .db-day-icon { margin-right: 2px; opacity: .8; vertical-align: -2px; }
 
 /* ── "What now?" hero + suggestions (Aujourd'hui) ────────────────────── */

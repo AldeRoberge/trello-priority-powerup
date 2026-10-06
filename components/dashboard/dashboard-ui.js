@@ -567,7 +567,6 @@
             h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: submit }, [icon('plus'), document.createTextNode('Ajouter'), h('kbd', { text: 'Ctrl+↵' })]),
           ]),
         ]),
-        h('p', { class: 'db-hint', text: 'Entrée : nouvelle tâche. Maj+Entrée : ligne suivante dans la même tâche (devient la description). Les images et documents collés ou déposés sont joints à la tâche de la ligne où ils se trouvent.' }),
         recent.length ? h('div', { class: 'db-section-title', text: 'Derniers ajouts' }) : null,
         recent.length ? h('div', { class: 'db-list' }, recent.map(function (r) {
           return h('div', { class: 'db-row', onclick: function () { state.selected = r.id; go('triage'); } }, [statusIcon(r), h('span', { class: 'db-row-name', text: r.name })]);
