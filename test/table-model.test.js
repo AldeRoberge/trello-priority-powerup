@@ -42,6 +42,8 @@ describe('TableModel', () => {
     assert.equal(row.progress, 42);
     assert.equal(row.urgency, 'Vite');
     assert.equal(row.impact, 8);
+    assert.equal(TM.rowFromRecord(rec({ estimatedMinutes: 20 })).estimate, 20);
+    assert.equal(row.estimate, 0);
     assert.equal(row.category, 'Vidéo');
     assert.equal(row.statut, 'En cours');
     assert.equal(TM.cellText(row, 'progress'), '42%');

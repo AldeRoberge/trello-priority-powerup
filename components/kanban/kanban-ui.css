@@ -422,3 +422,5 @@ html[data-color-mode] .tp-page--kanban {
   color: var(--tp-text-muted);
 }
 .kb-ai:focus-within .kb-ai-input:placeholder-shown ~ .kb-ai-hint { display: inline-block; }
+.kb-chip--empty { opacity: 0; }
+.kb-card:hover .kb-chip--empty, .kb-chip--empty:focus-visible { opacity: .6; }

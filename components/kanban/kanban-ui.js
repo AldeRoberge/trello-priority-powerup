@@ -358,6 +358,20 @@
           openEditor(row, 'priority', e.currentTarget);
         }));
       }
+      var estLabel = row.estimate > 0 && global.CardFields ? global.CardFields.formatMinutes(row.estimate) : '';
+      badges.push(chip('kb-chip--est' + (estLabel ? '' : ' kb-chip--empty'), 'clock', estLabel, 'Estimation · cliquer pour modifier', function (e) {
+        e.stopPropagation();
+        if (!global.CardFields) return;
+        global.CardFields.open('estimate', {
+          t: t,
+          cardId: row.id,
+          minutes: row.estimate || 0,
+          anchor: e.currentTarget,
+          onSaved: function () { setStatus('Enregistré', 'ok'); record({ type: 'field', label: 'Estimation', targetId: row.id, title: row.name }); },
+          onError: function (m) { setStatus(m, 'error'); },
+          onClose: function (changed) { if (changed) reload({ quiet: true }); },
+        });
+      }));
       var kids = [];
       if (row.category) kids.push(h('div', { class: 'kb-cat', text: row.category }));
       kids.push(h('div', { class: 'kb-title', text: row.name || 'Sans titre' }));

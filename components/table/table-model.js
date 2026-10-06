@@ -108,6 +108,7 @@
       blocked: !!rec.blocked,
       desc: splitVisible(rec.desc),
       due: rec.dueDate || '',
+      estimate: rec.estimatedMinutes > 0 ? Math.round(rec.estimatedMinutes) : 0,
       link: rec.url || '',
     };
   }

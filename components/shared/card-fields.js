@@ -417,7 +417,52 @@
     area.setSelectionRange(area.value.length, area.value.length);
   }
 
-  var OPENERS = { progress: openProgress, priority: openPriority, due: openDue, blocked: openBlocked, desc: openDesc };
+  var ESTIMATE_CHOICES = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 0];
+
+  /** 90 → "1 h 30", 45 → "45 min", 120 → "2 h". */
+  function formatMinutes(min) {
+    min = Math.round(min || 0);
+    if (min < 60) return min + ' min';
+    var h = Math.floor(min / 60);
+    var m = min % 60;
+    return h + ' h' + (m ? ' ' + ('0' + m).slice(-2) : '');
+  }
+
+  /** Estimated work time: a duration menu hanging from the anchor (o.minutes = current value). */
+  function openEstimate(o) {
+    var CM = global.ContextMenu;
+    var CT = global.CompletionTrello;
+    if (!CM || typeof CM.show !== 'function' || !CT) return o.onError && o.onError('Estimation indisponible');
+    close();
+    var r = o.anchor.getBoundingClientRect();
+    var items = ESTIMATE_CHOICES.map(function (m) {
+      return {
+        id: 'est:' + m,
+        label: m ? formatMinutes(m) : 'Non estimée',
+        icon: m ? 'clock' : 'clock-off',
+        checked: Math.round(o.minutes || 0) === m,
+        action: function () {
+          Promise.resolve(CT.getCardCompletionById(o.t, o.cardId))
+            .then(function (cur) {
+              var data = CT.normalizeCompletionData(cur || { items: [] });
+              return CT.saveCardCompletionById(o.t, o.cardId, Object.assign({}, data, { estimatedMinutes: m }));
+            })
+            .then(
+              function () {
+                if (typeof o.onSaved === 'function') o.onSaved(m);
+                if (typeof o.onClose === 'function') o.onClose(true);
+              },
+              function (err) {
+                if (typeof o.onError === 'function') o.onError(msg(err));
+              }
+            );
+        },
+      };
+    });
+    CM.show({ clientX: r.left, clientY: r.bottom + 4 }, items);
+  }
+
+  var OPENERS = { progress: openProgress, priority: openPriority, due: openDue, blocked: openBlocked, desc: openDesc, estimate: openEstimate };
 
   function open(kind, opts) {
     opts = opts || {};
@@ -434,6 +479,7 @@
     close: close,
     isOpen: function () { return !!current; },
     KINDS: Object.keys(OPENERS),
+    formatMinutes: formatMinutes,
     wrapSelection: wrapSelection,
     formatLines: formatLines,
   };
