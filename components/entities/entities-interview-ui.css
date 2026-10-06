@@ -1,0 +1,197 @@
+/* Entity interview (one question at a time). Reuses the composer dialog (cp-*) and the theme (--tp-*). */
+.iv-dialog {
+  width: min(560px, 100%);
+  min-height: 0;
+}
+.iv-head .cp-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 24ch;
+}
+.iv-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.iv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 12px;
+  overflow-y: auto;
+  min-height: 220px;
+}
+.iv-thread {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.iv-done {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
+  max-width: 100%;
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tp-surface-active);
+  color: var(--tp-text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.iv-done:hover {
+  background: var(--tp-surface-hover);
+}
+.iv-done em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+}
+.iv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.iv-q {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.iv-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.iv-opt {
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border-strong);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.iv-opt:hover {
+  background: var(--tp-surface-hover);
+}
+.iv-opt kbd {
+  font: inherit;
+  font-size: 10px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  text-align: center;
+  color: var(--tp-text-muted);
+  background: var(--tp-surface-active);
+}
+.iv-opt em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+}
+.iv-opt--sel {
+  background: var(--tp-surface);
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+  font-weight: 600;
+}
+.iv-opt--sel kbd {
+  background: var(--tp-primary);
+  color: var(--tp-primary-text);
+}
+.iv-src {
+  display: inline-flex;
+  font-size: 13px;
+  color: var(--tp-text-muted);
+}
+.iv-input {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border-strong);
+}
+.iv-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+}
+.iv-input--lg {
+  font-size: 16px;
+  padding: 10px 12px;
+}
+.iv-read {
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+.iv-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tp-danger-text);
+}
+.iv-status {
+  margin: 0;
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+.iv-batch {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.iv-batch li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--tp-surface-subtle);
+  overflow-wrap: anywhere;
+}
+.iv-batch em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+  min-width: 90px;
+}
+.iv-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.iv-spacer {
+  flex: 1;
+}
+@media (max-width: 480px) {
+  .iv-body { padding: 14px 14px 8px; }
+  .iv-opt { flex: 1 1 100%; }
+}
+.iv-head .cp-link {
+  white-space: nowrap;
+  margin-left: auto;
+}
+.iv-head .cp-link ~ .cp-x--lg {
+  margin-left: 0;
+}

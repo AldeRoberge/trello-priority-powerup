@@ -11,7 +11,8 @@
  * exist offers "Créer « Salon »": the same page opens for it and comes back. Nothing is written until the
  * final "Créer". Logic: EntitiesComposer.
  *
- * Usage: EntitiesComposerUI.open({ schema, entities, initialText?, initialTypes?, onDone(result) })
+ * Usage: EntitiesComposerUI.open({ schema, entities, initialText?, initialTypes?, initialDrafts?, onDone(result) })
+ *   initialDrafts = the drafts of an interview that was switched to this page (first = the entity, then what it links to)
  *   result = { schema, entities, created, rootId, again, types }
  *
  * Contents: 1 helpers | 2 open: state | 3 page | 4 field controls | 5 links | 6 chrome | 7 flow
@@ -1718,9 +1719,18 @@
     // boot
     var root = EC().newDraft({ types: (ctx.initialTypes || []).filter(function (t) { return !!EM().findById(st.schema.types, t); }) });
     root.intent = ctx.initialText || '';
+    if (ctx.initialDrafts && ctx.initialDrafts.length) {
+      root = ctx.initialDrafts[0];
+      root.intent = root.name;
+      root.intentApplied = root.name;
+      ctx.initialDrafts.slice(1).forEach(function (d) {
+        setDraft(d);
+        st.order.push(d.id);
+      });
+    }
     st.rootId = root.id;
     addDraft(root, null);
-    commitIntent();
+    if (!(ctx.initialDrafts && ctx.initialDrafts.length)) commitIntent();
     document.addEventListener('keydown', onKey, true);
     els.overlay.addEventListener('mousedown', function (ev) {
       if (ev.target === els.overlay) requestClose();
