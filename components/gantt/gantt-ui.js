@@ -1449,6 +1449,9 @@
         render();
       });
       var today = el('button', 'gantt-btn', { type: 'button', text: "Aujourd'hui" });
+      var todayIcon = el('i', 'ti ti-circle-dot');
+      todayIcon.setAttribute('aria-hidden', 'true');
+      today.insertBefore(todayIcon, today.firstChild);
       today.addEventListener('click', function () {
         state.anchor = model.toIsoDate(new Date());
         state.scrollToToday = true;

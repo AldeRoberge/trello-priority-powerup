@@ -225,6 +225,17 @@ describe('ContextMenu', () => {
     if (ContextMenu) ContextMenu.hide();
   });
 
+  it('dayIcon: circle-dot today, jumping arrow tomorrow, two arrows after, calendars beyond', () => {
+    assert.equal(ContextMenu.dayIcon(0), 'circle-dot');
+    assert.equal(ContextMenu.dayIcon(1), 'arrow-curve-right');
+    assert.equal(ContextMenu.dayIcon(2), 'arrows-right');
+    assert.equal(ContextMenu.dayIcon(3), 'calendar-event');
+    assert.equal(ContextMenu.dayIcon(9), 'calendar-week');
+    assert.equal(ContextMenu.dayIcon(30), 'calendar-month');
+    assert.equal(ContextMenu.dayIcon(-1), 'arrow-back-up');
+    assert.equal(ContextMenu.dayIcon(NaN), 'calendar');
+  });
+
   it('shows menu, invokes action on click, and hides', () => {
     let ran = false;
     const menu = ContextMenu.show(

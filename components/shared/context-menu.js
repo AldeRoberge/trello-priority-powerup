@@ -27,8 +27,13 @@
     unblock: 'player-play',
     block: 'player-pause',
     'add-subtask': 'list-check',
-    'postpone-tomorrow': 'calendar-plus',
+    'postpone-tomorrow': 'arrow-curve-right',
     'due-quick:*': 'calendar-event',
+    'due-quick:cet-apres-midi': 'circle-dot',
+    'due-quick:demain-matin': 'arrow-curve-right',
+    'due-quick:lundi-prochain': 'calendar-event',
+    'due-quick:dans-une-semaine': 'calendar-week',
+    'due-quick:dans-deux-semaines': 'calendar-month',
     'clear-due': 'calendar-off',
     'complete-all': 'checks',
     'reset-all': 'rotate',
@@ -85,7 +90,7 @@
     'zoom-year': 'calendar-stats',
     zoom: 'zoom-in',
     'nav-prev': 'chevron-left',
-    'nav-today': 'calendar-check',
+    'nav-today': 'circle-dot',
     'nav-next': 'chevron-right',
     'filter-completed': 'eye-off',
     'filter-blocked': 'eye-off',
@@ -188,6 +193,22 @@
     'remove-person': 'Suppression',
     'bulk-delete': 'Suppression'
   };
+
+  /**
+   * Tabler icon for a day relative to today (0 = today): circle-in-circle today,
+   * jumping arrow tomorrow, two arrows the day after, calendars further out.
+   */
+  function dayIcon(days) {
+    if (typeof days !== 'number' || !isFinite(days)) return 'calendar';
+    if (days === 0) return 'circle-dot';
+    if (days === 1) return 'arrow-curve-right';
+    if (days === 2) return 'arrows-right';
+    if (days === -1) return 'arrow-back-up';
+    if (days < -1) return 'history';
+    if (days < 7) return 'calendar-event';
+    if (days < 14) return 'calendar-week';
+    return 'calendar-month';
+  }
 
   function lookup(table, id) {
     if (!id) return '';
@@ -2141,6 +2162,7 @@
   }
 
   global.ContextMenu = {
+    dayIcon: dayIcon,
     show: show,
     hide: hide,
     bind: bind,

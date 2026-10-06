@@ -23196,6 +23196,12 @@
     function refreshTrigger() {
       var display = formatDueDateBoxDisplay(current);
       triggerTitle.textContent = formatDueDateTriggerTitle(current);
+      var triggerDays = current ? daysUntilDue(current) : NaN;
+      var dayIconName =
+        global.ContextMenu && typeof global.ContextMenu.dayIcon === 'function'
+          ? global.ContextMenu.dayIcon(triggerDays)
+          : 'calendar';
+      triggerIcon.className = 'ti ti-' + dayIconName + ' due-date-trigger-icon';
       if (display) {
         triggerValue.textContent = display;
         triggerValue.classList.remove('is-placeholder');

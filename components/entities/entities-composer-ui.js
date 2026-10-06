@@ -924,7 +924,12 @@
       }
       if (f.kind === 'date') {
         [['Aujourd’hui', 0], ['Demain', 1], ['Dans 7 jours', 7]].forEach(function (o) {
-          quick.appendChild(chip(o[0], false, function () { setQuick(isoDay(o[1])); }));
+          var ic = document.createElement('i');
+          ic.className = 'ti ti-' + (global.ContextMenu && global.ContextMenu.dayIcon ? global.ContextMenu.dayIcon(o[1]) : 'calendar');
+          ic.setAttribute('aria-hidden', 'true');
+          var b = chip(o[0], false, function () { setQuick(isoDay(o[1])); });
+          b.insertBefore(ic, b.firstChild);
+          quick.appendChild(b);
         });
       }
       if (f.kind === 'number' || f.kind === 'text') {
