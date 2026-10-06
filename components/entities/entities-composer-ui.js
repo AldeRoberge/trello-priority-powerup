@@ -92,6 +92,9 @@
       showLinks: false,
       showComps: false,
       openComps: {}, // component cards the user opened
+      ideas: [], // AI suggestions for the current name and genres
+      ideasLoading: false,
+      ideasSeq: 0,
     };
 
     var els = {
@@ -207,6 +210,7 @@
           paintIssues();
           refresh();
           renderRest(true);
+          scheduleIdeas();
         },
         onblur: function () {
           if (commitIntent()) {
@@ -1246,6 +1250,107 @@
       return row.childNodes.length ? row : null;
     }
 
+    /* AI ideas ---------------------------------------------------- */
+
+    var ideasBox = h('div', { class: 'cp-ideas', 'aria-live': 'polite' });
+    var ideasTimer = null;
+    var ideasKey = '';
+
+    function AI() {
+      return ctx.t ? global.EntitiesComposerAI : null;
+    }
+
+    function ideaStillOpen(it) {
+      var d = draft();
+      if (it.kind === 'type') return d.types.indexOf(it.typeId) < 0;
+      if (it.kind === 'alias') return !d.aliases.some(function (a) { return EM().normKey(a) === EM().normKey(it.alias); });
+      if (it.kind === 'answer') return d.answers[it.path] === undefined;
+      return !d.relations.some(function (r) { return r.to === it.to; });
+    }
+
+    function acceptIdea(it) {
+      commitIntent();
+      if (it.kind === 'type' && !it.installed) return installPreset(it.typeId);
+      setDraft(AI().apply(st.schema, draft(), it));
+      if (it.kind === 'alias') nameSec = null;
+      renderMain();
+      refresh();
+    }
+
+    function paintIdeas() {
+      ideasBox.textContent = '';
+      var open = st.ideas.filter(ideaStillOpen);
+      ideasBox.hidden = !open.length && !st.ideasLoading;
+      if (ideasBox.hidden) return;
+      var head = h('div', { class: 'cp-ideas-head' }, [icon('sparkles'), h('span', { text: st.ideasLoading && !open.length ? 'Je cherche des idées…' : 'Idées' })]);
+      var all = open.filter(function (i) {
+        return i.kind !== 'type' || i.installed;
+      });
+      if (all.length > 1) {
+        head.appendChild(
+          h('button', { class: 'cp-quiet', type: 'button', onclick: function () { all.forEach(function (i) { setDraft(AI().apply(st.schema, draft(), i)); }); nameSec = null; renderMain(); refresh(); } }, ['Tout accepter'])
+        );
+      }
+      ideasBox.appendChild(head);
+      if (!open.length) return;
+      var row = h('div', { class: 'cp-pills' });
+      open.forEach(function (it) {
+        row.appendChild(
+          h('button', { class: 'cp-idea', type: 'button', title: 'Ajouter', onclick: function () { acceptIdea(it); } }, [
+            icon(it.icon),
+            h('span', { class: 'cp-idea-detail', text: it.detail }),
+            h('b', { text: it.label }),
+          ])
+        );
+      });
+      ideasBox.appendChild(row);
+    }
+
+    /** Asks for ideas once the name (or the chosen genres) stopped changing; stale answers are ignored. */
+    function scheduleIdeas(delay) {
+      if (!AI()) return;
+      clearTimeout(ideasTimer);
+      var d = draft();
+      var key = d.id + '|' + d.name.trim() + '|' + d.types.join(',');
+      if (key === ideasKey) return;
+      var seq = ++st.ideasSeq;
+      if (d.name.trim().length < 2) {
+        ideasKey = '';
+        st.ideas = [];
+        st.ideasLoading = false;
+        paintIdeas();
+        return;
+      }
+      ideasTimer = setTimeout(function () {
+        AI()
+          .available(ctx.t)
+          .then(function (ok) {
+            if (!ok || seq !== st.ideasSeq) return null;
+            ideasKey = key;
+            st.ideasLoading = true;
+            paintIdeas();
+            return AI().suggest(ctx.t, {
+              schema: st.schema,
+              entities: st.entities,
+              draft: draft(),
+              choices: EC().archetypeChoices(st.schema, global.EntitiesLibrary),
+            });
+          })
+          .then(function (items) {
+            if (!items || seq !== st.ideasSeq) return;
+            st.ideas = items;
+            st.ideasLoading = false;
+            paintIdeas();
+          })
+          .catch(function () {
+            if (seq === st.ideasSeq) {
+              st.ideasLoading = false;
+              paintIdeas();
+            }
+          });
+      }, delay == null ? 700 : delay);
+    }
+
     var nameSec = null;
     var nameFor = '';
     var restBox = h('div', { class: 'cp-rest' });
@@ -1270,6 +1375,8 @@
       var keep = els.main.scrollTop;
       restBox.textContent = '';
       if (shown) {
+        paintIdeas();
+        restBox.appendChild(ideasBox);
         [archetypeBlock(), componentsBlock(), linksBlock(), moreBlock(), remarksBlock()].forEach(function (b) {
           if (b) restBox.appendChild(b);
         });
@@ -1425,6 +1532,7 @@
 
     function refresh() {
       gc();
+      scheduleIdeas();
       dialog.classList.toggle('cp-dialog--solo', isSolo() && !isSub());
       renderHeader();
       renderAside();
@@ -1511,6 +1619,8 @@
     }
 
     function teardown() {
+      clearTimeout(ideasTimer);
+      st.ideasSeq++;
       document.removeEventListener('keydown', onKey, true);
       if (els.overlay.parentNode) els.overlay.parentNode.removeChild(els.overlay);
       try {

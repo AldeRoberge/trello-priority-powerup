@@ -629,6 +629,7 @@
     function openComposer(opts) {
       if (!global.EntitiesComposerUI) return newEntity();
       global.EntitiesComposerUI.open({
+        t: t,
         schema: state.schema,
         entities: state.entities,
         initialText: opts && opts.text,
