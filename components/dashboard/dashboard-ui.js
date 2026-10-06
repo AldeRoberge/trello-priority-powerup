@@ -427,7 +427,7 @@
         role: 'textbox',
         'aria-multiline': 'true',
         'aria-label': 'Capture',
-        'data-placeholder': 'Une tâche par ligne. Collez du texte, des liens, des images ou des documents.',
+        'data-placeholder': 'Une tâche par ligne…',
         spellcheck: 'true',
       });
       try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { /* browser default separator */ }
@@ -552,7 +552,7 @@
       }
       refresh();
       els.main.appendChild(h('div', { class: 'db-page' }, [
-        pageHead('Capture', 'Videz votre tête : tout arrive dans la liste de triage.'),
+        pageHead('Capture'),
         hasTriage() ? null : inboxBanner(),
         h('div', { class: 'db-card' }, [
           ed,
@@ -756,7 +756,7 @@
         ]), d.date);
       });
       els.main.appendChild(h('div', { class: 'db-page db-page--wide' }, [
-        pageHead('Orchestrateur', 'Glissez les tâches sur un jour. Les retards sont reportés sur aujourd’hui.', autoBtn),
+        pageHead('Orchestrateur', null, autoBtn),
         h('div', { class: 'db-orch' }, [
           h('aside', { class: 'db-orch-pool' }, [h('div', { class: 'db-section-title', text: 'À planifier (' + pool.length + ')' }), poolEl]),
           h('div', { class: 'db-week' }, days),
