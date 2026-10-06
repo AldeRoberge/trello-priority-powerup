@@ -670,7 +670,14 @@
       moved.statut = list.name;
       moved.statutKey = list.category;
       moved.statutColor = list.color;
-      renderBoard();
+      // Dropped into a hidden (completed) column: dissolve the tile instead of making it vanish.
+      var tile = state.hideDone && !state.filter ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;
+      var target = columns().filter(function (c) { return c.list.id === listId; })[0];
+      if (tile && target && target.hidden) {
+        tile.classList.remove('is-dragging');
+        tile.classList.add('is-dissolving');
+        setTimeout(renderBoard, 450);
+      } else renderBoard();
       paintCount();
       setStatus('Enregistrement…', 'busy');
       var op = listChanged ? TT().moveCard(t, id, listId, pos) : TT().reorderCard(t, id, pos);
