@@ -217,6 +217,10 @@ html[data-color-mode] .tp-page--kanban {
   border-radius: 0 3px 3px 0;
   background: var(--kb-accent);
 }
+/* Blocked and complete at once: diagonal red/green stripes. */
+.kb-card.is-blocked-done::before {
+  background: repeating-linear-gradient(45deg, var(--kb-blocked, #e34935) 0 4px, var(--tp-success, #22a06b) 4px 8px);
+}
 .kb-card:hover { box-shadow: inset 0 0 0 1px var(--tp-border-strong); background: var(--tp-surface); }
 .kb-card:focus-visible { box-shadow: inset 0 0 0 2px var(--tp-primary); }
 .kb-card.is-dragging { opacity: 0.35; }

@@ -397,12 +397,15 @@
         kids.push(prog);
       }
       if (AI()) kids.push(askBox(row));
+      var accent = row.statutColor || (list && list.color) || '#626f86';
+      // Blocked (flag or "Bloqué" status) yet complete: striped red/green accent instead of the plain status colour.
+      var blockedDone = !!(row.blocked || row.statutKey === 'blocked') && typeof row.progress === 'number' && row.progress >= 100;
       var el = h('div', {
-        class: 'kb-card',
+        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : ''),
         draggable: 'true',
         tabindex: '0',
         'data-id': row.id,
-        style: '--kb-accent:' + (row.statutColor || (list && list.color) || '#626f86'),
+        style: '--kb-accent:' + accent + (blockedDone ? ';--kb-blocked:' + (row.statutKey === 'blocked' ? accent : '#e34935') : ''),
         onclick: function () { if (!state.swallowClick) openCard(row); },
         onkeydown: function (e) {
           if (e.key === 'Enter' && e.target === el) openCard(row);
