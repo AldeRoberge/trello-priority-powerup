@@ -1106,6 +1106,7 @@
         if (!tasks.length) return null;
         return global.GanttTrello.loadBoard(t).then(function (board) {
           state.records = board.cards || [];
+          state.lists = board.lists || state.lists || [];
           rebuild({ keepView: true });
           setStatus(nodes.length + (nodes.length > 1 ? ' éléments supprimés' : ' élément supprimé'), 'ok');
         });
@@ -1173,6 +1174,7 @@
         return global.GanttTrello.loadBoard(t);
       }).then(function (board) {
         state.records = board.cards || [];
+        state.lists = board.lists || state.lists || [];
         rebuild({ keepView: true });
         state.multi = {};
         added.forEach(function (id) { if (nodeById(id)) state.multi[id] = true; });
@@ -1334,6 +1336,7 @@
         return global.GanttTrello.loadBoard(t);
       }).then(function (board) {
         state.records = board.cards || [];
+        state.lists = board.lists || state.lists || [];
         setStatus('Tâche créée', 'ok');
         rebuild({ keepView: true });
       }).catch(function (err) {
@@ -1858,8 +1861,9 @@
 
       els.panel.appendChild(h('div', { class: 'mm-card' }, [
         title,
-        h('label', { class: 'mm-field' }, [h('span', { text: 'Statut' }), status]),
-        h('div', { class: 'mm-card-progress' }, [ringEl, bar, num, detail]),
+        h('label', { class: 'mm-field' }, [h('span', { text: 'Statut (colonne Trello)' }), status]),
+        h('div', { class: 'mm-field' }, [h('span', { text: 'Avancement' }), h('div', { class: 'mm-card-progress' }, [ringEl, bar, num, detail])]),
+        h('div', { class: 'mm-field' }, [h('span', { text: 'Priorité, échéance, blocage' })]),
         h('div', { class: 'mm-actions' }, [
           fieldBtn('priority', 'flag', urgency),
           fieldBtn('due', 'calendar-event', due),
@@ -1877,7 +1881,7 @@
     function contextBlock(n) {
       if (n.kind !== 'task' && n.kind !== 'goal') return null;
       var chain = MM().ancestors(state.graph.edges, n.id).reverse().map(nodeById).filter(Boolean);
-      var flags = MM().contextFlags(state.graph, n.id);
+      var flags = n.kind === 'task' && n.rec && MM().isClosed(n.rec) ? [] : MM().contextFlags(state.graph, n.id); // nothing is missing on a finished task
       if (!chain.length && !flags.length) return null;
       var crumbs = [];
       chain.forEach(function (a) {
@@ -2253,6 +2257,7 @@
       els.canvas.classList.add('is-loading');
       return global.GanttTrello.loadBoard(t).then(function (board) {
         state.records = board.cards || [];
+        state.lists = board.lists || state.lists || [];
         els.canvas.classList.remove('is-loading');
         rebuild({ relayout: true });
       }).catch(function (err) {
