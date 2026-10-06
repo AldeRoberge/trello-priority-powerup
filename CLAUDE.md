@@ -66,7 +66,8 @@ The UI copy is French (Québec). The user writes short, informal requests and ex
 - States: completed is grayed and not bold; blocked/paused is red with the "II" icon (click to unblock); blocked and completed together needs a deliberate look. Completed items are hidden by default with the same top-right toggle in every view. Text is never cropped (wrap it). Icons are homogeneous.
 - **No verbose text.** No subtitles, hint paragraphs, keyboard-shortcut explanations or instructions on screen. A page like Capture is Title + input + buttons, nothing else. Short placeholders only (a few words). Before adding any explanatory sentence, ask whether the UI is clear without it; if so, leave it out. Remove redundant copy when you see it.
 - Empty values say "Cliquer pour ajouter…" and can be set right there, never just "Vide".
-- **Visual hierarchy: less relevant means less present, everywhere.** Empty placeholders and hints ("Cliquer pour ajouter…", empty columns, input placeholders) are dimmed (opacity about 0.55, muted color), prefixed with a `+` icon (`ti ti-plus`) when they invite an action, and brighten slightly on hover. Same for other secondary info (completed, metadata, helper text): quieter than the content that matters. Apply it through shared CSS and check every view, not just the one asked about.
+- **Less relevant means less present, everywhere.** Empty placeholders and hints ("Cliquer pour ajouter…", empty columns, input placeholders) are dimmed (opacity about 0.55, muted color) and brighten slightly on hover. Other secondary info (completed, metadata, helper text) stays quieter than the content that matters. Do it in shared CSS and check every view.
+- **Icon meaning: `+` (`ti ti-plus`) only means "create/add a new item" (add a label, a place, a parent task, a description). Never use it for other actions (choose, set, assign, evaluate, open, edit): those get their own icon (pencil for set/choose/edit) or none.**
 
 ### AI rules
 

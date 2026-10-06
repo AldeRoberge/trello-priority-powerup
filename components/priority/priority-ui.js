@@ -11112,7 +11112,9 @@
         else if (plain) summary.textContent = plain;
         else {
           var plus = document.createElement('i');
-          plus.className = 'ti ti-plus info-row-summary-plus';
+          var promptText = ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
+          // + means "create a new item"; choosing or setting a value gets a pencil.
+          plus.className = (/ajouter/.test(promptText) ? 'ti ti-plus' : 'ti ti-pencil') + ' info-row-summary-plus';
           plus.setAttribute('aria-hidden', 'true');
           var hint = document.createElement('span');
           hint.className = 'info-row-summary-main';
