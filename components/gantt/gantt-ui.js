@@ -1144,6 +1144,68 @@
       return m ? h + 'h' + (m < 10 ? '0' : '') + m : h + 'h';
     }
 
+    // Year view, zoomed in: Monday lines + date labels inside the (then very
+    // wide) month columns, so there is never a big empty stretch without a grid.
+    var MIN_WEEK_TICK_PX = 40;
+
+    function bindWeekScale(scroll, timelineCol, headerTimeline, r) {
+      var days = model.rangeDayCount(r);
+      var dayPx = state.timelineWidth / days;
+      if (state.viewMode !== 'year' || dayPx * 7 < MIN_WEEK_TICK_PX) return;
+      var cols = r.columns;
+      var cells = headerTimeline.children;
+      var lines = el('div', 'gantt-hour-lines');
+      var labels = el('div', 'gantt-hour-labels');
+      timelineCol.appendChild(lines);
+      headerTimeline.appendChild(labels);
+      headerTimeline.classList.add('gantt-timeline-header--hours');
+      var raf = 0;
+      var showMonth = dayPx * 7 >= 70;
+
+      function draw() {
+        raf = 0;
+        var left = scroll.scrollLeft - 200;
+        var right = scroll.scrollLeft + scroll.clientWidth + 200;
+        var linesFrag = document.createDocumentFragment();
+        var labelsFrag = document.createDocumentFragment();
+        for (var c = 0; c < cols.length; c++) {
+          var x0 = model.dateToX(cols[c].start, r, state.timelineWidth);
+          var x1 = model.dateToX(model.addDays(cols[c].end, 1), r, state.timelineWidth);
+          var cell = cells[c];
+          if (cell && cell.classList.contains('gantt-col-head')) {
+            var shift = Math.max(0, Math.min(scroll.scrollLeft - x0, x1 - x0 - 60));
+            cell.style.paddingLeft = shift + 8 + 'px';
+          }
+          if (x1 < left || x0 > right) continue;
+          var d = model.startOfWeek(cols[c].start);
+          if (d.getTime() < cols[c].start.getTime()) d = model.addDays(d, 7);
+          for (; d.getTime() <= cols[c].end.getTime(); d = model.addDays(d, 7)) {
+            var x = model.dateToX(d, r, state.timelineWidth);
+            if (x === x0 || x < left || x > right) continue;
+            var line = el('div', 'gantt-hour-line');
+            line.style.left = x + 'px';
+            linesFrag.appendChild(line);
+            var lab = el('span', 'gantt-hour-label', {
+              text: showMonth && d.getDate() <= 7
+                ? d.getDate() + ' ' + d.toLocaleDateString('fr-FR', { month: 'short' })
+                : String(d.getDate()),
+            });
+            lab.style.left = x + 'px';
+            labelsFrag.appendChild(lab);
+          }
+        }
+        lines.textContent = '';
+        labels.textContent = '';
+        lines.appendChild(linesFrag);
+        labels.appendChild(labelsFrag);
+      }
+
+      draw();
+      scroll.addEventListener('scroll', function () {
+        if (!raf) raf = requestAnimationFrame(draw);
+      });
+    }
+
     function bindHourScale(scroll, timelineCol, headerTimeline, r, mapOpts) {
       var days = model.rangeDayCount(r);
       var dayPx = state.timelineWidth / days;
@@ -4809,6 +4871,7 @@
       // Apply the restored scroll now (not only next frame) so a zoom does not flash.
       if (restoreLeft != null && isFinite(restoreLeft)) scroll.scrollLeft = restoreLeft;
       bindHourScale(scroll, timelineCol, headerTimeline, r, mapOpts);
+      bindWeekScale(scroll, timelineCol, headerTimeline, r);
 
       labelsCol.style.width = clampLabelsWidth(state.labelsWidth, chart) + 'px';
       state.labelsWidth = clampLabelsWidth(state.labelsWidth, chart);
