@@ -52,7 +52,7 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
 
     it('a Building is a place AND matter: two natures, components of both lineages', () => {
       assert.deepEqual(M.naturesOf(schema, { types: ['batiment'] }), ['place', 'matter']);
-      assert.deepEqual(M.componentIdsOf(schema, { types: ['batiment'] }), ['matiere', 'provenance', 'construction']);
+      assert.deepEqual(M.componentIdsOf(schema, { types: ['batiment'] }), ['matiere', 'provenance', 'propriete', 'construction']);
     });
 
     it('a Worker is a Person in a role: it inherits the person fields and flags role', () => {

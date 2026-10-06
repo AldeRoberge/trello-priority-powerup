@@ -75,7 +75,7 @@
 
   function open(ctx) {
     var st = {
-      schema: ctx.schema,
+      schema: global.EntitiesLibrary ? global.EntitiesLibrary.ensureComponent(ctx.schema, 'propriete') : ctx.schema,
       entities: ctx.entities,
       drafts: {},
       order: [],
@@ -1238,6 +1238,10 @@
       return box;
     }
 
+    function hasOwner() {
+      return EM().componentIdsOf(st.schema, draft()).indexOf('propriete') >= 0;
+    }
+
     /** Quiet text buttons that reveal the optional parts: other names, details, links. */
     function moreBlock() {
       var row = h('div', { class: 'cp-more' });
@@ -1250,6 +1254,15 @@
           st.openComps.aliases = true;
           renderMain();
           var i = els.main.querySelector('.cp-chipedit-in');
+          if (i) i.focus();
+        });
+      if (!hasOwner() && EM().findById(st.schema.components, 'propriete'))
+        add('Propriétaire', 'user-circle', function () {
+          setDraft(EC().toggleComponent(st.schema, draft(), 'propriete', true));
+          st.openComps.propriete = true;
+          renderMain();
+          refresh();
+          var i = els.main.querySelector('.cp-ccard[open] input[aria-label*="Propriétaire"]');
           if (i) i.focus();
         });
       if (!st.showComps)

@@ -628,7 +628,12 @@
       .map(normalizeHistoryEntry)
       .filter(Boolean)
       .slice(-MAX_HISTORY);
-    return {
+    var source = null;
+    if (raw.source && typeof raw.source === 'object' && (raw.source.kind === 'people' || raw.source.kind === 'places') && raw.source.id) {
+      source = { kind: raw.source.kind, id: String(raw.source.id).slice(0, 80) };
+      if (raw.source.gone === true) source.gone = true;
+    }
+    var out = {
       id: String(raw.id),
       name: name,
       base: raw.base && String(raw.base) !== String(raw.id) ? String(raw.base) : '',
@@ -641,6 +646,8 @@
       createdAt: String(raw.createdAt || ''),
       updatedAt: String(raw.updatedAt || ''),
     };
+    if (source) out.source = source; // link to a People / Places record (see entities-directories.js)
+    return out;
   }
 
   function getValue(entity, path) {

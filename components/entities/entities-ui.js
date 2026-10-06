@@ -1111,6 +1111,7 @@
               }
               closePop();
               state.entities = EM().deleteEntity(state.schema, state.entities, e.id);
+              if (global.EntitiesDirectories) global.EntitiesDirectories.forget(t, e); // its People / Places record goes too
               state.selId = null;
               state.confirm = '';
               scheduleSave();
@@ -2176,8 +2177,15 @@
       dirty = false;
       state.saveState = 'saving';
       paintStatus();
-      return ET()
-        .commit(t, state.data, state.schema, state.entities)
+      var beforeSave = global.EntitiesDirectories
+        ? global.EntitiesDirectories.push(t, state.schema, state.entities).then(function (r) {
+            if (r.changed) state.entities = r.entities; // people and places now carry their directory link
+          })
+        : Promise.resolve();
+      return beforeSave
+        .then(function () {
+          return ET().commit(t, state.data, state.schema, state.entities);
+        })
         .then(
           function () {
             state.saveState = dirty ? 'dirty' : 'saved';
@@ -2223,6 +2231,16 @@
                 state.selId = state.entities.length ? state.entities[0].id : null;
                 paintList({ reveal: true });
                 paintMain();
+                // People and Places are entities too: bring the directories in (saved with the next write)
+                if (global.EntitiesDirectories)
+                  global.EntitiesDirectories.pull(t, state.schema, state.entities).then(function (r) {
+                    if (!r.changed) return;
+                    state.schema = r.schema;
+                    state.entities = r.entities;
+                    scheduleSave();
+                    paintList();
+                    paintMain();
+                  });
               },
               function (err) {
                 state.loaded = true;

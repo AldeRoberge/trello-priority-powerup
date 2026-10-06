@@ -18,6 +18,20 @@
   // ---------------------------------------------------------------- 1 components
   var COMPONENTS = [
     {
+      id: 'propriete',
+      name: 'Propriété',
+      fields: [{ key: 'proprietaire', label: 'Propriétaire', kind: 'refs', refTypes: [], rel: 'owned-by' }],
+    },
+    {
+      id: 'adresse',
+      name: 'Adresse',
+      fields: [
+        { key: 'adresse', label: 'Adresse', kind: 'text' },
+        { key: 'coordonnees', label: 'Coordonnées (lat, lon)', kind: 'geo' },
+        { key: 'notes', label: 'Notes', kind: 'longtext' },
+      ],
+    },
+    {
       id: 'matiere',
       name: 'Matière',
       fields: [
@@ -66,6 +80,7 @@
         { key: 'residence', label: 'Habite à', kind: 'ref', refTypes: ['place'], rel: 'lives-in' },
         { key: 'courriel', label: 'Courriel', kind: 'text' },
         { key: 'telephone', label: 'Téléphone', kind: 'text' },
+        { key: 'notes', label: 'Notes', kind: 'longtext' },
       ],
     },
     {
@@ -171,15 +186,15 @@
   ];
 
   var TYPES = [
-    { group: 'matter', id: 'objet', name: 'Objet', nature: 'matter', icon: 'box', aliases: ['object', 'chose', 'item', 'article'], components: ['matiere', 'provenance'], description: 'Une chose matérielle fabriquée ou trouvée.' },
+    { group: 'matter', id: 'objet', name: 'Objet', nature: 'matter', icon: 'box', aliases: ['object', 'chose', 'item', 'article'], components: ['matiere', 'provenance', 'propriete'], description: 'Une chose matérielle fabriquée ou trouvée.' },
     { group: 'matter', id: 'produit', name: 'Produit', nature: 'matter', icon: 'bottle', parents: ['objet'], aliases: ['product', 'cosmétique', 'crème'], components: ['produit'], description: 'Un objet fait pour être utilisé ou consommé : crème pour les mains, savon, aliment.' },
     { group: 'matter', id: 'substance', name: 'Substance', nature: 'matter', icon: 'flask', aliases: ['ingrédient', 'ingredient', 'matière première', 'material'], components: ['matiere'], description: 'De la matière sans forme propre : glycérine, eau, pierre, bois.' },
-    { group: 'living', id: 'etre_vivant', name: 'Être vivant', nature: 'living', icon: 'leaf', aliases: ['living', 'organisme', 'vivant'], components: ['vivant'], description: 'Ce qui naît, croît et meurt.' },
+    { group: 'living', id: 'etre_vivant', name: 'Être vivant', nature: 'living', icon: 'leaf', aliases: ['living', 'organisme', 'vivant'], components: ['vivant', 'propriete'], description: 'Ce qui naît, croît et meurt.' },
     { group: 'living', id: 'animal', name: 'Animal', nature: 'living', icon: 'paw', parents: ['etre_vivant'], aliases: ['pet', 'bête', 'animaux'], components: [], description: 'Un être vivant qui se déplace.' },
     { group: 'people', id: 'personne', name: 'Personne', nature: 'agent', icon: 'user', aliases: ['person', 'people', 'humain', 'gens'], components: ['personne'], description: 'Un être humain : il agit, il a des intentions.' },
     { group: 'people', id: 'travailleur', name: 'Travailleur', nature: 'agent', icon: 'briefcase', parents: ['personne'], role: true, aliases: ['worker', 'employé', 'employee', 'ouvrier', 'collègue'], components: ['emploi'], description: 'Une personne dans son rôle d’employé : le rôle dépend d’un contexte, la personne reste la même.' },
     { group: 'people', id: 'organisation', name: 'Organisation', nature: 'social', icon: 'building-community', aliases: ['organization', 'entreprise', 'company', 'institution', 'groupe'], components: ['organisation'], description: 'Un groupe reconnu qui agit comme un seul : il existe par convention.' },
-    { group: 'places', id: 'place', name: 'Lieu', nature: 'place', icon: 'map-pin', aliases: ['endroit', 'location'], components: [], description: 'Une portion d’espace.' },
+    { group: 'places', id: 'place', name: 'Lieu', nature: 'place', icon: 'map-pin', aliases: ['endroit', 'location'], components: ['adresse', 'propriete'], description: 'Une portion d’espace.' },
     { group: 'places', id: 'region', name: 'Région du monde', nature: 'place', icon: 'world', parents: ['place'], aliases: ['région', 'region', 'zone', 'territoire', 'world region', 'continent'], components: ['geographie'], description: 'Une zone de la carte : continent, province, région.' },
     { group: 'places', id: 'pays', name: 'Pays', nature: 'place', icon: 'flag', parents: ['region'], aliases: ['country', 'nation'], components: ['pays'], description: 'Un territoire gouverné.' },
     { group: 'places', id: 'ville', name: 'Ville', nature: 'place', icon: 'building-skyscraper', parents: ['place'], aliases: ['city', 'town', 'municipalité', 'village'], components: ['geographie'], description: 'Une agglomération.' },
@@ -328,6 +343,31 @@
     return { schema: next, added: added, typeIds: typeIds };
   }
 
+  /** The schema with the component installed (unchanged when it is already there). */
+  function ensureComponent(schema, cid) {
+    if (EM().findById(schema.components, cid)) return schema;
+    var c = presetComponent(cid);
+    return c ? EM().upsertComponent(schema, c) : schema;
+  }
+
+  /**
+   * What the People / Places bridge and the owner field need in every schema: the Propriété and Adresse
+   * components (the Lieu type carries Adresse), and the Personne type when asked (opts.people). Existing
+   * types and data are left alone.
+   */
+  function ensureBridge(schema, opts) {
+    var next = ensureComponent(ensureComponent(schema, 'propriete'), 'adresse');
+    var place = EM().findById(next.types, 'place');
+    if (place && place.components.indexOf('adresse') < 0) {
+      next = EM().upsertType(next, Object.assign({}, place, { components: place.components.concat(['adresse']) }));
+    }
+    if (opts && opts.people && !installedAs(next, 'personne')) {
+      var r = install(next, 'personne');
+      if (!r.error) next = r.schema;
+    }
+    return next;
+  }
+
   // ---------------------------------------------------------------- 5 export
   global.EntitiesLibrary = {
     COMPONENTS: COMPONENTS,
@@ -339,5 +379,7 @@
     missingFor: missingFor,
     dependencies: dependencies,
     install: install,
+    ensureComponent: ensureComponent,
+    ensureBridge: ensureBridge,
   };
 })(typeof window !== 'undefined' ? window : this);
