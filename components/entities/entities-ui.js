@@ -2,7 +2,7 @@
  * Role: UI of the Entities view ("Entités"): define rich things once ("Monstera", "Hôtel de Ville"), give them
  * types, typed properties, links and a history, then find them by describing them ("mes plantes au travail").
  *  - left: a source list (search box that also understands a request, type filter pills, entities grouped by type,
- *    one "+" menu to compose or create an empty one)
+ *    one "+" button that opens the composer)
  *  - right: the entity as a page (big editable name, type pills, aliases, then properties as grouped lists,
  *    links, and two collapsed rows: "Modèle et variantes", "Historique" with per-entry undo)
  *  - "Types et composants": the components (groups of typed fields) and types (bundles of components)
@@ -598,17 +598,8 @@
           type: 'button',
           title: 'Nouvelle entité',
           'aria-label': 'Nouvelle entité',
-          'aria-haspopup': 'menu',
-          'aria-expanded': 'false',
-          onclick: function (ev) {
-            openPop(
-              ev.currentTarget,
-              function (el) {
-                el.appendChild(menuItem('wand', 'Composer une entité', 'La décrire en une phrase', function () { openComposer(); }));
-                el.appendChild(menuItem('plus', 'Entité vide', 'Un nom, le reste plus tard', newEntity));
-              },
-              { align: 'end' }
-            );
+          onclick: function () {
+            openComposer();
           },
         },
         [icon('plus')]
@@ -628,7 +619,8 @@
     /** Opens the guided interview; what it creates (and any new type) is saved like any other edit. */
     function openComposer(opts) {
       if (!global.EntitiesComposerUI) return newEntity();
-      global.EntitiesComposerUI.open({
+      var Composer = global.EntitiesInterviewUI && global.EntitiesInterview ? global.EntitiesInterviewUI : global.EntitiesComposerUI;
+      Composer.open({
         t: t,
         schema: state.schema,
         entities: state.entities,
