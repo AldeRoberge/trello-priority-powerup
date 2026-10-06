@@ -208,9 +208,29 @@
       return i;
     }
 
-    function prioBadge(row) {
-      if (typeof row.priority !== 'number') return null;
-      return h('span', { class: 'db-prio db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)), title: row.tier || 'Priorité', text: String(row.priority) });
+    /** Clickable priority badge: opens the shared priority editor hanging from it. */
+    function prioBadge(row, askIfEmpty) {
+      var has = typeof row.priority === 'number';
+      if (!has && askIfEmpty !== true) return null;
+      var badge = h('button', {
+        class: has ? 'db-prio db-prio--btn db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)) : 'db-chip db-chip--btn',
+        type: 'button',
+        title: (has ? (row.tier || 'Priorité') + ' · ' : '') + 'Cliquer pour changer la priorité',
+        onclick: function (e) {
+          e.stopPropagation();
+          if (!global.CardFields) return;
+          global.CardFields.open('priority', {
+            t: t,
+            cardId: row.id,
+            cardName: row.name,
+            anchor: badge,
+            onSaved: function () { setStatus('Enregistré', 'ok', 2500); },
+            onError: function (m) { setStatus(m, 'error'); },
+            onClose: function (changed) { if (changed) reload({ quiet: true }); },
+          });
+        },
+      }, has ? [document.createTextNode(String(row.priority))] : [icon('flag'), document.createTextNode('Prioriser…')]);
+      return badge;
     }
 
     function setEstimate(row, minutes) {
@@ -652,7 +672,7 @@
     function taskCard(row, showDue) {
       var el = h('div', { class: 'db-task', draggable: 'true', title: row.name }, [
         h('div', { class: 'db-task-name', text: row.name }),
-        h('div', { class: 'db-task-meta' }, [prioBadge(row), estChip(row), showDue === true ? dueChip(row) : null]),
+        h('div', { class: 'db-task-meta' }, [prioBadge(row, true), estChip(row), showDue === true ? dueChip(row) : null]),
       ]);
       el.addEventListener('dragstart', function (e) {
         e.dataTransfer.setData('text/plain', row.id);

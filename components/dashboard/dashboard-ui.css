@@ -280,3 +280,6 @@ div.db-capture { resize: none; overflow: auto; max-height: 50vh; white-space: pr
 .db-sugg { margin-top: 20px; border: 1px solid var(--tp-border); border-radius: 8px; overflow: hidden; }
 .db-sugg-h { margin: 0; padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--tp-text-muted); border-bottom: 1px solid var(--tp-border); display: flex; align-items: center; gap: 4px; }
 .db-sugg .db-row:last-child { border-bottom: 0; }
+
+button.db-prio { border: 0; font-family: inherit; cursor: pointer; }
+.db-prio--btn:hover { filter: brightness(1.12); }
