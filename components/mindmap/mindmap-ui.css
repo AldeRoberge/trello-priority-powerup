@@ -114,6 +114,11 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-edge--depends { stroke: var(--mm-depends); stroke-width: 2.25; }
 .mm-edge--by { stroke: var(--mm-person); }
 .mm-edge--at { stroke: var(--mm-place); }
+.mm-edge--sub { stroke: var(--tp-text-muted); stroke-dasharray: 2 4; }
+.mm-edge-glow--sub { stroke: var(--tp-text-muted); }
+.mm-arrow--sub { fill: var(--tp-text-muted); }
+.mm-swatch--sub { border-top: 2px dotted var(--tp-text-muted); }
+.mm-node--subtask .mm-check { color: var(--mm-accent); }
 .mm-edge.is-cycle { stroke: var(--tp-danger-text); }
 .mm-edge.is-dim { opacity: 0.12; }
 .mm-edge-glow { fill: none; stroke-width: 7; stroke-linecap: round; opacity: 0.14; pointer-events: none; stroke: var(--tp-text-muted); }

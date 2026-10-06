@@ -151,7 +151,7 @@
     };
     var svg = s('svg', { class: 'mm-svg', width: '100%', height: '100%' });
     var defs = s('defs');
-    ['depends', 'by', 'at', 'serves'].forEach(function (k) {
+    ['depends', 'by', 'at', 'serves', 'sub'].forEach(function (k) {
       defs.appendChild(s('marker', { id: 'mm-arrow-' + k, viewBox: '0 0 10 10', refX: '9', refY: '5', markerUnits: 'userSpaceOnUse', markerWidth: '11', markerHeight: '11', orient: 'auto-start-reverse' },
         [s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mm-arrow mm-arrow--' + k })]));
     });
@@ -176,6 +176,7 @@
     els.canvas.appendChild(h('div', { class: 'mm-legend' }, [
       legendItem('serves', 'Contribue à'),
       legendItem('depends', 'Dépend de'),
+      legendItem('sub', 'Sous-tâche'),
       legendItem('by', 'Est fait par'),
       legendItem('at', 'Est fait à'),
     ]));
@@ -463,7 +464,7 @@
       edgeEls = Object.create(null);
       var graph = state.graph;
       graph.edges.forEach(function (e) {
-        var cls = e.kind === 'depends' ? 'depends' : e.kind === 'by' ? 'by' : e.kind === 'serves' ? 'serves' : 'at';
+        var cls = e.kind === 'depends' ? 'depends' : e.kind === 'by' ? 'by' : e.kind === 'serves' ? 'serves' : e.kind === 'sub' ? 'sub' : 'at';
         var glow = s('path', { class: 'mm-edge-glow mm-edge-glow--' + cls });
         var line = s('path', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : ''), 'marker-end': 'url(#mm-arrow-' + cls + ')' });
         var title = s('title');
@@ -492,7 +493,7 @@
       var g = s('g', { class: 'mm-node mm-node--' + n.kind, tabindex: '0', role: 'button', 'aria-label': n.label, 'data-id': n.id });
       var rec = n.rec || {};
       var lv = levelOf(n);
-      var accent = n.kind === 'task' ? (rec.color || 'hsl(210 62% 58%)') : n.kind === 'person' ? 'hsl(' + hueOf(n.label) + ' 55% 62%)' : lv ? 'hsl(' + lv.hue + ' 70% 60%)' : 'hsl(150 50% 46%)';
+      var accent = n.kind === 'task' ? (rec.color || 'hsl(210 62% 58%)') : n.kind === 'subtask' ? 'hsl(200 40% 62%)' : n.kind === 'person' ? 'hsl(' + hueOf(n.label) + ' 55% 62%)' : lv ? 'hsl(' + lv.hue + ' 70% 60%)' : 'hsl(150 50% 46%)';
       g.style.setProperty('--mm-accent', accent);
       if (n.bodyH) g.setAttribute('data-body', '');
       var x0 = -n.w / 2;
@@ -509,6 +510,9 @@
           var it = s('text', { class: 'mm-initials', 'text-anchor': 'middle', x: x0 + 24, y: cy + 4 });
           it.textContent = lv ? lv.label.charAt(0) : initials(n.label);
           g.appendChild(it);
+        } else if (n.kind === 'subtask') {
+          g.appendChild(s('circle', { class: 'mm-avatar', cx: x0 + 24, cy: cy, r: 11 }));
+          g.appendChild(s('path', { class: 'mm-check', d: 'M' + (x0 + 19) + ',' + cy + 'l4,4l7,-8', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
         } else {
           g.appendChild(s('path', {
             class: 'mm-pinicon',
@@ -1975,6 +1979,9 @@
           });
         });
         sections.push(section('Est fait à', placeRows));
+      } else if (n.kind === 'subtask') {
+        sections.push(section('Sous-tâche de', edges.filter(function (e) { return e.kind === 'sub' && e.to === n.id; }).map(function (e) { return linkRow('', nodeById(e.from)); })));
+        if (typeof n.progress === 'number') els.panel.appendChild(h('div', { class: 'mm-chips' }, [h('span', { class: 'mm-chip', text: Math.round(n.progress) + ' %' })]));
       } else if (n.kind === 'person') {
         sections.push(section('Fait', pick('by', 'in', function (e) { return linkRow('', nodeById(e.from)); })));
       } else {
@@ -2253,13 +2260,14 @@
     global.addEventListener('resize', function () { if (!state.graph.nodes.length) fit(); });
 
     /* ── Loading ───────────────────────────────────────────────────── */
-    function reload() {
-      els.canvas.classList.add('is-loading');
+    function reload(opts) {
+      var quiet = !!(opts && opts.quiet);
+      if (!quiet) els.canvas.classList.add('is-loading');
       return global.GanttTrello.loadBoard(t).then(function (board) {
         state.records = board.cards || [];
         state.lists = board.lists || state.lists || [];
         els.canvas.classList.remove('is-loading');
-        rebuild({ relayout: true });
+        rebuild({ relayout: !quiet });
       }).catch(function (err) {
         els.canvas.classList.remove('is-loading');
         gNodes.textContent = '';
@@ -2274,6 +2282,9 @@
       rebuild({ relayout: true });
     });
     renderBar();
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({ t: t, after: root, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return global.CardFields && global.CardFields.isOpen(); } });
+    }
     return reload().then(loadGoals);
   }
 

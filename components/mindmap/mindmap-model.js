@@ -35,6 +35,7 @@
   // Goal hierarchy, highest to smallest. A task is the last level. "serves" edges point from the
   // smaller thing to the bigger one it contributes to (task → project → objective → goal → mission → vision).
   EDGE_LABELS.serves = 'Contribue à';
+  EDGE_LABELS.sub = 'Sous-tâche';
   var LEVELS = [
     { id: 'vision', label: 'Vision', icon: 'eye', hue: 275 },
     { id: 'mission', label: 'Mission', icon: 'flag-3', hue: 330 },
@@ -254,6 +255,27 @@
         });
       }
     });
+
+    // Subtasks: local checklist items become nodes under their card; linked cards get a link from the parent.
+    if (show.sub !== false) {
+      tasks.forEach(function (r) {
+        var from = 't:' + r.id;
+        (Array.isArray(r.items) ? r.items : []).forEach(function (it) {
+          if (!it) return;
+          var linked = it.linkedCardId != null ? String(it.linkedCardId).trim() : '';
+          if (linked) {
+            if (linked !== r.id) addEdge('sub', from, 't:' + linked);
+            return;
+          }
+          if (!it.id || (opts.hideDone && (it.done || it.progress >= 100))) return;
+          var sid = 's:' + r.id + ':' + it.id;
+          var sn = addNode(sid, 'subtask', it.text || 'Sous-tâche');
+          sn.parentId = r.id;
+          sn.progress = typeof it.progress === 'number' ? it.progress : it.done ? 100 : 0;
+          addEdge('sub', from, sid);
+        });
+      });
+    }
 
     if (q) {
       var keepTask = Object.create(null);
