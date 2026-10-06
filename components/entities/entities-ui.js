@@ -1971,7 +1971,7 @@
     function addFieldsRow(e, first) {
       var have = EM().componentIdsOf(state.schema, e);
       var avail = state.schema.components.filter(function (c) {
-        return have.indexOf(c.id) < 0 && (c.fields.length || c.builtin);
+        return have.indexOf(c.id) < 0 && (c.fields.length || c.builtin) && EM().componentFits(state.schema, e, c.id);
       });
       if (!avail.length) return null;
       return h('div', { class: 'en-addrow' }, [

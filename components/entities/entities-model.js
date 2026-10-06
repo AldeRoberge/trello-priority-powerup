@@ -507,6 +507,33 @@
     return normalizeSchema(next);
   }
 
+  /**
+   * Components that only make sense for some natures (a Personne component on an event is nonsense: the person
+   * is another entity linked to the event). Keyed by component id so it also covers schemas saved earlier.
+   * Components of a type's own list are never filtered; this only guards the ones added to an entity.
+   */
+  var COMPONENT_NATURES = {
+    personne: ['agent'],
+    emploi: ['agent'],
+    vivant: ['living'],
+    organisation: ['social'],
+    geographie: ['place'],
+    pays: ['place'],
+    espace: ['place'],
+    construction: ['place', 'matter'],
+  };
+
+  /** May the entity carry the component on its own? Untyped entities and components without a rule always may. */
+  function componentFits(schema, entity, cid) {
+    var allowed = COMPONENT_NATURES[cid];
+    if (!allowed) return true;
+    var natures = naturesOf(schema, entity);
+    if (!natures.length) return true;
+    return natures.some(function (n) {
+      return allowed.indexOf(n) >= 0;
+    });
+  }
+
   /** Component ids an entity carries: union over its types, in type order. */
   function componentIdsOf(schema, entity) {
     var out = [];
@@ -519,7 +546,7 @@
     });
     // components the entity added on its own, beyond its archetypes
     (entity.components || []).forEach(function (cid) {
-      if (out.indexOf(cid) < 0 && findById(schema.components, cid)) out.push(cid);
+      if (out.indexOf(cid) < 0 && findById(schema.components, cid) && componentFits(schema, entity, cid)) out.push(cid);
     });
     // a component pulls in the ones it requires (Contenant needs Matière), transitively and without loops
     for (var i = 0; i < out.length; i++) {
@@ -993,7 +1020,7 @@
     var list = uniqueStrings(ids, MAX_COMPONENTS, MAX_NAME)
       .map(slug)
       .filter(function (c) {
-        return !!findById(schema.components, c);
+        return !!findById(schema.components, c) && componentFits(schema, entity, c);
       });
     if (JSON.stringify(list) === JSON.stringify(entity.components || [])) return entity;
     var next = clone(entity);
@@ -1914,6 +1941,8 @@
     removeComponent: removeComponent,
     removeType: removeType,
     componentIdsOf: componentIdsOf,
+    componentFits: componentFits,
+    COMPONENT_NATURES: COMPONENT_NATURES,
     archetypeDefaults: archetypeDefaults,
     setComponents: setComponents,
     setTypeDefault: setTypeDefault,

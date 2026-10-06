@@ -495,6 +495,7 @@
       var c = carry(st.schema, st.lib, d, cid);
       st.schema = c.schema;
       d = c.draft;
+      if (EM().componentIdsOf(st.schema, d).indexOf(cid) < 0) return; // a component this kind of thing cannot carry
       var f = EM().fieldOf(st.schema, path);
       if (!f || f.field.kind === 'geo' || f.field.kind === 'ref' || f.field.kind === 'refs') return;
       var v = CAI() ? CAI().coerce(f.field, facts[path], st.pool) : typeof facts[path] === 'string' ? facts[path] : undefined;

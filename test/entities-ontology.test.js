@@ -558,6 +558,29 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       assert.ok(M.describeEntity(s, [e, other], other).includes('Tous les (jours): 7'));
     });
 
+    it('a component that does not fit the nature is never carried (no Personne on an event)', () => {
+      const s = M.normalizeSchema({
+        types: [
+          { id: 'evenement', name: 'Événement', nature: 'event', components: ['temps'] },
+          { id: 'personne', name: 'Personne', nature: 'agent', components: ['personne'] },
+        ],
+        components: [
+          { id: 'temps', name: 'Temps', fields: [{ key: 'debut', label: 'Début', kind: 'date' }] },
+          { id: 'personne', name: 'Personne', fields: [{ key: 'courriel', label: 'Courriel', kind: 'text' }] },
+          { id: 'note', name: 'Note', fields: [{ key: 'txt', label: 'Texte', kind: 'text' }] },
+        ],
+      });
+      let ev = M.createEntity(s, { name: 'Tournage avec Jonny', types: ['evenement'] });
+      assert.equal(M.componentFits(s, ev, 'personne'), false);
+      assert.equal(M.componentFits(s, ev, 'note'), true);
+      ev = M.setComponents(s, ev, ['personne', 'note']);
+      assert.deepEqual(ev.components, ['note']);
+      // old data that already carries it: hidden, not shown
+      assert.deepEqual(M.componentIdsOf(s, Object.assign({}, ev, { components: ['personne', 'note'] })), ['temps', 'note']);
+      const jonny = M.createEntity(s, { name: 'Jonny', types: ['personne'] });
+      assert.deepEqual(M.componentIdsOf(s, jonny), ['personne']);
+    });
+
     it('an entity can carry extra components, with history and undo', () => {
       const s = plantSchema();
       let e = M.createEntity(s, { name: 'Ficus', types: ['plante'] });
