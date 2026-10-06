@@ -161,9 +161,11 @@
     var gNodes = s('g', { class: 'mm-nodes' });
     var gBox = s('g', { class: 'mm-selbox' }); // bounding box of the multi-selection (behind the wires and cards)
     var gTop = s('g', { class: 'mm-top' }); // rubber-band rectangle
+    var gHandles = s('g', { class: 'mm-handles' }); // grab handles on the two ends of the selected link
     gView.appendChild(gBox);
     gView.appendChild(gEdges);
     gView.appendChild(gNodes);
+    gView.appendChild(gHandles);
     gView.appendChild(gTop);
     svg.appendChild(gView);
     els.canvas.appendChild(svg);
@@ -634,6 +636,77 @@
       [ref.line, ref.glow, ref.hit].forEach(function (l) { if (l) l.setAttribute('d', d); });
       ref.label.setAttribute('x', ((p1.x + p2.x) / 2).toFixed(1));
       ref.label.setAttribute('y', ((p1.y + p2.y) / 2 - 6).toFixed(1));
+      ref.ends = [p1, p2];
+      if (state.selectedEdge === e.id) drawHandles();
+    }
+
+    /** Two grab handles on the ends of the selected link: drag one onto another card to move that end of the link. */
+    function drawHandles() {
+      gHandles.textContent = '';
+      var e = state.selectedEdge && edgeById(state.selectedEdge);
+      var ref = e && edgeEls[e.id];
+      if (!ref || !ref.ends || (e.kind !== 'depends' && e.kind !== 'serves')) return;
+      ['from', 'to'].forEach(function (end, i) {
+        var c = s('circle', { class: 'mm-edge-handle', r: 7, cx: ref.ends[i].x.toFixed(1), cy: ref.ends[i].y.toFixed(1) });
+        var t = s('title');
+        t.textContent = 'Glisser sur une autre carte pour déplacer ce bout du lien';
+        c.appendChild(t);
+        c.addEventListener('pointerdown', function (ev) { startEndDrag(ev, e, end); });
+        gHandles.appendChild(c);
+      });
+    }
+
+    /** Drags one end ('from' or 'to') of a link onto another card; the other end stays where it is. */
+    function startEndDrag(ev, e, end) {
+      if (ev.button) return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      var fixed = nodeById(end === 'to' ? e.from : e.to);
+      var ref = edgeEls[e.id];
+      if (!fixed || !ref) return;
+      var temp = s('path', { class: 'mm-wire-temp' });
+      gEdges.appendChild(temp);
+      root.classList.add('is-wiring');
+      var target = null;
+      function toGraph(me) {
+        var r = svg.getBoundingClientRect();
+        return { x: (me.clientX - r.left - state.view.x) / state.view.k, y: (me.clientY - r.top - state.view.y) / state.view.k };
+      }
+      function move(me) {
+        var el = document.elementFromPoint(me.clientX, me.clientY);
+        var ng = el && el.closest && el.closest('.mm-node--task, .mm-node--goal');
+        var id = ng && ng.getAttribute('data-id');
+        id = id && id !== fixed.id ? id : null;
+        if (id !== target) {
+          if (target && nodeEls[target]) nodeEls[target].classList.remove('is-drop-target');
+          target = id;
+          if (target && nodeEls[target]) nodeEls[target].classList.add('is-drop-target');
+        }
+        var p = toGraph(me);
+        var tn = target && nodeById(target);
+        var far = tn ? anchor(tn, facing(fixed, tn)[1]) : { x: p.x, y: p.y, nx: 0, ny: 0 };
+        var near = end === 'to' ? ref.ends[0] : ref.ends[1];
+        var a = end === 'to' ? near : far;
+        var b = end === 'to' ? far : near;
+        temp.setAttribute('d', wirePath({ x: a.x, y: a.y, nx: a.nx || 0, ny: a.ny || 0 }, { x: b.x, y: b.y, nx: b.nx || 0, ny: b.ny || 0 }));
+      }
+      function done() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', done);
+        if (target && nodeEls[target]) nodeEls[target].classList.remove('is-drop-target');
+        if (temp.parentNode) temp.parentNode.removeChild(temp);
+        root.classList.remove('is-wiring');
+      }
+      function up() {
+        var id = target;
+        done();
+        if (id) (end === 'to' ? retarget(e, nodeById(id)) : resource(e, nodeById(id)));
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', done);
+      move(ev);
     }
 
     function applyFocus() {
@@ -662,6 +735,7 @@
         ref.label.classList.toggle('is-shown', (!!focus || chosen) && lit);
       });
       drawSelectionBox();
+      drawHandles();
     }
 
     /**
@@ -1276,6 +1350,28 @@
         var from = nodeById(e.from);
         if (n.kind !== 'goal' || MM().rankOf(from) <= MM().rankOf(n)) { setStatus('Choisissez un élément d’un niveau supérieur', 'error'); return Promise.resolve(); }
         return saveGoals(goalsWith({ unlink: [e.from + '>' + e.to], link: [{ from: e.from, to: n.id }] })).then(function () { selectEdge('serves:' + e.from + '>' + n.id); });
+      }
+      setStatus('Ce lien se modifie dans la carte (Ouvrir la carte)', 'error');
+      return Promise.resolve();
+    }
+
+    /** Moves the source end of a link to another node (same target). */
+    function resource(e, n) {
+      if (!e) return Promise.resolve();
+      if (e.kind === 'depends') {
+        if (n.kind !== 'task' || n.id === e.from || n.id === e.to) { setStatus('Choisissez une autre tâche', 'error'); return Promise.resolve(); }
+        if (MM().wouldCycle(edgesWithout(e), n.id, e.to)) {
+          setStatus('Impossible : cela créerait une boucle de dépendances', 'error');
+          return Promise.resolve();
+        }
+        return setDependency(e.from.slice(2), e.to.slice(2), false).then(function () {
+          return setDependency(n.id.slice(2), e.to.slice(2), true, e.dep);
+        }).then(function () { selectEdge('depends:' + n.id + '>' + e.to); });
+      }
+      if (e.kind === 'serves') {
+        var to = nodeById(e.to);
+        if (n.id === e.to || MM().rankOf(n) < 0 || MM().rankOf(n) >= MM().rankOf(to)) { setStatus('Choisissez un élément d’un niveau inférieur', 'error'); return Promise.resolve(); }
+        return saveGoals(goalsWith({ unlink: [e.from + '>' + e.to], link: [{ from: n.id, to: e.to }] })).then(function () { selectEdge('serves:' + n.id + '>' + e.to); });
       }
       setStatus('Ce lien se modifie dans la carte (Ouvrir la carte)', 'error');
       return Promise.resolve();
