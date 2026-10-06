@@ -11107,10 +11107,11 @@
         }
         var isNode = !!(text && text.nodeType);
         var plain = isNode ? (text.textContent || '').trim() : String(text || '').trim();
+        var tip = (isNode && text.summaryTitle) || plain;
         if (isNode && plain) summary.replaceChildren(text);
         else summary.textContent = plain || ROW_EMPTY_PROMPTS[key] || 'Cliquer pour ajouter';
         summary.classList.toggle('is-empty', !plain);
-        summary.title = plain;
+        summary.title = tip;
         row.dataset.rowEmpty = !plain && key !== 'title' ? '1' : '0';
         sortEmptyRowsDown(row.parentNode);
       }
@@ -11673,51 +11674,140 @@
       }
       return '';
     }
-    // Folded-row summary: bold main text + muted details, e.g. « Importante · 5.0 ».
-    function richSummary(main, details) {
-      if (!main) return '';
+
+    // ── Rich folded-row summaries: avatars, icons and tinted chips ──────
+    // A builder returns a DocumentFragment (or '' when the row is empty).
+    // textContent doubles as the « has a value » test and the tooltip, so
+    // purely decorative bits (initials, arrows, dots) never go in as text.
+    var IRS_MAX = 3;
+
+    function irsEl(tag, className, text) {
+      var n = document.createElement(tag);
+      if (className) n.className = className;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+
+    function irsIcon(name, className) {
+      var i = document.createElement('i');
+      i.className = 'ti ti-' + name + (className ? ' ' + className : '');
+      i.setAttribute('aria-hidden', 'true');
+      return i;
+    }
+
+    // Tinted pill: optional leading node (icon / dot / avatar) + text.
+    function irsChip(opts) {
+      var chip = irsEl('span', 'irs-chip' + (opts.className ? ' ' + opts.className : ''));
+      if (opts.accent) chip.style.setProperty('--irs-accent', opts.accent);
+      if (opts.title) chip.title = opts.title;
+      if (opts.lead) chip.appendChild(opts.lead);
+      if (opts.text) chip.appendChild(irsEl('span', 'irs-chip-text', opts.text));
+      return chip;
+    }
+
+    function irsFragment(nodes, title) {
       var frag = document.createDocumentFragment();
-      var mainEl = document.createElement('span');
-      mainEl.className = 'info-row-summary-main';
-      mainEl.textContent = main;
-      frag.appendChild(mainEl);
-      (details || []).filter(Boolean).forEach(function (d) {
-        var sep = document.createElement('span');
-        sep.className = 'info-row-summary-sep';
-        sep.textContent = '·';
-        sep.setAttribute('aria-hidden', 'true');
-        var sub = document.createElement('span');
-        sub.className = 'info-row-summary-sub';
-        sub.textContent = d;
-        frag.appendChild(sep);
-        frag.appendChild(sub);
+      nodes.forEach(function (n, i) {
+        if (i) frag.appendChild(document.createTextNode(' '));
+        frag.appendChild(n);
       });
+      if (title) frag.summaryTitle = title;
       return frag;
     }
-    rowSummaries.priority = function () {
-      var m = priorityInline.mount;
-      var score = mountText(m, ['.heat-badge-num-val']);
-      var label = mountText(m, ['.priority-summary-label', '.heat-badge-label']);
-      return label ? richSummary(label, [score]) : score;
-    };
-    rowSummaries.progress = function () {
-      var m = progressInline.mount;
-      var status = mountText(m, ['.statut-summary-label', '.statut-embedded-summary']);
-      var pct = /(\d+)\s*%/.exec(m.textContent || '');
-      return richSummary(status || (pct ? 'Progrès' : ''), [
-        pct ? pct[1] + ' %' : ''
-      ]);
-    };
-    rowSummaries['task-types'] = function () {
-      return Array.prototype.map
-        .call(taskTypesEl.querySelectorAll('.info-task-type-name'), function (n) {
-          return (n.textContent || '').trim();
+
+    // First `max` nodes, then a « +N » chip for the rest.
+    function irsCapped(nodes, max) {
+      if (nodes.length <= max) return nodes;
+      var out = nodes.slice(0, max);
+      out.push(
+        irsChip({
+          className: 'irs-chip--more',
+          text: '+' + (nodes.length - max)
         })
-        .filter(Boolean)
-        .join(', ');
-    };
-    rowSummaries.objectif = function () {
-      var names = Array.prototype.map
+      );
+      return out;
+    }
+
+    function irsHueColor(seed) {
+      return 'hsl(' + tgHue(String(seed || '?')) + ' 62% 58%)';
+    }
+
+    function irsColorOf(el) {
+      if (!el) return '';
+      var c = el.style && (el.style.backgroundColor || el.style.background);
+      if (c) return c;
+      try {
+        var computed = global.getComputedStyle(el).backgroundColor;
+        if (computed && computed !== 'transparent' && computed !== 'rgba(0, 0, 0, 0)') {
+          return computed;
+        }
+      } catch (e) {}
+      return '';
+    }
+
+    function irsAvatar(member) {
+      var resolved = enrichMemberAvatar(member);
+      var url = memberAvatarUrl(resolved);
+      var mid = member && member.id != null ? String(member.id) : '';
+      var wrap = irsEl('span', 'irs-avatar');
+      function initialsFallback() {
+        wrap.replaceChildren();
+        wrap.classList.add('is-initials');
+        wrap.style.setProperty('--irs-hue', String(tgHue(mid || memberDisplayName(resolved) || '?')));
+        wrap.setAttribute('data-initials', memberInitials(resolved));
+      }
+      if (url) {
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        img.width = 20;
+        img.height = 20;
+        img.referrerPolicy = 'no-referrer';
+        img.addEventListener('error', initialsFallback);
+        wrap.appendChild(img);
+      } else {
+        initialsFallback();
+      }
+      return wrap;
+    }
+
+    function irsTypeChip(id) {
+      var label = taskTypeLabel(id) || id;
+      var icon = irsEl('span', 'irs-type-icon');
+      icon.innerHTML = taskTypeIconSvg(id);
+      return irsChip({
+        className: 'irs-type',
+        accent: irsHueColor(id),
+        lead: icon,
+        text: label,
+        title: taskTypeHint(id) || label
+      });
+    }
+
+    function irsLabelChip(label) {
+      var hex = labelColorHex(label && label.color);
+      var name = labelDisplayName(label);
+      var chip = irsChip({ className: 'irs-label', text: name, title: name });
+      chip.style.setProperty('--label-color', hex);
+      chip.style.setProperty('--label-fg', labelNeedsDarkText(hex) ? '#172b4d' : '#ffffff');
+      return chip;
+    }
+
+    function irsParentChip(parent, withList) {
+      var chip = irsChip({
+        className: 'irs-parent',
+        lead: irsIcon('hierarchy-3'),
+        text: parent.name || 'Carte sans titre',
+        title: parent.list ? (parent.name || '') + ' — ' + parent.list : parent.name || ''
+      });
+      if (withList && parent.list) {
+        chip.appendChild(irsEl('span', 'irs-chip-sub', parent.list));
+      }
+      return chip;
+    }
+
+    function objectifCrumbNames() {
+      return Array.prototype.map
         .call(
           objectifMount.querySelectorAll('.objectif-breadcrumb .objectif-crumb'),
           function (n) {
@@ -11731,51 +11821,299 @@
         .filter(function (t) {
           return t && t !== '—';
         });
-      return names.join(' → ');
-    };
-    rowSummaries.parent = function () {
-      return Array.prototype.map
-        .call(parentChipsEl.children, function (c) {
-          var clone = c.cloneNode(true);
-          Array.prototype.forEach.call(clone.querySelectorAll('button'), function (n) {
-            n.remove();
-          });
-          return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function irsObjectifNode(names) {
+      var wrap = irsEl('span', 'irs-crumbs');
+      names.forEach(function (name, i) {
+        if (i) wrap.appendChild(irsIcon('chevron-right', 'irs-arrow'));
+        var last = i === names.length - 1;
+        wrap.appendChild(
+          irsChip({
+            className: 'irs-objectif' + (last ? ' is-last' : ''),
+            lead: last ? irsIcon('target-arrow') : null,
+            text: name
+          })
+        );
+      });
+      return wrap;
+    }
+
+    rowSummaries.priority = function () {
+      var m = priorityInline.mount;
+      var score = mountText(m, ['.heat-badge-num-val']);
+      var label = mountText(m, ['.priority-summary-label', '.heat-badge-label']);
+      if (!label) return score;
+      var accent = irsColorOf(m.querySelector('.priority-summary-dot, .heat-tier-dot'));
+      var idle = !!m.querySelector('.priority-summary.is-inutile, .heat-badge.is-inutile');
+      var nodes = [
+        irsChip({
+          className: 'irs-priority' + (idle ? ' is-idle' : ''),
+          accent: accent,
+          lead: irsEl('span', 'irs-dot'),
+          text: label
         })
-        .filter(Boolean)
-        .join(', ');
+      ];
+      if (score) {
+        nodes.push(
+          irsChip({
+            className: 'irs-chip--score',
+            accent: accent,
+            text: score,
+            title: 'Score de priorité'
+          })
+        );
+      }
+      return irsFragment(nodes);
     };
+
+    rowSummaries.progress = function () {
+      var m = progressInline.mount;
+      var statutEl = m.querySelector('.statut-summary');
+      var status = mountText(m, ['.statut-summary-label', '.statut-embedded-summary']);
+      var pctMatch = /(\d+)\s*%/.exec(m.textContent || '');
+      var pct = pctMatch ? Math.max(0, Math.min(100, +pctMatch[1])) : null;
+      if (!status && pct == null) return '';
+      var statusColor = statutEl ? statutEl.style.getPropertyValue('--statut-color') : '';
+      var barHost = m.querySelector('.progress-summary');
+      var barColor =
+        (barHost && barHost.style.getPropertyValue('--overview-progress-accent')) || statusColor;
+      var icon = statutEl ? statutEl.querySelector('svg') : null;
+      var nodes = [
+        irsChip({
+          className: 'irs-status',
+          accent: statusColor || barColor,
+          lead: icon ? icon.cloneNode(true) : irsEl('span', 'irs-dot'),
+          text: status || 'Progrès'
+        })
+      ];
+      if (pct != null) {
+        var meter = irsEl('span', 'irs-progress');
+        if (barColor) meter.style.setProperty('--irs-accent', barColor);
+        meter.title = 'Progrès : ' + pct + ' %';
+        meter.classList.toggle('is-done', pct >= 100);
+        var track = irsEl('span', 'irs-bar');
+        var fill = irsEl('span', 'irs-bar-fill');
+        fill.style.width = pct + '%';
+        track.appendChild(fill);
+        meter.appendChild(track);
+        meter.appendChild(irsEl('span', 'irs-pct', pct + ' %'));
+        nodes.push(meter);
+      }
+      return irsFragment(nodes);
+    };
+
     rowSummaries.due = function () {
-      return mountText(dueInline.mount, ['.due-summary-label']);
+      var m = dueInline.mount;
+      var label = mountText(m, ['.due-summary-label']);
+      if (!label) return '';
+      var wrap = m.querySelector('.due-summary');
+      var band = wrap && wrap.dataset ? wrap.dataset.dueBand || '' : '';
+      var vague = !!(wrap && wrap.classList.contains('due-summary--vague'));
+      var accent =
+        dueBandAccent(band) || irsColorOf(m.querySelector('.due-summary-dot'));
+      var lead = irsEl('span', 'irs-dot');
+      if (vague) lead = irsIcon('tilde');
+      else if (band === 'overdue') lead = irsIcon('alert-triangle');
+      else if (band === 'imminent') lead = irsIcon('clock-exclamation');
+      return irsFragment([
+        irsChip({
+          className: 'irs-due' + (band ? ' is-' + band : ''),
+          accent: accent,
+          lead: lead,
+          text: label
+        })
+      ]);
     };
+
+    rowSummaries['task-types'] = function () {
+      if (!taskTypes.length) return '';
+      return irsFragment(
+        irsCapped(taskTypes.map(irsTypeChip), IRS_MAX),
+        taskTypes
+          .map(function (id) {
+            return taskTypeLabel(id) || id;
+          })
+          .join(', ')
+      );
+    };
+
+    rowSummaries.labels = function () {
+      if (!labels.length) return '';
+      return irsFragment(
+        irsCapped(labels.map(irsLabelChip), IRS_MAX + 1),
+        labels.map(labelDisplayName).join(', ')
+      );
+    };
+
+    rowSummaries.objectif = function () {
+      var names = objectifCrumbNames();
+      if (!names.length) return '';
+      return irsFragment([irsObjectifNode(names)], names.join(' → '));
+    };
+
+    rowSummaries.parent = function () {
+      if (!parentCards.length) return '';
+      return irsFragment(
+        irsCapped(
+          parentCards.map(function (p) {
+            return irsParentChip(p, parentCards.length === 1);
+          }),
+          2
+        ),
+        parentCards
+          .map(function (p) {
+            return p.name || 'Carte sans titre';
+          })
+          .join(', ')
+      );
+    };
+
     rowSummaries.desc = function () {
-      var text = (descInput.value || '')
-        .replace(/[#*_>`~\[\]()!-]+/g, ' ')
+      var raw = descInput.value || '';
+      var text = raw
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s*/gm, '')
+        .replace(/^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+        .replace(/[*_`~]+/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-      return text.length > 140 ? text.slice(0, 139) + '…' : text;
+      if (text.length > 160) text = text.slice(0, 159) + '…';
+
+      var tasksTotal = 0;
+      var tasksDone = 0;
+      var taskRe = /^\s*(?:[-*+]|\d+[.)])\s+\[([ xX])\]/gm;
+      var hit;
+      while ((hit = taskRe.exec(raw))) {
+        tasksTotal += 1;
+        if (hit[1] !== ' ') tasksDone += 1;
+      }
+      var images = (raw.match(/!\[[^\]]*\]\([^)]*\)/g) || []).length;
+      var links = Math.max(0, (raw.match(/\bhttps?:\/\/[^\s)\]]+/g) || []).length - images);
+
+      if (!text && !tasksTotal && !images && !links) return '';
+      var nodes = [];
+      if (text) nodes.push(irsEl('span', 'irs-text', text));
+      if (tasksTotal) {
+        var allDone = tasksDone === tasksTotal;
+        nodes.push(
+          irsChip({
+            className: 'irs-chip--tasks' + (allDone ? ' is-done' : ''),
+            lead: irsIcon(allDone ? 'checks' : 'list-check'),
+            text: tasksDone + '/' + tasksTotal,
+            title: tasksDone + ' tâche(s) faite(s) sur ' + tasksTotal
+          })
+        );
+      }
+      if (links) {
+        nodes.push(
+          irsChip({
+            className: 'irs-chip--links',
+            lead: irsIcon('link'),
+            text: String(links),
+            title: links + (links > 1 ? ' liens' : ' lien')
+          })
+        );
+      }
+      if (images) {
+        nodes.push(
+          irsChip({
+            className: 'irs-chip--images',
+            lead: irsIcon('photo'),
+            text: String(images),
+            title: images + (images > 1 ? ' images' : ' image')
+          })
+        );
+      }
+      return irsFragment(nodes, text);
     };
+
     rowSummaries.members = function () {
-      var names = Array.prototype.map
-        .call(membersEl.children, function (c) {
-          var clone = c.cloneNode(true);
-          Array.prototype.forEach.call(clone.querySelectorAll('button'), function (n) {
-            n.remove();
-          });
-          return (clone.textContent || '').replace(/[\s×]+$/, '').replace(/\s+/g, ' ').trim();
-        })
-        .filter(Boolean);
-      return names.join(', ');
+      var display = displayAssignees();
+      if (!display.length) return '';
+      var compact = display.length > 2;
+      var nodes = display.map(function (member) {
+        var name = memberDisplayName(member) || 'Membre';
+        var mid = member && member.id != null ? String(member.id) : '';
+        var isCustom = !!(member && member.custom) || isCustomAssigneeId(mid);
+        var roleIds = rolesForMember(mid);
+        var roleLabels = [];
+        var chip = irsChip({
+          className: 'irs-member' + (isCustom ? ' is-custom' : ''),
+          accent: irsHueColor(mid || name),
+          lead: irsAvatar(member),
+          text: compact ? name.split(/\s+/)[0] : name
+        });
+        roleIds.slice(0, 2).forEach(function (roleId) {
+          var entry = getMemberRoleEntry(roleId);
+          var roleLabel = (entry && entry.label) || roleId;
+          roleLabels.push(roleLabel);
+          var roleIcon = irsIcon((entry && entry.icon) || 'tag', 'irs-member-role');
+          roleIcon.title = roleLabel;
+          chip.appendChild(roleIcon);
+        });
+        chip.title = roleLabels.length ? name + ' — ' + roleLabels.join(', ') : name;
+        return chip;
+      });
+      return irsFragment(
+        irsCapped(nodes, IRS_MAX),
+        display
+          .map(function (member) {
+            return memberDisplayName(member) || 'Membre';
+          })
+          .join(', ')
+      );
     };
+
     rowSummaries.places = function () {
-      var names = placeSeq(cardPlaces)
-        .map(placeDisplayName)
-        .filter(Boolean);
-      var line = names.join(' → ');
+      var stops = pgStops(cardPlaces);
+      if (!stops.length) return '';
+      var shown = stops;
+      var hidden = 0;
+      if (stops.length > IRS_MAX) {
+        shown = [stops[0], null, stops[stops.length - 1]];
+        hidden = stops.length - 2;
+      }
+      var nodes = [];
+      shown.forEach(function (stop, i) {
+        if (i) nodes.push(irsIcon('arrow-narrow-right', 'irs-arrow'));
+        if (!stop) {
+          nodes.push(irsChip({ className: 'irs-chip--more', text: '+' + hidden }));
+          return;
+        }
+        var name = placeDisplayName(stop.ref);
+        nodes.push(
+          irsChip({
+            className: 'irs-place is-' + stop.key,
+            accent: irsHueColor(stop.ref.id || name),
+            lead: stop.key === 'at' ? irsIcon('map-pin') : irsEl('span', 'irs-stop-dot'),
+            text: name,
+            title: PLACE_STOP_LABELS[stop.key] + ' : ' + name
+          })
+        );
+      });
       var acts = placeSeq(cardPlaces).filter(function (r) {
         return r.do;
       }).length;
-      return line && acts ? line + ' · ' + acts + ' action' + (acts > 1 ? 's' : '') : line;
+      if (acts) {
+        nodes.push(
+          irsChip({
+            className: 'irs-chip--actions',
+            lead: irsIcon('list-check'),
+            text: String(acts),
+            title: acts + ' action' + (acts > 1 ? 's' : '')
+          })
+        );
+      }
+      return irsFragment(
+        nodes,
+        stops
+          .map(function (stop) {
+            return placeDisplayName(stop.ref);
+          })
+          .join(' → ')
+      );
     };
 
     // ── Inline feature mounts (Priorité / Progrès / Échéance) ───────────
@@ -19571,28 +19909,62 @@
       }
     });
 
-    function moreDetailsSummaryText() {
-      var bits = [];
-      if (taskTypes && taskTypes.length) {
-        bits.push(
-          taskTypes.length === 1 ? '1 type' : taskTypes.length + ' types'
+    // Folded \u00ab Plus de d\u00e9tails \u00bb: objectif, parents, type and label chips
+    // (same order as the section body).
+    function moreDetailsSummaryNode() {
+      var nodes = [];
+      var crumbs = objectifRow.row.hidden ? [] : objectifCrumbNames();
+      if (crumbs.length) {
+        nodes.push(
+          irsChip({
+            className: 'irs-objectif is-last',
+            lead: irsIcon('target-arrow'),
+            text: crumbs[crumbs.length - 1],
+            title: crumbs.join(' \u2192 ')
+          })
         );
       }
-      if (labels && labels.length) {
-        bits.push(
-          labels.length === 1
-            ? '1 \u00e9tiquette'
-            : labels.length + ' \u00e9tiquettes'
+      if (parentCards.length === 1) {
+        nodes.push(irsParentChip(parentCards[0], false));
+      } else if (parentCards.length > 1) {
+        nodes.push(
+          irsChip({
+            className: 'irs-parent',
+            lead: irsIcon('hierarchy-3'),
+            text: parentCards.length + ' parents',
+            title: parentCards
+              .map(function (p) {
+                return p.name || 'Carte sans titre';
+              })
+              .join(', ')
+          })
         );
       }
-      if (parentCards && parentCards.length) {
-        bits.push(
-          parentCards.length === 1
-            ? '1 parent'
-            : parentCards.length + ' parents'
-        );
+      nodes = nodes.concat(irsCapped(taskTypes.map(irsTypeChip), 2));
+      nodes = nodes.concat(irsCapped(labels.map(irsLabelChip), 3));
+      return nodes.length ? irsFragment(nodes) : '';
+    }
+
+    function paintMoreDetailsSummary() {
+      if (moreDetailsExpanded) {
+        moreSummaryEl.replaceChildren();
+        moreSummaryEl.hidden = true;
+        return;
       }
-      return bits.join(' \u00b7 ');
+      var node = moreDetailsSummaryNode();
+      moreSummaryEl.classList.toggle('is-empty', !node);
+      if (node) moreSummaryEl.replaceChildren(node);
+      else moreSummaryEl.textContent = 'Objectif, parents, types, \u00e9tiquettes\u2026';
+      moreSummaryEl.hidden = !moreSummaryEl.textContent;
+    }
+
+    if (typeof global.MutationObserver === 'function') {
+      var moreSummaryTimer = null;
+      new global.MutationObserver(function () {
+        if (moreDetailsExpanded) return;
+        clearTimeout(moreSummaryTimer);
+        moreSummaryTimer = setTimeout(paintMoreDetailsSummary, 80);
+      }).observe(moreBody, { childList: true, subtree: true, characterData: true });
     }
 
     function applyMoreDetailsExpanded(next, options) {
@@ -19611,11 +19983,7 @@
           ? 'Replier Plus de d\u00e9tails'
           : 'D\u00e9velopper Plus de d\u00e9tails'
       );
-      var summary = moreDetailsSummaryText();
-      moreSummaryEl.textContent = moreDetailsExpanded
-        ? ''
-        : summary || 'Objectif, parents, types, \u00e9tiquettes\u2026';
-      moreSummaryEl.hidden = moreDetailsExpanded || !moreSummaryEl.textContent;
+      paintMoreDetailsSummary();
       if (was !== moreDetailsExpanded && !options.silent) {
         onMoreDetailsExpandChange(moreDetailsExpanded, options);
       }
@@ -19651,14 +20019,7 @@
     }
 
     var moreCollapse = {
-      refreshSummary: function () {
-        if (!moreDetailsExpanded) {
-          var summary = moreDetailsSummaryText();
-          moreSummaryEl.textContent =
-            summary || 'Objectif, parents, types, \u00e9tiquettes\u2026';
-          moreSummaryEl.hidden = !moreSummaryEl.textContent;
-        }
-      },
+      refreshSummary: paintMoreDetailsSummary,
       setExpanded: function (on, opts) {
         applyMoreDetailsExpanded(!!on, opts);
       },

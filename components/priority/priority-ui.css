@@ -10114,3 +10114,342 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
 .info-row.is-collapsed > .info-row-value {
   display: none;
 }
+
+/* ── Rich folded-row summaries: avatars, icons and tinted chips ─────────
+   Built by rowSummaries.* / moreDetailsSummaryNode() in priority-ui.js.
+   --irs-accent is set inline per chip (tier / status / due band / hue). */
+.irs-chip {
+  --irs-tone: var(--irs-accent, #8590a2);
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 220px;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--irs-tone) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--irs-tone) 14%, transparent);
+  color: color-mix(in srgb, var(--irs-tone) 62%, var(--text-primary));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.irs-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.irs-chip-sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.irs-chip > .ti {
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--irs-tone);
+}
+
+.irs-chip svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--irs-tone);
+}
+
+.irs-arrow {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.irs-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--irs-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--irs-tone) 24%, transparent);
+}
+
+/* Neutral chips: coloured border + icon, regular text colour. */
+.irs-member,
+.irs-place,
+.irs-type,
+.irs-parent {
+  color: var(--text-primary);
+  font-weight: 550;
+}
+
+.irs-chip--more {
+  flex: 0 0 auto;
+  --irs-accent: var(--text-muted);
+  padding: 0 7px;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Priorité / Progrès / Échéance */
+.irs-priority {
+  font-weight: 700;
+}
+
+.irs-priority .irs-dot {
+  width: 9px;
+  height: 9px;
+}
+
+.irs-priority.is-idle {
+  opacity: 0.8;
+}
+
+.irs-chip--score {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.irs-status {
+  flex: 0 1 auto;
+  font-weight: 700;
+}
+
+.irs-progress {
+  --irs-tone: var(--irs-accent, #579dff);
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.irs-bar {
+  width: 56px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+.irs-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--irs-tone);
+}
+
+.irs-pct {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--irs-tone) 60%, var(--text-primary));
+}
+
+.irs-due {
+  flex: 0 1 auto;
+  font-weight: 700;
+}
+
+.irs-due.is-overdue {
+  background: color-mix(in srgb, var(--irs-tone) 22%, transparent);
+  border-color: color-mix(in srgb, var(--irs-tone) 55%, transparent);
+}
+
+/* Assignés */
+.irs-member {
+  padding-left: 2px;
+  max-width: 190px;
+}
+
+.irs-avatar {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+}
+
+.irs-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.irs-avatar.is-initials {
+  background: hsl(var(--irs-hue, 210) 52% 42%);
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.irs-avatar.is-initials::before {
+  content: attr(data-initials);
+}
+
+.irs-member.is-custom .irs-avatar {
+  outline: 1.5px dashed color-mix(in srgb, var(--irs-tone) 75%, transparent);
+  outline-offset: -1px;
+}
+
+.irs-member-role {
+  opacity: 0.9;
+}
+
+/* Lieux */
+.irs-place {
+  padding-left: 8px;
+}
+
+.irs-stop-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--irs-tone);
+}
+
+.irs-place.is-from .irs-stop-dot {
+  background: transparent;
+  border: 2px solid var(--irs-tone);
+}
+
+.irs-place.is-via .irs-stop-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.irs-chip--actions {
+  --irs-accent: #f5a623;
+  flex: 0 0 auto;
+}
+
+/* Description */
+/* The excerpt keeps a minimum width; on a narrow popup the count chips on
+   its right are the ones that get clipped. */
+.irs-text {
+  flex: 0 1 auto;
+  min-width: 4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--text-primary) 80%, transparent);
+}
+
+.irs-chip--tasks,
+.irs-chip--links,
+.irs-chip--images {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.irs-chip--tasks {
+  --irs-accent: #579dff;
+}
+
+.irs-chip--tasks.is-done {
+  --irs-accent: #4bce97;
+}
+
+.irs-chip--links {
+  --irs-accent: #6cc3e0;
+}
+
+.irs-chip--images {
+  --irs-accent: #b38fe8;
+}
+
+/* Plus de détails: objectif / parents / types / étiquettes */
+.irs-type {
+  max-width: 180px;
+}
+
+.irs-type-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--irs-tone);
+}
+
+.irs-label {
+  flex: 0 1 auto;
+  max-width: 160px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: var(--label-color, #b3bac5);
+  color: var(--label-fg, #ffffff);
+}
+
+.irs-parent {
+  --irs-accent: #579dff;
+  max-width: 260px;
+}
+
+.irs-crumbs {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.irs-objectif {
+  --irs-accent: #9f8fef;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.irs-objectif.is-last {
+  font-weight: 650;
+}
+
+.info-more-details-toggle {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Chips wrap onto a second line rather than truncating each other. */
+.info-more-details-summary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  overflow: hidden;
+}
+
+.info-more-details-summary .irs-chip {
+  flex-shrink: 0;
+}
+
+.info-more-details-summary.is-empty {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-muted);
+}
