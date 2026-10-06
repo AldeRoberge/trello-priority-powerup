@@ -528,7 +528,9 @@
     }
 
     function clearDropMarks() {
-      Array.prototype.forEach.call(els.sideList.querySelectorAll('.is-drop'), function (n) { n.classList.remove('is-drop'); });
+      Array.prototype.forEach.call(els.sideList.querySelectorAll('.is-drop, .is-drop-before, .is-drop-after'), function (n) {
+        n.classList.remove('is-drop', 'is-drop-before', 'is-drop-after');
+      });
       els.sideList.classList.remove('is-drop-root');
     }
 
@@ -565,12 +567,24 @@
       function nestable() {
         return kind === 'doc' && drag && drag.kind === 'doc' && drag.id !== id && !DM().isDocInside(state.idx, drag.id, id);
       }
+      // top / bottom edge of a document row = place the dragged document beside it (same parent), middle = nest inside
+      function edgeZone(e) {
+        if (!nestable()) return '';
+        var r = row.getBoundingClientRect();
+        var y = (e.clientY - r.top) / (r.height || 1);
+        return y < 0.28 ? 'before' : y > 0.72 ? 'after' : '';
+      }
       row.addEventListener('dragover', function (e) {
         if (!drag) return;
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
         clearDropMarks();
+        var zone = edgeZone(e);
+        if (zone) {
+          row.classList.add('is-drop-' + zone);
+          return;
+        }
         if (nestable()) {
           row.classList.add('is-drop');
           return;
@@ -580,6 +594,15 @@
         else els.sideList.classList.add('is-drop-root');
       });
       row.addEventListener('drop', function (e) {
+        if (edgeZone(e)) {
+          var moved = drag.id;
+          drag = null;
+          clearDropMarks();
+          e.preventDefault();
+          e.stopPropagation();
+          placeBeside(moved, id);
+          return;
+        }
         if (nestable()) {
           var src = drag.id;
           drag = null;
@@ -725,6 +748,25 @@
     /** Dropping a document on another one nests it right away (easily undone by dragging it out). */
     function askNest(docId, parentId) {
       nestDoc(docId, parentId);
+    }
+
+    /** Puts `docId` at the same level as `targetId`: same parent document, or same folder / root. */
+    function placeBeside(docId, targetId) {
+      editFolders(function (idx) {
+        if (docId === targetId || DM().isDocInside(idx, docId, targetId)) return;
+        idx.parents = idx.parents || {};
+        var parent = idx.parents[targetId];
+        if (parent) {
+          idx.parents[docId] = parent;
+          delete idx.docs[docId];
+        } else {
+          delete idx.parents[docId];
+          if (idx.docs[targetId]) idx.docs[docId] = idx.docs[targetId];
+          else delete idx.docs[docId];
+        }
+      }).then(function (ok) {
+        if (ok) paintList();
+      });
     }
 
     function nestDoc(docId, parentId) {
