@@ -804,6 +804,31 @@ button.en-typepill:hover {
   text-transform: uppercase;
   color: var(--tp-text-muted);
 }
+.en-sec-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--tp-text-muted);
+}
+.en-sec-toggle svg {
+  width: 12px;
+  height: 12px;
+  transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+.en-sec.is-collapsed .en-sec-toggle svg {
+  transform: none;
+}
+.en-sec.is-collapsed > :not(.en-sec-head) {
+  display: none;
+}
+.en-sec.is-collapsed .en-sec-head {
+  padding-bottom: 0;
+}
 .en-set {
   background: var(--en-set);
   border-radius: 12px;

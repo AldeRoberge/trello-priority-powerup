@@ -697,11 +697,35 @@
       else paintHistory();
     }
 
+    var COLLAPSE_KEY = 'tp-entities-collapsed-sections';
+    var collapsedSections = (function () {
+      try {
+        return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {};
+      } catch (err) {
+        return {};
+      }
+    })();
+
+    /** Entity page section; the title toggles it open/closed (remembered per title). */
     function section(title, body, aside, cls) {
-      return h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') }, [
-        h('header', { class: 'en-sec-head' }, [h('h3', { class: 'en-sec-title', text: title }), aside || null]),
-        body,
+      var box = h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') + (collapsedSections[title] ? ' is-collapsed' : '') });
+      var toggle = h('button', { class: 'en-sec-toggle', type: 'button', 'aria-expanded': String(!collapsedSections[title]) }, [
+        icon('chevron-right'),
+        h('h3', { class: 'en-sec-title', text: title }),
       ]);
+      toggle.addEventListener('click', function () {
+        var collapsed = !box.classList.contains('is-collapsed');
+        box.classList.toggle('is-collapsed', collapsed);
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        if (collapsed) collapsedSections[title] = true;
+        else delete collapsedSections[title];
+        try {
+          localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsedSections));
+        } catch (err) {}
+      });
+      box.appendChild(h('header', { class: 'en-sec-head' }, [toggle, aside || null]));
+      box.appendChild(body);
+      return box;
     }
 
     /** Collapsible block ("Historique", "Modèle et variantes"): a quiet row until opened. */
