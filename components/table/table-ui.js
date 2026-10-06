@@ -506,6 +506,11 @@
         class: 'tb-resizer',
         title: 'Glisser pour redimensionner · double-clic pour réinitialiser',
         onclick: function (e) { e.stopPropagation(); },
+        // The header is draggable (column reorder): that native drag would swallow the resize gesture.
+        onmouseenter: function (e) { e.currentTarget.parentNode.draggable = false; },
+        onmouseleave: function (e) { if (!document.body.classList.contains('tb-resizing')) e.currentTarget.parentNode.draggable = true; },
+        onmousedown: function (e) { e.preventDefault(); e.stopPropagation(); },
+        ondragstart: function (e) { e.preventDefault(); e.stopPropagation(); },
         ondblclick: function (e) {
           e.stopPropagation();
           delete state.widths[key];
@@ -531,6 +536,7 @@
             document.removeEventListener('pointermove', move);
             document.removeEventListener('pointerup', up);
             document.body.classList.remove('tb-resizing');
+            th.draggable = true;
             saveWidths();
           }
           document.addEventListener('pointermove', move);
