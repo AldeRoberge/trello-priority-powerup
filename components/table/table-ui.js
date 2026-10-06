@@ -694,7 +694,7 @@
       var addInput = h('input', {
         class: 'tb-add',
         id: 'tbAdd',
-        placeholder: 'Nouvelle carte : écrire un titre puis appuyer sur Entrée',
+        placeholder: 'Nouvelle carte : écrire un titre (« … demain » ou « … vendredi » fixe l’échéance), puis Entrée',
         onkeydown: function (e) {
           if (e.key !== 'Enter') return;
           var name = e.target.value.trim();
@@ -730,10 +730,20 @@
      * Creates a card. From the add row (`input`) focus returns there for the next title; from a menu
      * (`opts.rename`) the new title opens for editing, since "Nouvelle carte" is only a placeholder.
      */
-    function createIn(list, name, input, opts) {
+    function createIn(list, typed, input, opts) {
       if (input) input.disabled = true;
+      var QP = global.QuickParse;
+      var q = QP && !(opts && opts.rename) ? QP.parse(typed) : { name: typed, dueDate: '' };
+      var name = q.name;
       TT()
         .createRow(t, name, list.id)
+        .then(function (res) {
+          var cardId = res && res.cardId;
+          if (cardId && q.dueDate && global.GanttTrello) {
+            return global.GanttTrello.saveCardDates(t, cardId, { dueDate: q.dueDate }).then(function () { return res; }, function () { return res; });
+          }
+          return res;
+        })
         .then(function (res) {
           var cardId = res && res.cardId;
           // Trello's client-side card cache can lag right after a REST create, so the new card may be
@@ -1050,7 +1060,7 @@
       } else if (rich) {
         td.appendChild(rich);
       } else {
-        td.textContent = TM().cellText(row, key);
+        td.textContent = key === 'desc' ? TM().plainMarkdown(TM().cellText(row, key)) : TM().cellText(row, key);
         if (POP_KIND[key] && !td.textContent) td.appendChild(h('span', { class: 'tb-empty-hint', text: 'Définir' }));
       }
       var dragged = false;
@@ -1692,6 +1702,18 @@
       });
     }
     setInterval(loadAlerts, 30000);
+    // "C" = capture: jump to the add row at the bottom of the grid.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'c' && e.key !== 'C') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || state.editing) return;
+      var a = document.activeElement;
+      if (a && (/^(input|textarea|select)$/i.test(a.tagName) || a.isContentEditable)) return;
+      var add = document.getElementById('tbAdd');
+      if (!add) return;
+      e.preventDefault();
+      add.scrollIntoView({ block: 'nearest' });
+      add.focus();
+    });
     return reload();
   }
 

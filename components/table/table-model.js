@@ -64,6 +64,17 @@
     return out.length ? out : DEFAULT_COLUMNS.slice();
   }
 
+  /** Markdown → one readable line for a read-only cell (the editor still shows the raw text). */
+  function plainMarkdown(text) {
+    return String(text || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/gm, '')
+      .replace(/(\*\*|__|~~|\*|`)/g, '')
+      .replace(/\s*\n+\s*/g, ' · ')
+      .trim();
+  }
+
   function round1(n) {
     return Math.round(n * 10) / 10;
   }
@@ -297,6 +308,7 @@
   global.TableModel = {
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,
+    plainMarkdown: plainMarkdown,
     STATUT_ICONS: STATUT_ICONS,
     statutIcon: statutIcon,
     enrichLists: enrichLists,

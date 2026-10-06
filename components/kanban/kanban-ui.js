@@ -585,7 +585,7 @@
       if (state.composer !== list.id) {
         return h('button', { class: 'kb-add', onclick: function () { openComposer(list.id); } }, [icon('plus'), h('span', { text: 'Ajouter une carte' })]);
       }
-      var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Titre de la carte…' });
+      var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Titre de la carte… (ex. « Appeler Paul demain »)' });
       var busy = false;
       function submit() {
         var name = input.value.trim();
@@ -691,9 +691,14 @@
       });
     }
 
-    function createIn(list, name) {
+    function createIn(list, typed) {
+      var QP = global.QuickParse;
+      var q = QP ? QP.parse(typed) : { name: typed, dueDate: '' };
+      var name = q.name;
       return TT().createRow(t, name, list.id).then(function (res) {
         var cardId = res && res.cardId;
+        // "… demain": the date is lifted out of the title into the card's due date.
+        if (cardId && q.dueDate && global.GanttTrello) global.GanttTrello.saveCardDates(t, cardId, { dueDate: q.dueDate }).catch(function () { /* the card exists; the date can be set by hand */ });
         if (cardId) record({ type: 'create', targetId: cardId, title: name, after: list.name });
         // Trello's client-side card cache can lag right after a REST create: retry before giving up.
         function present() { return !cardId || state.rows.some(function (r) { return r.id === cardId; }); }
@@ -703,7 +708,7 @@
             return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () { return again(attempt + 1); });
           });
         }
-        return again(0).then(function () { setStatus('Carte créée dans « ' + list.name + ' »', 'ok'); });
+        return again(0).then(function () { setStatus('Carte créée dans « ' + list.name + ' »' + (q.dueDate ? ' · échéance ' + q.dueDate : ''), 'ok'); });
       });
     }
 
@@ -792,6 +797,18 @@
       state.hideDone = on;
       renderBar();
       renderBoard();
+    });
+    // "C" = capture: opens the add-card composer in the first "À faire" (else first open) column.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'c' && e.key !== 'C') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      var a = document.activeElement;
+      if (a && (/^(input|textarea|select)$/i.test(a.tagName) || a.isContentEditable)) return;
+      var cols = state.lists.filter(function (l) { return l.category !== 'completed' && l.category !== 'canceled' && l.category !== 'blocked'; });
+      var target = cols.filter(function (l) { return l.category === 'unstarted'; })[0] || cols[0];
+      if (!target) return;
+      e.preventDefault();
+      openComposer(target.id);
     });
     renderBar();
     els.board.innerHTML = skeletonCols();
