@@ -164,6 +164,51 @@
       ).then(function () { changed(); });
     }
 
+    function anyBusy() {
+      return Object.keys(state.busy).length > 0;
+    }
+
+    /** Most recent toggleable entry in the wanted state: undo takes the latest done one, redo the latest undone one. */
+    function pick(back) {
+      var best = null;
+      var want = back ? 'done' : 'undone';
+      state.items.forEach(function (e) {
+        if (e.state !== want || !canToggle(e)) return;
+        if (!best || (e.tsChanged || e.ts) > (best.tsChanged || best.ts)) best = e;
+      });
+      return best;
+    }
+
+    function undoLast() {
+      var e = anyBusy() ? null : pick(true);
+      if (!e) return Promise.resolve(false);
+      return toggle(e).then(function () { return true; });
+    }
+
+    function redoLast() {
+      var e = anyBusy() ? null : pick(false);
+      if (!e) return Promise.resolve(false);
+      return toggle(e).then(function () { return true; });
+    }
+
+    /** Ctrl/Cmd+Z undoes, Ctrl+Y or Ctrl/Cmd+Shift+Z redoes. Text fields keep their own native undo. */
+    function onShortcut(ev) {
+      if (ev.defaultPrevented || ev.altKey || !(ev.ctrlKey || ev.metaKey)) return;
+      var k = String(ev.key || '').toLowerCase();
+      var redo = k === 'y' || (k === 'z' && ev.shiftKey);
+      if (k !== 'z' && !redo) return;
+      var t = ev.target;
+      var tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      if (!(redo ? pick(false) : pick(true))) return;
+      ev.preventDefault();
+      if (redo) redoLast(); else undoLast();
+    }
+
+    if (cfg.shortcuts !== false && global.document && global.document.addEventListener) {
+      global.document.addEventListener('keydown', onShortcut);
+    }
+
     function clear() {
       state.items = [];
       state.confirmClear = false;
@@ -318,6 +363,11 @@
     return {
       record: record,
       toggle: toggle,
+      undoLast: undoLast,
+      redoLast: redoLast,
+      canUndo: function () { return !!pick(true); },
+      canRedo: function () { return !!pick(false); },
+      _onShortcut: onShortcut,
       clear: clear,
       renderInto: renderInto,
       open: function (parent) { setOpen(true, parent); },

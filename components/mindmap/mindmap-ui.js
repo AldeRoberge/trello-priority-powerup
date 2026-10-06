@@ -595,7 +595,7 @@
               document.removeEventListener('pointermove', move);
               document.removeEventListener('pointerup', up);
               document.removeEventListener('pointercancel', up);
-              if (val !== Math.round(prog)) runEdit(function () { return writeProgressTo(rec.id, val); });
+              if (val !== Math.round(prog)) runEdit(function () { return writeProgressTo(rec.id, val); }, progressEntry(rec, Math.round(prog), val));
             }
             move(ev);
             document.addEventListener('pointermove', move);
@@ -1443,6 +1443,43 @@
       return false;
     }
 
+    /* ── History (Ctrl+Z / Ctrl+Y) ─────────────────────────────────── */
+    var HP = null;
+    function record(e) {
+      e.type = 'edit';
+      return HP ? HP.record(e) : e;
+    }
+
+    /** Moves one history entry to its before (back) or after state. */
+    function applyEntry(e, back) {
+      var val = back ? e.beforeVal : e.afterVal;
+      var TT = global.TableTrello;
+      if (e.kind === 'goals') {
+        return global.MindmapGoalsTrello.save(t, MM().normalizeGoals(val)).then(function (saved) { state.goals = saved; });
+      }
+      if (e.kind === 'deps') {
+        return global.PriorityTrello.saveCardInputsById(t, e.targetId, { dependsOn: val.dependsOn || [], depTypes: val.depTypes || {} });
+      }
+      if (e.kind === 'name') return TT.saveName(t, e.targetId, val);
+      if (e.kind === 'status') return TT.moveCard(t, e.targetId, val, 'bottom');
+      if (e.kind === 'progress') return writeProgressTo(e.targetId, val);
+      return Promise.resolve();
+    }
+
+    if (global.HistoryPanel) {
+      var histBoard = '';
+      try { histBoard = (t && typeof t.getContext === 'function' && t.getContext().board) || ''; } catch (ctxErr) { /* no context */ }
+      HP = global.HistoryPanel.create({
+        key: 'tp-mindmap-history' + (histBoard ? ':' + histBoard : ''),
+        max: 60,
+        apply: applyEntry,
+        verb: function (e) { return e.verb || 'modifié'; },
+        after: function (e) { return e.kind === 'goals' ? Promise.resolve(rebuild({ keepView: true })) : refreshAfterEdit(); },
+        onStatus: function (m, kind) { setStatus(m, kind === 'busy' ? '' : kind); },
+        onError: function (err) { setStatus('Échec : ' + reasonText(err), 'error'); },
+      });
+    }
+
     /** Applies the edit at once, then stores it; a failed save puts the previous data back. */
     function saveGoals(next) {
       var GG = global.MindmapGoalsTrello;
@@ -1453,6 +1490,7 @@
       rebuild({ keepView: true });
       return GG.save(t, state.goals).then(function (saved) {
         state.goals = saved;
+        record({ kind: 'goals', title: 'Objectifs et liens', verb: 'modifiés', beforeVal: prev, afterVal: saved });
         setStatus('Enregistré', 'ok');
       }).catch(function (err) {
         state.goals = prev;
@@ -1622,7 +1660,12 @@
         return Promise.resolve();
       }
       setStatus('Enregistrement…');
+      var beforeDeps = { dependsOn: ((rec.inputs && rec.inputs.dependsOn) || []).slice(), depTypes: Object.assign({}, rec.inputs && rec.inputs.depTypes) };
       return pt.saveCardInputsById(t, rec.id, { dependsOn: list, depTypes: Object.assign({}, rec.inputs && rec.inputs.depTypes, typeChange || {}) }).then(function (saved) {
+        record({
+          kind: 'deps', targetId: rec.id, title: rec.name, verb: 'dépendances modifiées',
+          beforeVal: beforeDeps, afterVal: { dependsOn: list.slice(), depTypes: Object.assign({}, saved && saved.depTypes) },
+        });
         rec.inputs = Object.assign({}, rec.inputs || {}, saved || {});
         if (!list.length) delete rec.inputs.dependsOn;
         if (!saved || !saved.depTypes) delete rec.inputs.depTypes;
@@ -1747,9 +1790,10 @@
       }).catch(function (err) { setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error'); });
     }
 
-    function runEdit(fn) {
+    function runEdit(fn, entry) {
       setStatus('Enregistrement…');
       return Promise.resolve().then(fn).then(function () {
+        if (entry) record(entry);
         setStatus('Enregistré', 'ok');
         return refreshAfterEdit();
       }, function (err) {
@@ -1781,6 +1825,17 @@
     }
 
     /** Master progress over subtasks, else the card's own progress (same rule as the Table). */
+    function progressEntry(rec, from, to) {
+      return { kind: 'progress', targetId: rec.id, title: rec.name, verb: 'progrès ' + from + ' % → ' + to + ' %', beforeVal: from, afterVal: to };
+    }
+    function nameEntry(rec, to) {
+      return { kind: 'name', targetId: rec.id, title: rec.name, verb: 'renommée « ' + to + ' »', beforeVal: rec.name, afterVal: to };
+    }
+    function statusEntry(rec, toListId) {
+      var list = (state.lists || []).filter(function (l) { return String(l.id) === String(toListId); })[0];
+      return { kind: 'status', targetId: rec.id, title: rec.name, verb: 'déplacée' + (list ? ' vers « ' + list.name + ' »' : ''), beforeVal: rec.listId, afterVal: String(toListId) };
+    }
+
     function writeProgressTo(cardId, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
@@ -1808,7 +1863,7 @@
       title.addEventListener('change', function () {
         var v = title.value.trim();
         if (!v || v === rec.name) { title.value = rec.name || ''; return; }
-        runEdit(function () { return TT.saveName(t, rec.id, v); });
+        runEdit(function () { return TT.saveName(t, rec.id, v); }, nameEntry(rec, v));
       });
 
       // status (list)
@@ -1820,7 +1875,7 @@
       }));
       status.addEventListener('change', function () {
         if (status.value === String(rec.listId)) return;
-        runEdit(function () { return TT.moveCard(t, rec.id, status.value, 'bottom'); });
+        runEdit(function () { return TT.moveCard(t, rec.id, status.value, 'bottom'); }, statusEntry(rec, status.value));
       });
 
       // progress: click or drag the bar to set the %, the detailed editor via the button
@@ -1838,7 +1893,7 @@
           document.removeEventListener('pointermove', move);
           document.removeEventListener('pointerup', up);
           document.removeEventListener('pointercancel', up);
-          if (val !== pct) runEdit(function () { return writeProgressTo(rec.id, val); });
+          if (val !== pct) runEdit(function () { return writeProgressTo(rec.id, val); }, progressEntry(rec, pct, val));
         }
         move(ev);
         document.addEventListener('pointermove', move);
@@ -2092,7 +2147,7 @@
         if (input.parentNode) input.parentNode.removeChild(input);
         if (!save || !v) return;
         if (n.kind === 'task') {
-          if (v !== rec.name) runEdit(function () { return global.TableTrello.saveName(t, rec.id, v); });
+          if (v !== rec.name) runEdit(function () { return global.TableTrello.saveName(t, rec.id, v); }, nameEntry(rec, v));
         } else {
           renameGoal(n.id, v);
         }
@@ -2252,7 +2307,7 @@
         items.push(['Contribue à… / Dépend de…', '', function () { startLink(n.id); }, false, 'link']);
         (state.lists || []).forEach(function (l) {
           var here = String(l.id) === String(cardRec.listId);
-          items.push(['Statut : ' + l.name, here ? '✓' : '', function () { runEdit(function () { return TTm.moveCard(t, cardRec.id, l.id, 'bottom'); }); }, here, 'status']);
+          items.push(['Statut : ' + l.name, here ? '✓' : '', function () { runEdit(function () { return TTm.moveCard(t, cardRec.id, l.id, 'bottom'); }, statusEntry(cardRec, l.id)); }, here, 'status']);
         });
         items.push(['Archiver la carte', '', function () { deleteSelection({ force: true, nodes: [n] }); }, false, 'archive']);
         items.push(null);

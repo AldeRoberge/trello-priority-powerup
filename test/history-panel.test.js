@@ -87,6 +87,46 @@ describe('HistoryPanel', () => {
     assert.equal(make().panel.count(), 0);
   });
 
+  it('undoLast / redoLast walk the history like a stack', async () => {
+    const { panel, calls } = make();
+    const a = panel.record({ type: 'edit', title: 'A' });
+    const b = panel.record({ type: 'move', title: 'B' });
+    b.ts += 10;
+    assert.equal(panel.canRedo(), false);
+    assert.equal(await panel.undoLast(), true);
+    assert.equal(b.state, 'undone');
+    assert.equal(await panel.undoLast(), true);
+    assert.equal(a.state, 'undone');
+    assert.equal(await panel.undoLast(), false);
+    a.tsChanged = 100; b.tsChanged = 50;
+    assert.equal(await panel.redoLast(), true);
+    assert.equal(a.state, 'done');
+    assert.equal(await panel.redoLast(), true);
+    assert.equal(b.state, 'done');
+    assert.equal(await panel.redoLast(), false);
+    assert.equal(calls.length, 4);
+  });
+
+  it('keyboard shortcut undoes, ignores text fields', async () => {
+    const { panel, calls } = make({ shortcuts: false });
+    const e = panel.record({ type: 'edit', title: 'A' });
+    let prevented = 0;
+    const key = (o) => Object.assign({ key: 'z', ctrlKey: true, target: { tagName: 'DIV' }, preventDefault: () => { prevented += 1; } }, o);
+    panel._onShortcut(key({ target: { tagName: 'INPUT' } }));
+    panel._onShortcut(key({ target: { tagName: 'DIV', isContentEditable: true } }));
+    assert.equal(prevented, 0);
+    panel._onShortcut(key());
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(prevented, 1);
+    assert.equal(e.state, 'undone');
+    panel._onShortcut(key({ key: 'z', shiftKey: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(e.state, 'done');
+    panel._onShortcut(key({ key: 'y' }));
+    assert.equal(prevented, 2, 'nothing to redo: not intercepted');
+    assert.equal(calls.length, 2);
+  });
+
   it('formats relative times and day labels', () => {
     const now = new Date(2026, 9, 5, 12, 0, 0).getTime();
     assert.equal(HP._relTime(now - 10000, now), 'à l’instant');
