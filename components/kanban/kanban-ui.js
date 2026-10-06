@@ -66,6 +66,7 @@
       dragId: null,
       composer: null, // list id with the open "add card" composer
       aiBusy: false,
+      swallowClick: false, // true for one tick after a progress-bar drag so the release does not open the card
       status: '',
       statusKind: '',
     };
@@ -136,6 +137,7 @@
       if (e.type === 'create') return back ? TT().archiveCard(t, e.targetId) : TT().unarchiveCard(t, e.targetId);
       if (e.type === 'move') return TT().moveCard(t, e.targetId, val, back ? e.beforePos : e.afterPos);
       if (e.type === 'reorder') return TT().reorderCard(t, e.targetId, val);
+      if (e.type === 'progress') return writeProgress(e.targetId, val);
       return Promise.reject(new Error('Cette modification ne peut pas être annulée'));
     }
 
@@ -360,25 +362,37 @@
       if (row.category) kids.push(h('div', { class: 'kb-cat', text: row.category }));
       kids.push(h('div', { class: 'kb-title', text: row.name || 'Sans titre' }));
       if (badges.length) kids.push(h('div', { class: 'kb-badges' }, badges));
+      var prog = null;
       if (typeof row.progress === 'number') {
         var p = Math.max(0, Math.min(100, row.progress));
         var ring = global.ProgressRing ? global.ProgressRing.create(p, row.blocked) : null;
-        if (ring && row.blocked) {
-          ring.setAttribute('aria-label', 'Bloqué — cliquer pour débloquer');
-          ring.appendChild(Object.assign(document.createElementNS('http://www.w3.org/2000/svg', 'title'), { textContent: 'Bloqué — cliquer pour débloquer' }));
-        }
-        var prog = h('button', {
-          class: 'kb-prog' + (p >= 100 ? ' is-done' : ''),
-          title: 'Progrès · cliquer pour modifier',
+        // Ring: one click marks the card complete (100 %) or reopens it (0 %); on a blocked card it unblocks.
+        var ringBtn = h('button', {
+          class: 'kb-prog-ring',
+          type: 'button',
+          title: row.blocked ? 'Bloqué — cliquer pour débloquer' : p >= 100 ? 'Terminé — cliquer pour rouvrir (0 %)' : 'Cliquer pour marquer comme terminé',
           onclick: function (e) {
             e.stopPropagation();
-            if (row.blocked && e.target.closest && e.target.closest('.pg-ring')) return unblockRow(row);
-            openEditor(row, 'progress', e.currentTarget);
+            if (row.blocked) return unblockRow(row);
+            saveProgress(row, row.progress >= 100 ? 0 : 100);
           },
+        }, [ring]);
+        prog = h('div', {
+          class: 'kb-prog' + (p >= 100 ? ' is-done' : ''),
+          onclick: function (e) { e.stopPropagation(); },
         }, [
-          ring,
-          h('span', { class: 'kb-prog-bar' }, [h('i', { style: 'width:' + p + '%' })]),
-          h('span', { class: 'kb-prog-num', text: p + '%' }),
+          ringBtn,
+          h('span', { class: 'kb-prog-bar', title: 'Cliquer ou glisser pour régler le progrès' }, [h('i', { style: 'width:' + p + '%' })]),
+          h('button', {
+            class: 'kb-prog-num',
+            type: 'button',
+            title: 'Détail du progrès · cliquer pour modifier',
+            text: p + '%',
+            onclick: function (e) {
+              e.stopPropagation();
+              openEditor(row, 'progress', e.currentTarget.parentNode);
+            },
+          }),
         ]);
         kids.push(prog);
       }
@@ -389,7 +403,7 @@
         tabindex: '0',
         'data-id': row.id,
         style: '--kb-accent:' + (row.statutColor || (list && list.color) || '#626f86'),
-        onclick: function () { openCard(row); },
+        onclick: function () { if (!state.swallowClick) openCard(row); },
         onkeydown: function (e) {
           if (e.key === 'Enter' && e.target === el) openCard(row);
         },
@@ -411,7 +425,55 @@
           el.classList.remove('is-dragging');
         },
       }, kids);
+      if (prog) bindProgressDrag(el, prog, row);
       return el;
+    }
+
+    /**
+     * Clicking or dragging on the progress bar sets the % in place, without opening the card (same as the Table).
+     * The tile is draggable, so that is switched off for the gesture. Saved on release.
+     */
+    function bindProgressDrag(card, prog, row) {
+      var bar = prog.querySelector('.kb-prog-bar');
+      var fill = bar && bar.firstChild;
+      var num = prog.querySelector('.kb-prog-num');
+      var ring = prog.querySelector('.pg-ring');
+      if (!bar || !fill || !num) return;
+      bar.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (global.CardFields) global.CardFields.close();
+        var pct = row.progress;
+        function pctAt(x) {
+          var r = bar.getBoundingClientRect();
+          return r.width ? Math.max(0, Math.min(100, Math.round(((x - r.left) / r.width) * 100))) : pct;
+        }
+        function paint() {
+          fill.style.width = pct + '%';
+          num.textContent = pct + '%';
+          if (ring && global.ProgressRing) global.ProgressRing.set(ring, pct);
+          prog.classList.toggle('is-done', pct >= 100);
+        }
+        function move(ev) { pct = pctAt(ev.clientX); paint(); }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          document.removeEventListener('pointercancel', up);
+          card.draggable = true;
+          prog.classList.remove('is-dragging');
+          state.swallowClick = true;
+          setTimeout(function () { state.swallowClick = false; }, 0);
+          if (pct !== row.progress) saveProgress(row, pct);
+        }
+        card.draggable = false;
+        prog.classList.add('is-dragging');
+        try { bar.setPointerCapture(e.pointerId); } catch (err) { /* no capture: the document listeners still follow the pointer */ }
+        move(e);
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+      });
     }
 
     function cardMenu(row, x, y) {
@@ -633,6 +695,54 @@
         }
         return again(0).then(function () { setStatus('Carte créée dans « ' + list.name + ' »', 'ok'); });
       });
+    }
+
+    /** Master progress over subtasks, else the card's own progress (same write as the Table). Rejects if the editor is unavailable. */
+    function writeProgress(cardId, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+      return CT.getCardCompletionById(t, cardId).then(function (data) {
+        data = CT.normalizeCompletionData(data || { items: [] });
+        var next = data.items && data.items.length
+          ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
+          : Object.assign({}, data, { progress: pct });
+        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next));
+      });
+    }
+
+    /** Sets a card's progress in place; reaching 100 % also moves it to the board's completed list (like the Table). */
+    function saveProgress(row, pct) {
+      var prev = row.progress;
+      var from = { listId: row.listId, statut: row.statut, pos: row.pos };
+      row.progress = pct;
+      setStatus('Enregistrement…', 'busy');
+      writeProgress(row.id, pct)
+        .then(function () {
+          var done = pct >= 100 && row.statutKey !== 'completed'
+            ? state.lists.filter(function (l) { return l.category === 'completed'; })[0]
+            : null;
+          return done ? TT().moveCard(t, row.id, done.id, 'bottom').then(function () { return done; }) : null;
+        })
+        .then(function (done) {
+          var known = typeof prev === 'number';
+          if (prev !== pct) {
+            record({
+              type: known ? 'progress' : 'field', label: 'Progrès', targetId: row.id, title: row.name,
+              before: known ? prev + ' %' : '', after: pct + ' %', beforeVal: prev, afterVal: pct,
+            });
+          }
+          if (done) {
+            record({ type: 'move', targetId: row.id, title: row.name, key: 'statut', before: from.statut, after: done.name, beforeVal: from.listId, afterVal: done.id, beforePos: from.pos, afterPos: 'bottom' });
+          }
+          setStatus(done ? 'Carte terminée — déplacée dans « ' + done.name + ' »' : 'Enregistré', 'ok');
+          return reload({ quiet: true });
+        }, function (err) {
+          row.progress = prev;
+          renderBoard();
+          fail(err);
+          // The progress write may have landed before the move failed: show what Trello really has.
+          reload({ quiet: true });
+        });
     }
 
     /** Clears Bloqué on a card (the red II on its progress ring). */
