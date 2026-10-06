@@ -1007,7 +1007,7 @@
   }
 
   function emptyIndex() {
-    return { v: 1, folders: [], docs: {}, parents: {} };
+    return { v: 1, folders: [], docs: {}, parents: {}, archived: {} };
   }
 
   /** Tolerant parse: anything unreadable gives an empty index; dangling parents / cycles are healed. */
@@ -1026,7 +1026,9 @@
       var name = cleanFolderName(f.name);
       if (!name) return;
       seen[f.id] = true;
-      idx.folders.push({ id: f.id, name: name, parent: typeof f.parent === 'string' && f.parent ? f.parent : null });
+      var nf = { id: f.id, name: name, parent: typeof f.parent === 'string' && f.parent ? f.parent : null };
+      if (f.archived === true) nf.archived = true;
+      idx.folders.push(nf);
     });
     idx.folders.forEach(function (f) {
       if (f.parent && (!seen[f.parent] || f.parent === f.id)) f.parent = null;
@@ -1052,11 +1054,13 @@
     Object.keys(parents).forEach(function (k) {
       if (typeof parents[k] === 'string' && parents[k] && parents[k] !== k) idx.parents[k] = parents[k];
     });
+    var arch = raw.archived && typeof raw.archived === 'object' ? raw.archived : {};
+    Object.keys(arch).forEach(function (k) { if (arch[k] === true) idx.archived[k] = true; });
     return idx;
   }
 
   function packFolderIndex(idx) {
-    return JSON.stringify({ v: 1, folders: idx.folders, docs: idx.docs, parents: idx.parents || {} });
+    return JSON.stringify({ v: 1, folders: idx.folders, docs: idx.docs, parents: idx.parents || {}, archived: idx.archived || {} });
   }
 
   function newFolderId() {
@@ -1148,7 +1152,80 @@
     return false;
   }
 
-  function folderRows(docs, idx, open, query, sort) {
+  /** `docId` plus every document nested (at any depth) under it. */
+  function docWithKids(idx, docId) {
+    var out = [docId];
+    Object.keys(idx.parents || {}).forEach(function (k) {
+      if (k !== docId && isDocInside(idx, docId, k)) out.push(k);
+    });
+    return out;
+  }
+
+  /** Folder `id` plus all its sub-folders (ids). */
+  function folderWithSubs(idx, id) {
+    return idx.folders.filter(function (f) { return isInsideFolder(idx, id, f.id); }).map(function (f) { return f.id; });
+  }
+
+  /** Documents (ids) filed in the given folders, with the documents nested under them. */
+  function docsInFolders(idx, folderIds) {
+    var set = {};
+    folderIds.forEach(function (f) { set[f] = true; });
+    var out = [];
+    Object.keys(idx.docs).forEach(function (k) {
+      if (set[idx.docs[k]]) docWithKids(idx, k).forEach(function (x) { out.push(x); });
+    });
+    return out;
+  }
+
+  /** Marks a document (and what is nested under it) archived: hidden from the list, nothing deleted. */
+  function archiveDocIn(idx, docId) {
+    idx.archived = idx.archived || {};
+    docWithKids(idx, docId).forEach(function (k) { idx.archived[k] = true; });
+    return idx;
+  }
+
+  function restoreDocIn(idx, docId) {
+    idx.archived = idx.archived || {};
+    docWithKids(idx, docId).forEach(function (k) { delete idx.archived[k]; });
+    return idx;
+  }
+
+  /**
+   * Archives a folder. With `withContent` its sub-folders, documents and nested documents are archived too;
+   * otherwise they move up to its parent and stay visible.
+   */
+  function archiveFolderIn(idx, id, withContent) {
+    var f = folderById(idx, id);
+    if (!f) return idx;
+    idx.archived = idx.archived || {};
+    if (withContent) {
+      var ids = folderWithSubs(idx, id);
+      docsInFolders(idx, ids).forEach(function (k) { idx.archived[k] = true; });
+      idx.folders.forEach(function (x) { if (ids.indexOf(x.id) >= 0) x.archived = true; });
+      return idx;
+    }
+    var up = f.parent || null;
+    idx.folders.forEach(function (x) { if (x.parent === id) x.parent = up; });
+    Object.keys(idx.docs).forEach(function (k) {
+      if (idx.docs[k] !== id) return;
+      if (up) idx.docs[k] = up;
+      else delete idx.docs[k];
+    });
+    f.archived = true;
+    return idx;
+  }
+
+  /** Restores a folder with everything archived inside it. */
+  function restoreFolderIn(idx, id) {
+    var ids = folderWithSubs(idx, id);
+    docsInFolders(idx, ids).forEach(function (k) { delete (idx.archived || {})[k]; });
+    idx.folders.forEach(function (x) { if (ids.indexOf(x.id) >= 0) delete x.archived; });
+    return idx;
+  }
+
+  function folderRows(docs, idx, open, query, sort, showArchived) {
+    var arch = idx.archived || {};
+    if (!showArchived) docs = (docs || []).filter(function (d) { return !arch[d.id]; });
     var q = fold(String(query || '').trim());
     var isOpen = function (key, force) { return force || q ? true : !!(open && (open.has ? open.has(key) : open[key])); };
     var parents = idx.parents || {};
@@ -1178,7 +1255,7 @@
     }
     function countIn(fid) {
       var n = (byFolder[fid] || []).reduce(function (m, d) { return m + docCount(d); }, 0);
-      idx.folders.forEach(function (f) { if (f.parent === fid) n += countIn(f.id); });
+      idx.folders.forEach(function (f) { if (f.parent === fid && (showArchived || !f.archived)) n += countIn(f.id); });
       return n;
     }
     function matchesIn(fid) {
@@ -1191,17 +1268,17 @@
     function pushDoc(d, depth) {
       var ch = kids[d.id] || [];
       var o = ch.length > 0 && isOpen('doc:' + d.id);
-      rows.push({ type: 'doc', depth: depth, doc: d, childCount: ch.length, open: o });
+      rows.push({ type: 'doc', depth: depth, doc: d, childCount: ch.length, open: o, archived: !!arch[d.id] });
       if (o) ch.slice().sort(cmp).forEach(function (k) { if (!q || docMatches(k)) pushDoc(k, depth + 1); });
     }
     function walk(fid, depth) {
       idx.folders
-        .filter(function (f) { return (f.parent || '') === fid; })
+        .filter(function (f) { return (f.parent || '') === fid && (showArchived || !f.archived); })
         .sort(function (a, b) { return dir * (fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0); })
         .forEach(function (f) {
           if (q && !matchesIn(f.id)) return;
           var o = isOpen(f.id);
-          rows.push({ type: 'folder', depth: depth, folder: f, count: countIn(f.id), open: o });
+          rows.push({ type: 'folder', depth: depth, folder: f, count: countIn(f.id), open: o, archived: !!f.archived });
           if (o) walk(f.id, depth + 1);
         });
       (byFolder[fid] || []).slice().sort(cmp).forEach(function (d) {
@@ -1244,6 +1321,10 @@
     folderPath: folderPath,
     removeFolderFrom: removeFolderFrom,
     folderRows: folderRows,
+    archiveDocIn: archiveDocIn,
+    restoreDocIn: restoreDocIn,
+    archiveFolderIn: archiveFolderIn,
+    restoreFolderIn: restoreFolderIn,
     isDocInside: isDocInside,
     SORTS: SORTS,
     DEFAULT_TITLE: DEFAULT_TITLE,

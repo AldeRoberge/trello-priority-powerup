@@ -369,6 +369,11 @@
         items.push(item('folder-plus', 'Nouveau dossier', function () { newFolder(''); }));
         items.push(h('div', { class: 'dc-menu-sep' }));
       }
+      items.push(item('archive', 'Afficher les archives', function () {
+        state.showArchived = !state.showArchived;
+        paintList();
+      }, state.showArchived));
+      items.push(h('div', { class: 'dc-menu-sep' }));
       items.push(h('div', { class: 'dc-pop-sub', text: 'Trier par' }));
       SORT_LABELS.forEach(function (s) {
         items.push(item('arrows-sort', s[1], function () { setSort(s[0]); }, state.sort === s[0]));
@@ -384,7 +389,7 @@
         for (var i = 0; i < 5; i++) list.appendChild(h('div', { class: 'dc-skel' }, [h('span', { class: 'dc-skel-bar' })]));
         return;
       }
-      var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter, state.sort);
+      var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter, state.sort, state.showArchived);
       var pend = state.pendingFolder;
       if (pend && pend.parent && !rows.some(function (r) { return r.type === 'folder' && r.folder.id === pend.parent; })) pend = state.pendingFolder = null;
       if (pend && !pend.parent) list.appendChild(newFolderRow(0));
@@ -415,7 +420,7 @@
           },
         }, [icon('dots')]);
         var row = h('div', {
-          class: 'dc-item' + (on ? ' is-on' : ''),
+          class: 'dc-item' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
           style: 'padding-left:' + (8 + r.depth * 16) + 'px',
           role: 'option',
           'aria-selected': on ? 'true' : 'false',
@@ -490,7 +495,7 @@
         paintList();
       }
       var row = h('div', {
-        class: 'dc-item dc-folder',
+        class: 'dc-item dc-folder' + (r.archived ? ' is-archived' : ''),
         style: 'padding-left:' + (8 + r.depth * 16) + 'px',
         role: 'treeitem',
         'aria-expanded': r.open ? 'true' : 'false',
@@ -706,17 +711,20 @@
       });
     }
 
+    /** Archiving a folder asks whether its content goes along; nothing is deleted either way. */
     function deleteFolder(id) {
       var f = DM().folderById(state.idx, id);
       if (!f) return;
       dialog({
-        title: 'Supprimer le dossier « ' + f.name + ' » ?',
-        text: 'Les documents et sous-dossiers qu’il contient ne sont pas supprimés : ils remontent d’un niveau.',
-        ok: 'Supprimer',
-        danger: true,
-      }).then(function (yes) {
-        if (!yes) return;
-        editFolders(function (idx) { DM().removeFolderFrom(idx, id); }, 'Dossier supprimé.');
+        title: 'Archiver le dossier « ' + f.name + ' » ?',
+        text: 'Voulez-vous aussi archiver son contenu (documents et sous-dossiers) ? Sinon, le contenu reste visible et remonte d’un niveau. Les archives se retrouvent avec « Afficher les archives ».',
+        ok: 'Avec son contenu',
+        alt: 'Dossier seulement',
+      }).then(function (answer) {
+        if (!answer) return;
+        editFolders(function (idx) { DM().archiveFolderIn(idx, id, answer === true); }, 'Dossier archivé.').then(function () {
+          if (state.current && state.idx.archived && state.idx.archived[state.current.id] && !state.showArchived) leaveArchivedDoc();
+        });
       });
     }
 
@@ -848,7 +856,9 @@
           openFolderPicker(anchor, 'Déplacer le dossier vers', f.parent || '', folderId, function (to) { moveFolder(folderId, to); });
         }),
         h('div', { class: 'dc-menu-sep' }),
-        item('trash', 'Supprimer…', function () { deleteFolder(folderId); }, true),
+        f.archived
+          ? item('archive-off', 'Restaurer', function () { editFolders(function (idx) { DM().restoreFolderIn(idx, folderId); }, 'Dossier restauré.'); })
+          : item('archive', 'Archiver…', function () { deleteFolder(folderId); }, true),
       ]);
       placePop(pop, anchor.getBoundingClientRect());
     }
@@ -2034,7 +2044,9 @@
           openFolderPicker(anchor, 'Déplacer le document vers', state.idx.docs[docId] || '', '', function (to) { moveDocToFolder(docId, to); });
         }),
         h('div', { class: 'dc-menu-sep' }),
-        item('trash', 'Supprimer…', function () { confirmDelete(docId); }, true),
+        state.idx.archived && state.idx.archived[docId]
+          ? item('archive-off', 'Restaurer', function () { restoreDoc(docId); })
+          : item('archive', 'Archiver', function () { confirmDelete(docId); }, true),
       ]);
       placePop(pop, anchor.getBoundingClientRect());
     }
@@ -2064,38 +2076,27 @@
       });
     }
 
+    /** Opens another visible document when the current one has just been archived (or shows the empty state). */
+    function leaveArchivedDoc() {
+      state.current = null;
+      remember(LAST_KEY, null);
+      showCurrent();
+      var next = state.docs.filter(function (x) { return !(state.idx.archived || {})[x.id]; })[0];
+      if (next) openDoc(next.id, { skipSave: true });
+    }
+
+    /** Archive, not delete: the document is only flagged, it stays in Trello and can be restored. */
     function confirmDelete(docId) {
       var d = state.docs.filter(function (x) { return x.id === docId; })[0];
       if (!d) return;
-      dialog({
-        title: 'Supprimer « ' + d.title + ' » ?',
-        text: 'Le document sera supprimé définitivement de Trello. Les liens @ qui pointent vers lui deviendront orphelins.',
-        ok: 'Supprimer',
-        danger: true,
-      }).then(function (yes) {
-        if (!yes) return;
-        var snap = state.current && state.current.id === docId
-          ? Promise.resolve(lastDomMd())
-          : DT().loadDoc(t, docId).then(function (x) { return x.body; }, function () { return null; });
-        snap.then(function (snapBody) {
-          return DT().deleteDoc(t, docId).then(function () { histDeleted(d, snapBody); });
-        }).then(
-          function () {
-            var wasCurrent = state.current && state.current.id === docId;
-            state.docs = state.docs.filter(function (x) { return x.id !== docId; });
-            if (wasCurrent) {
-              state.current = null;
-              remember(LAST_KEY, null);
-              showCurrent();
-              if (state.docs.length) openDoc(state.docs[0].id, { skipSave: true });
-            }
-            paintList();
-            rebuildIndex();
-            toast('Document supprimé.', 'ok');
-          },
-          failure
-        );
+      var wasCurrent = state.current && state.current.id === docId;
+      editFolders(function (idx) { DM().archiveDocIn(idx, docId); }, 'Document archivé.').then(function (ok) {
+        if (ok && wasCurrent && !state.showArchived) leaveArchivedDoc();
       });
+    }
+
+    function restoreDoc(docId) {
+      editFolders(function (idx) { DM().restoreDocIn(idx, docId); }, 'Document restauré.');
     }
 
     function exportDoc(docId, mode) {

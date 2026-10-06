@@ -95,4 +95,28 @@ describe('DocsModel folders and nested documents', () => {
     DM.removeFolderFrom(idx, 'p');
     assert.deepEqual(idx.docs, {});
   });
+
+  it('archives and restores documents and folders without deleting anything', () => {
+    const idx = DM.emptyIndex();
+    idx.folders.push({ id: 'p', name: 'P', parent: null }, { id: 'q', name: 'Q', parent: 'p' });
+    idx.docs = { a: 'p', b: 'q' };
+    idx.parents = { c: 'a' };
+    const all = [...docs, { id: 'c', title: 'C2', updatedAt: '0', size: 1 }];
+    DM.archiveDocIn(idx, 'a');
+    assert.deepEqual(Object.keys(idx.archived).sort(), ['a', 'c']);
+    assert.ok(!DM.folderRows(all, idx, { p: 1, q: 1 }, '', 'name').some((r) => r.doc && r.doc.id === 'a'));
+    assert.ok(DM.folderRows(all, idx, { p: 1, q: 1 }, '', 'name', true).some((r) => r.doc && r.doc.id === 'a' && r.archived));
+    DM.restoreDocIn(idx, 'a');
+    assert.deepEqual(idx.archived, {});
+    DM.archiveFolderIn(idx, 'p', true);
+    assert.ok(idx.folders.every((f) => f.archived));
+    assert.deepEqual(Object.keys(idx.archived).sort(), ['a', 'b', 'c']);
+    const round = DM.parseFolderIndex(DM.packFolderIndex(idx));
+    assert.ok(round.folders[0].archived && round.archived.b);
+    DM.restoreFolderIn(idx, 'p');
+    assert.deepEqual(idx.archived, {});
+    DM.archiveFolderIn(idx, 'q', false);
+    assert.equal(idx.docs.b, 'p');
+    assert.ok(idx.folders.find((f) => f.id === 'q').archived);
+  });
 });

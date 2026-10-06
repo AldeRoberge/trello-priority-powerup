@@ -1094,3 +1094,7 @@ html[data-color-mode="dark"] .dc-root {
 .dc-doc-chev {
   cursor: pointer;
 }
+
+.dc-item.is-archived {
+  opacity: 0.55;
+}
