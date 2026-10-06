@@ -1071,7 +1071,7 @@
 
     /** Tasks are archived (recoverable in Trello); goals are removed from the stored hierarchy. */
     function deleteSelection(opts) {
-      var nodes = pickedNodes();
+      var nodes = (opts && opts.nodes) || pickedNodes();
       if (!nodes.length) return Promise.resolve();
       var key = nodes.map(function (n) { return n.id; }).sort().join('|');
       if (!(opts && opts.force) && !(state.confirmDeleteKey === key && Date.now() - state.confirmDeleteAt < 4000)) {
@@ -2215,6 +2215,15 @@
         copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
         cut: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/>',
         paste: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+        open: '<path d="M7 17 17 7M8 7h9v9"/>',
+        progress: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 9 9h-9z"/>',
+        flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+        due: '<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/>',
+        desc: '<path d="M4 6h16M4 12h10M4 18h14"/>',
+        ban: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+        link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+        status: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.5"/><circle cx="14" cy="12" r="1.5"/><circle cx="10" cy="18" r="1.5"/>',
+        archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/>',
         trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>',
         alignH: '<path d="M3 12h18"/><rect x="5" y="6" width="4" height="12" rx="1"/><rect x="15" y="8" width="4" height="8" rx="1"/>',
         alignV: '<path d="M12 3v18"/><rect x="6" y="5" width="12" height="4" rx="1"/><rect x="8" y="15" width="8" height="4" rx="1"/>',
@@ -2229,11 +2238,30 @@
         return s;
       }
       var items = [];
+      var cardRec = n && n.kind === 'task' && n.rec && global.TableTrello ? n.rec : null;
+      if (cardRec) {
+        var TTm = global.TableTrello;
+        var anchorEl = onNode;
+        items.push({ title: 'Carte' });
+        items.push(['Ouvrir la carte', '', function () { openCard(cardRec); }, false, 'open']);
+        items.push(['Progrès…', '', function () { openFieldEditor(cardRec, 'progress', anchorEl); }, false, 'progress']);
+        items.push(['Priorité…', '', function () { openFieldEditor(cardRec, 'priority', anchorEl); }, false, 'flag']);
+        items.push(['Échéance…', '', function () { openFieldEditor(cardRec, 'due', anchorEl); }, false, 'due']);
+        items.push(['Description…', '', function () { openFieldEditor(cardRec, 'desc', anchorEl); }, false, 'desc']);
+        items.push([cardRec.blocked ? 'Bloqué…' : 'Bloquer…', '', function () { openFieldEditor(cardRec, 'blocked', anchorEl); }, false, 'ban']);
+        items.push(['Contribue à… / Dépend de…', '', function () { startLink(n.id); }, false, 'link']);
+        (state.lists || []).forEach(function (l) {
+          var here = String(l.id) === String(cardRec.listId);
+          items.push(['Statut : ' + l.name, here ? '✓' : '', function () { runEdit(function () { return TTm.moveCard(t, cardRec.id, l.id, 'bottom'); }); }, here, 'status']);
+        });
+        items.push(['Archiver la carte', '', function () { deleteSelection({ force: true, nodes: [n] }); }, false, 'archive']);
+        items.push(null);
+      }
       if (count) {
         items.push(['Copier', 'Ctrl+C', copySelection, false, 'copy'], ['Couper', 'Ctrl+X', function () { if (copySelection()) deleteSelection({ force: true }); }, false, 'cut']);
       }
       items.push(['Coller', 'Ctrl+V', pasteClip, !state.clip, 'paste']);
-      if (count) items.push(['Supprimer', 'Suppr', deleteSelection, false, 'trash']);
+      if (count) items.push(['Supprimer', 'Suppr', function () { deleteSelection({ force: true }); }, false, 'trash']);
       items.push(null);
       items.push(['Aligner horizontalement', '', function () { alignNodes('y'); }, count < 2, 'alignH']);
       items.push(['Aligner verticalement', '', function () { alignNodes('x'); }, count < 2, 'alignV']);
@@ -2244,6 +2272,7 @@
       items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }, false, 'layout']);
       var menu = h('div', { class: 'mm-menu', role: 'menu' }, items.map(function (it) {
         if (!it) return h('div', { class: 'mm-menu-sep' });
+        if (it.title) return h('div', { class: 'mm-menu-title', text: it.title });
         var b = h('button', { class: 'mm-menu-item', type: 'button', role: 'menuitem', disabled: !!it[3] }, [icon(it[4]), h('span', { class: 'mm-menu-label', text: it[0] }), h('kbd', { text: it[1] })]);
         b.addEventListener('click', function () { closeMenu(); it[2](); });
         return b;
