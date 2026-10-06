@@ -174,3 +174,113 @@
 
 .ad-dock-spacer { flex: 1 1 auto; }
 .ad-dock-error { padding: 12px; color: var(--tp-text-muted); font-size: 13px; }
+
+/* ── Assistant dock: MMORPG-style chat log ("Alde : texte" / "AI : réponse") ── */
+.ad-dock .ad-dock-body .agent-messages {
+  gap: 1px;
+  padding: 4px 30px 4px 8px;
+  max-height: none;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ad-dock .ad-dock-body .agent-messages::-webkit-scrollbar { display: none; }
+.ad-dock .ad-dock-body .agent-msg,
+.ad-dock .ad-dock-body .agent-msg--user,
+.ad-dock .ad-dock-body .agent-msg--assistant {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: baseline;
+  align-self: stretch;
+  width: auto;
+  max-width: none;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition: opacity 0.6s ease;
+}
+.ad-dock .ad-dock-body .agent-msg:hover { background: var(--tp-surface-hover); }
+.ad-dock .ad-dock-body .agent-msg::before {
+  grid-column: 1;
+  grid-row: 1;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ad-dock .ad-dock-body .agent-msg--user::before {
+  content: 'Alde :';
+  color: var(--tp-warning-text, #b65c02);
+}
+.ad-dock .ad-dock-body .agent-msg--assistant::before {
+  content: 'AI :';
+  color: var(--tp-primary, #0c66e4);
+}
+.ad-dock .ad-dock-body .agent-msg--error::before { color: var(--tp-danger-text, #ae2e24); }
+.ad-dock .ad-dock-body .agent-msg > * { grid-column: 2; }
+.ad-dock .ad-dock-body .agent-msg-bubble,
+.ad-dock .ad-dock-body .agent-msg--user .agent-msg-bubble,
+html[data-color-mode='dark'] .ad-dock .ad-dock-body .agent-msg--user .agent-msg-bubble {
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--tp-text);
+  overflow-wrap: anywhere;
+}
+/* Rich content stays, but compact. */
+.ad-dock .ad-dock-body .agent-msg-bubble p,
+.ad-dock .ad-dock-body .agent-msg-bubble ul,
+.ad-dock .ad-dock-body .agent-msg-bubble ol { margin: 0 0 2px; }
+.ad-dock .ad-dock-body .agent-msg-bubble h1,
+.ad-dock .ad-dock-body .agent-msg-bubble h2,
+.ad-dock .ad-dock-body .agent-msg-bubble h3 { margin: 2px 0; font-size: 13px; }
+.ad-dock .ad-dock-body .agent-msg-bubble pre,
+.ad-dock .ad-dock-body .agent-msg-bubble table { font-size: 12px; max-width: 100%; overflow-x: auto; }
+.ad-dock .ad-dock-body .agent-msg-bubble img { max-height: 120px; }
+/* No avatar; feedback / copy / edit controls only on hover, overlaid at the line's end. */
+.ad-dock .ad-dock-body .agent-msg .agent-face,
+.ad-dock .ad-dock-body .agent-msg .agent-think-clouds { display: none !important; }
+.ad-dock .ad-dock-body .agent-msg-note { font-size: 11px; color: var(--tp-text-muted); }
+.ad-dock .ad-dock-body .agent-msg-feedback { opacity: 0; transition: opacity 0.15s; }
+.ad-dock .ad-dock-body .agent-msg:hover .agent-msg-feedback,
+.ad-dock .ad-dock-body .agent-msg:focus-within .agent-msg-feedback { opacity: 1; }
+
+/* Auto-disappearing: old lines fade out unless the chat is "awake" (hover, focus, scrolled up). */
+.ad-dock .ad-dock-body .agent-msg.is-old { opacity: 0.4; }
+.ad-dock .ad-dock-body .agent-msg.is-gone { opacity: 0; pointer-events: none; }
+.ad-dock .ad-dock-body.is-awake .agent-msg.is-old,
+.ad-dock .ad-dock-body.is-awake .agent-msg.is-gone { opacity: 1; pointer-events: auto; }
+
+/* Scroll arrows (right edge, under the settings gear) */
+.ad-dock-arrows {
+  position: absolute;
+  top: 30px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.ad-dock-body.is-awake .ad-dock-arrows { opacity: 1; }
+.ad-dock-arrow {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--tp-border);
+  border-radius: 4px;
+  background: var(--tp-surface);
+  color: var(--tp-text-subtle);
+  cursor: pointer;
+  font-size: 14px;
+}
+.ad-dock-arrow:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.ad-dock-arrow:disabled { opacity: 0.35; cursor: default; }

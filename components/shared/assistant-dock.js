@@ -14,6 +14,8 @@
   var LEGACY_HEIGHT_KEY = 'tb.dockHeight';
   var MIN_H = 160;
   var POLL_MS = 20000;
+  var OLD_MS = 25000; // lines start fading
+  var GONE_MS = 60000; // lines vanish (until the chat is hovered / focused / scrolled up)
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -79,6 +81,59 @@
       } else if (dock.mounted) refresh();
     }
 
+
+    /* MMO-style log behaviour: lines fade with age, scroll arrows, "awake" on hover / focus / scroll-up. */
+    function enhanceLog(body) {
+      var log = null;
+      var bound = null;
+      var arrows = el('div', 'ad-dock-arrows');
+      var up = el('button', 'ad-dock-arrow');
+      var down = el('button', 'ad-dock-arrow');
+      up.type = down.type = 'button';
+      up.title = 'Remonter'; down.title = 'Descendre';
+      up.appendChild(icon('chevron-up')); down.appendChild(icon('chevron-down'));
+      arrows.appendChild(up); arrows.appendChild(down);
+      body.appendChild(arrows);
+
+      function atBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < 8; }
+      function awake() {
+        return body.matches(':hover') || body.contains(document.activeElement) || !atBottom();
+      }
+      function tick() {
+        if (!log || !log.isConnected) { find(); if (!log) return; }
+        var now = Date.now();
+        var kids = log.children;
+        for (var i = 0; i < kids.length; i++) {
+          var k = kids[i];
+          if (!k.classList.contains('agent-msg')) continue;
+          if (!k.dataset.adT || k.classList.contains('is-streaming')) k.dataset.adT = String(now);
+          var age = now - Number(k.dataset.adT);
+          k.classList.toggle('is-old', age > OLD_MS);
+          k.classList.toggle('is-gone', age > GONE_MS);
+        }
+        body.classList.toggle('is-awake', awake());
+        up.disabled = log.scrollTop <= 0;
+        down.disabled = atBottom();
+      }
+      function find() {
+        log = body.querySelector('.agent-messages');
+        if (log && log !== bound) {
+          bound = log;
+          log.addEventListener('scroll', tick, { passive: true });
+          new MutationObserver(tick).observe(log, { childList: true });
+        }
+      }
+      up.addEventListener('click', function () { log.scrollBy({ top: -Math.max(40, log.clientHeight * 0.8) }); });
+      down.addEventListener('click', function () { log.scrollBy({ top: Math.max(40, log.clientHeight * 0.8) }); });
+      body.addEventListener('mouseenter', tick);
+      body.addEventListener('mouseleave', tick);
+      body.addEventListener('focusin', tick);
+      body.addEventListener('focusout', function () { setTimeout(tick, 0); });
+      setInterval(function () { if (body.isConnected) tick(); }, 1000);
+      find();
+      new MutationObserver(function () { find(); tick(); }).observe(body, { childList: true, subtree: true });
+    }
+
     function render() {
       var keep = dock.body;
       root.innerHTML = '';
@@ -120,6 +175,7 @@
           var m = el('div');
           m.id = 'assistantMount';
           keep.appendChild(m);
+          enhanceLog(keep);
         }
         dock.body = keep;
         keep.style.height = dock.height + 'px';
