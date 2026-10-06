@@ -9,6 +9,8 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
   let L;
   let C;
   let schema;
+  // the product family is a catalog: nobody installs all of it, each type must fit next to the core
+  const PRODUCT_FAMILY = ['cosmetique', 'aliment', 'appareil', 'produit_assemble', 'piece_detachee', 'pile'];
 
   before(() => {
     loadComponent('entities/entities-model.js');
@@ -17,7 +19,7 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
     M = global.EntitiesModel;
     L = global.EntitiesLibrary;
     C = global.EntitiesComposer;
-    schema = L.install(M.defaultSchema(), L.TYPES.map((t) => t.id)).schema;
+    schema = L.install(M.defaultSchema(), L.TYPES.map((t) => t.id).filter((id) => !PRODUCT_FAMILY.includes(id))).schema;
   });
 
   function make(init) {
@@ -283,10 +285,60 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       assert.equal(r.schema.types.filter((t) => t.name === 'Personne').length, 1);
     });
 
-    it('everything fits in the schema card with room to spare', () => {
-      const r = L.install(M.defaultSchema(), L.TYPES.map((t) => t.id));
+    it('everything but the product family fits in the schema card with room to spare', () => {
+      const r = L.install(M.defaultSchema(), L.TYPES.map((t) => t.id).filter((id) => !PRODUCT_FAMILY.includes(id)));
       assert.equal(r.error, undefined);
       assert.ok(JSON.stringify(r.schema).length < M.MAX_SCHEMA_CHARS - 4000);
+    });
+
+    it('each product type installs next to the core types', () => {
+      const core = L.install(M.defaultSchema(), L.TYPES.map((t) => t.id).filter((id) => !PRODUCT_FAMILY.includes(id))).schema;
+      PRODUCT_FAMILY.forEach((id) => assert.equal(L.install(core, id).error, undefined, id));
+    });
+
+    it('Produit is generic: no ingredients, skin type or expiry; those come from specific types', () => {
+      const s = L.install(M.defaultSchema(), ['produit', 'cosmetique', 'appareil']).schema;
+      const fieldsOf = (id) => M.componentIdsOf(s, M.createEntity(s, { name: 'x', types: [id] })).flatMap((c) => M.findById(s.components, c).fields.map((f) => c + '.' + f.key));
+      const plain = fieldsOf('produit');
+      ['produit.ingredients', 'produit.peau', 'consommable.peremption'].forEach((k) => assert.ok(!plain.includes(k), k));
+      assert.ok(plain.includes('produit.marque'));
+      ['ingredients.ingredients', 'soin_peau.peau', 'consommable.peremption'].forEach((k) => assert.ok(fieldsOf('cosmetique').includes(k), k));
+      const phone = fieldsOf('appareil');
+      assert.ok(phone.includes('energie.source'));
+      assert.ok(!phone.some((k) => k.startsWith('ingredients.') || k.startsWith('consommable.') || k.startsWith('soin_peau.')));
+    });
+
+    it('an assembled product has parts; a part knows what it belongs to', () => {
+      const s = L.install(M.defaultSchema(), ['produit_assemble', 'piece_detachee']).schema;
+      assert.ok(M.fieldOf(s, 'assemblage.parties'));
+      assert.equal(M.fieldOf(s, 'partie.tout').field.rel, 'part-of');
+    });
+
+    it('upgradeProduct moves ingredients and skin type out of Produit and keeps entity data', () => {
+      let s = L.install(M.defaultSchema(), ['produit']).schema;
+      s = M.upsertComponent(s, {
+        id: 'produit',
+        name: 'Produit',
+        fields: [
+          { key: 'marque', label: 'Marque', kind: 'text' },
+          { key: 'ingredients', label: 'Ingrédients', kind: 'refs', refTypes: ['substance'], rel: 'made-of' },
+          { key: 'peau', label: 'Type de peau', kind: 'multi', options: ['sèche'] },
+        ],
+      });
+      s = L.ensureComponent(s, 'consommable');
+      s = M.upsertType(s, Object.assign({}, M.findById(s.types, 'produit'), { components: ['produit', 'consommable'] }));
+      const cream = { id: 'e1', name: 'Crème', types: ['produit'], data: { produit: { marque: 'X', peau: ['sèche'] }, consommable: { peremption: '2027-01-01' } } };
+      const iphone = { id: 'e2', name: 'iPhone', types: ['produit'], data: { produit: { marque: 'Apple' } } };
+      const r = L.upgradeProduct(s, [cream, iphone]);
+      assert.ok(r.changed);
+      assert.ok(!M.fieldOf(r.schema, 'produit.peau'));
+      assert.deepEqual(M.findById(r.schema.types, 'produit').components, ['produit']);
+      assert.deepEqual(r.entities[0].data.soin_peau.peau, ['sèche']);
+      assert.ok(r.entities[0].components.includes('soin_peau') && r.entities[0].components.includes('consommable'));
+      assert.ok(!M.componentIdsOf(r.schema, r.entities[1]).includes('consommable'));
+      assert.equal(r.entities[0].data.consommable.peremption, '2027-01-01');
+      const again = L.upgradeProduct(r.schema, r.entities);
+      assert.equal(again.changed, false);
     });
 
     it('refuses an install that would overflow the schema card', () => {
@@ -308,15 +360,19 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
     });
 
     it('a hand cream: a product made of substances by an organization, with typed fields', () => {
+      const base = schema;
+      schema = L.install(base, 'cosmetique').schema;
       const glycerine = make({ name: 'Glycérine', types: ['substance'] });
       const labo = make({ name: 'Labo Nord', types: ['organisation'] });
       const cream = make({
         name: 'Crème pour les mains',
-        types: ['produit'],
+        types: ['cosmetique'],
         data: {
           matiere: { etat: 'gel', volume: '50' },
           provenance: { fabricant: labo.id, prix: '8,5' },
-          produit: { marque: 'Nord', ingredients: [glycerine.id], peau: ['sèche', 'sensible'] },
+          produit: { marque: 'Nord' },
+          ingredients: { ingredients: [glycerine.id] },
+          soin_peau: { peau: ['sèche', 'sensible'] },
           consommable: { peremption: '2027-03-01' },
         },
       });
@@ -328,6 +384,7 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
       assert.deepEqual(facts, ['made-by', 'made-of']);
       assert.equal(M.query(schema, [cream, glycerine], { types: ['objet'] }).length, 1);
       assert.equal(M.query(schema, [cream, glycerine, labo], { refersTo: [glycerine.id] }).length, 1);
+      schema = base;
     });
   });
 

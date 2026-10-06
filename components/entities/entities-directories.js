@@ -243,14 +243,18 @@
   /** Directory -> entities, on page load. Never throws: a failure leaves the entities as they were. */
   async function pull(t, schema, entities) {
     var none = { schema: schema, entities: entities, changed: false };
+    // old Produit schemas are split into specific components whether or not the directories are there
+    var up = global.EntitiesLibrary ? global.EntitiesLibrary.upgradeProduct(schema, entities) : none;
+    if (up.changed) none = { schema: up.schema, entities: up.entities, changed: true };
     if (!dirsAvailable()) return none;
     try {
       var dirs = await loadDirs(t);
-      var next = schema;
+      var next = up.schema || schema;
+      entities = up.entities || entities;
       if (dirs.people.length) next = global.EntitiesLibrary.ensureBridge(next, { people: true });
       else next = global.EntitiesLibrary.ensureBridge(next, {});
       var res = sync(next, entities, dirs, 'pull');
-      var schemaChanged = !same(next, schema);
+      var schemaChanged = !same(next, schema) || up.changed;
       return { schema: next, entities: res.entities, changed: res.entitiesChanged || schemaChanged };
     } catch (err) {
       console.error('EntitiesDirectories.pull failed', err);

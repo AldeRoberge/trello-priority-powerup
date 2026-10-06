@@ -70,9 +70,129 @@
       fields: [
         { key: 'marque', label: 'Marque', kind: 'text' },
         { key: 'modele', label: 'Modèle', kind: 'text' },
-        { key: 'ingredients', label: 'Ingrédients', kind: 'refs', refTypes: ['substance'], rel: 'made-of' },
-        { key: 'peau', label: 'Type de peau', kind: 'multi', options: ['sèche', 'normale', 'mixte', 'grasse', 'sensible'] },
         { key: 'usage', label: 'Mode d’emploi', kind: 'longtext' },
+      ],
+    },
+    {
+      id: 'ingredients',
+      name: 'Ingrédients',
+      fields: [
+        { key: 'ingredients', label: 'Ingrédients', kind: 'refs', refTypes: ['substance'], rel: 'made-of' },
+        { key: 'allergenes', label: 'Allergènes', kind: 'multi', options: ['arachides', 'noix', 'lait', 'œufs', 'gluten', 'soya', 'poisson'] },
+      ],
+    },
+    {
+      id: 'soin_peau',
+      name: 'Soin de la peau',
+      fields: [
+        { key: 'peau', label: 'Type de peau', kind: 'multi', options: ['sèche', 'normale', 'mixte', 'grasse', 'sensible'] },
+        { key: 'zone', label: 'Zone', kind: 'multi', options: ['visage', 'mains', 'corps', 'pieds', 'lèvres', 'cheveux'] },
+      ],
+    },
+    {
+      id: 'nutrition',
+      name: 'Valeurs nutritives',
+      fields: [
+        { key: 'portion', label: 'Portion', kind: 'text' },
+        { key: 'calories', label: 'Calories par portion', kind: 'number', unit: 'kcal' },
+        { key: 'sucres', label: 'Sucres', kind: 'number', unit: 'g' },
+        { key: 'sodium', label: 'Sodium', kind: 'number', unit: 'mg' },
+      ],
+    },
+    {
+      id: 'conservation',
+      name: 'Conservation',
+      fields: [
+        { key: 'mode', label: 'Où le garder', kind: 'choice', options: ['température ambiante', 'au frais', 'au réfrigérateur', 'au congélateur', 'à l’abri de la lumière'] },
+        { key: 'apres_ouverture', label: 'Durée après ouverture (jours)', kind: 'number' },
+      ],
+    },
+    {
+      id: 'assemblage',
+      name: 'Assemblage',
+      fields: [
+        { key: 'parties', label: 'Parties', kind: 'refs', refTypes: ['objet'] },
+        { key: 'assemble_le', label: 'Assemblé le', kind: 'date' },
+        { key: 'complet', label: 'Complet', kind: 'bool' },
+      ],
+    },
+    {
+      id: 'partie',
+      name: 'Partie d’un tout',
+      fields: [
+        { key: 'tout', label: 'Fait partie de', kind: 'ref', refTypes: ['objet'], rel: 'part-of' },
+        { key: 'role', label: 'Rôle', kind: 'text' },
+        { key: 'quantite', label: 'Quantité', kind: 'number' },
+        { key: 'remplacable', label: 'Remplaçable', kind: 'bool' },
+      ],
+    },
+    {
+      id: 'electronique',
+      name: 'Électronique',
+      fields: [
+        { key: 'processeur', label: 'Processeur', kind: 'text' },
+        { key: 'memoire', label: 'Mémoire vive', kind: 'number', unit: 'Go' },
+        { key: 'stockage', label: 'Stockage', kind: 'number', unit: 'Go' },
+        { key: 'ecran', label: 'Écran', kind: 'text' },
+        { key: 'systeme', label: 'Système d’exploitation', kind: 'text' },
+        { key: 'connectique', label: 'Connectique', kind: 'multi', options: ['USB-C', 'Lightning', 'HDMI', 'Wi-Fi', 'Bluetooth', 'cellulaire'] },
+      ],
+    },
+    {
+      id: 'energie',
+      name: 'Énergie',
+      fields: [
+        { key: 'source', label: 'Alimentation', kind: 'choice', options: ['pile', 'batterie rechargeable', 'secteur', 'solaire', 'manuelle'] },
+        { key: 'tension', label: 'Tension', kind: 'number', unit: 'V' },
+        { key: 'puissance', label: 'Puissance', kind: 'number', unit: 'W' },
+        { key: 'autonomie', label: 'Autonomie', kind: 'number', unit: 'h' },
+      ],
+    },
+    {
+      id: 'garantie',
+      name: 'Garantie',
+      fields: [
+        { key: 'jusqu_au', label: 'Garantie jusqu’au', kind: 'date' },
+        { key: 'couverture', label: 'Couverture', kind: 'text' },
+      ],
+    },
+    {
+      id: 'commerce',
+      name: 'Vente',
+      fields: [
+        { key: 'sku', label: 'SKU', kind: 'text' },
+        { key: 'vendeur', label: 'Vendeur', kind: 'ref', refTypes: ['organisation'] },
+        { key: 'prix_vente', label: 'Prix de vente', kind: 'number', unit: '$' },
+        { key: 'etat_vente', label: 'État', kind: 'choice', options: ['neuf', 'usagé', 'remis à neuf'] },
+      ],
+    },
+    {
+      id: 'entretien',
+      name: 'Entretien',
+      fields: [
+        { key: 'frequence', label: 'Fréquence (jours)', kind: 'number' },
+        { key: 'dernier', label: 'Dernier entretien', kind: 'date' },
+        { key: 'consigne', label: 'Consigne', kind: 'longtext' },
+      ],
+    },
+    {
+      id: 'danger',
+      name: 'Sécurité',
+      fields: [
+        { key: 'risques', label: 'Risques', kind: 'multi', options: ['inflammable', 'toxique', 'corrosif', 'tranchant', 'choc électrique'] },
+        { key: 'precautions', label: 'Précautions', kind: 'longtext' },
+        { key: 'rappel', label: 'Sous rappel', kind: 'bool' },
+      ],
+    },
+    {
+      id: 'physique',
+      name: 'Mesures',
+      fields: [
+        { key: 'poids', label: 'Poids', kind: 'number', unit: 'g' },
+        { key: 'longueur', label: 'Longueur', kind: 'number', unit: 'mm' },
+        { key: 'largeur', label: 'Largeur', kind: 'number', unit: 'mm' },
+        { key: 'hauteur', label: 'Hauteur', kind: 'number', unit: 'mm' },
+        { key: 'couleur', label: 'Couleur', kind: 'text' },
       ],
     },
     {
@@ -239,7 +359,13 @@
 
   var TYPES = [
     { group: 'matter', id: 'objet', name: 'Objet', nature: 'matter', icon: 'box', aliases: ['object', 'chose', 'item', 'article'], components: ['matiere', 'provenance', 'propriete'], description: 'Une chose matérielle fabriquée ou trouvée.' },
-    { group: 'matter', id: 'produit', name: 'Produit', nature: 'matter', icon: 'bottle', parents: ['objet'], aliases: ['product', 'cosmétique', 'crème'], components: ['produit', 'consommable'], description: 'Un objet fait pour être utilisé ou consommé : crème pour les mains, savon, aliment.' },
+    { group: 'matter', id: 'produit', name: 'Produit', nature: 'matter', icon: 'bottle', parents: ['objet'], aliases: ['product', 'article de vente'], components: ['produit'], description: 'Un objet fabriqué sous une marque et un modèle. Le reste (ingrédients, péremption, pièces, batterie) vient des composants ajoutés.' },
+    { group: 'matter', id: 'cosmetique', name: 'Cosmétique', nature: 'matter', icon: 'bottle', parents: ['produit'], aliases: ['cosmetic', 'crème', 'creme', 'savon', 'soin', 'lotion'], components: ['ingredients', 'soin_peau', 'consommable', 'conservation'], description: 'Un produit de soin : crème pour les mains, savon, lotion.' },
+    { group: 'matter', id: 'aliment', name: 'Aliment', nature: 'matter', icon: 'apple', parents: ['produit'], aliases: ['food', 'nourriture', 'boisson', 'breuvage'], components: ['ingredients', 'nutrition', 'consommable', 'conservation'], description: 'Un produit qui se mange ou se boit.' },
+    { group: 'matter', id: 'appareil', name: 'Appareil électronique', nature: 'matter', icon: 'device-mobile', parents: ['produit'], aliases: ['device', 'gadget', 'téléphone', 'telephone', 'ordinateur', 'tablette', 'iphone'], components: ['electronique', 'energie', 'identification', 'garantie', 'physique'], description: 'Un produit qui fonctionne à l’électricité : il a des pièces, pas des ingrédients.' },
+    { group: 'matter', id: 'produit_assemble', name: 'Produit assemblé', nature: 'matter', icon: 'puzzle', parents: ['produit'], aliases: ['assembly', 'rig', 'kit', 'ensemble', 'montage', 'système'], components: ['assemblage'], description: 'Plusieurs produits ou pièces qui, ensemble, forment un seul produit : un iPhone, un rig, un kit.' },
+    { group: 'matter', id: 'piece_detachee', name: 'Pièce détachée', nature: 'matter', icon: 'settings', parents: ['objet'], aliases: ['part', 'composant', 'component', 'pièce'], components: ['partie', 'identification'], description: 'Une pièce qui fait partie d’un produit assemblé : écran, batterie, carte mère.' },
+    { group: 'matter', id: 'pile', name: 'Pile ou batterie', nature: 'matter', icon: 'battery', parents: ['piece_detachee', 'consommable'], aliases: ['battery', 'batterie', 'accumulateur'], components: ['energie'], description: 'Une pièce qui stocke de l’énergie et s’use.' },
     { group: 'matter', id: 'consommable', name: 'Consommable', nature: 'matter', icon: 'hourglass', aliases: ['consumable', 'périssable'], components: ['consommable'], description: 'Ce qui se consomme ou se périme : un aliment, une pile, une cartouche.' },
     { group: 'matter', id: 'contenant', name: 'Contenant', nature: 'matter', icon: 'package', parents: ['objet'], aliases: ['container', 'récipient'], components: ['contenant'], description: 'Un objet qui contient autre chose, avec une capacité et un niveau.' },
     { group: 'matter', id: 'bouteille', name: 'Bouteille', nature: 'matter', icon: 'bottle', parents: ['produit', 'consommable', 'contenant'], aliases: ['bottle', 'gourde', 'flacon'], components: [], description: 'Un produit, consommable et contenant à la fois : rien de plus qu’une composition de composants.' },
@@ -449,6 +575,72 @@
     return next;
   }
 
+  /**
+   * Old schemas gave every Produit ingredients, a skin type and an expiry date. Split them out: the fields move
+   * to their own components (Ingrédients, Soin de la peau), Produit stops carrying Consommable, and every
+   * entity that already holds such a value keeps it (data moved, component added to that entity only).
+   * Idempotent; schemas without the old shape come back as they are.
+   * @returns {{schema:object, entities:object[], changed:boolean}}
+   */
+  function upgradeProduct(schema, entities) {
+    var none = { schema: schema, entities: entities, changed: false };
+    var comp = EM().findById(schema.components, 'produit');
+    var type = EM().findById(schema.types, 'produit');
+    var moves = [
+      { key: 'ingredients', to: 'ingredients' },
+      { key: 'peau', to: 'soin_peau' },
+    ].filter(function (m) {
+      return comp && comp.fields.some(function (f) { return f.key === m.key; });
+    });
+    var dropConsommable = !!(type && type.components.indexOf('consommable') >= 0);
+    if (!moves.length && !dropConsommable) return none;
+    var next = schema;
+    moves.forEach(function (m) {
+      next = ensureComponent(next, m.to);
+    });
+    if (moves.length) {
+      next = EM().upsertComponent(next, Object.assign({}, comp, {
+        fields: comp.fields.filter(function (f) {
+          return !moves.some(function (m) { return m.key === f.key; });
+        }),
+      }));
+    }
+    if (dropConsommable) {
+      next = ensureComponent(next, 'consommable');
+      next = EM().upsertType(next, Object.assign({}, type, {
+        components: type.components.filter(function (c) { return c !== 'consommable'; }),
+      }));
+    }
+    function filled(v) {
+      return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && v !== '' && v !== false;
+    }
+    var out = entities.map(function (e) {
+      var data = e.data || {};
+      var extra = [];
+      var nd = Object.assign({}, data);
+      moves.forEach(function (m) {
+        var old = data.produit;
+        if (!old || !Object.prototype.hasOwnProperty.call(old, m.key)) return;
+        var rest = Object.assign({}, nd.produit);
+        var val = rest[m.key];
+        delete rest[m.key];
+        nd.produit = rest;
+        if (filled(val)) {
+          nd[m.to] = Object.assign({}, nd[m.to], (function (o) { o[m.key] = val; return o; })({}));
+          extra.push(m.to);
+        }
+      });
+      if (dropConsommable && data.consommable && Object.keys(data.consommable).some(function (k) { return filled(data.consommable[k]); })) {
+        extra.push('consommable');
+      }
+      if (!extra.length && nd.produit === data.produit) return e;
+      var comps = (e.components || []).slice();
+      extra.forEach(function (c) { if (comps.indexOf(c) < 0) comps.push(c); });
+      return Object.assign({}, e, { data: nd, components: comps });
+    });
+    return { schema: next, entities: out, changed: true };
+  }
+
   // ---------------------------------------------------------------- 5 export
   global.EntitiesLibrary = {
     COMPONENTS: COMPONENTS,
@@ -463,5 +655,6 @@
     ensureComponent: ensureComponent,
     ensureField: ensureField,
     ensureBridge: ensureBridge,
+    upgradeProduct: upgradeProduct,
   };
 })(typeof window !== 'undefined' ? window : this);
