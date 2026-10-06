@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard visual harness (mock Trello)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="/components/shared/effects.css" />
+  <link rel="stylesheet" href="/components/priority/priority-ui.css" />
+  <link rel="stylesheet" href="/components/shared/markdown-dom.css" />
+  <link rel="stylesheet" href="/components/agent/agent-ui.css" />
+  <link rel="stylesheet" href="/components/agent/agent-blocks.css" />
+  <link rel="stylesheet" href="/components/agent/memory-ui.css" />
+  <link rel="stylesheet" href="/components/agent/agent-stats.css" />
+  <link rel="stylesheet" href="/components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="/components/shared/card-fields.css" />
+  <link rel="stylesheet" href="/components/dashboard/dashboard-ui.css" />
+  <link rel="stylesheet" href="/components/shared/context-menu.css" />
+</head>
+<body class="tp-page tp-page--dashboard">
+  <div id="viewTabs"></div>
+  <div id="dashboardMount"></div>
+  <script src="/components/shared/brand.js"></script>
+  <script src="/components/shared/rest-config.js"></script>
+  <script src="/components/shared/debug-log.js"></script>
+  <script src="/components/shared/effects.js"></script>
+  <script src="/components/shared/desc-meta.js"></script>
+  <script src="/components/priority/priority-matrix.js"></script>
+  <script src="/components/priority/priority-ui.js"></script>
+  <script src="/components/priority/priority-trello.js"></script>
+  <script src="/components/statut/statut-match.js"></script>
+  <script src="/components/statut/statut-trello.js"></script>
+  <script src="/components/completion/completion-trello.js"></script>
+  <script src="/components/completion/completion-ui.js"></script>
+  <script src="/components/gantt/gantt-model.js"></script>
+  <script src="/components/gantt/gantt-trello.js"></script>
+  <script src="/components/table/table-model.js"></script>
+  <script src="/components/sheets/sheets-trello.js"></script>
+  <script src="/components/table/table-trello.js"></script>
+  <script src="/components/table/table-menu.js"></script>
+  <script src="/components/shared/tab-autocomplete.js"></script>
+  <script src="/components/agent/agent.js"></script>
+  <script src="/components/shared/markdown-dom.js"></script>
+  <script src="/components/agent/agent-blocks.js"></script>
+  <script src="/components/agent/agent-memory.js"></script>
+  <script src="/components/profile/user-profile.js"></script>
+  <script src="/components/people/people.js"></script>
+  <script src="/components/places/places.js"></script>
+  <script src="/components/agent/memory-ui.js"></script>
+  <script src="/components/agent/agent-stats.js"></script>
+  <script src="/components/agent/agent-ui.js"></script>
+  <script src="/components/agent/assistant-mount.js"></script>
+  <script src="/components/shared/view-tabs.js"></script>
+  <script src="/components/shared/card-fields.js"></script>
+  <script src="/components/table/table-menu.js"></script>
+  <script src="/components/dashboard/dashboard-model.js"></script>
+  <script src="/components/dashboard/dashboard-trello.js"></script>
+  <script src="/components/dashboard/dashboard-ui.js"></script>
+  <script src="/components/shared/context-menu.js"></script>
+  <script>
+    // ---- mock Trello data (no network): DashboardTrello is replaced by an in-memory board ----
+    var T = '2026-10-06';
+    function day(n) { return DashboardModel.addDays(T, n); }
+    var lists = [
+      { id: 'l0', name: 'Inbox', category: 'triage', color: '#5e6ad2', icon: 'circle-arrow-down' },
+      { id: 'lb', name: 'Backlog', category: 'backlog', color: '#8270db', icon: 'circle-dashed' },
+      { id: 'l1', name: 'À faire', category: 'unstarted', color: '#626f86', icon: 'circle' },
+      { id: 'l2', name: 'En cours', category: 'started', color: '#1d7afc', icon: 'circle-half-2' },
+      { id: 'l3', name: 'Terminé', category: 'completed', color: '#22a06b', icon: 'circle-check' },
+      { id: 'l4', name: 'Annulé', category: 'canceled', color: '#8590a2', icon: 'circle-x' }
+    ];
+    var seq = 10;
+    function mk(id, name, listId, o) {
+      var l = lists.filter(function (x) { return x.id === listId; })[0];
+      return Object.assign({ id: id, name: name, listId: listId, statut: l.name, statutKey: l.category, statutColor: l.color, pos: seq++, priority: 5, tier: 'Moyenne', tierI: 2, impact: 5, urgency: '', estimate: 0, due: '', start: '', dueDone: false, link: '' }, o || {});
+    }
+    var rows = [
+      mk('t1', 'Appeler le comptable', 'l0'),
+      mk('t2', 'Idée : refonte de la page d’accueil', 'l0', { impact: 8 }),
+      mk('t3', 'Renouveler le passeport', 'l0'),
+      mk('c1', 'Préparer la réunion de lancement', 'l1', { priority: 7.4, tierI: 1, tier: 'Haute', estimate: 90 }),
+      mk('c2', 'Refonte du tableau de bord', 'l2', { priority: 5.1, estimate: 240, due: day(0), start: day(0) }),
+      mk('c3', 'Publier la version 2', 'l2', { priority: 9.2, tierI: 0, tier: 'Critique', estimate: 120, due: day(-1), start: day(-1) }),
+      mk('c4', 'Archiver les anciennes cartes', 'l1', { priority: 2, tierI: 3, tier: 'Basse', estimate: 30 }),
+      mk('c5', 'Écrire le rapport mensuel', 'lb', { priority: 6.3, estimate: 180 }),
+      mk('c6', 'Réserver la salle', 'l1', { priority: 4, due: day(2), start: day(2), estimate: 15 })
+    ];
+    var log = (window.__log = []);
+    function find(id) { return rows.filter(function (r) { return r.id === id; })[0]; }
+    DashboardTrello.load = function () {
+      return Promise.resolve({ lists: lists, rows: rows.map(function (r) { return Object.assign({}, r); }) });
+    };
+    DashboardTrello.ingest = function (t, names) {
+      names.forEach(function (n) { rows.push(mk('n' + seq, n, 'l0')); });
+      log.push(['ingest', names]);
+      return Promise.resolve({ list: lists[0], created: names });
+    };
+    DashboardTrello.moveToCategory = function (t, row, ls, cats) {
+      var l = DashboardTrello.listFor(lists, cats), r = find(row.id);
+      if (l && r) { r.listId = l.id; r.statut = l.name; r.statutKey = l.category; }
+      log.push(['move', row.id, cats[0]]);
+      return Promise.resolve(l);
+    };
+    DashboardTrello.savePriority = function (t, id, p) { log.push(['prio', id, p]); return Promise.resolve(); };
+    DashboardTrello.saveEstimate = function (t, id, m) { var r = find(id); if (r) r.estimate = m; log.push(['est', id, m]); return Promise.resolve(); };
+    DashboardTrello.planDay = function (t, id, iso) { var r = find(id); if (r) { r.start = iso; r.due = iso; } log.push(['plan', id, iso]); return Promise.resolve(); };
+    DashboardTrello.complete = function (t, row) { var r = find(row.id); if (r) { r.dueDone = true; r.statutKey = 'completed'; } log.push(['done', row.id]); return Promise.resolve(); };
+    DashboardTrello.cancel = function (t, row) { rows = rows.filter(function (r) { return r.id !== row.id; }); log.push(['cancel', row.id]); return Promise.resolve(); };
+    TableTrello.saveName = function (t, id, n) { var r = find(id); if (r) r.name = n; log.push(['name', id, n]); return Promise.resolve(); };
+    var t = { get: function () { return Promise.resolve(null); }, set: function () { return Promise.resolve(); }, board: function () { return Promise.resolve({ id: 'b1' }); }, showCard: function () { return Promise.resolve(); } };
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'dashboard' });
+    DashboardUI.mount(document.getElementById('dashboardMount'), t);
+  </script>
+</body>
+</html>

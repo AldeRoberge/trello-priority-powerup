@@ -76,6 +76,7 @@ const UNIT_FILES = [
   'entities-archetype.test.js',
   'entities-ontology.test.js',
   'agent-entities.test.js',
+  'dashboard-model.test.js',
 ];
 
 function listTests() {

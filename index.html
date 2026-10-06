@@ -368,7 +368,7 @@
     // Full-screen views live in a Trello modal, so a refresh drops them. Remember the open view
     // for this browser tab (sessionStorage survives a refresh) and reopen it when the board reloads.
     var VIEW_KEY = 'tp-open-view';
-    var VIEWS = { gantt: 'Gantt', table: 'Table', kanban: 'Kanban', docs: 'Documents' };
+    var VIEWS = { gantt: 'Gantt', table: 'Table', kanban: 'Kanban', dashboard: 'Dashboard', docs: 'Documents' };
     function rememberView(view, boardId) {
       try {
         if (view) sessionStorage.setItem(VIEW_KEY, JSON.stringify({ view: view, board: boardId }));
@@ -591,6 +591,13 @@
             text: 'Kanban',
             callback: function(t) {
               return openView(t, 'kanban', 'Kanban');
+            },
+          },
+          {
+            icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/layout-dashboard.svg',
+            text: 'Dashboard',
+            callback: function(t) {
+              return openView(t, 'dashboard', 'Dashboard');
             },
           },
           {
