@@ -459,6 +459,19 @@
     return hasAny ? sum : null;
   }
 
+  /** Gantt schedule of a subtask: ISO dates (YYYY-MM-DD) and optional HH:MM times, kept only when valid. */
+  function copyScheduleFields(from, to) {
+    if (!from || !to) return to;
+    ['startDate', 'dueDate'].forEach(function (k) {
+      if (typeof from[k] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(from[k])) to[k] = from[k];
+    });
+    if (!to.startDate && !to.dueDate) return to;
+    ['startTime', 'dueTime'].forEach(function (k) {
+      if (typeof from[k] === 'string' && /^\d{2}:\d{2}$/.test(from[k])) to[k] = from[k];
+    });
+    return to;
+  }
+
   function copyEstimateFields(from, to) {
     if (!from || !to) return to;
     var mins = clampEstimatedMinutes(from.estimatedMinutes);
@@ -1085,6 +1098,7 @@
       progress: progress,
     });
     copyEstimateFields(raw, out);
+    copyScheduleFields(raw, out);
     return out;
   }
 
@@ -1147,6 +1161,7 @@
     });
     if (linkedCardId) out.linkedCardId = linkedCardId;
     copyEstimateFields(raw, out);
+    if (!linkedCardId) copyScheduleFields(raw, out);
 
     // Local checklist only (never on linked items; no further nesting).
     if (!linkedCardId) {
@@ -1925,6 +1940,47 @@
   /**
    * Rename a top-level completion item (local or linked label).
    */
+  /**
+   * Set (or clear, with empty dates) the Gantt schedule of a local item, or of a checklist item
+   * when nestedId is given. parts: { startDate, dueDate, startTime, dueTime }.
+   */
+  function applyItemDates(data, itemId, nestedId, parts) {
+    var id = typeof itemId === 'string' ? itemId : '';
+    var nid = typeof nestedId === 'string' ? nestedId : '';
+    var normalized = normalizeCompletionData(data);
+    if (!id) return normalized;
+    var p = parts || {};
+    function patch(target) {
+      var next = Object.assign({}, target);
+      ['startDate', 'dueDate', 'startTime', 'dueTime'].forEach(function (k) {
+        delete next[k];
+        if (typeof p[k] === 'string' && p[k]) next[k] = p[k];
+      });
+      return next;
+    }
+    var idx = findItemIndex(normalized.items, id);
+    if (idx < 0) return normalized;
+    var item = normalized.items[idx];
+    var replacement;
+    if (nid) {
+      if (isLinkedItem(item) || !itemHasChecklist(item)) return normalized;
+      var found = false;
+      var nested = item.items.map(function (n) {
+        if (n.id !== nid) return n;
+        found = true;
+        return patch(n);
+      });
+      if (!found) return normalized;
+      replacement = Object.assign({}, item, { items: nested });
+    } else {
+      if (isLinkedItem(item)) return normalized;
+      replacement = patch(item);
+    }
+    normalized.items = normalized.items.slice();
+    normalized.items[idx] = replacement;
+    return normalizeCompletionData(normalized);
+  }
+
   function applyItemText(data, itemId, text) {
     var id = typeof itemId === 'string' ? itemId : '';
     var normalized = normalizeCompletionData(data);
@@ -3079,6 +3135,7 @@
     applyChecklistItemEstimate: applyChecklistItemEstimate,
     applyChecklistItemText: applyChecklistItemText,
     applyItemText: applyItemText,
+    applyItemDates: applyItemDates,
     addChecklistItem: addChecklistItem,
     addLocalItem: addLocalItem,
     removeChecklistItem: removeChecklistItem,

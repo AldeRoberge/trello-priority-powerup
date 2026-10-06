@@ -3439,30 +3439,32 @@
       }
     }
 
+    /** Rows whose bar can be scheduled: board cards, and local / checklist subtasks (dates stored on the item). */
+    function isDatable(row) {
+      if (!row) return false;
+      if (row.kind === 'card') return !!row.cardId;
+      return (row.kind === 'local' || row.kind === 'checklist') && !!row.parentCardId && !!row.itemId;
+    }
+
     function persistRow(row) {
-      if (!row || row.kind !== 'card' || !row.cardId) return Promise.resolve();
+      if (!isDatable(row)) return Promise.resolve();
+      var isCard = row.kind === 'card';
+      var key = isCard ? row.cardId : row.id;
       state.saving = true;
       var clearing = !row.startDate && !row.dueDate;
       setStatus(clearing ? 'Effacement des dates\u2026' : 'Enregistrement\u2026');
+      var cached = (isCard && state.cardsById[row.cardId]) || null;
       var parts = {
         startDate: row.startDate || '',
         dueDate: row.dueDate || '',
-        startTime: clearing
-          ? ''
-          : row.startTime ||
-            (state.cardsById[row.cardId] &&
-              state.cardsById[row.cardId].startTime) ||
-            '',
-        dueTime: clearing
-          ? ''
-          : row.dueTime ||
-            (state.cardsById[row.cardId] &&
-              state.cardsById[row.cardId].dueTime) ||
-            '',
+        startTime: clearing ? '' : row.startTime || (cached && cached.startTime) || '',
+        dueTime: clearing ? '' : row.dueTime || (cached && cached.dueTime) || '',
       };
-      var prevDates = baseDates[row.cardId];
-      return ganttTrello
-        .saveCardDates(t, row.cardId, parts)
+      var prevDates = baseDates[key];
+      var saving = isCard
+        ? ganttTrello.saveCardDates(t, row.cardId, parts)
+        : ganttTrello.saveSubtaskDates(t, subtaskMeta(row), parts);
+      return saving
         .then(function (res) {
           state.saving = false;
           if (!res || !res.ok) {
@@ -3473,101 +3475,10 @@
               setStatus(state.authHint, true);
             } else {
               setStatus('\u00c9chec enregistrement (' + reason + ')', true);
-    /** Rows that can receive a new subtask: board cards, and local items (as a checklist item). */
-    function canAddSubtask(row) {
-      if (!row) return false;
-      if (row.kind === 'card' && row.cardId) return true;
-      return row.kind === 'local' && !!row.parentCardId && !!row.itemId;
-    }
-
-    function commitAddSubtask(row, text) {
-      var trimmed = typeof text === 'string' ? text.trim() : '';
-      if (!trimmed) {
-        renderChart();
-        return;
-      }
-      if (state.saving || !canAddSubtask(row)) return;
-      state.saving = true;
-      setStatus('Ajout…');
-      ganttTrello
-        .addSubtask(t, subtaskMeta(row), trimmed)
-        .then(function (res) {
-          state.saving = false;
-          if (!res || !res.ok) {
-            setStatus(
-              'Échec ajout' + (res && res.reason ? ' (' + res.reason + ')' : ''),
-              true
-            );
-            return reload();
-          }
-          state.expanded[row.id] = true;
-          record({
-            type: 'add',
-            targetId: res.itemId || '',
-            title: res.name || trimmed,
-            label: 'sous-tâche ajoutée',
-          });
-          setStatus('Sous-tâche ajoutée');
-          return reload();
-        })
-        .catch(function (err) {
-          state.saving = false;
-          setStatus('Erreur : ' + (err && err.message ? err.message : String(err)), true);
-          return reload();
-        });
-    }
-
-    /** Swaps the row title for an input; Enter adds the subtask, Escape cancels. */
-    function startAddSubtask(row, actionsEl) {
-      var labelCell = actionsEl && actionsEl.closest ? actionsEl.closest('.gantt-label-cell, .gantt-row') : null;
-      var nameEl = labelCell && labelCell.querySelector('.gantt-task-name');
-      if (state.saving || !canAddSubtask(row) || !nameEl || !nameEl.parentNode) return;
-      var input = el('input', 'gantt-rename-input', { type: 'text', maxlength: '500' });
-      input.placeholder = 'Nouvelle sous-tâche…';
-      input.setAttribute('aria-label', 'Nouvelle sous-tâche');
-      var finished = false;
-      function finish(save) {
-        if (finished) return;
-        finished = true;
-        if (save) commitAddSubtask(row, input.value);
-        else renderChart();
-      }
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          finish(true);
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          finish(false);
-        }
-      });
-      input.addEventListener('blur', function () {
-        finish(true);
-      });
-      nameEl.parentNode.replaceChild(input, nameEl);
-      input.focus();
-    }
-
             }
             return reload();
           }
-          if (prevDates && JSON.stringify(prevDates) !== JSON.stringify(parts)) {
-      var addBtn = el('button', 'gantt-action-btn gantt-action-btn--add', {
-        type: 'button',
-        title: 'Ajouter une sous-tâche',
-      });
-      addBtn.innerHTML = '<i class="ti ti-list-check" aria-hidden="true"></i>';
-      if (!canAddSubtask(row)) {
-        addBtn.disabled = true;
-        addBtn.classList.add('is-disabled');
-      } else {
-        addBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          startAddSubtask(row, actions);
-        });
-      }
-      actions.appendChild(addBtn);
-
+          if (isCard && prevDates && JSON.stringify(prevDates) !== JSON.stringify(parts)) {
             record({
               type: 'dates',
               targetId: row.cardId,
@@ -3578,10 +3489,11 @@
               afterVal: parts,
             });
           }
-          baseDates[row.cardId] = parts;
+          baseDates[key] = parts;
           setStatus(clearing ? 'Dates effac\u00e9es' : 'Dates enregistr\u00e9es');
           var outlookSync = OS();
           if (
+            isCard &&
             state.outlookConnected &&
             outlookSync &&
             typeof outlookSync.scheduleSyncCard === 'function'
@@ -3608,7 +3520,7 @@
     }
 
     function clearRowDates(row) {
-      if (state.saving || !row || row.kind !== 'card' || !row.cardId) return;
+      if (state.saving || !isDatable(row)) return;
       row.startDate = '';
       row.dueDate = '';
       row.startTime = '';
@@ -3627,7 +3539,7 @@
      * Works in every view (unlike dragging, which only sets times in Jour/Semaine).
      */
     function openScheduleEditor(row, anchor) {
-      if (!row || row.kind !== 'card' || !row.cardId || !anchor) return;
+      if (!isDatable(row) || !anchor) return;
       var iv = model.resolveBarInterval(row, intervalOptions());
       var today = model.toIsoDate(new Date());
       var startD = row.startDate || (iv ? model.toIsoDate(iv.start) : '') || today;
@@ -3737,7 +3649,7 @@
             row.dueDate = ed;
             row.startTime = st;
             row.dueTime = et;
-            var card = state.cardsById[row.cardId];
+            var card = row.cardId ? state.cardsById[row.cardId] : null;
             if (card) {
               card.startDate = sd;
               card.dueDate = ed;
@@ -3798,7 +3710,7 @@
     }
 
     function bindTimelinePaint(timeRow, row) {
-      if (row.kind !== 'card' || !row.cardId) return;
+      if (!isDatable(row)) return;
       timeRow.classList.add('is-paintable');
       timeRow.title =
         'Cliquer pour planifier (date et heure) \u00b7 glisser pour d\u00e9finir une dur\u00e9e';
@@ -3904,7 +3816,7 @@
     }
 
     function bindBarDrag(barEl, row, interval) {
-      if (row.kind !== 'card' || !row.cardId) return;
+      if (!isDatable(row)) return;
 
       function onPointerDown(ev) {
         if (ev.button != null && ev.button !== 0) return;
@@ -4525,7 +4437,6 @@
                 })
                 .map(function (r) {
                   return r.cardId;
-        if (row.kind === 'card' && row.cardId) labelRow.setAttribute('data-card-id', row.cardId);
                 });
               return ContextMenu.buildGanttSectionItems({
                 sectionKey: row.sectionKey || 'pending',
@@ -4614,6 +4525,7 @@
             (state.selected[row.id] ? ' is-selected' : '')
         );
         labelRow.style.height = ROW_H + 'px';
+        if (row.kind === 'card' && row.cardId) labelRow.setAttribute('data-card-id', row.cardId);
         var labelCell = el('div', 'gantt-label-cell');
         labelCell.style.setProperty('--gantt-depth', String(row.depth || 0));
 
@@ -4803,7 +4715,7 @@
           if (geo && geo.visible) {
             hasVisibleBar = true;
             var bar = el('div', 'gantt-bar');
-            if (row.kind === 'card') bar.classList.add('is-editable');
+            if (isDatable(row)) bar.classList.add('is-editable');
             bar.style.left = geo.left + 'px';
             bar.style.width = geo.width + 'px';
             bar.style.backgroundColor = row.color || 'var(--tp-primary, #0c66e4)';
@@ -4814,7 +4726,7 @@
               (row.name || '') +
               ' \u00b7 ' +
               formatIntervalTitle(interval) +
-              (row.kind === 'card'
+              (isDatable(row)
                 ? '\nCliquer pour modifier \u00b7 glisser pour d\u00e9placer'
                 : '');
 
@@ -4823,7 +4735,7 @@
             });
             bar.appendChild(label);
 
-            if (row.kind === 'card') {
+            if (isDatable(row)) {
               bar.appendChild(makeBarEdge('start', interval));
               bar.appendChild(makeBarEdge('end', interval));
               var clearBtn = el('button', 'gantt-bar-clear', {
@@ -4865,7 +4777,7 @@
             }
 
             timeRow.appendChild(bar);
-            if (state.editAfterRender === row.id && row.kind === 'card') {
+            if (state.editAfterRender === row.id && isDatable(row)) {
               state.editAfterRender = null;
               setTimeout(function () {
                 openScheduleEditor(row, bar);
@@ -4874,7 +4786,7 @@
           }
         }
 
-        if (row.kind === 'card' && row.cardId && !hasVisibleBar) {
+        if (isDatable(row) && !hasVisibleBar) {
           bindTimelinePaint(timeRow, row);
         }
 

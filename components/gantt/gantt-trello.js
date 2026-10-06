@@ -946,6 +946,30 @@
   }
 
   /**
+   * Schedule a local / checklist subtask on the Gantt (dates stored on the item, not on a card).
+   * parts: { startDate, dueDate, startTime, dueTime }; empty dates clear the schedule.
+   */
+  async function saveSubtaskDates(t, rowMeta, parts) {
+    var ct = CT();
+    if (!ct || typeof ct.applyItemDates !== 'function') return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+    var pCard = rowMeta.parentCardId;
+    var itemId = rowMeta.itemId;
+    if (!pCard || !itemId) return { ok: false, reason: 'missing-ids' };
+    var data = await ct.getCardCompletionById(t, pCard);
+    var next;
+    if (rowMeta.kind === 'local') {
+      next = ct.applyItemDates(data, itemId, null, parts);
+    } else if (rowMeta.kind === 'checklist' && rowMeta.parentItemId) {
+      next = ct.applyItemDates(data, rowMeta.parentItemId, itemId, parts);
+    } else {
+      return { ok: false, reason: 'unsupported-kind' };
+    }
+    await ct.saveCardCompletionById(t, pCard, next);
+    return { ok: true, parentCardId: pCard, data: next };
+  }
+
+  /**
    * Rename a local / checklist / linked subtask and persist.
    */
   async function renameSubtask(t, rowMeta, text) {
@@ -1006,41 +1030,6 @@
       var pt = PT();
       var nameOk = false;
       if (pt && typeof pt.restPutCard === 'function') {
-  /**
-   * Add a subtask under a row: a local item on a board card, or a checklist
-   * item under a local item. rowMeta is the parent row's meta.
-   */
-  async function addSubtask(t, rowMeta, text) {
-    var ct = CT();
-    if (!ct) return { ok: false, reason: 'no-completion' };
-    rowMeta = rowMeta || {};
-    var nextText = typeof text === 'string' ? text.trim() : '';
-    var max =
-      ct.ITEM_TEXT_MAX != null && isFinite(ct.ITEM_TEXT_MAX) ? ct.ITEM_TEXT_MAX : 500;
-    if (nextText.length > max) nextText = nextText.slice(0, max);
-    if (!nextText) return { ok: false, reason: 'empty' };
-
-    if (rowMeta.kind === 'card' && rowMeta.cardId) {
-      var cardId = String(rowMeta.cardId);
-      var data = await ct.getCardCompletionById(t, cardId);
-      var added = ct.addLocalItem(data, nextText);
-      if (!added.item) return { ok: false, reason: 'add-failed' };
-      await ct.saveCardCompletionById(t, cardId, added.data);
-      return { ok: true, parentCardId: cardId, itemId: added.item.id, name: nextText };
-    }
-
-    if (rowMeta.kind === 'local' && rowMeta.parentCardId && rowMeta.itemId) {
-      var pCard = String(rowMeta.parentCardId);
-      var cData = await ct.getCardCompletionById(t, pCard);
-      var res = ct.addChecklistItem(cData, rowMeta.itemId, nextText);
-      if (!res.item) return { ok: false, reason: 'add-failed' };
-      await ct.saveCardCompletionById(t, pCard, res.data);
-      return { ok: true, parentCardId: pCard, itemId: res.item.id, name: nextText };
-    }
-
-    return { ok: false, reason: 'unsupported-kind' };
-  }
-
         var auth = await ensureRestAuthorized(t);
         if (auth.ok) {
           try {
@@ -1307,6 +1296,7 @@
     deleteSubtask: deleteSubtask,
     addSubtask: addSubtask,
     renameSubtask: renameSubtask,
+    saveSubtaskDates: saveSubtaskDates,
     removeTopLevelItem: removeTopLevelItem,
   };
 })(typeof window !== 'undefined' ? window : this);
