@@ -109,14 +109,14 @@
   }
 
   /**
-   * Capture Markdown → tasks [{ title, desc, urls, aids }].
+   * Capture Markdown → tasks [{ title, desc, urls, aids, due }].
    *  - first line = title (plain text), following lines = description (Markdown)
    *  - a first line with formatting / links / a cut title keeps its full Markdown in the description
    *  - every link also lands in `urls` (added as a Trello link attachment)
    *  - ⟦id⟧ tokens (attachment chips) are removed from the text and listed in `aids`
    *  - a block with only attachments becomes a task named after its first file (names = { aid: fileName })
    */
-  function parseCapture(md, names) {
+  function parseCapture(md, names, now) {
     names = names || {};
     var tasks = [];
     captureBlocks(md).forEach(function (lines) {
@@ -151,7 +151,14 @@
       if (!clean.length) desc = '';
       else if (cut.cut || firstMd.replace(/\\(.)/g, '$1') !== title) desc = [firstMd].concat(rest).join('\n\n');
       else if (rest.length) desc = rest.join('\n\n');
-      tasks.push({ title: cut.text, desc: desc, urls: urls, aids: aids });
+      // "… demain" / "… vendredi": the date leaves the title and becomes the due date (QuickParse, when loaded).
+      var due = '';
+      var QP = global.QuickParse;
+      if (QP && !cut.cut && !/^https?:\/\//.test(cut.text)) {
+        var q = QP.parse(cut.text, now);
+        if (q.dueDate) { cut = { text: q.name, cut: false }; due = q.dueDate; }
+      }
+      tasks.push({ title: cut.text, desc: desc, urls: urls, aids: aids, due: due });
     });
     return tasks;
   }

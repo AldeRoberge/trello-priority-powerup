@@ -386,8 +386,10 @@
         var empty = !ed.textContent.trim() && !ed.querySelector('.db-att, img');
         ed.classList.toggle('is-empty', empty);
         state.draftHtml = empty ? '' : ed.innerHTML;
-        var n = empty ? 0 : captureTasks(ed).length;
-        count.textContent = n ? n + (n > 1 ? ' tâches' : ' tâche') : '';
+        var found = empty ? [] : captureTasks(ed);
+        var n = found.length;
+        var dated = found.filter(function (x) { return x.due; }).length;
+        count.textContent = n ? n + (n > 1 ? ' tâches' : ' tâche') + (dated ? ' · ' + dated + ' avec échéance' : '') : '';
       }
       function insertHtml(html) {
         ed.focus();

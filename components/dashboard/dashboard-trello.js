@@ -100,6 +100,13 @@
           failed.push('description de « ' + task.title + ' »');
         }
       }
+      if (task.due) {
+        try {
+          await planDay(t, id, task.due);
+        } catch (e) {
+          failed.push('échéance de « ' + task.title + ' »');
+        }
+      }
       var urls = task.urls || [];
       for (var u = 0; u < urls.length; u++) {
         try {

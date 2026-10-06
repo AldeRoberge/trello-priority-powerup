@@ -163,6 +163,18 @@ describe('DashboardModel', () => {
     assert.deepEqual(DM.todayList(rows, '2026-10-06').map((r) => r.id), ['l', 't']);
   });
 
+  it('parseCapture lifts a trailing date into due (QuickParse), never from a link or a cut title', () => {
+    loadComponent('shared/quick-parse.js');
+    const now = new Date(2026, 9, 7);
+    const out = DM.parseCapture('Appeler le plombier demain\n\nRapport vendredi\n\nhttps://exemple.com/demain\n\ndemain', {}, now);
+    assert.deepEqual(out.map((t) => [t.title, t.due]), [
+      ['Appeler le plombier', '2026-10-08'],
+      ['Rapport', '2026-10-09'],
+      ['exemple.com/demain', ''],
+      ['demain', ''],
+    ]);
+  });
+
   it('nextAction prefers today\'s list (late first), else the best unplanned task', () => {
     const rows = [row('t', { due: '2026-10-06', priority: 9 }), row('l', { due: '2026-10-05', priority: 1 }), row('u', { priority: 8 })];
     assert.deepEqual(DM.nextAction(rows, '2026-10-06'), { row: rows[1], from: 'today' });
