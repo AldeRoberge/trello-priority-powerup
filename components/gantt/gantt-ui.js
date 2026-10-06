@@ -5090,6 +5090,10 @@
       reload({ syncOutlook: true });
     });
 
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({ t: t, after: mount, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return state.miniPopover || !!document.querySelector('.gantt-card-overlay'); } });
+    }
+
     return {
       destroy: function () {
         if (measureRaf) {

@@ -788,6 +788,9 @@
     });
     renderBar();
     els.board.innerHTML = skeletonCols();
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({ t: t, after: root, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return global.CardFields && global.CardFields.isOpen(); } });
+    }
     return reload({ quiet: true });
   }
 

@@ -1,0 +1,176 @@
+/* Assistant dock shared by Table, Gantt, Kanban and Mindmap (components/shared/assistant-dock.js). Colors from trello-theme.css (--tp-*). */
+/* ── Assistant dock ─────────────────────────────────────────────────── */
+.ad-dock {
+  flex: none;
+  position: relative;
+  border-top: 1px solid var(--tp-border-strong, var(--tp-border));
+  background: var(--tp-surface);
+}
+.ad-dock-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -3px;
+  height: 6px;
+  z-index: 8;
+  cursor: default;
+}
+.ad-dock.is-open .ad-dock-grip {
+  cursor: ns-resize;
+}
+.ad-dock.is-open .ad-dock-grip:hover {
+  background: var(--tp-primary);
+  opacity: 0.5;
+}
+.ad-dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--tp-text-subtle);
+}
+.ad-dock-bar:hover {
+  background: var(--tp-surface-hover);
+}
+.ad-dock-bar strong {
+  color: var(--tp-text);
+  font-weight: 600;
+}
+.ad-dock-hint {
+  color: var(--tp-text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ad-dock.is-open .ad-dock-hint {
+  display: none;
+}
+.ad-dock-body {
+  overflow: hidden;
+  border-top: 1px solid var(--tp-border);
+}
+.ad-dock-body #assistantMount {
+  height: 100%;
+}
+
+/* ── Assistant dock: compact chat (transcript scrolls, composer pinned at the bottom) ── */
+.ad-dock .ad-dock-body .variant-chat-section--standalone .field--chat {
+  max-width: none;
+  padding: 6px 12px 8px;
+  gap: 4px;
+}
+.ad-dock .ad-dock-body .agent-standalone-head {
+  min-height: 0;
+}
+.ad-dock .ad-dock-body .agent-standalone-heading {
+  padding: 0;
+  font-size: 12px;
+}
+/* Order: transcript · quick replies · composer — nothing else competes for the height. */
+.ad-dock .ad-dock-body .agent-chat-panel {
+  gap: 6px;
+}
+.ad-dock .ad-dock-body .agent-messages {
+  order: 1;
+  padding: 4px 4px 4px 6px;
+}
+.ad-dock .ad-dock-body .agent-empty,
+.ad-dock .ad-dock-body .agent-followups,
+.ad-dock .ad-dock-body .agent-prompts,
+.ad-dock .ad-dock-body .agent-apply-suggestions,
+.ad-dock .ad-dock-body .agent-error {
+  order: 2;
+  flex-shrink: 0;
+}
+.ad-dock .ad-dock-body .agent-suggestions {
+  order: 90;
+}
+.ad-dock .ad-dock-body .agent-composer {
+  order: 91;
+}
+.ad-dock .ad-dock-body .agent-interview-bar {
+  order: 92;
+}
+/* Hidden to save space: power picker (still in the composer's right-click menu), stats, debug. */
+.ad-dock .ad-dock-body .agent-composer-foot,
+.ad-dock .ad-dock-body .agent-chat-info,
+.ad-dock .ad-dock-body .agent-debug-panel {
+  display: none !important;
+}
+/* Quick suggestions: one slim scrollable row of small pills */
+.ad-dock .ad-dock-body .agent-suggestions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0;
+  padding: 0 0 2px;
+  gap: 6px;
+  scrollbar-width: thin;
+}
+.ad-dock .ad-dock-body .agent-suggestion-chip {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 3px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+.ad-dock .ad-dock-body .agent-suggestion-chip::before,
+.ad-dock .ad-dock-body .agent-suggestion-chip::after,
+.ad-dock .ad-dock-body .agent-suggestion-num {
+  display: none;
+}
+/* Composer: one compact row, icon-only send */
+.ad-dock .ad-dock-body .agent-composer {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 6px;
+}
+.ad-dock .ad-dock-body .agent-composer .tp-tab-complete-wrap,
+.ad-dock .ad-dock-body .agent-composer > .agent-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ad-dock .ad-dock-body .agent-composer-input {
+  min-height: 40px;
+  max-height: 120px;
+  padding: 8px 10px;
+}
+.ad-dock .ad-dock-body .agent-composer .tp-tab-complete-ghost {
+  padding: 8px 10px;
+}
+.ad-dock .ad-dock-body .agent-send-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.ad-dock .ad-dock-body .agent-send-btn-label {
+  display: none;
+}
+.ad-dock .ad-dock-body .agent-composer-input {
+  height: 40px;
+  resize: none;
+  field-sizing: content;
+}
+/* The dock bar already says "Assistant": keep only the settings gear, floated top-right. */
+.ad-dock .ad-dock-body {
+  position: relative;
+}
+.ad-dock .ad-dock-body .agent-standalone-head {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  z-index: 3;
+  width: auto;
+  padding: 0;
+}
+.ad-dock .ad-dock-body .agent-standalone-heading {
+  display: none;
+}
+
+.ad-dock-spacer { flex: 1 1 auto; }
+.ad-dock-error { padding: 12px; color: var(--tp-text-muted); font-size: 13px; }

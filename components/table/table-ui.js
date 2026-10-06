@@ -110,9 +110,8 @@
       alert: h('div', { class: 'tb-alert', hidden: true }),
       wrap: h('div', { class: 'tb-wrap' }),
       drawer: h('div', { class: 'tb-drawer', hidden: true }),
-      dock: h('div', { class: 'tb-dock' }),
     };
-    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.alert, els.wrap, els.drawer, els.dock]);
+    var shell = h('div', { class: 'tb-root', tabindex: '-1' }, [els.bar, els.banner, els.alert, els.wrap, els.drawer]);
     root.appendChild(shell);
 
     /* ── Status line (with optional action, e.g. Annuler) ─────────── */
@@ -1633,99 +1632,6 @@
       repaint: function () { if (state.drawer === 'history') renderDrawer(); },
     });
 
-    /* ── Assistant dock (project-scope chat under the table) ──────── */
-    var DOCK_KEY = 'tb.dockHeight';
-    var dock = { open: false, mounted: false, height: 340, poll: null, body: null };
-    try {
-      var savedH = parseInt(global.localStorage.getItem(DOCK_KEY), 10);
-      if (savedH >= 160) dock.height = savedH;
-    } catch (e) { /* storage unavailable */ }
-
-    function maxDockHeight() {
-      return Math.max(180, Math.round(shell.clientHeight * 0.75));
-    }
-
-    function setDockHeight(px, persist) {
-      dock.height = Math.max(160, Math.min(maxDockHeight(), Math.round(px)));
-      if (dock.body) dock.body.style.height = dock.height + 'px';
-      if (persist) {
-        try { global.localStorage.setItem(DOCK_KEY, String(dock.height)); } catch (e) { /* ignore */ }
-      }
-    }
-
-    function toggleDock(force) {
-      dock.open = typeof force === 'boolean' ? force : !dock.open;
-      renderDock();
-      if (dock.open && !dock.mounted && global.AssistantMount) {
-        dock.mounted = true;
-        var mountEl = dock.body.querySelector('#assistantMount');
-        global.AssistantMount.mount(mountEl, t, { resizeBody: false, focusComposer: true }).catch(function (err) {
-          dock.mounted = false;
-          mountEl.textContent = '';
-          mountEl.appendChild(h('div', { class: 'tb-loading', text: 'Assistant indisponible : ' + (err && err.message) }));
-        });
-      }
-      clearInterval(dock.poll);
-      dock.poll = null;
-      if (dock.open) {
-        // The assistant can edit cards; keep the grid current while it is open.
-        dock.poll = setInterval(function () {
-          if (state.editing || (global.CardFields && global.CardFields.isOpen())) return;
-          reload({ quiet: true });
-        }, 20000);
-      } else if (dock.mounted) reload({ quiet: true });
-    }
-
-    function renderDock() {
-      var keep = dock.body;
-      els.dock.innerHTML = '';
-      els.dock.classList.toggle('is-open', dock.open);
-      var grip = h('div', {
-        class: 'tb-dock-grip',
-        title: 'Glisser pour redimensionner',
-        onpointerdown: function (e) {
-          if (!dock.open) return;
-          e.preventDefault();
-          var startY = e.clientY;
-          var startH = dock.height;
-          function move(ev) { setDockHeight(startH + (startY - ev.clientY), false); }
-          function up() {
-            document.removeEventListener('pointermove', move);
-            document.removeEventListener('pointerup', up);
-            setDockHeight(dock.height, true);
-          }
-          document.addEventListener('pointermove', move);
-          document.addEventListener('pointerup', up);
-        },
-      });
-      var bar = h('div', {
-        class: 'tb-dock-bar',
-        role: 'button',
-        tabindex: '0',
-        'aria-expanded': dock.open ? 'true' : 'false',
-        onclick: function () { toggleDock(); },
-        onkeydown: function (e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDock(); }
-        },
-      }, [
-        icon('sparkles'),
-        h('strong', { text: 'Assistant' }),
-        h('span', { class: 'tb-dock-hint', text: 'Posez une question ou demandez une modification sur tout le projet…' }),
-        h('span', { class: 'tb-spacer' }),
-        icon(dock.open ? 'chevron-down' : 'chevron-up'),
-      ]);
-      els.dock.appendChild(grip);
-      els.dock.appendChild(bar);
-      if (dock.open) {
-        if (!keep) {
-          keep = h('div', { class: 'tb-dock-body tp-page--priority tp-page--assistant' }, [h('div', { id: 'assistantMount' })]);
-        }
-        dock.body = keep;
-        keep.style.height = dock.height + 'px';
-        els.dock.appendChild(keep);
-      }
-    }
-
     /* ── Loading ───────────────────────────────────────────────────── */
     function reload(opts) {
       if (!opts || !opts.quiet) els.wrap.innerHTML = skeletonRows();
@@ -1771,7 +1677,14 @@
       renderGrid();
     });
     renderBar();
-    renderDock();
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({
+        t: t,
+        after: root,
+        onRefresh: function () { reload({ quiet: true }); },
+        isBusy: function () { return state.editing || (global.CardFields && global.CardFields.isOpen()); },
+      });
+    }
     setInterval(loadAlerts, 30000);
     return reload();
   }
