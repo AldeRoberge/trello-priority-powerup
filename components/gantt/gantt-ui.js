@@ -3588,6 +3588,12 @@
           end: interval.end,
           hasTime: !!interval.hasTime,
         };
+        // Off-hours are squeezed in Jour/Semaine, so the same duration is drawn
+        // narrower there: keep the grabbed width while a bar is being moved.
+        var startGeo =
+          mode === 'move' && usesTimedTimeline()
+            ? model.barGeometry(origin, r, state.timelineWidth, mapOpts)
+            : null;
         state.drag = {
           row: row,
           mode: mode,
@@ -3598,6 +3604,7 @@
           pointerId: ev.pointerId,
           agenda: usesTimedTimeline(),
           mapOpts: mapOpts,
+          fixedWidth: startGeo && startGeo.visible ? startGeo.width : null,
           originLeft: usesTimedTimeline()
             ? model.dateTimeToX(
                 interval.start,
@@ -3656,9 +3663,28 @@
               var durMs =
                 state.drag.origin.end.getTime() -
                 state.drag.origin.start.getTime();
+              var startMs = snappedStart.getTime();
+              // A bar that began inside the range stays inside it, so dropping
+              // at the edge doesn't push it onto an invisible day.
+              var rangeStartMs = model.startOfDay(state.drag.range.start).getTime();
+              var rangeEndMs = model
+                .addDays(
+                  state.drag.range.start,
+                  model.rangeDayCount(state.drag.range)
+                )
+                .getTime();
+              if (
+                state.drag.origin.start.getTime() >= rangeStartMs &&
+                state.drag.origin.end.getTime() <= rangeEndMs
+              ) {
+                startMs = Math.max(
+                  rangeStartMs,
+                  Math.min(startMs, rangeEndMs - durMs)
+                );
+              }
               next = {
-                start: snappedStart,
-                end: new Date(snappedStart.getTime() + durMs),
+                start: new Date(startMs),
+                end: new Date(startMs + durMs),
                 hasTime: true,
               };
             } else {
@@ -3696,7 +3722,7 @@
             else next.end = next.start;
           }
           applyIntervalToRow(row, next);
-          updateBarEl(barEl, row, next, state.drag.mode);
+          updateBarEl(barEl, row, next, state.drag.mode, state.drag.fixedWidth);
           showDragTip(e.clientX, e.clientY, formatIntervalTitle(next));
         }
 
@@ -3738,7 +3764,8 @@
       barEl.addEventListener('pointerdown', onPointerDown);
     }
 
-    function updateBarEl(barEl, row, interval, dragMode) {
+    /** fixedWidth (px) pins the width while moving a bar, and keeps it inside the timeline. */
+    function updateBarEl(barEl, row, interval, dragMode, fixedWidth) {
       var r = range();
       var geo = model.barGeometry(
         interval,
@@ -3746,13 +3773,20 @@
         state.timelineWidth,
         timelineMapOptions()
       );
-      if (!geo || !geo.visible) {
+      var pinned = typeof fixedWidth === 'number' && fixedWidth > 0;
+      if (!geo || (!geo.visible && !pinned)) {
         barEl.style.display = 'none';
         return;
       }
+      var left = geo.left;
+      var width = geo.width;
+      if (pinned) {
+        width = fixedWidth;
+        left = Math.max(0, Math.min(left, state.timelineWidth - width));
+      }
       barEl.style.display = '';
-      barEl.style.left = geo.left + 'px';
-      barEl.style.width = geo.width + 'px';
+      barEl.style.left = left + 'px';
+      barEl.style.width = width + 'px';
       barEl.title =
         (row.name || '') + ' \u00b7 ' + formatIntervalTitle(interval);
       var fill = barEl.querySelector('.gantt-bar-fill');
