@@ -1,14 +1,16 @@
 /*
  * Role: UI of the Entities view ("Entités"): define rich things once ("Ficus", "Hôtel de Ville"), give them
  * types, typed properties, links and a history, then find them by describing them ("mes plantes au travail").
- *  - left: filter box (free text, or a request the model resolves into type + place chips) and the entities
- *  - right: the entity (name, aliases, types, properties per component, links, history with per-entry undo)
- *  - "Schéma": the components (groups of typed fields) and types (bundles of components)
+ *  - left: a source list (search box that also understands a request, type filter pills, entities grouped by type,
+ *    one "+" menu to compose or create an empty one)
+ *  - right: the entity as a page (big editable name, type pills, aliases, then properties as grouped lists,
+ *    links, and two collapsed rows: "Modèle et variantes", "Historique" with per-entry undo)
+ *  - "Types et composants": the components (groups of typed fields) and types (bundles of components)
  * Data + writes: EntitiesTrello; pure logic (schema, mutations, history, query, text resolution): EntitiesModel.
  *
  * Contents
- *   1. helpers   2. mount: state + skeleton   3. sidebar   4. entity editor   5. schema editor
- *   6. saving    7. boot
+ *   1. helpers   2. mount: state + skeleton   (popovers and menus)   3. sidebar   4. entity editor
+ *   5. schema editor   6. saving   7. boot
  */
 (function (global) {
   'use strict';
@@ -58,6 +60,47 @@
     return h('i', { class: 'ti ti-' + name, 'aria-hidden': 'true' });
   }
 
+  /** Lowercase, accent-free text for searching in pickers. */
+  function fold(s) {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase();
+  }
+
+  function cap(s) {
+    s = String(s || '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  /** The tile of an entity takes the color of the nature of its first type (iOS system colors). */
+  var NATURE_COLORS = {
+    matter: '#ff9500',
+    living: '#34c759',
+    agent: '#0a84ff',
+    place: '#30b0c7',
+    event: '#af52de',
+    social: '#5e5ce6',
+    abstract: '#ff2d55',
+  };
+  var NEUTRAL_COLOR = '#8e8e93';
+
+  var RELATIVE = typeof Intl !== 'undefined' && Intl.RelativeTimeFormat ? new Intl.RelativeTimeFormat('fr', { numeric: 'auto' }) : null;
+
+  /** "à l’instant", "il y a 3 min", "hier", then a short date once it is older than a week. */
+  function whenText(ts) {
+    var d = ts ? new Date(ts) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    var diff = (Date.now() - d.getTime()) / 1000;
+    if (RELATIVE && diff >= 0 && diff < 7 * 86400) {
+      if (diff < 60) return 'à l’instant';
+      if (diff < 3600) return RELATIVE.format(-Math.round(diff / 60), 'minute');
+      if (diff < 86400) return RELATIVE.format(-Math.round(diff / 3600), 'hour');
+      return RELATIVE.format(-Math.round(diff / 86400), 'day');
+    }
+    return d.toLocaleDateString('fr-CA', { dateStyle: 'medium' });
+  }
+
   function splitList(s) {
     return String(s || '')
       .split(',')
@@ -98,6 +141,11 @@
       saveState: 'idle',
       saveMsg: '',
       confirm: '', // id of the thing waiting for a second click (delete)
+      openHistory: false, // the "Historique" row is expanded
+      openModel: undefined, // "Modèle et variantes": undefined = open only when the entity has a model or variants
+      linkOpen: false, // the inline "add a link" form is showing
+      refocus: '', // selector to focus after the next paintMain
+      folds: {}, // schema editor: which type/component cards are expanded
     };
     var saveTimer = null;
     var saving = false;
@@ -173,19 +221,166 @@
       );
     }
 
+    /* ── Popovers and menus ─────────────────────────────────────── */
+
+    var pop = null;
+
+    function closePop(refocus) {
+      if (!pop) return;
+      var p = pop;
+      pop = null;
+      document.removeEventListener('mousedown', p.onDown, true);
+      document.removeEventListener('keydown', p.onKey, true);
+      global.removeEventListener('resize', p.onClose);
+      els.main.removeEventListener('scroll', p.onClose);
+      listBox.removeEventListener('scroll', p.onClose);
+      if (p.el.parentNode) p.el.parentNode.removeChild(p.el);
+      p.anchor.setAttribute('aria-expanded', 'false');
+      if (refocus && document.body.contains(p.anchor)) p.anchor.focus();
+    }
+
+    /** Floating panel under `anchor` (a menu or a picker); `build(el, close)` fills it. Click the anchor again, press Escape or click away to close. */
+    function openPop(anchor, build, opts) {
+      opts = opts || {};
+      var toggling = pop && pop.anchor === anchor;
+      closePop();
+      if (toggling) return;
+      var el = h('div', { class: 'en-pop' + (opts.className ? ' ' + opts.className : ''), role: opts.role || 'menu' });
+      build(el, function (refocus) {
+        closePop(refocus);
+      });
+      root.appendChild(el);
+      var a = anchor.getBoundingClientRect();
+      var r = el.getBoundingClientRect();
+      var vw = document.documentElement.clientWidth;
+      var vh = document.documentElement.clientHeight;
+      var left = opts.align === 'end' ? a.right - r.width : a.left;
+      left = Math.max(8, Math.min(left, vw - r.width - 8));
+      var top = a.bottom + 6;
+      if (top + r.height > vh - 8 && a.top - r.height - 6 > 8) top = a.top - r.height - 6;
+      el.style.left = left + 'px';
+      el.style.top = Math.max(8, top) + 'px';
+      anchor.setAttribute('aria-expanded', 'true');
+      var p = {
+        el: el,
+        anchor: anchor,
+        onClose: function () {
+          closePop();
+        },
+        onDown: function (ev) {
+          if (!el.contains(ev.target) && !anchor.contains(ev.target)) closePop();
+        },
+        onKey: function (ev) {
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            closePop(true);
+            return;
+          }
+          if (ev.key === 'Tab') {
+            closePop();
+            return;
+          }
+          if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+          var items = Array.prototype.slice.call(el.querySelectorAll('.en-menu-item:not([disabled]), .en-pop-search'));
+          if (!items.length) return;
+          ev.preventDefault();
+          var i = items.indexOf(document.activeElement);
+          i = ev.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+          items[i].focus();
+        },
+      };
+      pop = p;
+      document.addEventListener('mousedown', p.onDown, true);
+      document.addEventListener('keydown', p.onKey, true);
+      global.addEventListener('resize', p.onClose);
+      els.main.addEventListener('scroll', p.onClose);
+      listBox.addEventListener('scroll', p.onClose);
+      var first = el.querySelector('.en-pop-search') || el.querySelector('.en-menu-item');
+      if (first) first.focus();
+    }
+
+    /** A row of a menu. `fn` runs after the menu closes (unless opts.keepOpen). */
+    function menuItem(ic, label, sub, fn, opts) {
+      opts = opts || {};
+      return h(
+        'button',
+        {
+          class: 'en-menu-item' + (opts.danger ? ' is-danger' : ''),
+          type: 'button',
+          role: 'menuitem',
+          onclick: function (ev) {
+            if (!opts.keepOpen) closePop();
+            fn(ev);
+          },
+        },
+        [
+          icon(ic),
+          h('span', { class: 'en-menu-text' }, [h('span', { class: 'en-menu-label', text: label }), sub ? h('span', { class: 'en-menu-sub', text: sub }) : null]),
+          opts.check ? h('span', { class: 'en-menu-check' }, [icon('check')]) : null,
+        ]
+      );
+    }
+
     /* ── 3. Sidebar ─────────────────────────────────────────────── */
 
     var listBox = h('div', { class: 'en-list' });
     var chipBox = h('div', { class: 'en-chips' });
-    var queryInput = h('input', {
-      class: 'en-input',
-      type: 'search',
-      placeholder: 'Filtrer, ou décrire : mes plantes au travail',
-      'aria-label': 'Filtrer les entités',
-      oninput: function () {
-        state.query = queryInput.value;
-        paintList();
+    var typeBar = h('div', { class: 'en-filters', role: 'group', 'aria-label': 'Filtrer par type', hidden: true });
+    var clearBtn = h(
+      'button',
+      {
+        class: 'en-search-clear',
+        type: 'button',
+        hidden: true,
+        'aria-label': 'Effacer la recherche',
+        onclick: function () {
+          setQuery('');
+          queryInput.focus();
+        },
       },
+      [icon('x')]
+    );
+    var queryInput = h('input', {
+      class: 'en-search-input',
+      type: 'search',
+      placeholder: 'Rechercher ou décrire…',
+      title: 'Cherchez un nom, ou décrivez ce que vous voulez : « mes plantes au travail »',
+      'aria-label': 'Filtrer les entités',
+      autocomplete: 'off',
+      oninput: function () {
+        setQuery(queryInput.value, true);
+      },
+      onkeydown: function (ev) {
+        if (ev.key === 'Escape' && queryInput.value) {
+          ev.stopPropagation();
+          setQuery('');
+        } else if (ev.key === 'ArrowDown') {
+          var first = listBox.querySelector('.en-row');
+          if (first) {
+            ev.preventDefault();
+            first.focus();
+          }
+        }
+      },
+    });
+
+    function setQuery(v, fromInput) {
+      state.query = v;
+      if (!fromInput) queryInput.value = v;
+      clearBtn.hidden = !v;
+      paintList();
+    }
+
+    listBox.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+      var rows = Array.prototype.slice.call(listBox.querySelectorAll('.en-row'));
+      var i = rows.indexOf(document.activeElement);
+      if (i < 0) return;
+      ev.preventDefault();
+      if (ev.key === 'ArrowUp' && i === 0) return queryInput.focus();
+      var next = rows[ev.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1) : i - 1];
+      if (next) next.focus();
     });
 
     function visibleEntities() {
@@ -205,7 +400,102 @@
       return { list: list, info: info && info.recognized ? info : null };
     }
 
-    function paintList() {
+    /** What an entity looks like in lists: the icon of its first type, tinted by the nature of that type. */
+    function entityVisual(e) {
+      var first = e && e.types && e.types.length ? EM().findById(state.schema.types, e.types[0]) : null;
+      var nature = first ? EM().natureOfType(state.schema, first.id) : '';
+      var nat = EM().natureById(nature);
+      return {
+        icon: (first && first.icon) || (nat && nat.icon) || (first ? 'tag' : 'circle-dashed'),
+        color: NATURE_COLORS[nature] || NEUTRAL_COLOR,
+      };
+    }
+
+    function tile(e, size) {
+      var v = entityVisual(e);
+      return h('span', { class: 'en-tile en-tile--' + size, style: '--tile:' + v.color, 'aria-hidden': 'true' }, [icon(v.icon)]);
+    }
+
+    /** Type filter pills: only types that have entities, the busiest first, the rest behind "Plus". */
+    function fillTypes() {
+      typeBar.textContent = '';
+      var counts = {};
+      state.entities.forEach(function (e) {
+        EM()
+          .typeClosure(state.schema, e.types)
+          .forEach(function (id) {
+            counts[id] = (counts[id] || 0) + 1;
+          });
+      });
+      var used = state.schema.types
+        .filter(function (ty) {
+          return counts[ty.id] > 0 || ty.id === state.typeFilter;
+        })
+        .sort(function (a, b) {
+          return (counts[b.id] || 0) - (counts[a.id] || 0) || a.name.localeCompare(b.name, 'fr');
+        });
+      typeBar.hidden = used.length < 2 && !state.typeFilter;
+      if (typeBar.hidden) return;
+      var MAX = 4;
+      var shown = used.slice(0, MAX);
+      var active = used.filter(function (ty) {
+        return ty.id === state.typeFilter;
+      })[0];
+      if (active && shown.indexOf(active) < 0) shown[MAX - 1] = active;
+      function pill(label, id, count) {
+        var on = state.typeFilter === id;
+        return h(
+          'button',
+          {
+            class: 'en-pill' + (on ? ' is-on' : ''),
+            type: 'button',
+            'aria-pressed': String(on),
+            onclick: function () {
+              state.typeFilter = on ? '' : id;
+              paintList();
+            },
+          },
+          [label, count != null ? h('span', { class: 'en-pill-n', text: String(count) }) : null]
+        );
+      }
+      typeBar.appendChild(pill('Tout', '', null));
+      shown.forEach(function (ty) {
+        typeBar.appendChild(pill(ty.name, ty.id, counts[ty.id] || 0));
+      });
+      var rest = used.filter(function (ty) {
+        return shown.indexOf(ty) < 0;
+      });
+      if (rest.length) {
+        typeBar.appendChild(
+          h(
+            'button',
+            {
+              class: 'en-pill en-pill--more',
+              type: 'button',
+              'aria-haspopup': 'menu',
+              'aria-expanded': 'false',
+              onclick: function (ev) {
+                openPop(ev.currentTarget, function (el) {
+                  rest.forEach(function (ty) {
+                    el.appendChild(
+                      menuItem(ty.icon || 'tag', ty.name, counts[ty.id] + (counts[ty.id] > 1 ? ' entités' : ' entité'), function () {
+                        state.typeFilter = ty.id;
+                        paintList();
+                      })
+                    );
+                  });
+                });
+              },
+            },
+            ['Plus', icon('chevron-down')]
+          )
+        );
+      }
+    }
+
+    function paintList(opts) {
+      fillTypes();
+      schemaLink.classList.toggle('is-on', state.mode === 'schema');
       var vis = visibleEntities();
       chipBox.textContent = '';
       if (vis.info) {
@@ -213,15 +503,18 @@
           var label = m.kind === 'type' ? 'Type : ' + m.name : m.kind === 'entity' ? m.name : 'Valeur : ' + m.name;
           chipBox.appendChild(h('span', { class: 'en-chip en-chip--' + m.kind, text: label }));
         });
-        if (!vis.list.length) chipBox.appendChild(h('span', { class: 'en-hint', text: 'Aucune entité ne correspond.' }));
       }
       listBox.textContent = '';
       if (!state.loaded) {
-        listBox.appendChild(h('p', { class: 'en-hint', text: 'Chargement…' }));
+        listBox.appendChild(h('p', { class: 'en-list-hint', text: 'Chargement…' }));
         return;
       }
       if (!state.entities.length) {
-        listBox.appendChild(h('p', { class: 'en-hint', text: 'Aucune entité pour l’instant.' }));
+        listBox.appendChild(h('p', { class: 'en-list-hint', text: 'Aucune entité pour l’instant.' }));
+        return;
+      }
+      if (!vis.list.length) {
+        listBox.appendChild(h('p', { class: 'en-list-hint', text: 'Aucune entité ne correspond.' }));
         return;
       }
       var groups = {};
@@ -234,27 +527,39 @@
         }
         groups[key].push(e);
       });
-      order.forEach(function (key) {
-        listBox.appendChild(h('div', { class: 'en-group', text: key ? typeName(key) : 'Sans type' }));
-        groups[key].forEach(function (e) {
-          listBox.appendChild(
-            h(
-              'button',
-              {
-                class: 'en-row' + (e.id === state.selId && state.mode === 'entity' ? ' is-on' : ''),
-                onclick: function () {
-                  state.selId = e.id;
-                  state.mode = 'entity';
-                  state.confirm = '';
-                  paintList();
-                  paintMain();
-                },
-              },
-              [h('span', { class: 'en-row-name', text: e.name }), h('span', { class: 'en-row-sub', text: rowSummary(e) })]
-            )
-          );
-        });
+      order.sort(function (a, b) {
+        if (!a || !b) return a ? -1 : 1; // "Sans type" last
+        return typeName(a).localeCompare(typeName(b), 'fr', { sensitivity: 'base' });
       });
+      order.forEach(function (key) {
+        listBox.appendChild(h('div', { class: 'en-group' }, [h('span', { text: key ? typeName(key) : 'Sans type' }), h('span', { class: 'en-group-n', text: String(groups[key].length) })]));
+        groups[key]
+          .slice()
+          .sort(function (a, b) {
+            return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true });
+          })
+          .forEach(function (e) {
+            var on = e.id === state.selId && state.mode === 'entity';
+            var sub = rowSummary(e);
+            listBox.appendChild(
+              h(
+                'button',
+                {
+                  class: 'en-row' + (on ? ' is-on' : ''),
+                  type: 'button',
+                  'aria-current': on ? 'true' : null,
+                  onclick: function (ev) {
+                    openEntity(e.id, { focus: ev.detail === 0 });
+                  },
+                },
+                [tile(e, 'sm'), h('span', { class: 'en-row-text' }, [h('span', { class: 'en-row-name', text: e.name }), sub ? h('span', { class: 'en-row-sub', text: sub }) : null])]
+              )
+            );
+          });
+      });
+      var sel = listBox.querySelector('.en-row.is-on');
+      if (sel && opts && opts.reveal) sel.scrollIntoView({ block: 'nearest' });
+      if (sel && opts && opts.focus) sel.focus();
     }
 
     function rowSummary(e) {
@@ -271,53 +576,53 @@
       return parts.join(' · ');
     }
 
-    function buildSide() {
-      var typeSel = h('select', {
-        class: 'en-input',
-        'aria-label': 'Filtrer par type',
-        onchange: function () {
-          state.typeFilter = typeSel.value;
+    var schemaLink = h(
+      'button',
+      {
+        class: 'en-side-link',
+        type: 'button',
+        onclick: function () {
+          state.mode = 'schema';
           paintList();
+          paintMain();
         },
-      });
-      function fillTypes() {
-        typeSel.textContent = '';
-        typeSel.appendChild(h('option', { value: '', text: 'Tous les archétypes' }));
-        state.schema.types.forEach(function (ty) {
-          typeSel.appendChild(h('option', { value: ty.id, text: (ty.parents.length ? '↳ ' : '') + ty.name }));
-        });
-        typeSel.value = state.typeFilter;
-      }
-      buildSide.fillTypes = fillTypes;
-      fillTypes();
+      },
+      [icon('adjustments'), 'Types et composants']
+    );
+
+    function buildSide() {
+      var newBtn = h(
+        'button',
+        {
+          class: 'en-icon-btn en-icon-btn--accent',
+          type: 'button',
+          title: 'Nouvelle entité',
+          'aria-label': 'Nouvelle entité',
+          'aria-haspopup': 'menu',
+          'aria-expanded': 'false',
+          onclick: function (ev) {
+            openPop(
+              ev.currentTarget,
+              function (el) {
+                el.appendChild(menuItem('wand', 'Composer une entité', 'La décrire en une phrase', function () { openComposer(); }));
+                el.appendChild(menuItem('plus', 'Entité vide', 'Un nom, le reste plus tard', newEntity));
+              },
+              { align: 'end' }
+            );
+          },
+        },
+        [icon('plus')]
+      );
       els.side.appendChild(
         h('div', { class: 'en-side-head' }, [
-          h('div', { class: 'en-title' }, [icon('stack-2'), h('span', { text: 'Entités' }), els.status]),
-          h('button', { class: 'en-btn en-btn--primary en-btn--block', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
-          queryInput,
-          typeSel,
+          h('div', { class: 'en-title' }, [h('h1', { class: 'en-title-text', text: 'Entités' }), els.status, newBtn]),
+          h('div', { class: 'en-search' }, [icon('search'), queryInput, clearBtn]),
+          typeBar,
           chipBox,
         ])
       );
       els.side.appendChild(listBox);
-      els.side.appendChild(
-        h('div', { class: 'en-side-foot' }, [
-          h('button', { class: 'en-btn en-btn--primary', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer']),
-          h('button', { class: 'en-btn', title: 'Créer une entité vide', onclick: newEntity }, [icon('plus'), 'Vide']),
-          h(
-            'button',
-            {
-              class: 'en-btn',
-              onclick: function () {
-                state.mode = 'schema';
-                paintList();
-                paintMain();
-              },
-            },
-            [icon('settings'), 'Schéma']
-          ),
-        ])
-      );
+      els.side.appendChild(h('div', { class: 'en-side-foot' }, [schemaLink]));
     }
 
     /** Opens the guided interview; what it creates (and any new type) is saved like any other edit. */
@@ -333,11 +638,9 @@
           state.entities = res.entities;
           state.selId = res.rootId;
           state.mode = 'entity';
-          state.query = '';
-          queryInput.value = '';
+          setQuery('');
           scheduleSave();
-          buildSide.fillTypes();
-          paintList();
+          paintList({ reveal: true });
           paintMain();
           toast(res.created.length > 1 ? res.created.length + ' entités créées et liées.' : 'Entité créée.');
           if (res.again) openComposer({ types: res.types });
@@ -362,7 +665,7 @@
       state.entities = state.entities.concat([e]);
       state.selId = e.id;
       scheduleSave();
-      paintList();
+      paintList({ reveal: true });
       paintMain();
       var input = els.main.querySelector('.en-name');
       if (input) {
@@ -393,26 +696,50 @@
       else paintHistory();
     }
 
-    var historyBox = h('div', { class: 'en-history' });
+    function section(title, body, aside, cls) {
+      return h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') }, [
+        h('header', { class: 'en-sec-head' }, [h('h3', { class: 'en-sec-title', text: title }), aside || null]),
+        body,
+      ]);
+    }
+
+    /** Collapsible block ("Historique", "Modèle et variantes"): a quiet row until opened. */
+    function disclosure(title, meta, open, onToggle) {
+      return h('button', { class: 'en-disc' + (open ? ' is-open' : ''), type: 'button', 'aria-expanded': String(open), onclick: onToggle }, [
+        h('span', { class: 'en-disc-title', text: title }),
+        meta ? h('span', { class: 'en-disc-meta', text: meta }) : null,
+        icon('chevron-right'),
+      ]);
+    }
+
+    var historyBox = h('section', { class: 'en-sec en-sec--disc' });
 
     function paintHistory() {
       historyBox.textContent = '';
       var e = selected();
       if (!e) return;
-      historyBox.appendChild(h('h3', { class: 'en-h', text: 'Historique' }));
       var list = e.history.slice().reverse();
+      var open = !!state.openHistory;
+      historyBox.appendChild(
+        disclosure('Historique', list.length + (list.length > 1 ? ' changements' : ' changement'), open, function () {
+          state.openHistory = !state.openHistory;
+          paintHistory();
+        })
+      );
+      if (!open) return;
+      var set = h('div', { class: 'en-set' });
       list.forEach(function (entry) {
         var revertable = EM().isRevertable(entry);
-        var when = entry.ts ? new Date(entry.ts).toLocaleString('fr-CA', { dateStyle: 'short', timeStyle: 'short' }) : '';
-        historyBox.appendChild(
+        set.appendChild(
           h('div', { class: 'en-hist-row' + (entry.undoOf ? ' is-undo' : '') }, [
-            h('span', { class: 'en-hist-when', text: when }),
+            h('span', { class: 'en-hist-when', title: entry.ts ? new Date(entry.ts).toLocaleString('fr-CA') : '', text: whenText(entry.ts) }),
             h('span', { class: 'en-hist-text', text: EM().describeEntry(state.schema, state.entities, entry) }),
             revertable
               ? h(
                   'button',
                   {
                     class: 'en-link',
+                    type: 'button',
                     title: 'Annuler ce changement',
                     onclick: function () {
                       applyEntity(
@@ -429,23 +756,29 @@
           ])
         );
       });
+      historyBox.appendChild(set);
     }
 
     function fieldInput(e, comp, field) {
       var path = comp.id + '.' + field.key;
       var val = EM().effectiveValue(state.entities, e, path, state.schema);
-      function commit(v) {
+      function commit(v, rebuild) {
         applyEntity(
           function (cur) {
             return EM().setValue(state.schema, cur, path, v);
           },
-          { rebuild: !!e.base || hasDefaults(e) }
+          { rebuild: !!rebuild || !!e.base || hasDefaults(e) }
         );
+      }
+      function selectWrap(sel) {
+        return h('span', { class: 'en-select' }, [sel]);
       }
       var aria = comp.name + ' : ' + field.label;
       if (field.kind === 'bool') {
         return h('input', {
           type: 'checkbox',
+          class: 'en-switch',
+          role: 'switch',
           'aria-label': aria,
           checked: val ? true : null,
           onchange: function (ev) {
@@ -454,83 +787,117 @@
         });
       }
       if (field.kind === 'choice') {
-        var sel = h('select', { class: 'en-input', 'aria-label': aria, onchange: function () { commit(sel.value); } });
+        var sel = h('select', { class: 'en-ctl', 'aria-label': aria, onchange: function () { commit(sel.value); } });
         sel.appendChild(h('option', { value: '', text: '—' }));
         (field.options || []).forEach(function (o) {
           sel.appendChild(h('option', { value: o, text: o }));
         });
         sel.value = val || '';
-        return sel;
+        return selectWrap(sel);
       }
       if (field.kind === 'ref' || field.kind === 'refs') {
-        var pool = state.entities.filter(function (x) {
-          if (x.id === e.id) return false;
-          if (!field.refTypes || !field.refTypes.length) return true;
-          return x.types.some(function (ty) {
-            return field.refTypes.indexOf(ty) >= 0;
+        var pool = state.entities
+          .filter(function (x) {
+            if (x.id === e.id) return false;
+            if (!field.refTypes || !field.refTypes.length) return true;
+            return field.refTypes.some(function (ty) {
+              return EM().isA(state.schema, x, ty);
+            });
+          })
+          .sort(function (a, b) {
+            return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true });
           });
-        });
         if (field.kind === 'ref') {
-          var rs = h('select', { class: 'en-input', 'aria-label': aria, onchange: function () { commit(rs.value); } });
+          var rs = h('select', { class: 'en-ctl', 'aria-label': aria, onchange: function () { commit(rs.value); } });
           rs.appendChild(h('option', { value: '', text: '—' }));
           pool.forEach(function (x) {
             rs.appendChild(h('option', { value: x.id, text: x.name }));
           });
           rs.value = val || '';
-          return rs;
+          return selectWrap(rs);
         }
-        var ms = h('select', { class: 'en-input', multiple: true, size: Math.min(4, Math.max(2, pool.length)), 'aria-label': aria });
-        pool.forEach(function (x) {
-          var o = h('option', { value: x.id, text: x.name });
-          if ((val || []).indexOf(x.id) >= 0) o.selected = true;
-          ms.appendChild(o);
-        });
-        ms.addEventListener('change', function () {
-          commit(
-            Array.prototype.filter
-              .call(ms.options, function (o) {
-                return o.selected;
-              })
-              .map(function (o) {
-                return o.value;
-              })
+        var cur = Array.isArray(val) ? val.slice() : [];
+        var wrap = h('div', { class: 'en-refs' });
+        cur.forEach(function (id) {
+          var o = EM().findById(state.entities, id);
+          wrap.appendChild(
+            h('span', { class: 'en-token' }, [
+              o ? o.name : '?',
+              h(
+                'button',
+                {
+                  class: 'en-token-x',
+                  type: 'button',
+                  'aria-label': 'Retirer ' + (o ? o.name : 'ce lien'),
+                  onclick: function () {
+                    commit(
+                      cur.filter(function (x) {
+                        return x !== id;
+                      }),
+                      true
+                    );
+                  },
+                },
+                [icon('x')]
+              ),
+            ])
           );
         });
-        return ms;
+        var rest = pool.filter(function (x) {
+          return cur.indexOf(x.id) < 0;
+        });
+        if (rest.length) {
+          var add = h('select', {
+            class: 'en-ctl en-ctl--add',
+            'aria-label': aria + ' : ajouter',
+            onchange: function () {
+              if (add.value) commit(cur.concat([add.value]), true);
+            },
+          });
+          add.appendChild(h('option', { value: '', text: cur.length ? '+ Ajouter' : '+ Ajouter…' }));
+          rest.forEach(function (x) {
+            add.appendChild(h('option', { value: x.id, text: x.name }));
+          });
+          wrap.appendChild(add);
+        }
+        return wrap;
       }
       if (field.kind === 'multi') {
-        var box = h('div', { class: 'en-checks' });
+        var box = h('div', { class: 'en-pills' });
         (field.options || []).forEach(function (o) {
+          var on = (val || []).indexOf(o) >= 0;
           box.appendChild(
-            h('label', { class: 'en-check' }, [
-              h('input', {
-                type: 'checkbox',
-                checked: (val || []).indexOf(o) >= 0 ? true : null,
-                onchange: function (ev) {
-                  var cur = (EM().effectiveValue(state.entities, selected() || e, path) || []).filter(function (x) {
+            h(
+              'button',
+              {
+                class: 'en-pill' + (on ? ' is-on' : ''),
+                type: 'button',
+                'aria-pressed': String(on),
+                onclick: function () {
+                  var now = (EM().effectiveValue(state.entities, selected() || e, path, state.schema) || []).filter(function (x) {
                     return x !== o;
                   });
-                  if (ev.target.checked) cur.push(o);
-                  commit(cur);
+                  if (!on) now.push(o);
+                  commit(now, true);
                 },
-              }),
-              o,
-            ])
+              },
+              [o]
+            )
           );
         });
         return box;
       }
       if (field.kind === 'longtext') {
-        var ta = h('textarea', { class: 'en-input en-area', rows: '4', maxlength: '1500', 'aria-label': aria, onchange: function () { commit(ta.value); } });
+        var ta = h('textarea', { class: 'en-ctl en-area', rows: '3', maxlength: '1500', placeholder: 'Ajouter…', 'aria-label': aria, onchange: function () { commit(ta.value); } });
         ta.value = val == null ? '' : String(val);
         return ta;
       }
       var type = field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : field.kind === 'url' ? 'url' : 'text';
       var inp = h('input', {
-        class: 'en-input',
+        class: 'en-ctl' + (val == null || val === '' ? ' is-empty' : ''),
         type: type,
         step: field.kind === 'number' ? 'any' : null,
-        placeholder: field.kind === 'geo' ? '45.5017, -73.5673' : field.kind === 'url' ? 'https://…' : null,
+        placeholder: field.kind === 'geo' ? '45.5017, -73.5673' : field.kind === 'url' ? 'https://…' : field.kind === 'date' ? null : 'Ajouter…',
         'aria-label': aria + (field.unit ? ' (' + field.unit + ')' : ''),
         value: val == null ? '' : String(val),
         onchange: function () {
@@ -538,7 +905,10 @@
         },
       });
       if (field.kind === 'url' && val) {
-        return h('div', { class: 'en-unit' }, [inp, h('a', { class: 'en-link', href: String(val), target: '_blank', rel: 'noopener noreferrer', text: 'Ouvrir' })]);
+        return h('div', { class: 'en-unit' }, [
+          inp,
+          h('a', { class: 'en-iconlink', href: String(val), target: '_blank', rel: 'noopener noreferrer', title: 'Ouvrir le lien', 'aria-label': 'Ouvrir le lien' }, [icon('arrow-up-right')]),
+        ]);
       }
       return field.unit ? h('div', { class: 'en-unit' }, [inp, h('span', { class: 'en-unit-sfx', text: field.unit })]) : inp;
     }
@@ -548,10 +918,10 @@
       return Object.keys(EM().archetypeDefaults(state.schema, e.types)).length > 0;
     }
 
-    /** Label of a field with its provenance: inherited from the archetype, or overridden here (resettable). */
-    function fieldLabel(e, comp, f) {
+    /** Where a field's value comes from: the type's default, the model it follows, or this entity (resettable). */
+    function fieldMeta(e, comp, f) {
       var path = comp.id + '.' + f.key;
-      var row = h('div', { class: 'en-flabel' }, [h('label', { text: f.label })]);
+      var meta = h('span', { class: 'en-prop-meta' });
       var origin = EM().originOf(state.entities, e, path, state.schema);
       var base = e.base ? EM().findById(state.entities, e.base) : null;
       var archDefault = EM().archetypeDefaults(state.schema, e.types);
@@ -560,8 +930,10 @@
         return h(
           'button',
           {
-            class: 'en-link',
+            class: 'en-reset',
+            type: 'button',
             title: title,
+            'aria-label': 'Réinitialiser : ' + title,
             onclick: function () {
               applyEntity(
                 function (cur) {
@@ -571,124 +943,38 @@
               );
             },
           },
-          [icon('arrow-back-up'), 'Réinitialiser']
+          [icon('arrow-back-up')]
         );
       }
       if (origin === 'archetype') {
-        row.appendChild(h('span', { class: 'en-badge en-badge--inherited', title: 'Valeur par défaut de l’archétype : modifier ici crée une valeur propre' }, [icon('sparkles'), 'par défaut']));
-        return row;
+        meta.appendChild(h('span', { class: 'en-prov', title: 'Valeur par défaut du type : la modifier ici crée une valeur propre à cette entité' }, [icon('sparkles'), 'par défaut']));
+        return meta;
       }
       if (!base) {
-        if (origin === 'own' && hasArch) {
-          row.appendChild(h('span', { class: 'en-badge en-badge--own' }, ['modifié']));
-          row.appendChild(resetButton('Revenir à la valeur par défaut de l’archétype'));
-        }
-        return row;
+        if (origin === 'own' && hasArch) meta.appendChild(resetButton('Revenir à la valeur par défaut du type'));
+        return meta;
       }
       if (origin && origin !== 'own') {
-        row.appendChild(h('span', { class: 'en-badge en-badge--inherited', title: 'Suit le modèle : modifier ici crée une valeur propre' }, [icon('git-fork'), 'hérité de ' + (EM().findById(state.entities, origin) || { name: '?' }).name]));
-      } else if (origin === 'own' && base && EM().effectiveValue(state.entities, base, path) !== undefined) {
-        row.appendChild(h('span', { class: 'en-badge en-badge--own' }, ['modifié']));
-        row.appendChild(
-          h(
-            'button',
-            {
-              class: 'en-link',
-              title: 'Revenir à la valeur du modèle',
-              onclick: function () {
-                applyEntity(
-                  function (cur) {
-                    return EM().setValue(state.schema, cur, path, undefined);
-                  },
-                  { rebuild: true }
-                );
-              },
-            },
-            [icon('arrow-back-up'), 'Réinitialiser']
-          )
-        );
-      } else if (origin === 'own') {
-        row.appendChild(h('span', { class: 'en-badge en-badge--own' }, ['propre']));
+        meta.appendChild(h('span', { class: 'en-prov', title: 'Suit le modèle : la modifier ici crée une valeur propre' }, [icon('git-fork'), 'hérité de ' + (EM().findById(state.entities, origin) || { name: '?' }).name]));
+      } else if (origin === 'own' && EM().effectiveValue(state.entities, base, path) !== undefined) {
+        meta.appendChild(resetButton('Revenir à la valeur du modèle'));
       }
-      return row;
+      return meta;
     }
 
-    /** Archetype selector, clone buttons and the list of variants. */
-    function archetypeCard(e) {
-      var base = e.base ? EM().findById(state.entities, e.base) : null;
-      var sel = h('select', { class: 'en-input', 'aria-label': 'Variante de (modèle)' });
-      sel.appendChild(h('option', { value: '', text: 'Aucun (entité indépendante)' }));
-      state.entities.forEach(function (x) {
-        if (x.id === e.id || EM().wouldCycle(state.entities, e.id, x.id)) return;
-        sel.appendChild(h('option', { value: x.id, text: x.name }));
-      });
-      sel.value = e.base || '';
-      sel.addEventListener('change', function () {
-        applyEntity(
-          function (cur) {
-            return EM().setBase(state.entities, cur, sel.value);
-          },
-          { rebuild: true }
-        );
-      });
-      var variants = EM().variantsOf(state.entities, e.id);
-      var card = h('div', { class: 'en-card' }, [
-        h('h3', { class: 'en-h', text: 'Variantes' }),
-        h('div', { class: 'en-field' }, [h('label', { text: 'Variante de' }), sel]),
-        h('p', {
-          class: 'en-hint',
-          text: base
-            ? 'Les valeurs non modifiées ici suivent « ' + base.name + ' » ; ce que vous changez ici n’affecte jamais « ' + base.name + ' » ni ses autres variantes.'
-            : 'Optionnel : prendre une autre entité pour modèle, hériter de ses valeurs et ne stocker que vos différences.',
-        }),
-      ]);
-      var actions = h('div', { class: 'en-actions' }, [
-        h('button', { class: 'en-btn', title: 'Nouvelle entité qui hérite de celle-ci', onclick: function () { cloneSelected(false); } }, [icon('git-fork'), 'Créer une variante']),
-        h('button', { class: 'en-btn', title: 'Copie sans lien avec l’original', onclick: function () { cloneSelected(true); } }, [icon('copy'), 'Copie indépendante']),
-      ]);
-      if (base) {
-        actions.appendChild(
-          h(
-            'button',
-            {
-              class: 'en-btn',
-              title: 'Garde les valeurs actuelles mais ne suit plus le modèle',
-              onclick: function () {
-                applyEntity(
-                  function (cur) {
-                    return EM().detachEntity(state.entities, cur);
-                  },
-                  { rebuild: true }
-                );
-              },
-            },
-            [icon('unlink'), 'Détacher du modèle']
-          )
-        );
+    var fieldUid = 0;
+
+    function propRow(e, comp, f) {
+      var control = fieldInput(e, comp, f);
+      var label = h('label', { class: 'en-prop-label', text: f.label });
+      var focusable = control.matches('input,select,textarea') ? control : control.querySelector('input,select,textarea');
+      if (focusable) {
+        fieldUid += 1;
+        focusable.id = 'en-f' + fieldUid;
+        label.setAttribute('for', focusable.id);
       }
-      card.appendChild(actions);
-      if (variants.length) {
-        card.appendChild(h('div', { class: 'en-flabel' }, [h('label', { text: 'Variantes (' + variants.length + ')' })]));
-        var list = h('div', { class: 'en-variants' });
-        variants.forEach(function (v) {
-          list.appendChild(
-            h(
-              'button',
-              {
-                class: 'en-btn',
-                onclick: function () {
-                  state.selId = v.id;
-                  paintList();
-                  paintMain();
-                },
-              },
-              [v.name]
-            )
-          );
-        });
-        card.appendChild(list);
-      }
-      return card;
+      var stack = f.kind === 'longtext' || f.kind === 'multi' || f.kind === 'refs';
+      return h('div', { class: 'en-prop' + (stack ? ' en-prop--stack' : '') + (f.kind === 'bool' ? ' en-prop--switch' : '') }, [label, h('div', { class: 'en-prop-value' }, [control]), fieldMeta(e, comp, f)]);
     }
 
     function cloneSelected(detach) {
@@ -704,7 +990,7 @@
       state.entities = state.entities.concat([copy]);
       state.selId = copy.id;
       scheduleSave();
-      paintList();
+      paintList({ reveal: true });
       paintMain();
       var input = els.main.querySelector('.en-name');
       if (input) {
@@ -713,17 +999,139 @@
       }
     }
 
-    function paintMain() {
-      els.main.textContent = '';
-      if (state.mode === 'schema') return paintSchema();
-      var e = selected();
-      if (!e) {
-        els.main.appendChild(emptyState());
-        return;
-      }
+    function openEntity(id, opts) {
+      state.selId = id;
+      state.mode = 'entity';
+      state.confirm = '';
+      state.linkOpen = false;
+      paintList({ reveal: true, focus: opts && opts.focus });
+      paintMain();
+    }
+
+    /** A small clickable reference to another entity. */
+    function entityChip(other) {
+      return h('button', { class: 'en-ref', type: 'button', onclick: function () { openEntity(other.id); } }, [tile(other, 'xs'), h('span', { text: other.name })]);
+    }
+
+    /** The picker behind "+ Type": every type, searchable, a check on those the entity already has. */
+    function typePicker(anchor, e) {
+      openPop(
+        anchor,
+        function (el, close) {
+          var types = state.schema.types.slice().sort(function (a, b) {
+            return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+          });
+          var search = types.length > 7 ? h('input', { class: 'en-pop-search', type: 'search', placeholder: 'Chercher un type', 'aria-label': 'Chercher un type', autocomplete: 'off' }) : null;
+          var listEl = h('div', { class: 'en-pop-list' });
+          function fill() {
+            var q = search ? fold(search.value) : '';
+            listEl.textContent = '';
+            var n = 0;
+            types.forEach(function (ty) {
+              if (q && fold(ty.name + ' ' + ty.aliases.join(' ')).indexOf(q) < 0) return;
+              n += 1;
+              var has = e.types.indexOf(ty.id) >= 0;
+              var nat = EM().natureById(EM().natureOfType(state.schema, ty.id));
+              listEl.appendChild(
+                menuItem(
+                  ty.icon || (nat && nat.icon) || 'tag',
+                  ty.name,
+                  nat ? nat.name : '',
+                  function () {
+                    applyEntity(
+                      function (cur) {
+                        var set = cur.types.filter(function (x) {
+                          return x !== ty.id;
+                        });
+                        if (!has) set.push(ty.id);
+                        return EM().setTypes(state.schema, cur, set);
+                      },
+                      { rebuild: true }
+                    );
+                  },
+                  { check: has }
+                )
+              );
+            });
+            if (!n) listEl.appendChild(h('p', { class: 'en-list-hint', text: 'Aucun type ne correspond.' }));
+          }
+          if (search) {
+            search.addEventListener('input', fill);
+            el.appendChild(search);
+          }
+          el.appendChild(listEl);
+          el.appendChild(
+            h('div', { class: 'en-pop-foot' }, [
+              menuItem('adjustments', 'Gérer les types…', '', function () {
+                state.mode = 'schema';
+                paintList();
+                paintMain();
+              }),
+            ])
+          );
+          fill();
+        },
+        { className: 'en-pop--picker', role: 'dialog' }
+      );
+    }
+
+    /** The "•••" menu of the entity page: duplicate, detach, delete (two clicks). */
+    function moreMenu(anchor, e) {
+      openPop(
+        anchor,
+        function (el) {
+          el.appendChild(menuItem('git-fork', 'Créer une variante', 'Une entité qui hérite de celle-ci', function () { cloneSelected(false); }));
+          el.appendChild(menuItem('copy', 'Dupliquer', 'Une copie sans lien avec l’original', function () { cloneSelected(true); }));
+          if (e.base) {
+            el.appendChild(
+              menuItem('unlink', 'Détacher du modèle', 'Garde les valeurs, ne le suit plus', function () {
+                applyEntity(
+                  function (cur) {
+                    return EM().detachEntity(state.entities, cur);
+                  },
+                  { rebuild: true }
+                );
+              })
+            );
+          }
+          el.appendChild(h('div', { class: 'en-menu-sep' }));
+          var armed = false;
+          var del = menuItem(
+            'trash',
+            'Supprimer l’entité',
+            '',
+            function () {
+              if (!armed) {
+                armed = true;
+                del.querySelector('.en-menu-label').textContent = 'Confirmer la suppression';
+                del.querySelector('.en-menu-text').appendChild(h('span', { class: 'en-menu-sub', text: 'Retire aussi les liens qui pointent vers elle' }));
+                return;
+              }
+              closePop();
+              state.entities = EM().deleteEntity(state.schema, state.entities, e.id);
+              state.selId = null;
+              state.confirm = '';
+              scheduleSave();
+              paintList();
+              paintMain();
+            },
+            { danger: true, keepOpen: true }
+          );
+          el.appendChild(del);
+        },
+        { align: 'end' }
+      );
+    }
+
+    /** Title block: type icon, big editable name, type pills, aliases. */
+    function heroBlock(e) {
       var nameInput = h('input', {
-        class: 'en-input en-name',
+        class: 'en-name',
+        type: 'text',
         'aria-label': 'Nom',
+        placeholder: 'Nom',
+        maxlength: '80',
+        autocomplete: 'off',
         value: e.name,
         onchange: function () {
           applyEntity(function (cur) {
@@ -731,238 +1139,524 @@
           });
           nameInput.value = (selected() || e).name;
         },
-      });
-      var aliasInput = h('input', {
-        class: 'en-input',
-        'aria-label': 'Alias',
-        placeholder: 'ex. travail, work, bureau',
-        value: e.aliases.join(', '),
-        onchange: function () {
-          applyEntity(function (cur) {
-            return EM().setAliases(cur, splitList(aliasInput.value));
-          });
+        onkeydown: function (ev) {
+          if (ev.key === 'Enter') nameInput.blur();
+          else if (ev.key === 'Escape') {
+            nameInput.value = (selected() || e).name;
+            nameInput.blur();
+          }
         },
       });
-      var typeBox = h('div', { class: 'en-checks' });
-      state.schema.types.forEach(function (ty) {
-        typeBox.appendChild(
-          h('label', { class: 'en-check' }, [
-            h('input', {
-              type: 'checkbox',
-              checked: e.types.indexOf(ty.id) >= 0 ? true : null,
-              onchange: function (ev) {
-                applyEntity(
-                  function (cur) {
-                    var set = cur.types.filter(function (x) {
-                      return x !== ty.id;
-                    });
-                    if (ev.target.checked) set.push(ty.id);
-                    return EM().setTypes(state.schema, cur, set);
-                  },
-                  { rebuild: true }
-                );
+      var moreBtn = h(
+        'button',
+        {
+          class: 'en-icon-btn',
+          type: 'button',
+          title: 'Plus d’actions',
+          'aria-label': 'Plus d’actions',
+          'aria-haspopup': 'menu',
+          'aria-expanded': 'false',
+          onclick: function (ev) {
+            moreMenu(ev.currentTarget, selected() || e);
+          },
+        },
+        [icon('dots')]
+      );
+
+      var typesRow = h('div', { class: 'en-typesrow' });
+      var typeNames = [];
+      e.types.forEach(function (tid) {
+        var ty = EM().findById(state.schema.types, tid);
+        if (!ty) return;
+        typeNames.push(fold(ty.name));
+        var nat = EM().natureById(EM().natureOfType(state.schema, tid));
+        typesRow.appendChild(
+          h('span', { class: 'en-typepill', style: '--tile:' + ((nat && NATURE_COLORS[nat.id]) || NEUTRAL_COLOR) }, [
+            icon(ty.icon || (nat && nat.icon) || 'tag'),
+            h('span', { text: ty.name + (ty.role ? ' (rôle)' : '') }),
+            h(
+              'button',
+              {
+                class: 'en-typepill-x',
+                type: 'button',
+                title: 'Retirer le type ' + ty.name,
+                'aria-label': 'Retirer le type ' + ty.name,
+                onclick: function () {
+                  applyEntity(
+                    function (cur) {
+                      return EM().setTypes(
+                        state.schema,
+                        cur,
+                        cur.types.filter(function (x) {
+                          return x !== tid;
+                        })
+                      );
+                    },
+                    { rebuild: true }
+                  );
+                },
               },
-            }),
-            ty.name,
+              [icon('x')]
+            ),
           ])
         );
       });
-      els.main.appendChild(
-        h('div', { class: 'en-card' }, [
-          h('div', { class: 'en-field' }, [h('label', { text: 'Nom' }), nameInput]),
-          h('div', { class: 'en-field' }, [h('label', { text: 'Alias (séparés par des virgules)' }), aliasInput]),
-          h('div', { class: 'en-field' }, [h('label', { text: 'Archétypes' }), typeBox]),
-        ])
-      );
-      els.main.appendChild(ontologyCard(e));
-      els.main.appendChild(archetypeCard(e));
-      EM()
-        .componentIdsOf(state.schema, e)
-        .forEach(function (cid) {
-          var comp = EM().findById(state.schema.components, cid);
-          if (!comp) return;
-          var own = EM().componentIdsOf(state.schema, { types: e.types }).indexOf(cid) < 0;
-          var card = h('div', { class: 'en-card' }, [
-            h('h3', { class: 'en-h' }, [
-              comp.name,
-              own
-                ? h(
-                    'button',
-                    {
-                      class: 'en-link',
-                      title: 'Retirer ce composant de l’entité (les valeurs saisies restent en mémoire)',
-                      onclick: function () {
-                        applyEntity(
-                          function (cur) {
-                            return EM().setComponents(state.schema, cur, (cur.components || []).filter(function (x) { return x !== cid; }));
-                          },
-                          { rebuild: true }
-                        );
-                      },
-                    },
-                    [icon('x'), 'Retirer']
-                  )
-                : null,
-            ]),
-          ]);
-          if (!comp.fields.length) card.appendChild(h('p', { class: 'en-hint', text: 'Ce composant n’a aucun champ (voir Schéma).' }));
-          comp.fields.forEach(function (f) {
-            card.appendChild(h('div', { class: 'en-field' }, [fieldLabel(e, comp, f), fieldInput(e, comp, f)]));
-          });
-          els.main.appendChild(card);
-        });
-      els.main.appendChild(addComponentCard(e));
-      els.main.appendChild(linksCard(e));
-      els.main.appendChild(
-        h('div', { class: 'en-card' }, [historyBox])
-      );
-      paintHistory();
-      els.main.appendChild(
-        h('div', { class: 'en-danger' }, [
-          h(
-            'button',
-            {
-              class: 'en-btn en-btn--danger',
-              onclick: function () {
-                if (state.confirm !== e.id) {
-                  state.confirm = e.id;
-                  paintMain();
-                  return;
-                }
-                state.entities = EM().deleteEntity(state.schema, state.entities, e.id);
-                state.selId = null;
-                state.confirm = '';
-                scheduleSave();
-                paintList();
-                paintMain();
-              },
+      typesRow.appendChild(
+        h(
+          'button',
+          {
+            class: 'en-typeadd',
+            type: 'button',
+            'aria-haspopup': 'dialog',
+            'aria-expanded': 'false',
+            onclick: function (ev) {
+              typePicker(ev.currentTarget, selected() || e);
             },
-            [icon('trash'), state.confirm === e.id ? 'Confirmer la suppression (retire aussi les liens)' : 'Supprimer l’entité']
-          ),
-        ])
+          },
+          [icon('plus'), e.types.length ? 'Type' : 'Ajouter un type']
+        )
       );
+      EM()
+        .naturesOf(state.schema, e)
+        .forEach(function (n) {
+          var nat = EM().natureById(n);
+          if (typeNames.indexOf(fold(nat.name)) >= 0) return;
+          typesRow.appendChild(h('span', { class: 'en-nature', title: nat.hint, text: nat.name }));
+        });
+      var base = e.base ? EM().findById(state.entities, e.base) : null;
+      if (base) {
+        typesRow.appendChild(
+          h('button', { class: 'en-typepill en-typepill--model', type: 'button', title: 'Cette entité suit son modèle : ouvrir « ' + base.name + ' »', onclick: function () { openEntity(base.id); } }, [icon('git-fork'), 'Variante de ' + base.name])
+        );
+      }
+
+      var aliasBox = h('div', { class: 'en-aliases' });
+      function setAliasList(list, refocus) {
+        applyEntity(function (cur) {
+          return EM().setAliases(cur, list);
+        });
+        fillAliases();
+        if (refocus) {
+          var inp = aliasBox.querySelector('.en-alias-input');
+          if (inp) inp.focus();
+        }
+      }
+      function fillAliases() {
+        var cur = selected() || e;
+        aliasBox.textContent = '';
+        aliasBox.appendChild(h('span', { class: 'en-aliases-label', text: 'Aussi appelé' }));
+        cur.aliases.forEach(function (a) {
+          aliasBox.appendChild(
+            h('span', { class: 'en-token' }, [
+              a,
+              h('button', { class: 'en-token-x', type: 'button', 'aria-label': 'Retirer l’alias ' + a, onclick: function () { setAliasList(cur.aliases.filter(function (x) { return x !== a; }), true); } }, [icon('x')]),
+            ])
+          );
+        });
+        var input = h('input', {
+          class: 'en-alias-input',
+          type: 'text',
+          maxlength: '40',
+          autocomplete: 'off',
+          placeholder: cur.aliases.length ? 'Ajouter…' : 'ex. travail, work, bureau',
+          title: 'Un alias est un autre nom : l’assistant comprend « au travail » si l’alias est « travail ».',
+          'aria-label': 'Ajouter un alias',
+          onkeydown: function (ev) {
+            if (ev.key === 'Enter' || ev.key === ',') {
+              ev.preventDefault();
+              commitAlias(true);
+            } else if (ev.key === 'Backspace' && !input.value && cur.aliases.length) {
+              setAliasList(cur.aliases.slice(0, -1), true);
+            }
+          },
+          onblur: function () {
+            commitAlias(false);
+          },
+        });
+        function commitAlias(refocus) {
+          var parts = splitList(input.value);
+          if (!parts.length) return;
+          input.value = '';
+          setAliasList((selected() || e).aliases.concat(parts), refocus);
+        }
+        aliasBox.appendChild(input);
+      }
+      fillAliases();
+
+      return h('header', { class: 'en-hero' }, [h('div', { class: 'en-hero-top' }, [tile(e, 'lg'), nameInput, moreBtn]), typesRow, aliasBox]);
     }
 
-    /** Composition: an entity can carry components beyond its archetypes. */
-    function addComponentCard(e) {
+    function paintMain() {
+      var viewKey = state.mode + ':' + (state.selId || '');
+      var same = els.main.dataset.view === viewKey;
+      var keep = same ? els.main.scrollTop : 0;
+      if (!same) {
+        state.openModel = undefined;
+        state.linkOpen = false;
+      }
+      closePop();
+      els.main.textContent = '';
+      els.main.dataset.view = viewKey;
+      var page = h('div', { class: 'en-page' });
+      els.main.appendChild(page);
+      if (state.mode === 'schema') {
+        page.classList.add('en-page--schema');
+        paintSchema(page);
+      } else paintEntity(page);
+      els.main.scrollTop = keep;
+      if (state.refocus) {
+        var f = page.querySelector(state.refocus);
+        state.refocus = '';
+        if (f) f.focus();
+      }
+    }
+
+    function paintEntity(page) {
+      var e = selected();
+      if (!e) {
+        page.classList.add('en-page--empty');
+        page.appendChild(emptyState());
+        return;
+      }
+      page.appendChild(heroBlock(e));
+      EM()
+        .ontologyIssues(state.schema, state.entities, e)
+        .forEach(function (i) {
+          page.appendChild(h('div', { class: 'en-notice en-notice--' + i.level, role: 'note' }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), h('span', { text: i.message })]));
+        });
+      var ownIds = EM().componentIdsOf(state.schema, { types: e.types });
+      var comps = EM()
+        .componentIdsOf(state.schema, e)
+        .map(function (cid) {
+          return EM().findById(state.schema.components, cid);
+        })
+        .filter(Boolean);
+      comps.forEach(function (comp) {
+        var own = ownIds.indexOf(comp.id) < 0;
+        var removeBtn = own
+          ? h(
+              'button',
+              {
+                class: 'en-link',
+                type: 'button',
+                title: 'Retirer ces champs de cette entité (les valeurs saisies restent en mémoire)',
+                onclick: function () {
+                  applyEntity(
+                    function (cur) {
+                      return EM().setComponents(
+                        state.schema,
+                        cur,
+                        (cur.components || []).filter(function (x) {
+                          return x !== comp.id;
+                        })
+                      );
+                    },
+                    { rebuild: true }
+                  );
+                },
+              },
+              ['Retirer']
+            )
+          : null;
+        var rows = comp.fields.map(function (f) {
+          return propRow(e, comp, f);
+        });
+        if (!rows.length) rows = [h('p', { class: 'en-set-empty', text: 'Aucun champ : ajoutez-en dans « Types et composants ».' })];
+        page.appendChild(section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn));
+      });
+      var addFields = addFieldsRow(e, !comps.length);
+      if (addFields) page.appendChild(addFields);
+      page.appendChild(linksSection(e));
+      var ctx = contextSection(e);
+      if (ctx) page.appendChild(ctx);
+      page.appendChild(modelSection(e));
+      page.appendChild(historyBox);
+      paintHistory();
+    }
+
+    /** "+ Ajouter des champs": groups of fields (components) for this entity only, without changing its type. */
+    function addFieldsRow(e, first) {
       var have = EM().componentIdsOf(state.schema, e);
       var avail = state.schema.components.filter(function (c) {
         return have.indexOf(c.id) < 0 && c.fields.length;
       });
-      if (!avail.length) return h('div', { hidden: true });
-      var sel = h('select', { class: 'en-input', 'aria-label': 'Composant à ajouter' });
-      avail.forEach(function (c) {
-        sel.appendChild(h('option', { value: c.id, text: c.name + ' (' + c.fields.map(function (x) { return x.label; }).join(', ') + ')' }));
-      });
-      return h('div', { class: 'en-card en-addcomp' }, [
-        h('h3', { class: 'en-h', text: 'Composer davantage' }),
-        h('p', { class: 'en-hint', text: 'Ajoutez un composant à cette entité seulement, sans changer son archétype.' }),
-        h('div', { class: 'en-link-add' }, [
-          sel,
-          h(
-            'button',
-            {
-              class: 'en-btn',
-              onclick: function () {
-                applyEntity(
-                  function (cur) {
-                    return EM().setComponents(state.schema, cur, (cur.components || []).concat([sel.value]));
-                  },
-                  { rebuild: true }
-                );
-              },
+      if (!avail.length) return null;
+      return h('div', { class: 'en-addrow' }, [
+        h(
+          'button',
+          {
+            class: 'en-btn en-btn--ghost',
+            type: 'button',
+            'aria-haspopup': 'menu',
+            'aria-expanded': 'false',
+            title: 'Ajouter un groupe de champs à cette entité seulement, sans changer son type',
+            onclick: function (ev) {
+              openPop(ev.currentTarget, function (el) {
+                avail.forEach(function (c) {
+                  el.appendChild(
+                    menuItem(
+                      'forms',
+                      c.name,
+                      c.fields
+                        .map(function (x) {
+                          return x.label;
+                        })
+                        .join(', '),
+                      function () {
+                        applyEntity(
+                          function (cur) {
+                            return EM().setComponents(state.schema, cur, (cur.components || []).concat([c.id]));
+                          },
+                          { rebuild: true }
+                        );
+                      }
+                    )
+                  );
+                });
+              });
             },
-            [icon('plus'), 'Ajouter le composant']
-          ),
-        ]),
+          },
+          [icon('plus'), first ? 'Ajouter des champs' : 'Ajouter d’autres champs']
+        ),
       ]);
     }
 
-    function openEntity(id) {
-      state.selId = id;
-      state.mode = 'entity';
-      state.confirm = '';
-      paintList();
-      paintMain();
-    }
-
-    function entityButton(other) {
-      return h('button', { class: 'en-link', onclick: function () { openEntity(other.id); } }, [other.name]);
-    }
-
-    /** What the entity IS: natures, where it sits in the containment hierarchy, what it contains, what grounds it. */
-    function ontologyCard(e) {
-      var card = h('div', { class: 'en-card en-onto' }, [h('h3', { class: 'en-h', text: 'Ontologie' })]);
-      var natures = EM().naturesOf(state.schema, e);
-      var chips = h('div', { class: 'en-chips' });
-      natures.forEach(function (n) {
-        var nat = EM().natureById(n);
-        chips.appendChild(h('span', { class: 'en-chip en-chip--' + nat.realm, title: nat.hint }, [icon(nat.icon), nat.name]));
-      });
-      e.types.forEach(function (tid) {
-        var ty = EM().findById(state.schema.types, tid);
-        if (ty && ty.role) chips.appendChild(h('span', { class: 'en-chip en-chip--role', title: 'Un rôle : ce que l’entité est dans un contexte', text: 'rôle : ' + ty.name }));
-      });
-      if (!natures.length) chips.appendChild(h('span', { class: 'en-hint', text: 'Sans nature : donnez un type qui en a une (voir Schéma).' }));
-      card.appendChild(chips);
-      var path = EM().pathOf(state.schema, state.entities, e.id);
-      if (path.length > 1) {
-        var crumb = h('div', { class: 'en-crumb', 'aria-label': 'Où se trouve cette entité' });
-        path.forEach(function (p, i) {
-          if (i) crumb.appendChild(h('span', { class: 'en-crumb-sep', text: '›' }));
-          crumb.appendChild(p.id === e.id ? h('strong', { text: p.name }) : entityButton(p));
-        });
-        card.appendChild(crumb);
+    /** Where the entity sits (containment), what it contains, what anchors it in matter: derived, read-only. */
+    function contextSection(e) {
+      var rows = [];
+      function row(label, nodes) {
+        rows.push(h('div', { class: 'en-prop en-prop--ctx' }, [h('span', { class: 'en-prop-label', text: label }), h('div', { class: 'en-prop-value en-crumb' }, nodes), h('span', { class: 'en-prop-meta' })]));
       }
-      var inside = EM().descendantsOf(state.schema, state.entities, e.id).slice(0, 12);
-      if (inside.length) {
-        var row = h('div', { class: 'en-inside' }, [h('span', { class: 'en-hint', text: 'Contient : ' })]);
-        inside.forEach(function (id) {
-          var o = EM().findById(state.entities, id);
-          if (o) row.appendChild(entityButton(o));
-        });
-        card.appendChild(row);
-      }
-      EM()
-        .ontologyIssues(state.schema, state.entities, e)
-        .forEach(function (i) {
-          card.appendChild(h('p', { class: 'en-issue en-issue--' + i.level }, [icon(i.level === 'error' ? 'alert-circle' : i.level === 'info' ? 'info-circle' : 'alert-triangle'), i.message]));
-        });
-      var g = EM().groundingOf(state.schema, state.entities, e.id);
-      if (g.grounded && g.path.length > 1) {
-        var gr = h('div', { class: 'en-inside' }, [h('span', { class: 'en-hint', text: 'Ancré dans le matériel par : ' })]);
-        g.path.slice(1).forEach(function (id, i) {
+      function chain(ids) {
+        var nodes = [];
+        ids.forEach(function (id, i) {
           var o = EM().findById(state.entities, id);
           if (!o) return;
-          if (i) gr.appendChild(h('span', { class: 'en-crumb-sep', text: '›' }));
-          gr.appendChild(entityButton(o));
+          if (i) nodes.push(h('span', { class: 'en-crumb-sep', text: '›' }));
+          nodes.push(entityChip(o));
         });
-        card.appendChild(gr);
+        return nodes;
       }
-      return natures.length || path.length > 1 || inside.length ? card : h('div', { hidden: true });
+      var path = EM().pathOf(state.schema, state.entities, e.id);
+      if (path.length > 1) {
+        row(
+          'Se trouve dans',
+          chain(
+            path
+              .filter(function (p) {
+                return p.id !== e.id;
+              })
+              .map(function (p) {
+                return p.id;
+              })
+          )
+        );
+      }
+      var inside = EM().descendantsOf(state.schema, state.entities, e.id);
+      if (inside.length) {
+        var nodes = inside.slice(0, 12).map(function (id) {
+          return EM().findById(state.entities, id);
+        });
+        nodes = nodes.filter(Boolean).map(entityChip);
+        if (inside.length > 12) nodes.push(h('span', { class: 'en-hint', text: '+ ' + (inside.length - 12) }));
+        row('Contient', nodes);
+      }
+      var g = EM().groundingOf(state.schema, state.entities, e.id);
+      if (g.grounded && g.path.length > 1) row('Ancré par', chain(g.path.slice(1)));
+      if (!rows.length) return null;
+      return section('Contexte', h('div', { class: 'en-set' }, rows));
+    }
+
+    /** Free relations ("situé dans", "fait de"…) and the ones that point here, as a list with an inline "add". */
+    function linksSection(e) {
+      var rows = [];
+      e.relations.forEach(function (r) {
+        var other = EM().findById(state.entities, r.to);
+        rows.push(
+          h('div', { class: 'en-prop en-prop--link' }, [
+            h('span', { class: 'en-prop-label', text: cap(r.type) }),
+            h('div', { class: 'en-prop-value' }, [other ? entityChip(other) : h('span', { class: 'en-hint', text: '(supprimée)' })]),
+            h('span', { class: 'en-prop-meta' }, [
+              h(
+                'button',
+                {
+                  class: 'en-reset',
+                  type: 'button',
+                  title: 'Retirer le lien',
+                  'aria-label': 'Retirer le lien ' + r.type,
+                  onclick: function () {
+                    applyEntity(
+                      function (cur) {
+                        return EM().removeRelation(cur, r.type, r.to);
+                      },
+                      { rebuild: true }
+                    );
+                  },
+                },
+                [icon('x')]
+              ),
+            ]),
+          ])
+        );
+      });
+      EM()
+        .linksOf(state.schema, state.entities, e.id)
+        .filter(function (l) {
+          return l.dir === 'in' && l.via !== 'variante de';
+        })
+        .forEach(function (l) {
+          var other = EM().findById(state.entities, l.other);
+          if (!other) return;
+          var via = String(l.via);
+          var label = l.inverse && l.inverse !== via ? l.inverse : via.indexOf(' / ') >= 0 ? 'Utilisé comme « ' + via.split(' / ').pop() + ' » par' : '← ' + via;
+          rows.push(
+            h('div', { class: 'en-prop en-prop--link is-in' }, [
+              h('span', { class: 'en-prop-label', text: cap(label) }),
+              h('div', { class: 'en-prop-value' }, [entityChip(other)]),
+              h('span', { class: 'en-prop-meta' }),
+            ])
+          );
+        });
+      var others = state.entities.filter(function (x) {
+        return x.id !== e.id;
+      });
+      if (others.length) {
+        rows.push(state.linkOpen ? linkForm(e, others) : h('button', { class: 'en-set-add', type: 'button', onclick: function () { state.linkOpen = true; state.refocus = '.en-link-type'; paintMain(); } }, [icon('plus'), 'Ajouter un lien']));
+      } else if (!rows.length) {
+        rows.push(h('p', { class: 'en-set-empty', text: 'Créez une autre entité pour pouvoir les relier.' }));
+      }
+      return section('Liens', h('div', { class: 'en-set' }, rows));
+    }
+
+    function linkForm(e, others) {
+      var relType = h('input', {
+        class: 'en-input en-link-type',
+        type: 'text',
+        placeholder: 'Lien (ex. situé dans, fait de)',
+        'aria-label': 'Type de lien',
+        list: 'en-rel-types',
+        autocomplete: 'off',
+      });
+      var relList = h('datalist', { id: 'en-rel-types' });
+      EM()
+        .relationsFor(EM().naturesOf(state.schema, e))
+        .forEach(function (d) {
+          relList.appendChild(h('option', { value: d.name }));
+        });
+      var relTo = h('select', { class: 'en-input', 'aria-label': 'Entité liée' });
+      others
+        .slice()
+        .sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true });
+        })
+        .forEach(function (x) {
+          relTo.appendChild(h('option', { value: x.id, text: x.name }));
+        });
+      function submit() {
+        if (!relTo.value) return;
+        if (EM().wouldCycleRelation(state.schema, state.entities, e.id, relType.value, relTo.value)) {
+          toast('Ce lien ferait contenir une entité par elle-même.', 'error');
+          return;
+        }
+        state.linkOpen = false;
+        applyEntity(
+          function (cur) {
+            return EM().addRelation(cur, relType.value, relTo.value);
+          },
+          { rebuild: true }
+        );
+      }
+      relType.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') submit();
+        else if (ev.key === 'Escape') cancel();
+      });
+      function cancel() {
+        state.linkOpen = false;
+        paintMain();
+      }
+      return h('div', { class: 'en-linkform' }, [
+        relList,
+        relType,
+        relTo,
+        h('button', { class: 'en-btn en-btn--primary', type: 'button', onclick: submit }, ['Lier']),
+        h('button', { class: 'en-btn', type: 'button', onclick: cancel }, ['Annuler']),
+      ]);
+    }
+
+    /** "Modèle et variantes": rarely needed, so a collapsed row unless this entity already follows a model or has variants. */
+    function modelSection(e) {
+      var base = e.base ? EM().findById(state.entities, e.base) : null;
+      var variants = EM().variantsOf(state.entities, e.id);
+      var open = state.openModel === undefined ? !!(base || variants.length) : state.openModel;
+      var meta = base ? 'suit « ' + base.name + ' »' : variants.length ? variants.length + (variants.length > 1 ? ' variantes' : ' variante') : '';
+      var box = h('section', { class: 'en-sec en-sec--disc' }, [
+        disclosure('Modèle et variantes', meta, open, function () {
+          state.openModel = !open;
+          paintMain();
+        }),
+      ]);
+      if (!open) return box;
+      var sel = h('select', { class: 'en-ctl', id: 'en-model', 'aria-label': 'Modèle suivi par cette entité' });
+      sel.appendChild(h('option', { value: '', text: 'Aucun (entité indépendante)' }));
+      state.entities
+        .slice()
+        .sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true });
+        })
+        .forEach(function (x) {
+          if (x.id === e.id || EM().wouldCycle(state.entities, e.id, x.id)) return;
+          sel.appendChild(h('option', { value: x.id, text: x.name }));
+        });
+      sel.value = e.base || '';
+      sel.addEventListener('change', function () {
+        applyEntity(
+          function (cur) {
+            return EM().setBase(state.entities, cur, sel.value);
+          },
+          { rebuild: true }
+        );
+      });
+      var rows = [h('div', { class: 'en-prop' }, [h('label', { class: 'en-prop-label', for: 'en-model', text: 'Modèle' }), h('div', { class: 'en-prop-value' }, [h('span', { class: 'en-select' }, [sel])]), h('span', { class: 'en-prop-meta' })])];
+      if (variants.length) {
+        rows.push(
+          h('div', { class: 'en-prop en-prop--ctx' }, [
+            h('span', { class: 'en-prop-label', text: 'Variantes' }),
+            h('div', { class: 'en-prop-value en-crumb' }, variants.map(entityChip)),
+            h('span', { class: 'en-prop-meta' }),
+          ])
+        );
+      }
+      rows.push(
+        h('p', {
+          class: 'en-set-note',
+          text: base
+            ? 'Les valeurs que vous ne modifiez pas suivent « ' + base.name + ' » ; ce que vous changez ici n’affecte jamais « ' + base.name + ' » ni ses autres variantes.'
+            : 'Choisissez un modèle pour hériter de ses valeurs et ne garder que vos différences. « Créer une variante » (menu •••) le fait en un clic.',
+        })
+      );
+      box.appendChild(h('div', { class: 'en-set' }, rows));
+      return box;
     }
 
     function emptyState() {
+      if (!state.loaded) return h('div', { class: 'en-empty' }, [h('p', { class: 'en-empty-text', text: 'Chargement…' })]);
+      var has = state.entities.length > 0;
       var box = h('div', { class: 'en-empty' }, [
-        icon('stack-2'),
-        h('p', { text: 'Choisissez une entité, ou créez-en une.' }),
-        h('button', { class: 'en-btn en-btn--primary', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
+        h('span', { class: 'en-empty-ic' }, [icon('stack-2')]),
+        h('h2', { class: 'en-empty-title', text: has ? 'Aucune entité sélectionnée' : 'Décrivez votre première entité' }),
         h('p', {
-          class: 'en-hint',
-          text: 'Une entité est un objet nommé (« Ficus », « Hôtel de Ville ») avec des types, des propriétés, des liens et un historique. L’assistant s’en sert pour comprendre « arroser mes plantes au travail ».',
+          class: 'en-empty-text',
+          text: has
+            ? 'Choisissez une entité dans la liste, ou composez-en une nouvelle.'
+            : 'Une entité est une chose nommée — « Ficus », « Hôtel de Ville » — avec un type, des propriétés et des liens. L’assistant s’en sert pour comprendre « arroser mes plantes au travail ».',
         }),
+        h('button', { class: 'en-btn en-btn--primary', type: 'button', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
       ]);
       var hasPlant = state.schema.types.some(function (ty) {
         return ty.id === 'plante';
       });
-      if (!hasPlant) {
-        box.appendChild(
-          h(
-            'button',
-            { class: 'en-btn', onclick: addPlantExample },
-            [icon('plant'), 'Ajouter le type « Plante » (lieu + entretien)']
-          )
-        );
+      if (!hasPlant && !has) {
+        box.appendChild(h('button', { class: 'en-link', type: 'button', onclick: addPlantExample }, [icon('plant'), 'Essayer avec un exemple : le type « Plante »']));
       }
       return box;
     }
@@ -982,100 +1676,6 @@
       toast('Type « Plante » ajouté. Créez des plantes, puis un lieu avec l’alias « travail ».');
     }
 
-    function linksCard(e) {
-      var card = h('div', { class: 'en-card' }, [h('h3', { class: 'en-h', text: 'Liens' })]);
-      e.relations.forEach(function (r) {
-        var other = EM().findById(state.entities, r.to);
-        card.appendChild(
-          h('div', { class: 'en-link-row' }, [
-            h('span', { text: r.type + ' → ' + (other ? other.name : '?') }),
-            h(
-              'button',
-              {
-                class: 'en-link',
-                'aria-label': 'Retirer le lien',
-                onclick: function () {
-                  applyEntity(
-                    function (cur) {
-                      return EM().removeRelation(cur, r.type, r.to);
-                    },
-                    { rebuild: true }
-                  );
-                },
-              },
-              [icon('x')]
-            ),
-          ])
-        );
-      });
-      EM()
-        .linksOf(state.schema, state.entities, e.id)
-        .filter(function (l) {
-          return l.dir === 'in';
-        })
-        .forEach(function (l) {
-          var other = EM().findById(state.entities, l.other);
-          card.appendChild(
-            h('div', { class: 'en-link-row en-link-row--in' }, [
-              h('span', { text: l.inverse && l.inverse !== l.via ? l.inverse + ' ' + (other ? other.name : '?') : (other ? other.name : '?') + ' ← ' + l.via }),
-              other
-                ? h(
-                    'button',
-                    {
-                      class: 'en-link',
-                      onclick: function () {
-                        state.selId = other.id;
-                        paintList();
-                        paintMain();
-                      },
-                    },
-                    ['Ouvrir']
-                  )
-                : null,
-            ])
-          );
-        });
-      var relType = h('input', { class: 'en-input', placeholder: 'Type de lien (ex. situé dans, fait de, ancré dans)', 'aria-label': 'Type de lien', list: 'en-rel-types' });
-      var relList = h('datalist', { id: 'en-rel-types' });
-      EM()
-        .relationsFor(EM().naturesOf(state.schema, e))
-        .forEach(function (d) {
-          relList.appendChild(h('option', { value: d.name }));
-        });
-      card.appendChild(relList);
-      var relTo = h('select', { class: 'en-input', 'aria-label': 'Entité liée' });
-      state.entities.forEach(function (x) {
-        if (x.id !== e.id) relTo.appendChild(h('option', { value: x.id, text: x.name }));
-      });
-      card.appendChild(
-        h('div', { class: 'en-link-add' }, [
-          relType,
-          relTo,
-          h(
-            'button',
-            {
-              class: 'en-btn',
-              onclick: function () {
-                if (!relTo.value) return;
-                if (EM().wouldCycleRelation(state.schema, state.entities, e.id, relType.value, relTo.value)) {
-                  toast('Ce lien ferait contenir une entité par elle-même.', 'error');
-                  return;
-                }
-                applyEntity(
-                  function (cur) {
-                    return EM().addRelation(cur, relType.value, relTo.value);
-                  },
-                  { rebuild: true }
-                );
-              },
-            },
-            [icon('link'), 'Lier']
-          ),
-        ])
-      );
-      return card;
-    }
-
     /* ── 5. Schema editor ───────────────────────────────────────── */
 
     function setSchema(next) {
@@ -1084,37 +1684,36 @@
         return EM().normalizeEntity(e, next);
       });
       scheduleSave();
-      buildSide.fillTypes();
       paintList();
       paintMain();
     }
 
-    function paintSchema() {
-      var main = els.main;
+    function paintSchema(main) {
       main.appendChild(
-        h('div', { class: 'en-card' }, [
-          h('h3', { class: 'en-h', text: 'Schéma' }),
-          h('p', {
-            class: 'en-hint',
-            text: 'Un composant est un groupe de champs typés (ex. Entretien : fréquence, dernier arrosage). Un type regroupe des composants (ex. Plante = Lieu + Entretien). Une entité a un ou plusieurs types.',
-          }),
+        h('header', { class: 'en-hero en-hero--schema' }, [
           h(
             'button',
             {
-              class: 'en-btn',
+              class: 'en-back',
+              type: 'button',
               onclick: function () {
                 state.mode = 'entity';
                 paintList();
                 paintMain();
               },
             },
-            [icon('arrow-left'), 'Retour aux entités']
+            [icon('chevron-left'), 'Entités']
           ),
+          h('h2', { class: 'en-page-title', text: 'Types et composants' }),
+          h('p', {
+            class: 'en-lead',
+            text: 'Un composant est un groupe de champs (ex. Entretien : fréquence, dernier arrosage). Un type regroupe des composants (ex. Plante = Lieu + Entretien) ; une entité a un ou plusieurs types.',
+          }),
         ])
       );
       if (global.EntitiesLibrary) main.appendChild(libraryCard());
       main.appendChild(relationsCard());
-      main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Archétypes' }));
+      main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Types (archétypes)' }));
       state.schema.types.forEach(function (ty) {
         main.appendChild(typeCard(ty));
       });
@@ -1128,7 +1727,7 @@
               setSchema(EM().upsertType(state.schema, { name: 'Type ' + n, components: [] }));
             },
           },
-          [icon('plus'), 'Nouvel archétype']
+          [icon('plus'), 'Nouveau type']
         )
       );
       main.appendChild(h('h3', { class: 'en-h en-h--section', text: 'Composants' }));
@@ -1265,6 +1864,16 @@
       return card;
     }
 
+    /** A schema card that folds: a one-line summary until opened (the open ones are remembered across repaints). */
+    function foldCard(id, summary, body) {
+      var box = h('details', { class: 'en-fold' }, [h('summary', { class: 'en-fold-sum' }, summary.concat([icon('chevron-right')])), h('div', { class: 'en-fold-body' }, body)]);
+      if (state.folds[id]) box.setAttribute('open', '');
+      box.addEventListener('toggle', function () {
+        state.folds[id] = box.open;
+      });
+      return box;
+    }
+
     /** Default values of an archetype: what an entity gets for a field it leaves empty (links excluded). */
     function defaultsEditor(ty) {
       var defaults = ty.defaults || {};
@@ -1386,7 +1995,14 @@
       name.addEventListener('change', save);
       aliases.addEventListener('change', save);
       var delId = 'type:' + ty.id;
-      return h('div', { class: 'en-card' }, [
+      var natureName = (EM().natureById(EM().natureOfType(state.schema, ty.id)) || {}).name;
+      var nComp = ty.components.length;
+      var summary = [
+        tile({ types: [ty.id] }, 'sm'),
+        h('span', { class: 'en-fold-name', text: ty.name }),
+        h('span', { class: 'en-fold-meta', text: [natureName, nComp ? nComp + (nComp > 1 ? ' composants' : ' composant') : ''].filter(Boolean).join(' · ') }),
+      ];
+      return foldCard('type:' + ty.id, summary, [
         h('div', { class: 'en-field' }, [h('label', { text: 'Nom' }), name]),
         h('div', { class: 'en-field' }, [h('label', { text: 'Alias' }), aliases]),
         h('div', { class: 'en-field' }, [h('label', { text: 'Description' }), desc]),
@@ -1425,7 +2041,7 @@
       name.addEventListener('change', function () {
         saveFields(c.fields);
       });
-      var card = h('div', { class: 'en-card' }, [h('div', { class: 'en-field' }, [h('label', { text: 'Nom' }), name])]);
+      var card = h('div', { class: 'en-fold-fields' }, [h('div', { class: 'en-field' }, [h('label', { text: 'Nom' }), name])]);
       c.fields.forEach(function (f, i) {
         var label = h('input', { class: 'en-input', value: f.label, 'aria-label': 'Nom du champ' });
         var kind = h('select', { class: 'en-input', 'aria-label': 'Type du champ' });
@@ -1520,7 +2136,8 @@
           ),
         ])
       );
-      return card;
+      var nFields = c.fields.length;
+      return foldCard('comp:' + c.id, [h('span', { class: 'en-fold-name', text: c.name }), h('span', { class: 'en-fold-meta', text: nFields + (nFields > 1 ? ' champs' : ' champ') })], [card]);
     }
 
     /* ── 6. Saving ──────────────────────────────────────────────── */
@@ -1596,8 +2213,7 @@
                 state.entities = data.entities.slice();
                 state.loaded = true;
                 state.selId = state.entities.length ? state.entities[0].id : null;
-                buildSide.fillTypes();
-                paintList();
+                paintList({ reveal: true });
                 paintMain();
               },
               function (err) {
