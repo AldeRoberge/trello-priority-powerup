@@ -466,8 +466,9 @@
       var list = col.list;
       var body = h('div', { class: 'kb-cards' });
       col.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
-      if (!col.cards.length) {
-        body.appendChild(h('div', { class: 'kb-empty', text: col.hidden ? col.total + ' masquée' + (col.total > 1 ? 's' : '') : state.filter ? 'Aucune carte' : 'Déposer une carte ici' }));
+      // An empty column shows no placeholder: the "+ Ajouter une carte" button below is also a drop target (the whole column accepts drops).
+      if (!col.cards.length && (col.hidden || state.filter)) {
+        body.appendChild(h('div', { class: 'kb-empty', text: col.hidden ? col.total + ' masquée' + (col.total > 1 ? 's' : '') : 'Aucune carte' }));
       }
       var colEl = h('section', {
         class: 'kb-col' + (KM().isClosedKey(list.category) ? ' is-closed' : ''),
