@@ -1271,7 +1271,6 @@
     deleteSubtask: deleteSubtask,
     renameSubtask: renameSubtask,
     removeTopLevelItem: removeTopLevelItem,
+    setSubtaskProgress: setSubtaskProgress,
   };
 })(typeof window !== 'undefined' ? window : this);
-    addSubtask: addSubtask,
-    setSubtaskProgress: setSubtaskProgress,
