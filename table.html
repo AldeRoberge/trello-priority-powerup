@@ -74,6 +74,7 @@
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'table' });
     PriorityTrello.initIframePage(function (t) {
       TableUI.mount(document.getElementById('tableMount'), t);
+      ViewTabs.highlightFromUrl(function (id) { return 'tr[data-id="' + id + '"]'; });
     });
   </script>
 </body>

@@ -80,6 +80,14 @@
   <script src="./components/agent/agent-ui.js?v=ask-buttons-1"></script>
   <script src="./components/history/card-history.js?v=echeance-recurring-1"></script>
   <script src="./components/history/history-ui.js?v=history-5"></script>
+  <style>
+    .tp-view-links { display: flex; align-items: center; gap: 8px; padding: 8px 16px 0; }
+    .tp-view-links[hidden] { display: none; }
+    .tp-view-links-label { font-size: 12px; font-weight: 600; color: var(--tp-text-muted, #8590a2); }
+    .tp-view-link { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--tp-border, rgba(255,255,255,.18)); background: var(--tp-surface-subtle, transparent); color: var(--tp-text, inherit); font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+    .tp-view-link:hover { background: var(--tp-surface-hover, rgba(255,255,255,.08)); border-color: var(--tp-primary, #579dff); }
+    .tp-view-link.is-busy { opacity: .6; pointer-events: none; }
+  </style>
 </head>
 <body class="tp-page tp-page--priority is-booting">
   <div
@@ -162,6 +170,11 @@
     </div>
   </div>
   <div class="compare-page" id="popupMain">
+    <div class="tp-view-links" id="viewLinks" hidden>
+      <span class="tp-view-links-label">Voir dans</span>
+      <a class="tp-view-link" id="viewInGantt" href="#"><i class="ti ti-timeline" aria-hidden="true"></i>Gantt</a>
+      <a class="tp-view-link" id="viewInTable" href="#"><i class="ti ti-table" aria-hidden="true"></i>Tableau</a>
+    </div>
     <div class="cerveau-shell" id="cerveauShell">
       <div class="cerveau-main">
         <div class="compare-grid" id="priorityMount"></div>
@@ -7223,6 +7236,34 @@
         openSection = t.arg('openSection');
         argName = t.arg('cardName');
       }
+      // « Voir dans Gantt / Tableau »: open the view in this modal, on this card.
+      (function wireViewLinks() {
+        var bar = document.getElementById('viewLinks');
+        if (!bar || !window.PriorityTrello) return;
+        [['viewInGantt', './gantt.html'], ['viewInTable', './table.html']].forEach(function (spec) {
+          var a = document.getElementById(spec[0]);
+          if (!a) return;
+          a.addEventListener('click', function (event) {
+            event.preventDefault();
+            if (a.classList.contains('is-busy')) return;
+            a.classList.add('is-busy');
+            Promise.resolve(PriorityTrello.resolveCurrentCardId(t))
+              .then(function (id) {
+                var u = new URL(spec[1], window.location.href);
+                var sp = new URLSearchParams(window.location.search);
+                if (id) sp.set('hl', id);
+                u.search = '?' + sp.toString();
+                u.hash = window.location.hash || '';
+                window.location.assign(u.href);
+              })
+              .catch(function (err) {
+                console.error('View link failed', err);
+                a.classList.remove('is-busy');
+              });
+          });
+        });
+        bar.hidden = false;
+      })();
       var focusProgress = openSection === 'progress';
       var focusPriority = openSection === 'priority';
       var focusObjectif = openSection === 'objectif';

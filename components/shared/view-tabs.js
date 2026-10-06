@@ -59,5 +59,47 @@
     return nav;
   }
 
-  global.ViewTabs = { mount: mount, hrefFor: hrefFor, VIEWS: VIEWS };
+  /** URL of a view page that opens on (and highlights) one card. */
+  function hrefForCard(page, loc, cardId) {
+    var u = new URL(page, loc.href);
+    var sp = new URLSearchParams(loc.search || '');
+    sp.set('hl', cardId);
+    u.search = '?' + sp.toString();
+    u.hash = loc.hash || '';
+    return u.href;
+  }
+
+  /**
+   * Highlight the card named by ?hl= : scroll its row into view and pulse it.
+   * rowSelector(cardId) returns a CSS selector; the grid re-renders as data loads, so poll for a while.
+   */
+  function highlightFromUrl(rowSelector) {
+    var id = new URLSearchParams(global.location.search).get('hl');
+    if (!id) return;
+    var scrolled = false;
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries += 1;
+      var el = null;
+      try {
+        el = document.querySelector(rowSelector(id.replace(/["\\]/g, '')));
+      } catch (e) {}
+      if (el) {
+        el.classList.add('vt-highlight');
+        if (!scrolled) {
+          scrolled = true;
+          if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+        }
+      }
+      if (tries > 40) clearInterval(timer);
+    }, 250);
+  }
+
+  global.ViewTabs = {
+    mount: mount,
+    hrefFor: hrefFor,
+    hrefForCard: hrefForCard,
+    highlightFromUrl: highlightFromUrl,
+    VIEWS: VIEWS,
+  };
 })(typeof window !== 'undefined' ? window : this);

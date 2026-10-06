@@ -4525,6 +4525,7 @@
                 })
                 .map(function (r) {
                   return r.cardId;
+        if (row.kind === 'card' && row.cardId) labelRow.setAttribute('data-card-id', row.cardId);
                 });
               return ContextMenu.buildGanttSectionItems({
                 sectionKey: row.sectionKey || 'pending',

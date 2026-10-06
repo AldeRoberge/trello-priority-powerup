@@ -85,6 +85,7 @@
       }
       var mount = document.getElementById('ganttMount');
       GanttUI.mountGantt(mount, t);
+      ViewTabs.highlightFromUrl(function (id) { return '.gantt-row[data-card-id="' + id + '"]'; });
     });
   </script>
 </body>
