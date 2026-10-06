@@ -133,7 +133,7 @@ describe('EntitiesRealityAI', () => {
     assert.ok(plan.order.every((r) => plan.nodes[r].verified === true || plan.nodes[r].verified === 'skipped'));
   });
 
-  it('failed calls and garbage only shrink the map; a missing verifier leaves nodes unverified', async () => {
+  it('failed calls and garbage only shrink the map; a missing verifier leaves nodes unverified but confident ones stay on', async () => {
     installAgent({
       plan: () => PLAN,
       branch: () => new Error('réseau'),
@@ -143,7 +143,7 @@ describe('EntitiesRealityAI', () => {
     assert.equal(plan.order.length, 3);
     const brand = plan.order.find((r) => plan.nodes[r].name === 'Powerade');
     assert.equal(plan.nodes[brand].failed, true);
-    assert.equal(R.statusOf(plan, brand, {}), 'suggested'); // 0.85 but never verified
+    assert.equal(R.statusOf(plan, brand, {}), 'on'); // 0.85 and the check could not run: confident enough alone
     assert.equal(R.statusOf(plan, plan.order[0], {}), 'on'); // 0.9 is sure enough alone
   });
 

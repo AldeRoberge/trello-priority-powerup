@@ -121,7 +121,7 @@ describe('EntitiesReality', () => {
     assert.equal(R.statusOf(v, c, { excluded: { [b]: true } }), 'off'); // a node goes with its parent
     assert.equal(R.statusOf(v, d, { accepted: { [d]: true } }), 'on');
     const skipped = R.markChecked(plan, plan.order);
-    assert.equal(R.statusOf(skipped, b, {}), 'suggested');
+    assert.equal(R.statusOf(skipped, b, {}), 'on');
   });
 
   it('build: the bottle gets its components, its contents, its maker and the maker\'s parent', () => {

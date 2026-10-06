@@ -14,7 +14,7 @@
  *   ("contenant.contenu", "provenance.fabricant") or a relation of the vocabulary ("fait partie de").
  *
  * Trust: a node is built automatically when its confidence is >= LIMITS.auto AND the orchestrator verified it (or it
- * is >= LIMITS.sure); between LIMITS.keep and that it is only SUGGESTED (the user switches it on); below, dropped.
+ * is >= LIMITS.sure, or >= LIMITS.auto when the check ran or could not run); between LIMITS.keep and that it is only SUGGESTED (the user switches it on); below, dropped.
  * The user can switch any node off. Existing entities are reused by name or alias, never duplicated or edited.
  *
  * Usage: var plan = EntitiesReality.emptyPlan();
@@ -446,7 +446,7 @@
     }
     if (flags.accepted && flags.accepted[ref]) return 'on';
     if (n.conf >= LIMITS.sure) return 'on';
-    if (n.conf >= LIMITS.auto) return n.verified === true ? 'on' : n.verified === 'skipped' ? 'suggested' : 'pending';
+    if (n.conf >= LIMITS.auto) return n.verified === true || n.verified === 'skipped' ? 'on' : 'pending'; // unverified because the check could not run: the planner's own confidence is enough
     return 'suggested';
   }
 
