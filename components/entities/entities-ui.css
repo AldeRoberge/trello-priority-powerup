@@ -814,14 +814,22 @@ button.en-typepill:hover {
   cursor: pointer;
   color: var(--tp-text-muted);
 }
-.en-sec-toggle svg {
+.en-sec-toggle > svg {
   width: 12px;
   height: 12px;
   transform: rotate(90deg);
   transition: transform 0.15s;
 }
-.en-sec.is-collapsed .en-sec-toggle svg {
+.en-sec.is-collapsed .en-sec-toggle > svg {
   transform: none;
+}
+.en-sec-ico {
+  display: inline-flex;
+  margin-left: 2px;
+}
+.en-sec-ico svg {
+  width: 14px;
+  height: 14px;
 }
 .en-sec.is-collapsed > :not(.en-sec-head) {
   display: none;

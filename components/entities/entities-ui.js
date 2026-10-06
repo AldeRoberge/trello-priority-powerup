@@ -700,7 +700,17 @@
     })();
 
     /** Entity page section; the title toggles it open/closed (remembered per title). */
-    function section(title, body, aside, cls) {
+    var SECTION_ICONS = {
+      propriete: 'key', adresse: 'map-pin', matiere: 'flask', provenance: 'world', acquisition: 'shopping-cart', location: 'map-pin',
+      produit: 'package', contenant: 'box', identification: 'id', condition: 'heart-rate-monitor', vivant: 'leaf', personne: 'user',
+      emploi: 'briefcase', organisation: 'building', geographie: 'map', pays: 'flag', construction: 'building', espace: 'ruler-measure',
+      temps: 'clock', concept: 'bulb', regle: 'gavel', names: 'tag', contexte: 'sitemap', liens: 'link',
+    };
+    function sectionIcon(id) {
+      return SECTION_ICONS[id] || 'category';
+    }
+
+    function section(title, body, aside, cls, iconName) {
       var box = h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') + (collapsedSections[title] ? ' is-collapsed' : '') });
       var toggle = h('button', { class: 'en-sec-toggle', type: 'button', 'aria-expanded': String(!collapsedSections[title]) }, [
         icon('chevron-right'),
@@ -1320,7 +1330,7 @@
       }
       fillAliases();
       var row = h('div', { class: 'en-prop en-prop--stack' }, [h('label', { class: 'en-prop-label', text: 'Alias' }), h('div', { class: 'en-prop-value' }, [aliasBox]), h('span', { class: 'en-prop-meta' })]);
-      return section('Autres noms', h('div', { class: 'en-set' }, [row]), removeBtn);
+      return section('Autres noms', h('div', { class: 'en-set' }, [row]), removeBtn, null, sectionIcon('names'));
     }
 
     function paintMain() {
@@ -1405,7 +1415,7 @@
           return propRow(e, comp, f);
         });
         if (!rows.length) rows = [h('p', { class: 'en-set-empty', text: 'Aucun champ : ajoutez-en dans « Types et composants ».' })];
-        page.appendChild(section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn));
+        page.appendChild(section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn, null, sectionIcon(comp.id)));
       });
       if (!comps.length) page.appendChild(h('p', { class: 'en-hint en-hint--lead', text: 'Pas encore de champs : choisissez un type pour en obtenir (ex. Plante : arrosage, santé), ou ajoutez-en.' }));
       var addFields = addFieldsRow(e, !comps.length);
@@ -1508,7 +1518,7 @@
       var g = EM().groundingOf(state.schema, state.entities, e.id);
       if (g.grounded && g.path.length > 1) row('Ancré par', chain(g.path.slice(1)));
       if (!rows.length) return null;
-      return section('Contexte', h('div', { class: 'en-set' }, rows));
+      return section('Contexte', h('div', { class: 'en-set' }, rows), null, null, sectionIcon('contexte'));
     }
 
     /** Free relations ("situé dans", "fait de"…) and the ones that point here, as a list with an inline "add". */
@@ -1569,7 +1579,7 @@
       } else if (!rows.length) {
         rows.push(h('p', { class: 'en-set-empty', text: 'Créez une autre entité pour pouvoir les relier.' }));
       }
-      return section('Liens', h('div', { class: 'en-set' }, rows));
+      return section('Liens', h('div', { class: 'en-set' }, rows), null, null, sectionIcon('liens'));
     }
 
     function linkForm(e, others) {

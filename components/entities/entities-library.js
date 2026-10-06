@@ -192,7 +192,6 @@
       fields: [
         { key: 'debut', label: 'Début', kind: 'date' },
         { key: 'fin', label: 'Fin', kind: 'date' },
-        { key: 'ou', label: 'Où', kind: 'ref', refTypes: ['place'], rel: 'located-in' },
       ],
     },
     {
@@ -242,7 +241,7 @@
     { group: 'places', id: 'ville', name: 'Ville', nature: 'place', icon: 'building-skyscraper', parents: ['place'], aliases: ['city', 'town', 'municipalité', 'village'], components: ['geographie'], description: 'Une agglomération.' },
     { group: 'places', id: 'batiment', name: 'Bâtiment', nature: 'place', icon: 'building', parents: ['place', 'objet'], aliases: ['building', 'édifice', 'immeuble'], components: ['construction'], description: 'À la fois un lieu qu’on habite et un objet construit avec de la matière.' },
     { group: 'places', id: 'piece', name: 'Pièce', nature: 'place', icon: 'door', parents: ['place'], aliases: ['room', 'local', 'salle', 'bureau'], components: ['espace'], description: 'Un espace à l’intérieur d’un bâtiment.' },
-    { group: 'time', id: 'evenement', name: 'Événement', nature: 'event', icon: 'calendar-event', aliases: ['event', 'réunion', 'rencontre', 'meeting'], components: ['temps'], description: 'Ce qui se passe dans le temps, quelque part.' },
+    { group: 'time', id: 'evenement', name: 'Événement', nature: 'event', icon: 'calendar-event', aliases: ['event', 'réunion', 'rencontre', 'meeting'], components: ['temps', 'location'], description: 'Ce qui se passe dans le temps, quelque part.' },
     { group: 'ideas', id: 'concept', name: 'Concept', nature: 'abstract', icon: 'bulb', aliases: ['idea', 'idée', 'notion', 'abstraction', 'abstrait', 'abstract'], components: ['concept'], description: 'Une idée sans corps : elle ne vaut que par ce qui l’incarne ou l’exprime.' },
     { group: 'ideas', id: 'valeur', name: 'Valeur', nature: 'abstract', icon: 'scale', parents: ['concept'], aliases: ['value', 'principe', 'principle'], components: [], description: 'Un concept qui oriente l’action : justice, liberté, sobriété.' },
     { group: 'ideas', id: 'regle', name: 'Règle', nature: 'social', icon: 'gavel', aliases: ['rule', 'loi', 'law', 'norme', 'règlement'], components: ['regle'], description: 'Un fait social : elle compte comme règle parce qu’un groupe la reconnaît.' },
