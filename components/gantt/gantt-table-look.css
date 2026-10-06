@@ -152,7 +152,6 @@ body.tp-page--gantt #ganttMount {
 .gantt-bar {
   border-radius: 4px;
   font-size: 12px;
-  font-weight: 500;
   box-shadow: none;
 }
 .gantt-bar-label {
@@ -271,23 +270,21 @@ body.tp-page--gantt #ganttMount {
   font-weight: 700;
 }
 
-/* Bars: slim, square, solid */
+/* Bars: solid and tall enough to read; the text colour is set per bar for contrast */
 .gantt-bar {
-  top: 11px;
-  height: 18px;
-  border-radius: 2px;
-  font-size: 11px;
-}
-.gantt-bar-fill {
-  background: rgba(0, 0, 0, 0.22);
+  top: 7px;
+  height: 26px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 600;
 }
 .gantt-bar.is-editable:hover {
   filter: brightness(1.08);
 }
 .gantt-paint-ghost {
-  top: 11px;
-  height: 18px;
-  border-radius: 2px;
+  top: 7px;
+  height: 26px;
+  border-radius: 3px;
 }
 
 /* Today: dashed reference line */
