@@ -955,7 +955,8 @@
         return meta;
       }
       if (origin && origin !== 'own') {
-        meta.appendChild(h('span', { class: 'en-prov', title: 'Suit le modèle : la modifier ici crée une valeur propre' }, [icon('git-fork'), 'hérité de ' + (EM().findById(state.entities, origin) || { name: '?' }).name]));
+        var from = (EM().findById(state.entities, origin) || { name: '?' }).name;
+        meta.appendChild(h('span', { class: 'en-prov', title: 'Hérité de « ' + from + ' » : la modifier ici crée une valeur propre' }, [icon('git-fork'), 'hérité']));
       } else if (origin === 'own' && EM().effectiveValue(state.entities, base, path) !== undefined) {
         meta.appendChild(resetButton('Revenir à la valeur du modèle'));
       }
@@ -1201,6 +1202,13 @@
           ])
         );
       });
+      EM()
+        .naturesOf(state.schema, e)
+        .forEach(function (n) {
+          var nat = EM().natureById(n);
+          if (typeNames.indexOf(fold(nat.name)) >= 0) return;
+          typesRow.appendChild(h('span', { class: 'en-nature', title: nat.hint, text: nat.name }));
+        });
       typesRow.appendChild(
         h(
           'button',
@@ -1216,13 +1224,6 @@
           [icon('plus'), e.types.length ? 'Type' : 'Ajouter un type']
         )
       );
-      EM()
-        .naturesOf(state.schema, e)
-        .forEach(function (n) {
-          var nat = EM().natureById(n);
-          if (typeNames.indexOf(fold(nat.name)) >= 0) return;
-          typesRow.appendChild(h('span', { class: 'en-nature', title: nat.hint, text: nat.name }));
-        });
       var base = e.base ? EM().findById(state.entities, e.base) : null;
       if (base) {
         typesRow.appendChild(
@@ -1364,6 +1365,7 @@
         if (!rows.length) rows = [h('p', { class: 'en-set-empty', text: 'Aucun champ : ajoutez-en dans « Types et composants ».' })];
         page.appendChild(section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn));
       });
+      if (!comps.length) page.appendChild(h('p', { class: 'en-hint en-hint--lead', text: 'Pas encore de champs : choisissez un type pour en obtenir (ex. Plante : arrosage, santé), ou ajoutez-en.' }));
       var addFields = addFieldsRow(e, !comps.length);
       if (addFields) page.appendChild(addFields);
       page.appendChild(linksSection(e));
@@ -1631,7 +1633,7 @@
           class: 'en-set-note',
           text: base
             ? 'Les valeurs que vous ne modifiez pas suivent « ' + base.name + ' » ; ce que vous changez ici n’affecte jamais « ' + base.name + ' » ni ses autres variantes.'
-            : 'Choisissez un modèle pour hériter de ses valeurs et ne garder que vos différences. « Créer une variante » (menu •••) le fait en un clic.',
+            : 'Hérite des valeurs du modèle et ne garde que ses différences. Raccourci : « Créer une variante » dans le menu •••.',
         })
       );
       box.appendChild(h('div', { class: 'en-set' }, rows));

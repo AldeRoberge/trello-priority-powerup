@@ -1246,6 +1246,13 @@ button.en-typepill:hover {
   color: var(--tp-text-muted);
   font-size: 13px;
 }
+.en-hint--lead {
+  margin-top: 28px;
+  padding: 0 4px;
+}
+.en-hint--lead + .en-addrow {
+  margin-top: 8px;
+}
 
 /* ── 8. Banner, toast ────────────────────────────────────────────────── */
 .en-banner {

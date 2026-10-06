@@ -4,6 +4,14 @@ Onglet **Entités** (à côté de Gantt, Tableau, Kanban, Documents). On y décr
 
 Exemple : « Arroser mes plantes au travail » devient le filtre *type Plante* + *lieu dont l'alias est « travail »*, soit exactement les plantes qui sont à l'Hôtel de Ville. Fonctionne aussi en anglais (« Water my plants at work ») grâce aux alias et aux pluriels.
 
+## La vue
+
+- **Liste (à gauche)** : une recherche qui comprend aussi une phrase (« mes plantes au travail » devient des puces *Type* + *lieu*), des pastilles de filtre par type (les plus utilisés, le reste sous « Plus »), puis les entités rangées par type, chacune avec une icône colorée selon la nature de son type. Le bouton **+** ouvre un menu : *Composer une entité* ou *Entité vide*. « Types et composants » (en bas) ouvre l'éditeur de schéma.
+- **Page d'une entité (à droite)** : un grand nom modifiable (Entrée valide, Échap annule), ses types en pastilles (« × » pour retirer, « + Type » ouvre un sélecteur avec recherche), ses alias (« Aussi appelé », Entrée ou virgule pour en ajouter), puis un groupe de lignes par composant : étiquette à gauche, valeur à droite, interrupteur pour oui/non, pastilles pour les choix multiples, puces pour les liens multiples. Chaque champ dit d'où vient sa valeur (« par défaut », « hérité ») et propose ↩ pour revenir à la valeur du type ou du modèle.
+- Ensuite : **Ajouter des champs** (un groupe de champs pour cette entité seulement), **Liens** (liste avec « Ajouter un lien » sur place), **Contexte** (où elle se trouve, ce qu'elle contient : calculé, lecture seule), puis deux lignes repliées : **Modèle et variantes** (ouverte d'office si l'entité a un modèle ou des variantes) et **Historique**.
+- Le menu **•••** à côté du nom : *Créer une variante*, *Dupliquer* (copie sans lien), *Détacher du modèle*, *Supprimer l'entité* (deux clics).
+- Le défilement est conservé quand la page se redessine ; clair et sombre suivent le thème de Trello.
+
 ## Modèle (ECS)
 
 | Notion | Rôle | Exemple |
@@ -35,7 +43,7 @@ Le bouton **Composer** ouvre une seule page (plus d'étapes) :
 
 Logique pure et testée : `components/entities/entities-composer.js` (`readIntent`, `suggest`, `defaultFor`, `archetypeChoices`, `toggleComponent`, `defineComponent`, `defineType`, `issues`, `finalize`) ; interface : `entities-composer-ui.js` + `.css`. Tests : `test/entities-composer.test.js`, `test/entities-ontology.test.js`.
 
-Dans l'éditeur de **Schéma**, chaque archétype a une section « Valeurs par défaut » (champs hors liens). Sur la page d'une entité, un champ affiche sa provenance (« par défaut », « modifié » avec **Réinitialiser**) et « Composer davantage » ajoute un composant à cette entité seulement.
+Dans l'éditeur de **Schéma**, chaque archétype a une section « Valeurs par défaut » (champs hors liens). Sur la page d'une entité, un champ affiche sa provenance (« par défaut », « hérité », ou ↩ quand il a été modifié) et « Ajouter des champs » ajoute un composant à cette entité seulement. Un champ « lien vers une entité » propose aussi les entités des sous-types (un Bâtiment est un Lieu).
 
 ## Variantes (une entité comme modèle)
 
@@ -44,9 +52,9 @@ En plus de l'archétype (le type), une entité peut être une **variante** d'une
 - Modifier une variante écrit une valeur propre ; l'archétype et les autres variantes ne bougent jamais.
 - Modifier l'archétype se répercute sur les variantes, sauf sur les champs qu'elles ont surchargés.
 - Chaque champ indique sa provenance (« hérité de Ficus » / « modifié ») ; **Réinitialiser** supprime la surcharge et revient à la valeur du modèle.
-- **Créer une variante** (hérite), **Copie indépendante** (valeurs copiées, aucun lien) et **Détacher du modèle** (garde les valeurs actuelles, ne suit plus) sont dans la carte « Modèle et variantes ». Les chaînes (variante d'une variante) fonctionnent ; les boucles sont refusées.
+- **Créer une variante** (hérite), **Dupliquer** (valeurs copiées, aucun lien) et **Détacher du modèle** (garde les valeurs actuelles, ne suit plus) sont dans le menu **•••** de la page ; la ligne repliée « Modèle et variantes » permet de choisir le modèle d'une entité existante et liste ses variantes. Les chaînes (variante d'une variante) fonctionnent ; les boucles sont refusées.
 - Supprimer un archétype fige les valeurs héritées de ses variantes. Alias, types et liens libres ne sont pas hérités ; les recherches (« mes plantes au travail ») et l'assistant voient les valeurs héritées.
-- Cela se fait depuis la page de l'entité (« Variantes ») ; le Composer ne le propose plus.
+- Cela se fait depuis la page de l'entité ; le Composer ne le propose plus.
 
 ## Résolution d'une phrase
 
