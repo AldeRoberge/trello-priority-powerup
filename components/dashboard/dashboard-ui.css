@@ -152,13 +152,14 @@ html[data-color-mode] .tp-page--dashboard {
 }
 .db-row:hover { background: var(--tp-surface-hover); }
 .db-row.is-sel { background: var(--tp-surface-active); }
-.db-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-row-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .db-st { font-size: 16px; }
 .db-check { font: inherit; border: 0; background: transparent; padding: 0; cursor: pointer; color: var(--tp-text-muted); font-size: 16px; }
 .db-check:hover { color: var(--tp-success); }
 .db-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--tp-text-muted); box-shadow: inset 0 0 0 1px var(--tp-border); white-space: nowrap; }
 .db-chip.is-late { color: var(--tp-danger-text); }
-button.db-chip { background: none; font: inherit; font-size: 11px; cursor: pointer; }
+button.db-chip { background: none; border: 0; outline: 0; font: inherit; font-size: 11px; cursor: pointer; }
+button.db-chip:focus-visible { box-shadow: inset 0 0 0 1px var(--tp-text-muted); }
 .db-chip--btn:hover { color: var(--tp-text); box-shadow: inset 0 0 0 1px var(--tp-text-muted); }
 .db-prio { min-width: 22px; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-weight: 600; text-align: center; color: #fff; background: #8590a2; }
 .db-prio--0 { background: #c9372c; }
@@ -223,9 +224,11 @@ button.db-chip { background: none; font: inherit; font-size: 11px; cursor: point
   overflow: hidden;
   font-size: 12px;
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 8px;
 }
-.db-tl-block span { color: var(--tp-text-muted); font-size: 11px; }
+.db-tl-block b { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-tl-block span { flex: none; color: var(--tp-text-muted); font-size: 11px; white-space: nowrap; }
 
 /* ── Skeleton ────────────────────────────────────────────────────────── */
 .db-skel { border-radius: 6px; background: var(--tp-surface-active); animation: db-pulse 1.2s ease-in-out infinite; }
