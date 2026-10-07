@@ -823,9 +823,10 @@
       return SECTION_ICONS[id] || 'category';
     }
 
-    function section(title, body, aside, cls, iconName) {
-      var box = h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') + (collapsedSections[title] ? ' is-collapsed' : '') });
-      var toggle = h('button', { class: 'en-sec-toggle', type: 'button', 'aria-expanded': String(!collapsedSections[title]) }, [
+    function section(title, body, aside, cls, iconName, autoCollapsed) {
+      var isClosed = collapsedSections[title] !== undefined ? !!collapsedSections[title] : !!autoCollapsed;
+      var box = h('section', { class: 'en-sec' + (cls ? ' ' + cls : '') + (isClosed ? ' is-collapsed' : '') });
+      var toggle = h('button', { class: 'en-sec-toggle', type: 'button', 'aria-expanded': String(!isClosed) }, [
         icon('chevron-right'),
         iconName ? h('span', { class: 'en-sec-ico' }, [icon(iconName)]) : null,
         h('h3', { class: 'en-sec-title', text: title }),
@@ -834,8 +835,7 @@
         var collapsed = !box.classList.contains('is-collapsed');
         box.classList.toggle('is-collapsed', collapsed);
         toggle.setAttribute('aria-expanded', String(!collapsed));
-        if (collapsed) collapsedSections[title] = true;
-        else delete collapsedSections[title];
+        collapsedSections[title] = collapsed;
         try {
           localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsedSections));
         } catch (err) {}
@@ -1927,6 +1927,15 @@
           return EM().findById(state.schema.components, cid);
         })
         .filter(Boolean);
+      // once something is filled in, the empty groups wait (collapsed) after the links so the page opens on what matters
+      var isFilled = function (comp) {
+        return comp.fields.some(function (f) {
+          var v = EM().effectiveValue(state.entities, e, comp.id + '.' + f.key, state.schema);
+          return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length) && v !== false;
+        });
+      };
+      var anyFilled = comps.some(function (c) { return c.builtin !== 'aliases' && isFilled(c); });
+      var emptyBlocks = [];
       comps.forEach(function (comp) {
         var own = ownIds.indexOf(comp.id) < 0;
         var removeBtn = own
@@ -1964,7 +1973,10 @@
           return propRow(e, comp, f);
         });
         if (!rows.length) rows = [h('p', { class: 'en-set-empty', text: 'Aucun champ : ajoutez-en dans « Types et composants ».' })];
-        page.appendChild(section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn, null, sectionIcon(comp.id)));
+        var late = anyFilled && !isFilled(comp);
+        var block = section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn, null, sectionIcon(comp.id), late);
+        if (late) emptyBlocks.push(block);
+        else page.appendChild(block);
       });
       if (!comps.length) page.appendChild(h('p', { class: 'en-hint en-hint--lead', text: 'Pas encore de champs : choisissez un type pour en obtenir (ex. Plante : arrosage, santé), ou ajoutez-en.' }));
       var addFields = addFieldsRow(e, !comps.length);
@@ -1974,6 +1986,7 @@
       page.appendChild(linksSection(e));
       var ctx = contextSection(e);
       if (ctx) page.appendChild(ctx);
+      emptyBlocks.forEach(function (b) { page.appendChild(b); });
       page.appendChild(modelSection(e));
       page.appendChild(historyBox);
       paintHistory();

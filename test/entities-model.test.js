@@ -250,4 +250,12 @@ describe('Autres noms as a built-in component', () => {
     for (let i = 0; i < 100; i++) e = EM.addRelation(e, 'a pour membre', 'm' + i);
     assert.equal(e.relations.length, 100);
   });
+  it('resolveText finds people by a typed job title ("les vidéastes")', () => {
+    const L = global.EntitiesLibrary || (loadComponent('entities/entities-library.js'), global.EntitiesLibrary);
+    const s = L.install(EM.defaultSchema(), ['travailleur']).schema;
+    const a = EM.setValue(s, EM.createEntity(s, { name: 'Marc-Antoine', types: ['travailleur'] }), 'emploi.poste', 'Vidéaste');
+    const b = EM.setValue(s, EM.createEntity(s, { name: 'Marie', types: ['travailleur'] }), 'emploi.poste', 'Directrice');
+    const r = EM.resolveText(s, [a, b], 'les vidéastes');
+    assert.deepEqual(r.entities.map((e) => e.name), ['Marc-Antoine']);
+  });
 });

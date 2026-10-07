@@ -1873,6 +1873,22 @@
         });
       });
     });
+    // short text values already typed on entities ("Vidéaste" as a Poste) are searchable words too ("les vidéastes")
+    var seenText = {};
+    entities.forEach(function (e) {
+      Object.keys(e.data || {}).forEach(function (cid) {
+        Object.keys(e.data[cid]).forEach(function (key) {
+          var f = fieldOf(schema, cid + '.' + key);
+          var v = e.data[cid][key];
+          if (!f || f.field.kind !== 'text' || typeof v !== 'string' || v.length < 3 || v.length > 40) return;
+          var k = cid + '.' + key + '=' + normKey(v);
+          if (seenText[k] || !hasPhrase(hay, stem(v))) return;
+          seenText[k] = true;
+          where.push({ path: cid + '.' + key, op: 'eq', value: v });
+          mentions.push({ kind: 'value', path: cid + '.' + key, name: v, via: stem(v) });
+        });
+      });
+    });
     var filter = {};
     if (types.length) filter.types = types;
     if (refs.length) filter.refersTo = refs;
@@ -1882,6 +1898,8 @@
     if (types.length) {
       found = query(schema, entities, filter);
       if (!found.length && direct.length && !where.length) found = direct;
+    } else if (where.length && !refs.length && !named.length) {
+      found = query(schema, entities, filter);
     } else if (refs.length || where.length) {
       // only names were mentioned ("au travail"): the mentioned entities themselves
       found = named.map(function (n) {
