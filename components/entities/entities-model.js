@@ -46,8 +46,8 @@
   var MAX_COMPONENTS = 40;
   var MAX_FIELDS = 20;
   var MAX_TYPES = 60;
-  var MAX_ENTITIES = 500;
-  var MAX_RELATIONS = 30;
+  var MAX_ENTITIES = 2000;
+  var MAX_RELATIONS = 120;
   var MAX_REL_TYPE = 40;
   var MAX_ROLE = 60;
   var MAX_CHOICES = 20;
@@ -1275,6 +1275,11 @@
     { id: 'opposes', name: 's’oppose à', category: 'conceptual', symmetric: true, from: ['abstract', 'social'], to: ['abstract', 'social'], aliases: ['contraire de', 'opposes'] },
     { id: 'similar-to', name: 'ressemble à', category: 'conceptual', symmetric: true, aliases: ['similaire à', 'similar to'] },
     { id: 'represents', name: 'représente', inverse: 'est représenté par', category: 'conceptual', aliases: ['symbolise', 'represents'] },
+    { id: 'uses', name: 'utilise', inverse: 'est utilisé par', category: 'social', from: ['agent', 'social', 'event'], aliases: ['uses', 'emploie comme outil', 'a besoin de'], inverseAliases: ['used by'] },
+    { id: 'supplies', name: 'fournit', inverse: 'est fourni par', category: 'social', from: ['agent', 'social'], aliases: ['fournisseur de', 'supplies', 'livre à'], inverseAliases: ['fournisseur', 'supplied by'] },
+    { id: 'published-on', name: 'publié sur', inverse: 'publie', category: 'production', aliases: ['diffusé sur', 'published on'], inverseAliases: ['diffuse', 'publishes'] },
+    { id: 'organizes', name: 'organise', inverse: 'est organisé par', category: 'social', from: ['agent', 'social'], to: ['event'], aliases: ['organizes'], inverseAliases: ['organisé par', 'organized by'] },
+    { id: 'replaces', name: 'remplace', inverse: 'est remplacé par', category: 'taxonomic', aliases: ['replaces'], inverseAliases: ['remplacé par', 'replaced by'] },
     { id: 'related', name: 'lié à', category: 'generic', symmetric: true, aliases: ['related to', 'relié à'] },
   ];
   var relIndex = null;
@@ -1555,19 +1560,20 @@
       if (!m || !other || m.def.symmetric) return;
       var subject = m.dir === 'inv' ? other : entity;
       var object = m.dir === 'inv' ? entity : other;
+      var bad = [];
       [['from', subject], ['to', object]].forEach(function (side) {
         var expected = m.def[side[0]];
         var ns = naturesOf(schema, side[1]);
         if (!expected || !ns.length || ns.some(function (n) { return expected.indexOf(n) >= 0; })) return;
-        out.push({
-          level: 'warn',
-          code: 'relation-nature',
-          other: other.id,
-          relType: r.type,
-          message:
-            'Le lien « ' + r.type + ' » ne convient pas ici : « ' + side[1].name + ' » est de nature « ' + natureNames(ns) + ' », alors que ce lien relie d’habitude des choses de nature « ' + natureNames(expected).replace(/ \/ /g, ' » ou « ') + ' ». ' +
-            'Essayez « fait partie de » ou « lié à » (ou changez le type de « ' + side[1].name + ' »).',
-        });
+        bad.push('« ' + side[1].name + ' » est de nature « ' + natureNames(ns) + ' » (attendu : « ' + natureNames(expected).replace(/ \/ /g, ' » ou « ') + ' »)');
+      });
+      if (!bad.length) return;
+      out.push({
+        level: 'warn',
+        code: 'relation-nature',
+        other: other.id,
+        relType: r.type,
+        message: 'Le lien « ' + r.type + ' » avec « ' + other.name + ' » ne convient pas : ' + bad.join(' ; ') + '. Essayez le sens inverse, « fait partie de » ou « lié à ».',
       });
     });
     if (natures.length && !natures.some(function (n) { return realmOf(n) === 'material'; }) && !groundingOf(schema, entities, entity.id).grounded) {
@@ -1711,6 +1717,23 @@
         if (typeof actual === 'string' && typeof expected === 'string') return normKey(actual) === normKey(expected);
         return actual === expected;
     }
+  }
+
+
+  /**
+   * Names of the entities most relevant to `text` (shared words with the name or aliases first, then the most
+   * recently touched), for AI prompts that cannot carry every entity.
+   */
+  function relevantNames(entities, text, limit) {
+    var words = normKey(text || '').split(' ').filter(function (w) { return w.length > 2; }).map(singular);
+    var scored = (entities || []).map(function (e, i) {
+      var keys = [e.name].concat(e.aliases || []).map(function (n) { return normKey(n).split(' ').map(singular); });
+      var hit = 0;
+      keys.forEach(function (ws) { ws.forEach(function (w) { if (words.indexOf(w) >= 0) hit++; }); });
+      return { name: e.name, hit: hit, at: String(e.updatedAt || ''), i: i };
+    });
+    scored.sort(function (a, b) { return b.hit - a.hit || (a.at < b.at ? 1 : a.at > b.at ? -1 : a.i - b.i); });
+    return scored.slice(0, limit).map(function (x) { return x.name; });
   }
 
   /**
@@ -2043,6 +2066,7 @@
     SYSTEM_OPS: SYSTEM_OPS,
     SYSTEM_LEVELS: SYSTEM_LEVELS,
     query: query,
+    relevantNames: relevantNames,
     resolveText: resolveText,
     describeEntity: describeEntity,
     promptLines: promptLines,

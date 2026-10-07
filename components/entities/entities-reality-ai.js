@@ -168,7 +168,7 @@
       'Composants (id | nom | champs) :\n' + componentLines(ctx).join('\n'),
       'Champs de lien (chemin | libellé | cible) :\n' + linkLines(ctx).join('\n'),
       'Relations : ' + relationNames().join(', '),
-      'Entités existantes (réutilise le nom exact si c’est la même chose) : ' + (ctx.entities.slice(0, MAX_ENTITIES).map(function (e) { return e.name; }).join(', ') || 'aucune'),
+      'Entités existantes (réutilise le nom exact si c’est la même chose) : ' + (EM().relevantNames(ctx.entities, ctx.name, MAX_ENTITIES).join(', ') || 'aucune'),
     ].join('\n\n');
   }
 

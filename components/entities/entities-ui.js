@@ -1883,9 +1883,11 @@
         return;
       }
       page.appendChild(heroBlock(e));
+      var shownNature = 0;
       EM()
         .ontologyIssues(state.schema, state.entities, e)
         .forEach(function (i) {
+          if (i.code === 'relation-nature' && ++shownNature > 2) return;
           var fix =
             i.code === 'relation-nature'
               ? h(

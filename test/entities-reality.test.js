@@ -228,7 +228,7 @@ describe('EntitiesReality', () => {
     const other = M.createEntity(out.schema, { id: 'x', name: 'Système audio', types: ['objet'] });
     const msg = M.ontologyIssues(out.schema, [bad, other], bad).filter((i) => i.code === 'relation-nature').map((i) => i.message);
     assert.ok(msg.length > 0);
-    assert.match(msg[0], /^Le lien « sorte de » ne convient pas ici : « Système de son » est de nature « matière »/);
+    assert.match(msg[0], /^Le lien « sorte de » avec « Système audio » ne convient pas : « Système de son » est de nature « matière »/);
     assert.match(msg[0], /« abstrait » ou « fait social »/);
     assert.doesNotMatch(msg[0], /part d’habitude|vise d’habitude/);
   });

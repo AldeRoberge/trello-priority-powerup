@@ -56,9 +56,7 @@
       var t = EM().findById(schema.types, id);
       return t ? t.name : id;
     });
-    var existing = ctx.entities.slice(0, MAX_ENTITIES).map(function (e) {
-      return e.name;
-    });
+    var existing = EM().relevantNames(ctx.entities, draft.name, MAX_ENTITIES);
     var fields = fieldLines(schema, draft);
     var rels = EC().relationTypes(ctx.entities).slice(0, 8);
     var system = [

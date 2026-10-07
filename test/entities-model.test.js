@@ -229,4 +229,25 @@ describe('Autres noms as a built-in component', () => {
     assert.deepEqual(e.aliases, []);
     assert.ok(!EM.componentIdsOf(s, e).includes('names'));
   });
+  it('knows uses / supplies / published on, with inverses', () => {
+    assert.equal(EM.inverseLabel('utilise'), 'est utilisé par');
+    assert.equal(EM.inverseLabel('fournisseur de'), 'est fourni par');
+    assert.equal(EM.inverseLabel('publié sur'), 'publie');
+    assert.equal(EM.matchRelation('est organisé par').dir, 'inv');
+  });
+
+  it('relevantNames puts entities sharing words with the text first, then the most recent', () => {
+    const s = EM.defaultSchema();
+    const mk = (name, at) => Object.assign(EM.createEntity(s, { name, types: ['place'] }), { updatedAt: at });
+    const list = [mk('Parc du Quai', '2026-01-01'), mk('Hôtel de Ville', '2026-03-01'), mk('Salle du conseil', '2026-02-01')];
+    assert.deepEqual(EM.relevantNames(list, 'Tournage au parc', 2), ['Parc du Quai', 'Hôtel de Ville']);
+    assert.equal(EM.relevantNames(list, '', 5).length, 3);
+  });
+
+  it('allows many relations on one entity (a service with its members)', () => {
+    const s = EM.defaultSchema();
+    let e = EM.createEntity(s, { name: 'Service', types: ['place'] });
+    for (let i = 0; i < 100; i++) e = EM.addRelation(e, 'a pour membre', 'm' + i);
+    assert.equal(e.relations.length, 100);
+  });
 });

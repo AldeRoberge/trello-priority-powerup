@@ -115,7 +115,7 @@
       d.types.length ? '' : 'Genres disponibles (id | nom) :\n' + choices.map(function (c) { return c.id + ' | ' + c.name; }).join('\n'),
       'Déjà répondu : ' + (known(ctx).join(' ; ') || 'rien'),
       'Champs à proposer (chemin | libellé | genre | options) :\n' + (fields.join('\n') || 'aucun'),
-      'Entités existantes : ' + (ctx.entities.slice(0, MAX_ENTITIES).map(function (e) { return e.name; }).join(', ') || 'aucune'),
+      'Entités existantes : ' + (EM().relevantNames(ctx.entities, ctx.draft.name, MAX_ENTITIES).join(', ') || 'aucune'),
       web && web.results && web.results.length
         ? 'Résultats web :\n' +
           (web.answer ? 'Résumé : ' + web.answer + '\n' : '') +
