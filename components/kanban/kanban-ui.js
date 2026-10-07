@@ -306,7 +306,7 @@
 
     function askBox(row) {
       var sug = AI().cachedSuggestion(row);
-      var input = askInput('kb-ai-input', sug, row, function () { return sug; });
+      var input = askInput('kb-ai-input', sug || 'Demander à l’IA…', row, function () { return sug; });
       var box = h('div', { class: 'kb-ai', onclick: function (e) { e.stopPropagation(); } }, [
         icon('sparkles'),
         input,
@@ -316,10 +316,10 @@
       input.addEventListener('focus', function () {
         var c = box.closest('.kb-card');
         if (c) c.draggable = false;
-        // Upgrade the instant suggestion with a model-written one (cached per card state).
-        AI().suggest(t, row).then(function (better) {
-          if (better && better !== sug) { sug = better; input.placeholder = better; }
-        });
+      });
+      // The model writes the suggestion from the full card state (cached per state, queued across the board).
+      AI().suggest(t, row).then(function (better) {
+        if (better && better !== sug) { sug = better; input.placeholder = better; }
       });
       input.addEventListener('blur', function () { var c = box.closest('.kb-card'); if (c) c.draggable = true; });
       return box;
