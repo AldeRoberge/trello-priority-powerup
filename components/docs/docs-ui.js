@@ -2669,7 +2669,10 @@
       if (bg) box.style.background = bg;
       else {
         var img = h('img', { class: 'dc-cover-img', alt: '', draggable: 'false' });
-        img.style.objectPosition = '50% ' + (c.y == null ? 50 : c.y) + '%';
+        var st = DM().coverImageStyle(c);
+        img.style.objectPosition = st.objectPosition;
+        img.style.transformOrigin = st.transformOrigin;
+        img.style.transform = st.transform;
         img.addEventListener('error', function () { box.classList.add('is-broken'); });
         var url = DM().coverImageUrl(c, (global.devicePixelRatio || 1) > 1.5 ? 2400 : 1600);
         if (url) img.src = url;
@@ -2703,7 +2706,7 @@
       box.appendChild(
         h('div', { class: 'dc-cover-actions' }, [
           coverBtn('photo', 'Changer', function (btn) { openCoverPicker(btn.getBoundingClientRect()); }),
-          isImage ? coverBtn('arrows-move-vertical', 'Repositionner', startReposition) : null,
+          isImage ? coverBtn('arrows-move', 'Repositionner', startReposition) : null,
           coverBtn('trash', 'Retirer', function () { setCover(null); }),
         ])
       );
@@ -2799,41 +2802,96 @@
       if (!c || !img) return;
       closePop();
       repositioning = true;
-      var y = c.y == null ? 50 : c.y;
+      var ZMIN = DM().COVER_ZOOM_MIN;
+      var ZMAX = DM().COVER_ZOOM_MAX;
+      var pos = { px: c.px == null ? 50 : c.px, y: c.y == null ? 50 : c.y, z: c.z || ZMIN };
       box.classList.add('is-repositioning');
       var actions = box.querySelector('.dc-cover-actions');
       actions.textContent = '';
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      /** Rendered photo size at the current zoom (object-fit: cover, then scaled). */
+      function geo() {
+        var bw = box.clientWidth;
+        var bh = box.clientHeight;
+        var s = img.naturalWidth ? Math.max(bw / img.naturalWidth, bh / img.naturalHeight) : 0;
+        var k = pos.z / 100;
+        return { bw: bw, bh: bh, w: s ? img.naturalWidth * s * k : bw * k, h: s ? img.naturalHeight * s * k : bh * k };
+      }
+      function paint() {
+        var at = pos.px + '% ' + pos.y + '%';
+        img.style.objectPosition = at;
+        img.style.transformOrigin = at;
+        img.style.transform = pos.z > ZMIN ? 'scale(' + pos.z / 100 + ')' : '';
+        range.value = String(Math.round(pos.z));
+      }
+      /** Zooms keeping the photo point under (cx, cy) in place; the photo never gets smaller than the banner. */
+      function zoomTo(z, cx, cy) {
+        var g = geo();
+        if (cx == null) { cx = g.bw / 2; cy = g.bh / 2; }
+        var fx = (cx - (pos.px / 100) * (g.bw - g.w)) / g.w;
+        var fy = (cy - (pos.y / 100) * (g.bh - g.h)) / g.h;
+        pos.z = clamp(z, ZMIN, ZMAX);
+        var n = geo();
+        if (n.w - n.bw > 0.5) pos.px = clamp(((cx - fx * n.w) / (n.bw - n.w)) * 100, 0, 100);
+        if (n.h - n.bh > 0.5) pos.y = clamp(((cy - fy * n.h) / (n.bh - n.h)) * 100, 0, 100);
+        paint();
+      }
+      function onWheel(e) {
+        e.preventDefault();
+        var r = box.getBoundingClientRect();
+        zoomTo(pos.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), e.clientX - r.left, e.clientY - r.top);
+      }
       function end(save) {
         document.removeEventListener('keydown', onKey, true);
+        box.removeEventListener('wheel', onWheel);
         repositioning = false;
-        if (save && state.current === cur && Math.round(y) !== (c.y == null ? 50 : c.y)) setCover(Object.assign({}, c, { y: Math.round(y) }));
+        var next = DM().normalizeCover(Object.assign({}, c, { px: Math.round(pos.px), y: Math.round(pos.y), z: Math.round(pos.z) }));
+        if (save && state.current === cur && !DM().sameCover(next, c)) setCover(next);
         else paintCover();
       }
       function onKey(e) {
         if (e.key === 'Escape') { e.stopPropagation(); end(false); }
         else if (e.key === 'Enter') { e.preventDefault(); end(true); }
+        else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomTo(pos.z + 20); }
+        else if (e.key === '-') { e.preventDefault(); zoomTo(pos.z - 20); }
       }
+      var range = h('input', {
+        type: 'range', min: String(ZMIN), max: String(ZMAX), step: '1', 'aria-label': 'Zoom',
+        oninput: function (e) { zoomTo(Number(e.target.value)); },
+      });
       document.addEventListener('keydown', onKey, true);
+      box.addEventListener('wheel', onWheel, { passive: false });
+      actions.appendChild(
+        h('div', { class: 'dc-cover-zoom' }, [
+          h('button', { class: 'dc-cover-zoom-btn', type: 'button', title: 'Zoom arrière', 'aria-label': 'Zoom arrière', onclick: function () { zoomTo(pos.z - 20); } }, [icon('zoom-out')]),
+          range,
+          h('button', { class: 'dc-cover-zoom-btn', type: 'button', title: 'Zoom avant', 'aria-label': 'Zoom avant', onclick: function () { zoomTo(pos.z + 20); } }, [icon('zoom-in')]),
+        ])
+      );
       actions.appendChild(coverBtn('check', 'Enregistrer', function () { end(true); }));
       actions.appendChild(coverBtn('x', 'Annuler', function () { end(false); }));
+      paint();
       box.onpointerdown = function (e) {
         if (!repositioning || e.button !== 0 || (e.target.closest && e.target.closest('.dc-cover-actions'))) return;
         e.preventDefault();
-        var startY = e.clientY;
-        var startPos = y;
-        var bw = box.clientWidth;
-        var bh = box.clientHeight;
-        var rendered = img.naturalWidth ? Math.max(bh, bw * (img.naturalHeight / img.naturalWidth)) : bh;
-        var overflow = rendered - bh;
-        if (overflow <= 1) return;
+        var sx = e.clientX;
+        var sy = e.clientY;
+        var start = { px: pos.px, y: pos.y };
+        var g = geo();
+        var ox = g.w - g.bw;
+        var oy = g.h - g.bh;
+        if (ox <= 1 && oy <= 1) return;
         try {
           box.setPointerCapture(e.pointerId);
         } catch (err) {
           /* pointer already gone: the drag just ends at the cover edge */
         }
         box.onpointermove = function (ev) {
-          y = Math.max(0, Math.min(100, startPos - ((ev.clientY - startY) / overflow) * 100));
-          img.style.objectPosition = '50% ' + y + '%';
+          if (ox > 1) pos.px = clamp(start.px - ((ev.clientX - sx) / ox) * 100, 0, 100);
+          if (oy > 1) pos.y = clamp(start.y - ((ev.clientY - sy) / oy) * 100, 0, 100);
+          paint();
         };
         box.onpointerup = box.onpointercancel = function () {
           box.onpointermove = box.onpointerup = box.onpointercancel = null;

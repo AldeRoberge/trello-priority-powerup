@@ -584,7 +584,48 @@ html[data-color-mode="dark"] .dc-cover-btn:hover {
   color: inherit;
 }
 .dc-cover.is-repositioning {
-  cursor: ns-resize;
+  cursor: move;
+}
+.dc-cover.is-repositioning .dc-cover-actions {
+  cursor: default;
+}
+.dc-cover-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #172b4d;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.2);
+}
+.dc-cover-zoom input[type="range"] {
+  width: 90px;
+  margin: 0 2px;
+  accent-color: var(--tp-primary);
+  cursor: pointer;
+}
+.dc-cover-zoom-btn {
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.dc-cover-zoom-btn:hover {
+  background: rgba(9, 30, 66, 0.08);
+}
+.dc-cover-zoom-btn .ti {
+  font-size: 14px;
+}
+html[data-color-mode="dark"] .dc-cover-zoom {
+  background: rgba(29, 33, 37, 0.88);
+  color: #dee4ea;
+}
+html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 .dc-cover.is-repositioning .dc-cover-credit {
   display: none;

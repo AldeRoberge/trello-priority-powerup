@@ -291,7 +291,34 @@
       var y = Math.round(Number(raw.y));
       if (isFinite(y) && y !== 50) out.y = Math.max(0, Math.min(100, y));
     }
+    if (out.k !== 'color' && out.k !== 'gradient' && raw.px != null) {
+      var px = Math.round(Number(raw.px));
+      if (isFinite(px) && px !== 50) out.px = Math.max(0, Math.min(100, px));
+    }
+    if (out.k !== 'color' && out.k !== 'gradient' && raw.z != null) {
+      var z = Math.round(Number(raw.z));
+      if (isFinite(z) && z > COVER_ZOOM_MIN) out.z = Math.min(COVER_ZOOM_MAX, z);
+    }
     return out;
+  }
+
+  var COVER_ZOOM_MIN = 100;
+  var COVER_ZOOM_MAX = 300;
+
+  /**
+   * Inline style of a cover photo: focus point (px, y in %) + zoom (z in %, never below 100).
+   * The image keeps object-fit: cover and is scaled around the focus point, so it always fills the banner.
+   */
+  function coverImageStyle(cover) {
+    var c = normalizeCover(cover) || {};
+    var x = c.px == null ? 50 : c.px;
+    var y = c.y == null ? 50 : c.y;
+    var z = c.z || COVER_ZOOM_MIN;
+    return {
+      objectPosition: x + '% ' + y + '%',
+      transformOrigin: x + '% ' + y + '%',
+      transform: z > COVER_ZOOM_MIN ? 'scale(' + z / 100 + ')' : '',
+    };
   }
 
   /** One-line JSON for the meta block ('' = no cover). */
@@ -1792,6 +1819,9 @@
     parseCover: parseCover,
     sameCover: sameCover,
     coverBackground: coverBackground,
+    coverImageStyle: coverImageStyle,
+    COVER_ZOOM_MIN: COVER_ZOOM_MIN,
+    COVER_ZOOM_MAX: COVER_ZOOM_MAX,
     coverImageUrl: coverImageUrl,
     unsplashUrl: unsplashUrl,
     unsplashCredit: unsplashCredit,

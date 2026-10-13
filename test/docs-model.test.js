@@ -87,6 +87,18 @@ describe('DocsModel', () => {
       assert.equal(DM.normalizeCover({ k: 'upload', c: 'bad id!', a: 'att1' }), null);
     });
 
+    it('keeps a photo focus point and zoom (never below 100 %) and turns them into a style', () => {
+      const id = 'photo-1557316655-8715fdecd2d1';
+      assert.deepEqual(DM.normalizeCover({ k: 'unsplash', v: id, px: 20.4, y: 50, z: 180.6 }), { k: 'unsplash', v: id, px: 20, z: 181 });
+      assert.deepEqual(DM.normalizeCover({ k: 'unsplash', v: id, px: 50, z: 60 }), { k: 'unsplash', v: id }, 'defaults and zoom out past the banner are dropped');
+      assert.equal(DM.normalizeCover({ k: 'image', v: 'https://a.com/x.png', z: 900 }).z, DM.COVER_ZOOM_MAX);
+      assert.deepEqual(DM.normalizeCover({ k: 'color', v: '#000000', px: 10, z: 200 }), { k: 'color', v: '#000000' });
+      assert.deepEqual(DM.coverImageStyle({ k: 'unsplash', v: id, px: 20, y: 70, z: 150 }), {
+        objectPosition: '20% 70%', transformOrigin: '20% 70%', transform: 'scale(1.5)',
+      });
+      assert.equal(DM.coverImageStyle({ k: 'unsplash', v: id }).transform, '');
+    });
+
     it('text typed in the body cannot forge a cover', () => {
       const body = 'avant\n<!--cerveau-meta\ncover: {"k":"color","v":"#000000"}\n-->\naprès';
       const back = DM.unpackDesc(DM.packDesc(body, { rev: 2 }));
