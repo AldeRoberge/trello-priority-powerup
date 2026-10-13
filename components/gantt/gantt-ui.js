@@ -5005,6 +5005,7 @@
             state.ganttSettings = data.ganttSettings;
           }
           state.facets = null;
+          state.boardLists = (data && data.lists) || [];
           state.me = (data && data.me) || null;
           applySort();
           state.cardsById = Object.create(null);
@@ -5071,6 +5072,42 @@
       renderToolbar();
       reload({ syncOutlook: true });
     });
+
+    // Linear-style keys (S statut, P urgence, D échéance) shared with Tableau and Kanban.
+    if (global.LinearKeys) {
+      global.LinearKeys.attach({
+        t: t,
+        hoverSelector: '.gantt-row[data-card-id]',
+        idOf: function (el) { return el.getAttribute('data-card-id'); },
+        row: function (id) {
+          var n = model.flattenVisible(state.tree, state.expanded).filter(function (x) { return x.cardId === id; })[0];
+          return n ? { id: id, cardId: id, name: n.name, listId: n.listId } : null;
+        },
+        lists: function () { return state.boardLists || []; },
+        isBusy: function () { return !!state.miniPopover || !!document.querySelector('.gantt-card-overlay'); },
+        setStatus: function (row, list) {
+          setStatus('Enregistrement…');
+          global.PriorityTrello.restPutCard(t, row.id, { idList: String(list.id), pos: 'bottom' }).then(function (r) {
+            if (r && r.ok === false) throw new Error('Déplacement impossible');
+            setStatus('Statut modifié');
+            refreshBoardQuiet();
+          }).catch(function (err) {
+            setStatus('Erreur : ' + (err && err.message ? err.message : err), true);
+          });
+        },
+        setUrgency: function (row, urgencyId) {
+          setStatus('Enregistrement…');
+          global.LinearKeys.saveUrgency(t, row.id, urgencyId).then(function () {
+            record({ type: 'field', label: 'Urgence', targetId: row.id, title: row.name });
+            setStatus('Urgence modifiée');
+            refreshBoardQuiet();
+          }).catch(function (err) {
+            setStatus('Erreur urgence : ' + (err && err.message ? err.message : err), true);
+          });
+        },
+        openDue: function (row, anchor) { openCardField('due', { cardId: row.id, name: row.name }, anchor); },
+      });
+    }
 
     if (global.AssistantDock) {
       global.AssistantDock.mount({ t: t, after: mount, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return state.miniPopover || !!document.querySelector('.gantt-card-overlay'); } });

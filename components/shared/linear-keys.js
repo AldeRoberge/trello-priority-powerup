@@ -59,6 +59,7 @@
       if (typeof o.isBusy === 'function' && o.isBusy()) return;
       if ((global.LinearPick && global.LinearPick.isOpen()) || (global.NewCard && global.NewCard.isOpen()) || (global.CardFields && global.CardFields.isOpen())) return;
       if (action === 'new') {
+        if (typeof o.newCard !== 'function') return;
         e.preventDefault();
         return o.newCard();
       }
