@@ -2037,14 +2037,14 @@
       }
       if (n.kind === 'goal') {
         sections.push(goalEditor(n));
-        sections.push(servesUp(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('plus'), 'Relier…'])));
+        sections.push(servesUp(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('link'), 'Relier…'])));
         sections.push(servesDown());
       } else if (n.kind === 'task') {
-        sections.push(servesUp(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('plus'), 'Contribue à…'])));
+        sections.push(servesUp(h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('link'), 'Contribue à…'])));
         sections.push(section('Dépend de', pick('depends', 'out', function (e) {
           var dep = nodeById(e.to);
           return linkRow('', dep, function () { toggleDependency(n.id.slice(2), dep.id.slice(2)); });
-        }), h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('plus'), 'Dépend de…'])));
+        }), h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('link'), 'Dépend de…'])));
         sections.push(section('Bloque', pick('depends', 'in', function (e) { return linkRow('', nodeById(e.from)); })));
         sections.push(section('Est fait par', pick('by', 'out', function (e) { return linkRow('', nodeById(e.to)); })));
         var placeRows = [];
