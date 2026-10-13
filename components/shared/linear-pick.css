@@ -1,0 +1,127 @@
+/* Linear-style picker and new-card composer (see linear-pick.js, new-card.js). */
+.lp-pop {
+  position: fixed;
+  z-index: 10000;
+  width: 240px;
+  max-height: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  border: 1px solid var(--tp-border-strong, rgba(9, 30, 66, 0.3));
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  font: 13px/1.3 system-ui, sans-serif;
+}
+.lp-input {
+  border: 0;
+  border-bottom: 1px solid var(--tp-border, rgba(9, 30, 66, 0.15));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 8px 10px;
+  outline: none;
+}
+.lp-input::placeholder { color: var(--tp-text-subtle, #626f86); opacity: 0.75; }
+.lp-list { overflow-y: auto; padding-top: 4px; }
+.lp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.lp-item.is-active { background: var(--tp-surface-hover, rgba(9, 30, 66, 0.08)); }
+.lp-icon { font-size: 16px; flex: none; }
+.lp-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin: 0 3px; }
+.lp-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-check { color: var(--tp-text-subtle, #626f86); font-size: 15px; }
+.lp-key {
+  font: 11px/1 system-ui, sans-serif;
+  color: var(--tp-text-subtle, #626f86);
+  border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.2));
+  border-radius: 4px;
+  padding: 2px 5px;
+  min-width: 18px;
+  text-align: center;
+}
+.lp-empty { padding: 10px; color: var(--tp-text-subtle, #626f86); }
+
+/* New-card composer */
+.nc-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.45);
+}
+.nc-card {
+  width: min(620px, calc(100vw - 24px));
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  border: 1px solid var(--tp-border-strong, rgba(9, 30, 66, 0.3));
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  padding: 14px 16px 12px;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+.nc-crumb { color: var(--tp-text-subtle, #626f86); font-size: 12px; margin-bottom: 8px; }
+.nc-title, .nc-desc {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  resize: none;
+  padding: 2px 0;
+}
+.nc-title { font-size: 18px; font-weight: 600; }
+.nc-desc { min-height: 64px; margin-top: 6px; color: var(--tp-text-subtle, #44546f); }
+.nc-title::placeholder, .nc-desc::placeholder { color: var(--tp-text-subtle, #626f86); opacity: 0.6; }
+.nc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.nc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--tp-border, rgba(9, 30, 66, 0.2));
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.nc-chip:hover, .nc-chip:focus-visible { background: var(--tp-surface-hover, rgba(9, 30, 66, 0.08)); outline: none; }
+.nc-chip.is-empty { color: var(--tp-text-subtle, #626f86); opacity: 0.8; }
+.nc-chip input[type='date'] { border: 0; background: transparent; color: inherit; font: inherit; padding: 0; outline: none; color-scheme: dark light; }
+.nc-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; border-top: 1px solid var(--tp-border, rgba(9, 30, 66, 0.15)); padding-top: 10px; }
+.nc-hint { margin-right: auto; color: var(--tp-text-subtle, #626f86); font-size: 12px; opacity: 0.7; }
+.nc-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tp-primary, #0c66e4);
+  color: var(--tp-primary-text, #fff);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nc-btn:disabled { opacity: 0.5; cursor: default; }
+.nc-chip--date { position: relative; }
+.nc-chip--date input[type='date'] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }

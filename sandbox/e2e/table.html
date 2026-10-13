@@ -15,6 +15,10 @@
   <link rel="stylesheet" href="/components/agent/agent-stats.css" />
   <link rel="stylesheet" href="/components/shared/view-tabs.css" />
   <link rel="stylesheet" href="/components/shared/card-fields.css" />
+  <link rel="stylesheet" href="/components/shared/linear-pick.css" />
+  <link rel="stylesheet" href="/components/shared/history-panel.css" />
+  <link rel="stylesheet" href="/components/shared/progress-ring.css" />
+  <link rel="stylesheet" href="/components/shared/assistant-dock.css" />
   <link rel="stylesheet" href="/components/table/table-ui.css" />
   <link rel="stylesheet" href="/components/shared/context-menu.css" />
 </head>
@@ -53,6 +57,14 @@
   <script src="/components/agent/assistant-mount.js"></script>
   <script src="/components/shared/view-tabs.js"></script>
   <script src="/components/shared/card-fields.js"></script>
+  <script src="/components/shared/hide-done.js"></script>
+  <script src="/components/shared/progress-ring.js"></script>
+  <script src="/components/shared/history-panel.js"></script>
+  <script src="/components/shared/assistant-dock.js"></script>
+  <script src="/components/shared/linear-pick.js"></script>
+  <script src="/components/shared/new-card.js"></script>
+  <script src="/components/shared/linear-keys.js"></script>
+  <script src="/components/shared/quick-parse.js"></script>
   <script src="/components/table/table-ui.js"></script>
   <script src="/components/shared/context-menu.js"></script>
   <script>
@@ -74,6 +86,13 @@
     TableTrello.getTableSettings = function () { return Promise.resolve({ columns: TableModel.DEFAULT_COLUMNS.slice() }); };
     SheetsTrello.getSettings = function () { return Promise.resolve({}); };
     PriorityTrello.isRestAuthorized = function () { return Promise.resolve(true); };
+    // Writes of the Linear-style composer / keys (mock: edit the in-memory records).
+    window.__writes = [];
+    TableTrello.moveCard = function (t_, id, listId) { var r = recs.filter(function (x) { return x.id === id; })[0]; var l = lists.filter(function (x) { return x.id === listId; })[0]; if (r && l) { r.listId = l.id; r.listName = l.name; r.category = l.category; r.color = l.color; } window.__writes.push(['move', id, listId]); return Promise.resolve(); };
+    TableTrello.createRow = function (t_, name, listId) { var l = lists.filter(function (x) { return x.id === listId; })[0]; var id = 'n' + (recs.length + 1); recs.push({ id: id, name: name, listId: listId, listName: l.name, category: l.category, color: l.color, pos: 99, progress: 0, priorityScore: 1, priorityLabel: 'Basse', inputs: { empressement: 'aucun', impact: 2 }, dueDate: '', desc: '', url: '' }); window.__writes.push(['create', name, listId]); return Promise.resolve({ cardId: id }); };
+    PriorityTrello.restPutCard = function (t_, id, body) { window.__writes.push(['put', id, body]); return Promise.resolve({ ok: true }); };
+    PriorityTrello.saveCardInputsById = function (t_, id, patch) { var r = recs.filter(function (x) { return x.id === id; })[0]; if (r) Object.assign(r.inputs, patch); window.__writes.push(['inputs', id, patch]); return Promise.resolve(); };
+    GanttTrello.saveCardDates = function (t_, id, parts) { window.__writes.push(['dates', id, parts]); return Promise.resolve(); };
     var store = {};
     var t = {
       get: function (a, b, k) { return Promise.resolve(store[k] || null); },

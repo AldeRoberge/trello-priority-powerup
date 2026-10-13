@@ -818,18 +818,47 @@
       renderBar();
       renderBoard();
     });
-    // "C" = capture: opens the add-card composer in the first "À faire" (else first open) column.
-    document.addEventListener('keydown', function (e) {
-      if (e.key !== 'c' && e.key !== 'C') return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
-      var a = document.activeElement;
-      if (a && (/^(input|textarea|select)$/i.test(a.tagName) || a.isContentEditable)) return;
+    // Linear-style keys on the hovered card: S statut, P urgence, D échéance, C nouvelle carte (shared composer).
+    function openNewCard() {
       var cols = state.lists.filter(function (l) { return l.category !== 'completed' && l.category !== 'canceled' && l.category !== 'blocked'; });
       var target = cols.filter(function (l) { return l.category === 'unstarted'; })[0] || cols[0];
-      if (!target) return;
-      e.preventDefault();
-      openComposer(target.id);
-    });
+      if (!target || !global.NewCard) return;
+      global.NewCard.open({
+        t: t,
+        lists: state.lists,
+        listId: target.id,
+        onError: fail,
+        onCreated: function (c) {
+          if (c.cardId) record({ type: 'create', targetId: c.cardId, title: c.name, after: c.list.name });
+          function present() { return !c.cardId || state.rows.some(function (r) { return r.id === c.cardId; }); }
+          (function again(n) {
+            return reload({ quiet: true }).then(function () {
+              if (present() || n >= 4) return setStatus('Carte créée dans « ' + c.list.name + ' »', 'ok');
+              return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () { return again(n + 1); });
+            });
+          })(0);
+        },
+      });
+    }
+    if (global.LinearKeys) {
+      global.LinearKeys.attach({
+        t: t,
+        hoverSelector: '.kb-card',
+        idOf: function (el) { return el.getAttribute('data-id'); },
+        row: findRow,
+        lists: function () { return state.lists; },
+        setStatus: function (row, list) { dropCard(row.id, list.id, null); },
+        setUrgency: function (row, urgencyId) {
+          setStatus('Enregistrement…', 'busy');
+          global.LinearKeys.saveUrgency(t, row.id, urgencyId).then(function () {
+            record({ type: 'field', label: 'Urgence', targetId: row.id, title: row.name });
+            return reload({ quiet: true });
+          }).then(function () { setStatus('Enregistré', 'ok'); }, fail);
+        },
+        openDue: function (row, anchor) { openEditor(row, 'due', anchor); },
+        newCard: openNewCard,
+      });
+    }
     renderBar();
     els.board.innerHTML = skeletonCols();
     if (global.AssistantDock) {

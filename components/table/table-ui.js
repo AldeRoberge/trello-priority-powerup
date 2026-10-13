@@ -775,10 +775,23 @@
         });
     }
 
+    /** Linear-style status picker (filter field, check on the current one, 1-9 shortcuts). */
+    function pickStatut(row, anchor, e) {
+      if (!global.LinearPick || state.editing) return;
+      if (e) e.stopPropagation();
+      global.LinearPick.open({
+        anchor: anchor,
+        placeholder: 'Changer le statut…',
+        current: row.listId,
+        items: state.lists.map(function (l) { return { id: l.id, label: l.name, icon: TM().statutIcon(l.category || '_none'), color: l.color }; }),
+        onPick: function (it) { commitEdit(row, 'statut', it.id); },
+      });
+    }
+
     function statutPill(row) {
       var list = listById(row.listId);
       var color = row.statutColor || (list && list.color) || '#626f86';
-      var pill = h('span', { class: 'tb-pill', style: '--pill:' + color }, [
+      var pill = h('span', { class: 'tb-pill', style: '--pill:' + color, title: 'Changer le statut (S)', onclick: function (e) { pickStatut(row, e.currentTarget, e); } }, [
         icon(TM().statutIcon(row.statutKey || (list && list.category) || '_none')),
         h('span', { text: row.statut || '—' }),
       ]);
@@ -1704,18 +1717,54 @@
       });
     }
     setInterval(loadAlerts, 30000);
-    // "C" = capture: jump to the add row at the bottom of the grid.
-    document.addEventListener('keydown', function (e) {
-      if (e.key !== 'c' && e.key !== 'C') return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || state.editing) return;
-      var a = document.activeElement;
-      if (a && (/^(input|textarea|select)$/i.test(a.tagName) || a.isContentEditable)) return;
-      var add = document.getElementById('tbAdd');
-      if (!add) return;
-      e.preventDefault();
-      add.scrollIntoView({ block: 'nearest' });
-      add.focus();
-    });
+    // Linear-style keys on the hovered / selected row: S statut, P urgence, D échéance, C nouvelle carte.
+    function afterCreate(cardId) {
+      function present() { return !cardId || state.rows.some(function (r) { return r.id === cardId; }); }
+      function again(n) {
+        return reload({ quiet: true }).then(function () {
+          if (present() || n >= 4) return;
+          return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () { return again(n + 1); });
+        });
+      }
+      return again(0);
+    }
+    function newCardComposer() {
+      var list = newCardList();
+      if (!global.NewCard || !list) return;
+      global.NewCard.open({
+        t: t,
+        lists: state.lists,
+        listId: list.id,
+        onError: fail,
+        onCreated: function (c) {
+          if (c.cardId) record({ type: 'create', targetId: c.cardId, title: c.name, after: c.list.name });
+          afterCreate(c.cardId).then(function () { setStatus('Carte créée dans « ' + c.list.name + ' »', 'ok'); schedulePush(); });
+        },
+      });
+    }
+    if (global.LinearKeys) {
+      global.LinearKeys.attach({
+        t: t,
+        hoverSelector: 'tr[data-id]',
+        idOf: function (el) { return el.getAttribute('data-id'); },
+        selectedId: function () { return state.selected ? state.selected.rowId : ''; },
+        row: findRow,
+        lists: function () { return state.lists; },
+        isBusy: function () { return !!state.editing; },
+        anchorFor: function (id) { return els.wrap.querySelector('tr[data-id="' + id + '"] .tb-pill') || els.wrap.querySelector('td[data-row="' + id + '"]'); },
+        setStatus: function (row, list) { commitEdit(row, 'statut', list.id); },
+        setUrgency: function (row, urgencyId) {
+          setStatus('Enregistrement…', 'busy');
+          global.LinearKeys.saveUrgency(t, row.id, urgencyId).then(function () {
+            record({ type: 'field', label: 'Urgence', targetId: row.id, title: row.name });
+            schedulePush();
+            return reload({ quiet: true });
+          }).then(function () { setStatus('Enregistré', 'ok'); }, fail);
+        },
+        openDue: function (row, anchor) { openEditor(row, 'due', els.wrap.querySelector('td[data-row="' + row.id + '"].tb-cell--due') || anchor); },
+        newCard: newCardComposer,
+      });
+    }
     return reload();
   }
 
