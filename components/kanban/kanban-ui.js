@@ -83,9 +83,10 @@
     root.appendChild(h('div', { class: 'kb-root', tabindex: '-1' }, [els.bar, els.banner, els.board]));
 
     /* ── Status + errors ───────────────────────────────────────────── */
-    function setStatus(msg, kind, keepMs) {
+    function setStatus(msg, kind, keepMs, openHistory) {
       state.status = msg || '';
       state.statusKind = kind || '';
+      state.statusOpen = kind === 'ok' ? openHistory || null : null;
       paintStatus();
       clearTimeout(statusTimer);
       if (msg && kind !== 'error' && kind !== 'busy') {
@@ -101,7 +102,11 @@
       if (state.statusKind === 'ok') s.appendChild(icon('check'));
       if (state.statusKind === 'busy') s.appendChild(icon('refresh', 'kb-spin'));
       if (state.statusKind === 'error') s.appendChild(icon('alert-triangle'));
-      s.appendChild(document.createTextNode(state.status));
+      if (state.statusOpen) {
+        s.appendChild(h('button', { class: 'hp-status-link', title: 'Ouvrir l’historique', onclick: state.statusOpen }, [document.createTextNode(state.status)]));
+      } else {
+        s.appendChild(document.createTextNode(state.status));
+      }
     }
 
     function fail(err) {
@@ -158,7 +163,7 @@
         apply: applyEntry,
         verb: histVerb,
         after: function () { return reload({ quiet: true }); },
-        onStatus: function (m, kind) { setStatus(m, kind); },
+        onStatus: function (m, kind, openHistory) { setStatus(m, kind, undefined, openHistory); },
         onError: fail,
       });
     }

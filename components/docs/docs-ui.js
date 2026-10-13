@@ -217,7 +217,12 @@
       els.toast.className = 'dc-toast' + (kind ? ' is-' + kind : '');
       els.toast.textContent = '';
       if (!msg) return;
-      els.toast.appendChild(document.createTextNode(msg));
+      if (action && action.onMessage) {
+        els.toast.appendChild(h('button', { class: 'hp-status-link', title: 'Ouvrir l’historique', onclick: action.onMessage }, [document.createTextNode(msg)]));
+        action = null;
+      } else {
+        els.toast.appendChild(document.createTextNode(msg));
+      }
       if (action) {
         els.toast.appendChild(
           h('button', {
@@ -2592,7 +2597,9 @@
       apply: histApply,
       canToggle: histCanToggle,
       verb: histVerb,
-      onStatus: function (m, kind) { toast(m, kind === 'ok' ? 'ok' : ''); },
+      onStatus: function (m, kind, openHistory) {
+        toast(m, kind === 'ok' ? 'ok' : '', kind === 'ok' && openHistory ? { onMessage: openHistory } : null);
+      },
       onError: failure,
     });
 

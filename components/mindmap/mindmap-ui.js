@@ -190,9 +190,10 @@
       ]);
     }
 
-    function setStatus(text, kind) {
+    function setStatus(text, kind, openHistory) {
       state.status = text || '';
       state.statusKind = kind || '';
+      state.statusOpen = kind === 'ok' ? openHistory || null : null;
       clearTimeout(statusTimer);
       if (text && kind !== 'error' && kind !== 'busy') statusTimer = setTimeout(function () { setStatus(''); renderBar(); }, 2500);
       renderBar();
@@ -295,8 +296,9 @@
         h('span', { class: 'mm-spacer' }),
       ];
       if (state.status) {
-        kids.push(h('span', { class: 'mm-status' + (state.statusKind ? ' is-' + state.statusKind : '') },
-          state.statusKind === 'busy' ? [h('i', { class: 'ti ti-loader-2 mm-spin', 'aria-hidden': 'true' }), state.status] : [state.status]));
+        var statusKids = state.statusKind === 'busy' ? [h('i', { class: 'ti ti-loader-2 mm-spin', 'aria-hidden': 'true' }), state.status] : [state.status];
+        if (state.statusOpen) statusKids = [h('button', { class: 'hp-status-link', title: 'Ouvrir l’historique', onclick: state.statusOpen }, [state.status])];
+        kids.push(h('span', { class: 'mm-status' + (state.statusKind ? ' is-' + state.statusKind : '') }, statusKids));
       }
       kids.push(h('span', { class: 'mm-count' }, [tasks + (tasks > 1 ? ' tâches' : ' tâche')]));
       var doneCount = state.records.filter(function (r) { return MM().isClosed(r); }).length;
@@ -1497,7 +1499,7 @@
         apply: applyEntry,
         verb: function (e) { return e.verb || 'modifié'; },
         after: function (e) { return e.kind === 'goals' ? Promise.resolve(rebuild({ keepView: true })) : refreshAfterEdit(); },
-        onStatus: function (m, kind) { setStatus(m, kind === 'busy' ? '' : kind); },
+        onStatus: function (m, kind, openHistory) { setStatus(m, kind === 'busy' ? '' : kind, openHistory); },
         onError: function (err) { setStatus('Échec : ' + reasonText(err), 'error'); },
       });
     }

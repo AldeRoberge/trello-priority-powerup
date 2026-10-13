@@ -45,6 +45,19 @@ describe('HistoryPanel', () => {
     assert.equal(make().panel.count(), 2, 'reloads from storage');
   });
 
+  it('onStatus gets an openPanel callback after undo / redo so the message can open the list', async () => {
+    let openFn = null;
+    const seen = [];
+    const { panel } = make({ onStatus: (m, kind, open) => { seen.push([m, kind]); if (open) openFn = open; } });
+    const e = panel.record({ type: 'archive', title: 'A' });
+    await panel.toggle(e);
+    assert.deepEqual(seen[seen.length - 1], ['Action annulée', 'ok']);
+    assert.equal(typeof openFn, 'function');
+    assert.equal(panel.isOpen(), false);
+    openFn();
+    assert.equal(panel.isOpen(), true);
+  });
+
   it('caps the number of entries', () => {
     const { panel } = make({ max: 3 });
     for (let i = 0; i < 5; i++) panel.record({ type: 'edit', title: 'n' + i });

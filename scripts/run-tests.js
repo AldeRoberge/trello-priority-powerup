@@ -18,6 +18,7 @@ const unitOnly = args.includes('--unit');
 const UNIT_FILES = [
   'version.test.js',
   'linear-pick.test.js',
+  'shortcut-wiring.test.js',
   'priority-matrix.test.js',
   'priority-scoring.test.js',
   'priority-score-breakdown.test.js',

@@ -821,9 +821,20 @@
 
     var statusTimer = null;
     /** Status messages float over the grid as a toast: errors stay (click to retry), the rest fades. */
-    function setStatus(msg, isError) {
+    function setStatus(msg, isError, openHistory) {
       clearTimeout(statusTimer);
-      statusBar.textContent = msg || '';
+      statusBar.textContent = '';
+      if (openHistory && msg) {
+        var link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'hp-status-link';
+        link.title = 'Ouvrir l’historique';
+        link.textContent = msg;
+        link.addEventListener('click', openHistory);
+        statusBar.appendChild(link);
+      } else {
+        statusBar.textContent = msg || '';
+      }
       statusBar.classList.toggle('is-error', !!isError);
       if (msg && !isError) {
         statusTimer = setTimeout(function () {
@@ -965,8 +976,8 @@
         after: function () {
           return reload({ quiet: true });
         },
-        onStatus: function (m) {
-          setStatus(m);
+        onStatus: function (m, kind, openHistory) {
+          setStatus(m, false, openHistory);
         },
         onError: function (err) {
           setStatus('Erreur\u00a0: ' + (err && err.message ? err.message : String(err)), true);

@@ -16,6 +16,12 @@
 .hp-spin { animation: hp-spin 0.9s linear infinite; }
 @keyframes hp-spin { to { transform: rotate(360deg); } }
 .hp-spacer { flex: 1; }
+/* Status message that opens the panel ("Action annulée"): looks like text, underlines on hover. */
+.hp-status-link {
+  border: 0; background: none; font: inherit; color: inherit; padding: 0; cursor: pointer; text-decoration: underline;
+  text-decoration-color: transparent; text-underline-offset: 2px;
+}
+.hp-status-link:hover { text-decoration-color: currentColor; }
 
 /* Docked drawer (hosts without their own) */
 .hp-drawer {

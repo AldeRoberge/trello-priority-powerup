@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/components/gantt/gantt-filters.css" />
   <link rel="stylesheet" href="/components/shared/view-tabs.css" />
   <link rel="stylesheet" href="/components/shared/card-fields.css" />
+  <link rel="stylesheet" href="/components/shared/linear-pick.css" />
   <link rel="stylesheet" href="/components/gantt/gantt-table-look.css" />
 </head>
 <body class="tp-page tp-page--gantt">
@@ -34,6 +35,11 @@
   <script src="/components/gantt/gantt-trello.js"></script>
   <script src="/components/shared/view-tabs.js"></script>
   <script src="/components/shared/card-fields.js"></script>
+  <script src="/components/shared/linear-pick.js"></script>
+  <script src="/components/table/table-trello.js"></script>
+  <script src="/components/shared/quick-parse.js"></script>
+  <script src="/components/shared/new-card.js"></script>
+  <script src="/components/shared/linear-keys.js"></script>
   <script src="/components/gantt/gantt-filters.js"></script>
   <script src="/components/gantt/gantt-ui.js"></script>
   <script>
@@ -60,7 +66,8 @@
     ];
     GanttTrello.loadBoard = function () {
       return Promise.resolve({
-        lists: [], cards: records, tree: GanttModel.buildNestTree(records), me: ME,
+        lists: [{ id: 'l1', name: 'À faire', category: 'unstarted', color: '#626f86' }, { id: 'l2', name: 'En cours', category: 'started', color: '#1d7afc' }],
+        cards: records, tree: GanttModel.buildNestTree(records), me: ME,
         settings: null, ganttSettings: { dayStart: '08:15', dayEnd: '16:45' },
       });
     };

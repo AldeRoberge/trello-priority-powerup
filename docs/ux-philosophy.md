@@ -1,6 +1,6 @@
 # Philosophie UX commune
 
-Règles partagées entre les vues. Vérifié par lecture du code et des pages HTML le 2026-10-13 ; pas encore testé dans le navigateur.
+Règles partagées entre les vues. Vérifié par lecture du code et des pages HTML le 2026-10-13. S/P/D/C implémentés dans Gantt, Mindmap et Dashboard le 2026-10-13, testés dans le harnais e2e (mock Trello).
 
 ## Vues
 
@@ -29,24 +29,23 @@ Dashboard, Gantt, Tableau, Kanban, Mindmap, Documents, Entités (navigation dans
 
 | Composant | Kanban | Tableau | Gantt | Mindmap | Dashboard | Entités | Documents |
 |---|---|---|---|---|---|---|---|
-| `linear-keys.js` (S/P/D/C) | oui | oui | non | non | non | non | non |
-| `new-card.js` (création) | oui | oui | non | non | non | non | non |
+| `linear-keys.js` (S/P/D/C) | oui | oui | oui | oui | oui | non (pas de statut) | non (pas de statut) |
+| `new-card.js` (C) | oui | oui | oui | oui | oui | non | non |
 | `hide-done.js` (masquer terminés) | oui | oui | oui | oui | oui | non | non |
 | `context-menu.js` | oui | oui | oui | oui | oui | oui | oui |
 
-Documents et Entités n'ont pas de statut ni d'urgence ; l'absence de S/P/D y est une exception assumée, pas un oubli. Pour Entités, le masquage des terminés reste à décider.
+Entités et Documents n'ont ni statut ni urgence : l'absence de S/P/D y est une exception assumée. Le masquage des terminés n'y est pas encore décidé.
 
-## Écarts principaux (priorisés)
+## Écarts restants (priorisés)
 
 | # | Problème | Vues concernées | Priorité | Complexité | Validation |
 |---|---|---|---|---|---|
-| 1 | Raccourcis S/P/D/C absents (`linear-keys.js` non chargé) | Gantt, Mindmap, Dashboard, Entités | P2 | Faible : charger le script et brancher les actions sur la carte sélectionnée | Test e2e : sélectionner une carte, appuyer S, vérifier le statut dans la vue et après retour de vue |
-| 2 | Création de carte propre à chaque vue (`new-card.js` absent) | Gantt, Mindmap, Dashboard, Entités | P2 | Moyenne : le composant est prévu pour Kanban/Tableau, vérifier son contrat avant réutilisation | Test : créer une carte dans chaque vue, la retrouver dans Kanban et Tableau |
-| 3 | Masquer les terminés absent | Entités, Documents | P3 | Faible, mais décision produit (Documents n'a pas de terminé) | Test : marquer une carte terminée, vérifier le bouton haut-droit |
-| 4 | Indicateur de sauvegarde non uniforme | Gantt, Tableau, Kanban, Entités | P2 | Moyenne | À mesurer dans le navigateur avant de changer |
-| 5 | Recherche et filtres non partagés entre vues | Toutes | P3 | Élevée : décision produit requise (état partagé ou par vue ?) | Décision à prendre avant tout code |
+| 1 | Urgence préselectionnée « Aucune » dans le sélecteur : la ligne n'expose pas l'urgence (Gantt, Mindmap, Dashboard) | Gantt, Mindmap, Dashboard | P3 | Faible : passer le libellé d'urgence dans `row` | Ouvrir P sur une carte urgente et vérifier la coche |
+| 2 | Filtre « masquer terminés » absent des vues sans statut | Entités, Documents | P3 | Décision produit | — |
+| 3 | Indicateur de sauvegarde non uniforme | Gantt, Tableau, Kanban, Entités | P2 | Moyenne | À mesurer dans le navigateur |
+| 4 | Recherche et filtres non partagés entre vues | Toutes | P3 | Élevée : décision produit (état partagé ou par vue ?) | Décision à prendre avant tout code |
 
-Ces écarts viennent de la lecture du code. Aucun n'a encore été reproduit dans le navigateur.
+Les raccourcis et la création sont vérifiés par `test/shortcut-wiring.test.js` (pages et scripts), et testés dans le harnais e2e (Mindmap, Gantt, Dashboard). Le Dashboard fixe la date d'échéance avec D ; le jour prévu (début et fin) reste celui de l'éditeur de triage.
 
 ## Exceptions assumées
 

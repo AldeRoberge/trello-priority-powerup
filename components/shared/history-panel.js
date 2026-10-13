@@ -95,7 +95,8 @@
    *   canToggle  optional function (entry) -> bool; default: every type but "field"
    *   verb       function (entry) -> string: what happened, shown after the title
    *   after      optional function (entry, back) -> Promise: runs once a toggle succeeded (reload, sheet push…)
-   *   onStatus   optional function (message, kind) for toasts; kind 'busy' | 'ok'
+   *   onStatus   optional function (message, kind, openPanel) for toasts; kind 'busy' | 'ok'.
+   *              openPanel (ok only) opens the history list, so the message can link to it.
    *   onError    optional function (err)
    *   onChange   optional function (count) fired when the number of entries changes
    *   repaint    optional function: re-render the host drawer that embeds renderInto() (Table)
@@ -154,7 +155,7 @@
           e.tsChanged = Date.now();
           delete state.busy[e.id];
           persist();
-          if (cfg.onStatus) cfg.onStatus(back ? 'Action annulée' : 'Action rétablie', 'ok');
+          if (cfg.onStatus) cfg.onStatus(back ? 'Action annulée' : 'Action rétablie', 'ok', openPanel);
           return cfg.after ? cfg.after(e, back) : undefined;
         },
         function (err) {
@@ -349,6 +350,9 @@
       var head = h('div', { class: 'hp-head' }, [h('span', { class: 'hp-head-title' }, [icon('history'), h('span', { text: 'Historique' })])]);
       renderInto(drawer, head, function () { setOpen(false); });
     }
+
+    /** Opens the panel from a status message ("Action annulée" is clickable in every view). */
+    function openPanel() { setOpen(true); }
 
     function setOpen(open, parent) {
       state.open = !!open;

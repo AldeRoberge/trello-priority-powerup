@@ -4,6 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Annulation : le message « Action annulée » ouvre l'historique, pour annuler ou rétablir d'autres modifications (Kanban, Gantt, Mindmap, Documents).
+- Gantt : survoler la ligne rouge d'aujourd'hui affiche l'heure actuelle.
 - Cartes : choix du statut et de l'urgence avec recherche, touches S, P et D (style Linear).
 - Nouvelle carte : la touche C ouvre le même composeur dans Kanban, Table et Gantt.
 - Documents : le panneau rapide d'une tâche affiche statut, progression, blocage, priorité, échéance, estimation et description, avec renommer et archiver (annulable).
