@@ -489,7 +489,9 @@
       var v = row[key];
       if (!spec.heat || typeof v !== 'number') return null;
       var frac = Math.max(0, Math.min(1, v / spec.heat));
-      return 'background:rgba(52,187,140,' + (0.08 + frac * 0.5).toFixed(2) + ')';
+      // Blocked cards read red, like their pause icon and status pill; everything else is the green priority scale.
+      var rgb = row.blocked || row.statutKey === 'blocked' ? '227,73,53' : '52,187,140';
+      return 'background:rgba(' + rgb + ',' + (0.08 + frac * 0.5).toFixed(2) + ')';
     }
 
     /* ── Column widths (drag the right edge of a header; double-click resets) ── */
