@@ -129,6 +129,7 @@
       pasteN: 0,
       confirmDeleteAt: 0,
       snap: (function () { try { return localStorage.getItem('tp-mindmap-snap') !== '0'; } catch (e) { return true; } })(),
+      pending: [], // placeholder cards shown while Trello is still creating them
       dropPos: {}, // node id → graph position chosen for a task just created from the canvas
       relink: null, // edge id whose target is being replaced
       confirmDelete: null, // goal node id waiting for a second click
@@ -323,7 +324,7 @@
       opts = opts || {};
       var prev = Object.create(null);
       state.graph.nodes.forEach(function (n) { if (isFinite(n.x)) prev[n.id] = { x: n.x, y: n.y }; });
-      var g = MM().buildGraph(state.records, { hideDone: state.hideDone, filter: state.filter, show: state.show, goals: state.goals });
+      var g = MM().buildGraph(state.pending.length ? state.records.concat(state.pending) : state.records, { hideDone: state.hideDone, filter: state.filter, show: state.show, goals: state.goals });
       var anyNew = false;
       g.nodes.forEach(function (n) {
         measure(n);
@@ -1323,10 +1324,23 @@
       var above = side === 'top';
       var pos = { x: p.x + (side === 'right' ? 105 : side === 'left' ? -105 : 0), y: p.y + (below ? 22 : above ? -22 : 0) };
       setStatus('Création…');
+      // Show the card right away, exactly where it was dropped; the real card replaces it once Trello answers.
+      var temp = { id: 'new-' + Date.now().toString(36), name: name, listId: listRec.listId, listName: listRec.listName, progress: 0, inputs: {}, assignees: [], items: [], pending: true };
+      state.pending.push(temp);
+      state.dropPos['t:' + temp.id] = pos;
+      rebuild({ keepView: true });
+      function dropTemp() {
+        state.pending = state.pending.filter(function (r) { return r !== temp; });
+      }
       return pt.createCard(t, { name: name, idList: listRec.listId }).then(function (res) {
         if (!res || !res.ok) throw new Error((res && res.reason) || 'erreur');
         var newId = res.cardId;
-        state.dropPos['t:' + newId] = pos;
+        var tempNode = nodeById('t:' + temp.id);
+        state.dropPos['t:' + newId] = tempNode && isFinite(tempNode.x) ? { x: tempNode.x, y: tempNode.y } : pos;
+        // swap the placeholder for the real id in place so the card does not flicker or move
+        dropTemp();
+        state.records = state.records.concat([Object.assign({}, temp, { id: newId, pending: false })]);
+        rebuild({ keepView: true });
         if (!src) return null;
         var dependsOnSrc = side === 'right' || side === 'bottom';
         var depCard = dependsOnSrc ? newId : src.rec.id;
@@ -1349,6 +1363,8 @@
         setStatus('Tâche créée', 'ok');
         rebuild({ keepView: true });
       }).catch(function (err) {
+        dropTemp();
+        rebuild({ keepView: true });
         setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error');
       });
     }
