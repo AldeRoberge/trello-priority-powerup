@@ -194,7 +194,7 @@
       state.status = text || '';
       state.statusKind = kind || '';
       clearTimeout(statusTimer);
-      if (text && kind !== 'error') statusTimer = setTimeout(function () { setStatus(''); renderBar(); }, 2500);
+      if (text && kind !== 'error' && kind !== 'busy') statusTimer = setTimeout(function () { setStatus(''); renderBar(); }, 2500);
       renderBar();
     }
 
@@ -295,7 +295,8 @@
         h('span', { class: 'mm-spacer' }),
       ];
       if (state.status) {
-        kids.push(h('span', { class: 'mm-status' + (state.statusKind ? ' is-' + state.statusKind : '') }, [state.status]));
+        kids.push(h('span', { class: 'mm-status' + (state.statusKind ? ' is-' + state.statusKind : '') },
+          state.statusKind === 'busy' ? [h('i', { class: 'ti ti-loader-2 mm-spin', 'aria-hidden': 'true' }), state.status] : [state.status]));
       }
       kids.push(h('span', { class: 'mm-count' }, [tasks + (tasks > 1 ? ' tâches' : ' tâche')]));
       var doneCount = state.records.filter(function (r) { return MM().isClosed(r); }).length;
@@ -1323,7 +1324,7 @@
       var below = side === 'bottom';
       var above = side === 'top';
       var pos = { x: p.x + (side === 'right' ? 105 : side === 'left' ? -105 : 0), y: p.y + (below ? 22 : above ? -22 : 0) };
-      setStatus('Création…');
+      setStatus('Création…', 'busy');
       // Show the card right away, exactly where it was dropped; the real card replaces it once Trello answers.
       var temp = { id: 'new-' + Date.now().toString(36), name: name, listId: listRec.listId, listName: listRec.listName, progress: 0, inputs: {}, assignees: [], items: [], pending: true };
       state.pending.push(temp);
