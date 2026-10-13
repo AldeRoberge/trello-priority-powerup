@@ -55,7 +55,26 @@
     return rects.length;
   }
 
+  /** Index at which a column dropped at horizontal position `x` lands among column rects (left/right), dragged one excluded. */
+  function columnInsertIndex(rects, x) {
+    for (var i = 0; i < rects.length; i++) {
+      if (x < rects[i].left + (rects[i].right - rects[i].left) / 2) return i;
+    }
+    return rects.length;
+  }
+
+  /** `lists` with the one `id` moved to `index` among the others. Returns a new array (unchanged if `id` is unknown). */
+  function reorderLists(lists, id, index) {
+    var moved = lists.filter(function (l) { return l.id === id; })[0];
+    if (!moved) return lists.slice();
+    var rest = lists.filter(function (l) { return l.id !== id; });
+    var at = Math.max(0, Math.min(index, rest.length));
+    return rest.slice(0, at).concat([moved], rest.slice(at));
+  }
+
   global.KanbanModel = {
+    columnInsertIndex: columnInsertIndex,
+    reorderLists: reorderLists,
     buildColumns: buildColumns,
     siblingsFor: siblingsFor,
     insertIndex: insertIndex,

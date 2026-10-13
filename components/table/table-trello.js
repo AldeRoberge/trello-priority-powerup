@@ -138,6 +138,31 @@
     need(await PT().restPutCard(t, id, { pos: pos }));
   }
 
+  /**
+   * Moves a whole list (Kanban column) so it lands at `index` among the board's other open lists.
+   * Positions are read from Trello at drop time (t.lists() carries order but not `pos`).
+   * Resolves { pos, prevPos }.
+   */
+  async function moveList(t, listId, index) {
+    await ensureAuth(t);
+    var boardId = await t.board('id').then(function (b) {
+      return b.id;
+    });
+    var res = need(await ST().trelloRest(t, '/boards/' + boardId + '/lists?filter=open&fields=id,pos'));
+    var all = (res.data || []).slice().sort(function (a, b) {
+      return a.pos - b.pos;
+    });
+    var moved = all.filter(function (l) {
+      return l.id === listId;
+    })[0];
+    var siblings = all.filter(function (l) {
+      return l.id !== listId;
+    });
+    var pos = TM().dropPos(siblings, Math.max(0, Math.min(index, siblings.length)));
+    need(await ST().trelloRest(t, '/lists/' + listId, 'PUT', { pos: pos }));
+    return { pos: pos, prevPos: moved ? moved.pos : null };
+  }
+
   async function saveCategory(t, cardId, fieldId, text) {
     await ensureAuth(t);
     var res = await ST().trelloRest(
@@ -180,6 +205,7 @@
     saveDesc: saveDesc,
     moveCard: moveCard,
     reorderCard: reorderCard,
+    moveList: moveList,
     saveCategory: saveCategory,
     createRow: createRow,
     archiveCard: archiveCard,

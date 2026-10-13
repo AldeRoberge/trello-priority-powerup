@@ -64,6 +64,7 @@
       hideDone: HD.get(),
       authOk: true,
       dragId: null,
+      dragListId: null, // list id of the column being dragged by its header
       composer: null, // list id with the open "add card" composer
       aiBusy: false,
       swallowClick: false, // true for one tick after a progress-bar drag so the release does not open the card
@@ -530,7 +531,37 @@
       els.board.querySelectorAll('.is-over').forEach(function (n) { n.classList.remove('is-over'); });
       var m = els.board.querySelector('.kb-drop');
       if (m && m.parentNode) m.parentNode.removeChild(m);
+      els.board.querySelectorAll('.is-drop-before, .is-drop-after').forEach(function (n) {
+        n.classList.remove('is-drop-before', 'is-drop-after');
+      });
     }
+
+    /** Where a dragged column would land at `x`: its index among the other columns, plus the neighbour to mark. */
+    function columnDropAt(x) {
+      var cols = [].slice.call(els.board.querySelectorAll('.kb-col:not(.is-dragging-col)'));
+      var rects = cols.map(function (n) { return n.getBoundingClientRect(); });
+      var index = KM().columnInsertIndex(rects, x);
+      return { index: index, before: cols[index] || null, after: index > 0 ? cols[index - 1] : null };
+    }
+
+    // Column reordering: dragging a column header over the board moves a marker; dropping saves the list's new position.
+    els.board.addEventListener('dragover', function (e) {
+      if (!state.dragListId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      clearDropMarks();
+      var at = columnDropAt(e.clientX);
+      if (at.before) at.before.classList.add('is-drop-before');
+      else if (at.after) at.after.classList.add('is-drop-after');
+    });
+    els.board.addEventListener('drop', function (e) {
+      if (!state.dragListId) return;
+      e.preventDefault();
+      var id = state.dragListId;
+      var index = columnDropAt(e.clientX).index;
+      clearDropMarks();
+      dropList(id, index);
+    });
 
     /** Index among the column's tiles (without the dragged one) where a drop at `y` lands. */
     function dropIndex(body, y) {
@@ -579,7 +610,25 @@
           dropCard(id, list.id, at);
         },
       }, [
-        h('header', { class: 'kb-col-head' }, [
+        h('header', {
+          class: 'kb-col-head',
+          draggable: 'true',
+          title: 'Glisser pour réorganiser les colonnes',
+          ondragstart: function (e) {
+            state.dragListId = list.id;
+            e.dataTransfer.effectAllowed = 'move';
+            try { e.dataTransfer.setData('text/plain', 'list:' + list.id); } catch (err) { /* ignore */ }
+            try { e.dataTransfer.setDragImage(colEl, 20, 20); } catch (err) { /* default drag image */ }
+            setTimeout(function () { colEl.classList.add('is-dragging-col'); }, 0);
+            els.board.classList.add('is-dragging-list');
+          },
+          ondragend: function () {
+            state.dragListId = null;
+            els.board.classList.remove('is-dragging-list');
+            colEl.classList.remove('is-dragging-col');
+            clearDropMarks();
+          },
+        }, [
           h('span', { class: 'kb-col-icon' }, [icon(list.icon)]),
           h('span', { class: 'kb-col-name', text: list.name, title: list.name }),
           h('span', { class: 'kb-col-count', text: String(col.total) }),
@@ -620,6 +669,12 @@
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
         else if (e.key === 'Escape') { state.composer = null; renderBoard(); }
+      });
+      // Clicking away keeps what was typed: the card is created (the composer's own buttons handle themselves).
+      input.addEventListener('blur', function (e) {
+        var to = e.relatedTarget;
+        if (to && to.closest && to.closest('.kb-composer')) return;
+        submit(true);
       });
       return h('div', { class: 'kb-composer' }, [
         input,
@@ -670,12 +725,6 @@
       var list = listById(listId);
       if (!moved || !list) return renderBoard();
       var siblings = KM().siblingsFor(state.rows, listId, id);
-      // Clicking away keeps what was typed: the card is created (the composer's own buttons handle themselves).
-      input.addEventListener('blur', function (e) {
-        var to = e.relatedTarget;
-        if (to && to.closest && to.closest('.kb-composer')) return;
-        submit(true);
-      });
       var at = index == null ? siblings.length : index;
       // `index` counts the *visible* tiles; map it onto the full list so hidden cards keep their place.
       var visible = siblings.filter(function (r) { return columns().some(function (c) { return c.list.id === listId && c.cards.indexOf(r) !== -1; }); });
@@ -705,6 +754,26 @@
         if (listChanged) record({ type: 'move', targetId: id, title: moved.name, key: 'statut', before: from.statut, after: list.name, beforeVal: from.listId, afterVal: listId, beforePos: from.pos, afterPos: pos });
         else record({ type: 'reorder', targetId: id, title: moved.name, after: list.name, beforeVal: from.pos, afterVal: pos });
         setStatus(listChanged ? 'Carte déplacée dans « ' + list.name + ' »' : 'Ordre enregistré', 'ok');
+      }, function (err) {
+        fail(err);
+        reload({ quiet: true });
+      });
+    }
+
+    /** Moves column `listId` to `index` among the other columns (saved to Trello as the list's pos). */
+    function dropList(listId, index) {
+      state.dragListId = null;
+      var from = state.lists.map(function (l) { return l.id; });
+      var next = KM().reorderLists(state.lists, listId, index);
+      var changed = next.some(function (l, i) { return l.id !== from[i]; });
+      els.board.classList.remove('is-dragging-list');
+      if (!changed) return renderBoard();
+      var list = listById(listId);
+      state.lists = next;
+      renderBoard();
+      setStatus('Enregistrement…', 'busy');
+      TT().moveList(t, listId, index).then(function () {
+        setStatus('Colonne « ' + (list ? list.name : '') + ' » déplacée', 'ok');
       }, function (err) {
         fail(err);
         reload({ quiet: true });

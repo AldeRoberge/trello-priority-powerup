@@ -123,6 +123,25 @@ html[data-color-mode] .tp-page--kanban {
 .kb-col.is-over {
   box-shadow: inset 0 0 0 2px var(--tp-primary), inset 0 3px 0 var(--kb-accent);
 }
+/* Column reordering: the header is the drag handle; a bar shows where the column will land */
+.kb-col.is-dragging-col { opacity: 0.4; }
+.kb-col.is-drop-before,
+.kb-col.is-drop-after { position: relative; }
+.kb-col.is-drop-before::before,
+.kb-col.is-drop-after::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--tp-primary);
+  pointer-events: none;
+}
+.kb-col.is-drop-before::before { left: -8px; }
+.kb-col.is-drop-after::after { right: -8px; }
+.kb-col-head { cursor: grab; }
+.kb-col-head:active { cursor: grabbing; }
 .kb-col-head {
   flex: none;
   display: flex;

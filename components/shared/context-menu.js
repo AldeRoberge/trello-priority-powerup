@@ -554,6 +554,8 @@
         h.className = 'tp-context-menu-hint';
         h.textContent = hint;
         btn.appendChild(h);
+        // Long hints get their own line under the label instead of squeezing it.
+        if (String(hint).length > 16) btn.classList.add('has-long-hint');
       }
       if (item.checked) {
         var ck = d.createElement('i');
