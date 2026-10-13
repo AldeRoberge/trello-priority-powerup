@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Documents : l'auteur et la dernière modification (qui, quand) sous le titre ; un clic ouvre l'historique des versions (aperçu, changements, restauration).
 - Mindmap : zoom arrière replie un groupe (vision, projet, type ou groupe à la main) ; zoom avant ouvre la tâche en nœuds (progrès, priorité, statut).
 - Saisie : l'IA propose la suite du texte (Tab pour garder) dans les documents, les noms de tâches, de documents et de personnes, et les étiquettes.
 - Interface : les phrases d'explication sous les titres et les champs sont retirées (nouvelle entité, réglages, documents, assistant, Gantt).

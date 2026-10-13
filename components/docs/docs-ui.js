@@ -24,6 +24,9 @@
   var DT = function () {
     return global.DocsTrello;
   };
+  var DH = function () {
+    return global.DocsHistory;
+  };
 
   var SAVE_DELAY_MS = 1200;
   var REFRESH_MIN_MS = 20000;
@@ -1079,10 +1082,23 @@
     function paintMeta() {
       els.meta.textContent = '';
       if (!state.current || !editor) return;
+      var cur = state.current;
       var words = DM().countWords(editor.innerText || editor.textContent || '');
-      var parts = [words + (words > 1 ? ' mots' : ' mot')];
-      if (state.current.updatedAt) parts.push('modifié ' + DM().relativeTime(state.current.updatedAt));
-      els.meta.appendChild(h('span', { text: parts.join(' · ') }));
+      var who = docWho(cur);
+      var line = [];
+      if (who && who.author) line.push('Créé par ' + whoName(who.author.member));
+      if (cur.updatedAt) {
+        var by = who && who.editor ? (Date.parse(cur.updatedAt) - Date.parse(who.editor.date) > 5000 ? whoMe : who.editor.member) : null;
+        var mod = 'modifié ' + DM().relativeTime(cur.updatedAt) + (by ? ' par ' + whoName(by) : '');
+        line.push(DH() ? h('button', { class: 'dc-meta-link', type: 'button', title: 'Historique des versions', onclick: openVersions }, [mod]) : mod);
+      }
+      line.push(words + (words > 1 ? ' mots' : ' mot'));
+      var span = h('span');
+      line.forEach(function (x, i) {
+        if (i) span.appendChild(document.createTextNode(' · '));
+        span.appendChild(typeof x === 'string' ? document.createTextNode(x) : x);
+      });
+      els.meta.appendChild(span);
       var size = DM().sizeInfo(lastDomMd());
       if (size.ratio >= 0.8) {
         var over = size.over;
@@ -1094,6 +1110,65 @@
           })
         );
       }
+    }
+
+    /* Author, last editor and version history (DocsHistory, from Trello card actions). */
+    var whoMe = null;
+
+    /** {author, editor} of a document, fetched once per opened document (null while loading). */
+    function docWho(doc) {
+      if (!DH()) return null;
+      if (doc.who !== undefined) return doc.who;
+      doc.who = null;
+      Promise.all([DH().loadWho(t, doc.id), DH().loadMe(t)]).then(function (r) {
+        doc.who = r[0];
+        whoMe = r[1];
+        if (state.current === doc) paintMeta();
+      }, function () {});
+      return null;
+    }
+
+    function whoName(m) {
+      return whoMe && m && m.id === whoMe.id ? 'vous' : (m && m.name) || 'quelqu’un';
+    }
+
+    function openVersions() {
+      var cur = state.current;
+      if (!cur || !DH()) return;
+      closePop();
+      saveNow().then(function () {
+        if (state.current !== cur) return;
+        histFlush();
+        DH().loadMe(t).then(function (me) {
+          DH().openPanel({ root: shell, t: t, docId: cur.id, title: cur.title, currentBody: cur.body || '', me: me, onRestore: restoreVersion });
+        });
+      });
+    }
+
+    /** Writes an older text back as a new revision (undoable with Ctrl+Z like any body edit). */
+    function restoreVersion(body) {
+      var cur = state.current;
+      if (!cur) return Promise.resolve(false);
+      var was = cur.body || '';
+      if (body === was) return Promise.resolve(true);
+      return DT().saveDoc(t, { id: cur.id, body: body, rev: cur.rev, cover: cur.cover || null }).then(function (res) {
+        var s = histSummary(was, body);
+        var keep = was.length <= HIST_MAX_BODY && body.length <= HIST_MAX_BODY;
+        record({
+          type: 'edit', key: 'body', label: 'Contenu', targetId: cur.id,
+          title: DM().cleanTitle(cur.title) || DM().UNTITLED,
+          before: s.before, after: s.after,
+          beforeVal: keep ? was : null, afterVal: keep ? body : null,
+        });
+        touchListItem(cur.id, { updatedAt: res.updatedAt, size: body.length });
+        return openDoc(cur.id, { reload: true, skipSave: true }).then(function () {
+          toast('Version restaurée.', 'ok');
+          return true;
+        });
+      }, function (err) {
+        failure(err);
+        return false;
+      });
     }
 
     /* Page fields: subject (task or entity), its metadata, tags, child documents. */
@@ -2522,6 +2597,9 @@
             if (!state.current.cover) addCover();
             else openCoverPicker(anchor.getBoundingClientRect());
           })
+          : null,
+        state.current && state.current.id === docId && DH()
+          ? item('history', 'Historique des versions', openVersions)
           : null,
         item('download', 'Télécharger (.md)', function () { exportDoc(docId, 'download'); }),
         item('clipboard', 'Copier en Markdown', function () { exportDoc(docId, 'copy'); }),
