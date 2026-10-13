@@ -4762,6 +4762,16 @@
         nowMarker = el('div', 'gantt-today-line');
         nowMarker.style.left = todayX + 'px';
         nowMarker.setAttribute('data-now', String(now.getTime()));
+        var markerLabel = el('span', 'gantt-today-label');
+        var formatNowTime = function (date) {
+          return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        };
+        markerLabel.textContent = formatNowTime(now);
+        nowMarker.appendChild(markerLabel);
+        // Refresh the label on hover so it shows the current time, not the time of the last render.
+        nowMarker.addEventListener('mouseenter', function () {
+          markerLabel.textContent = formatNowTime(new Date());
+        });
         timelineCol.appendChild(nowMarker);
       }
 
