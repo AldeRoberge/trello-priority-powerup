@@ -623,15 +623,72 @@
     assert(ui.state.docs.every(function (d) { return d.id !== copy; }), 'gone from the list');
   });
 
-  test('clicking a task chip opens the card; clicking a document chip opens the document', async function () {
+  test('clicking a task chip opens its quick panel (Ouvrir opens the card); clicking a document chip opens the document', async function () {
     await freshDoc('Liens vers', 'tâche [@Refonte du tableau de bord](task:c2) et doc [@Plan de projet](doc:doc2)');
     fake.calls.length = 0;
     ed().querySelector('.dc-mention--task').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    var openBtn = await waitFor(function () { return $('.dc-pop--task .cq-iconbtn[aria-label="Ouvrir la carte"]'); }, 'quick panel');
+    openBtn.click();
     await waitFor(function () { return fake.calls.some(function (c) { return c.method === 'MODAL'; }); }, 'card modal');
     var modal = fake.calls.filter(function (c) { return c.method === 'MODAL'; })[0];
     eq(modal.body.cardId, 'c2');
     ed().querySelector('.dc-mention--doc').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await waitFor(function () { return $('.dc-title').value === 'Plan de projet'; }, 'other document open', 7000);
+  });
+
+  test('the task panel: status, progress, rename, description and archive (with undo) from the document', async function () {
+    await freshDoc('Panneau', 'tâche [@Refonte du tableau de bord](task:c2)');
+    var card = function () { return fake.cards.filter(function (c) { return c.id === 'c2'; })[0]; };
+    var panel = function () { return $('.dc-pop--task .cq'); };
+    ed().querySelector('.dc-mention--task').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await waitFor(function () { return panel() && panel().querySelector('.cq-head'); }, 'panel loaded');
+    eq(panel().querySelector('.cq-status-name').textContent, 'En cours');
+    eq(panel().querySelector('.cq-num').textContent, '45%');
+    assert(panel().querySelector('.cq-chip--blocked.is-empty'), 'empty chips are dimmed, not hidden');
+
+    // status: the list menu moves the card
+    panel().querySelector('.cq-status').click();
+    var item = await waitFor(function () { return $$('.tp-context-menu-item').filter(function (b) { return /Terminé/.test(b.textContent); })[0]; }, 'list menu');
+    item.click();
+    await waitFor(function () { return card().idList === 'l3'; }, 'card moved');
+    await waitFor(function () { return panel().querySelector('.cq-status-name').textContent === 'Terminé'; }, 'status repainted');
+    assert($('.dc-pop--task'), 'the panel stays open after a menu pick');
+
+    // the ring completes / reopens
+    panel().querySelector('.cq-ring').click();
+    await waitFor(function () { return panel().querySelector('.cq-num').textContent === '100%'; }, 'completed');
+    panel().querySelector('.cq-ring').click();
+    await waitFor(function () { return panel().querySelector('.cq-num').textContent === '0%'; }, 'reopened');
+
+    // rename in place (double-click), the chip in the text follows
+    panel().querySelector('.cq-title').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    var input = panel().querySelector('.cq-title-input');
+    input.value = 'Refonte v2';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await waitFor(function () { return card().name === 'Refonte v2'; }, 'renamed in Trello');
+    await waitFor(function () { return ed().querySelector('.dc-mention--task').getAttribute('data-label') === 'Refonte v2'; }, 'chip relabelled');
+
+    // description: shared editor, rendered after saving
+    panel().querySelector('.cq-desc').click();
+    var area = await waitFor(function () { return $('.cf-textarea'); }, 'description editor');
+    area.value = 'Du **neuf**';
+    $('.cf-btn--primary').click();
+    await waitFor(function () { return card().desc === 'Du **neuf**'; }, 'description saved');
+    await waitFor(function () { return panel().querySelector('.cq-desc-body strong'); }, 'description rendered');
+
+    // archive closes the panel and offers an undo
+    panel().querySelector('.cq-iconbtn[aria-label="Plus d’actions"]').click();
+    var arch = await waitFor(function () { return $$('.tp-context-menu-item').filter(function (b) { return /Archiver/.test(b.textContent); })[0]; }, 'more menu');
+    arch.click();
+    await waitFor(function () { return card().closed === true; }, 'archived');
+    assert(!$('.dc-pop--task'), 'panel closed');
+    $('.dc-toast .dc-link').click();
+    await waitFor(function () { return card().closed === false; }, 'archive undone');
+    // leave the shared mock board as found for the tests that follow
+    card().name = 'Refonte du tableau de bord';
+    card().desc = '';
+    card().idList = 'l2';
+    extras.c2.progress = 45;
   });
 
   test('clicking a person chip shows who they are', async function () {

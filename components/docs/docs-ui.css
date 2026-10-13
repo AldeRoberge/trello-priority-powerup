@@ -957,9 +957,13 @@ html[data-color-mode="dark"] .dc-root {
   font-size: 16px;
   color: var(--tp-text-muted);
 }
+/* Editors opened from the task panel (CardFields) hang above it. */
+.cf-pop { z-index: 1150; }
 .dc-pop--task {
-  width: 300px;
-  max-width: 320px;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  gap: 0;
 }
 .dc-pop-line--plain {
   color: var(--tp-text-muted);

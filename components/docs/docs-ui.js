@@ -1357,10 +1357,15 @@
       }
     }
 
-    /** Quick preview of a linked task (hover or click); "Ouvrir" opens the full card. */
+    /**
+     * Quick card panel for a linked task (hover or click): the shared CardQuick, so the quick actions
+     * (status, progress, blocked, priority, due date, estimate, description, rename, archive) are the
+     * Kanban's. Using it (or opening one of its editors or menus) pins it until a click elsewhere.
+     */
     var previewTimer = null;
     var previewChip = null;
     var previewPinned = false;
+    var quick = null;
     function openTaskPreview(chip, pin) {
       clearTimeout(previewTimer);
       if (previewChip === chip && pop && pop.classList.contains('dc-pop--task')) {
@@ -1372,41 +1377,39 @@
       previewPinned = !!pin;
       var id = chip.getAttribute('data-id');
       var name = chip.getAttribute('data-label') || 'Carte';
-      var item = DM().resolveMention(state.index, 'task', id);
-      var body = h('div', { class: 'dc-pop-sub', text: 'Chargement…' });
-      var head = [h('div', { class: 'dc-pop-name', text: name })];
-      if (item && item.sub) head.push(h('div', { class: 'dc-pop-sub', text: item.sub }));
-      var openBtn = h('button', { class: 'dc-btn dc-btn--primary', type: 'button', onclick: function () { closePop(); openTask(id, name); } }, [icon('external-link'), 'Ouvrir']);
-      var el = h('div', { class: 'dc-pop dc-pop--task' }, head.concat([body, h('div', { class: 'dc-pop-row' }, [openBtn])]));
+      var el = h('div', { class: 'dc-pop dc-pop--task' });
       pop = el;
       el.addEventListener('mouseenter', function () { clearTimeout(previewTimer); });
       el.addEventListener('mouseleave', function () { if (!previewPinned) scheduleClosePreview(); });
-      placePop(el, chip.getBoundingClientRect());
-      var rest = global.PriorityTrello && global.PriorityTrello.trelloRest;
-      if (!item || !rest) {
-        body.textContent = item ? '' : 'Tâche introuvable (archivée ou supprimée).';
+      // Using the panel pins it: several quick actions in a row, until a click elsewhere.
+      el.addEventListener('mousedown', function () { previewPinned = true; });
+      var rect = chip.getBoundingClientRect();
+      if (!global.CardQuick) {
+        el.appendChild(h('div', { class: 'dc-pop-name', text: name }));
+        el.appendChild(h('div', { class: 'dc-pop-row' }, [h('button', { class: 'dc-btn dc-btn--primary', type: 'button', onclick: function () { closePop(); openTask(id, name); } }, [icon('external-link'), 'Ouvrir'])]));
+        placePop(el, rect);
         return;
       }
-      Promise.resolve(rest(t, '/cards/' + encodeURIComponent(id) + '?fields=desc,due,dueComplete,idMembers,badges')).then(
-        function (res) {
-          if (pop !== el) return;
-          var c = res && res.ok !== false ? res.data : null;
-          if (!c) { body.textContent = 'Aperçu indisponible.'; return; }
-          var lines = [];
-          if (c.due) {
-            var d = new Date(c.due);
-            lines.push(h('div', { class: 'dc-pop-line dc-pop-line--plain' }, [icon(c.dueComplete ? 'circle-check' : 'clock'), d.toLocaleDateString('fr-CA', { year: 'numeric', month: 'short', day: 'numeric' })]));
-          }
-          var desc = String(c.desc || '').trim();
-          if (desc) lines.push(h('div', { class: 'dc-pop-desc', text: desc.length > 400 ? desc.slice(0, 400) + '…' : desc }));
-          else if (!lines.length) lines.push(h('div', { class: 'dc-pop-sub', text: 'Aucune description.' }));
-          if (body.parentNode) {
-            lines.forEach(function (n) { body.parentNode.insertBefore(n, body); });
-            body.parentNode.removeChild(body);
-          }
-        },
-        function () { if (pop === el) body.textContent = 'Aperçu indisponible.'; }
-      );
+      placePop(el, rect);
+      quick = global.CardQuick.mount(el, {
+        t: t,
+        cardId: id,
+        name: name,
+        onOpen: function () { closePop(); openTask(id, name); },
+        onChange: function () { loadSources(); },
+        onHold: function (on) { if (on) previewPinned = true; },
+        onToast: function (m, kind, action) { toast(m, kind === 'error' ? 'error' : '', action); },
+        onGone: function () { if (pop === el) closePop(); },
+      });
+      // The panel grows once the card is loaded (and when a field is set): keep it on screen.
+      if (global.ResizeObserver) {
+        var ro = new global.ResizeObserver(function () {
+          if (pop !== el) { ro.disconnect(); return; }
+          placePop(el, rect);
+        });
+        ro.observe(el);
+        el._ro = ro;
+      }
     }
 
     function scheduleClosePreview() {
@@ -1922,6 +1925,11 @@
     /* ── 7. Popovers + dialogs ───────────────────────────────────── */
 
     function closePop() {
+      if (quick) {
+        quick.destroy();
+        quick = null;
+      }
+      if (pop && pop._ro) pop._ro.disconnect();
       if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
       pop = null;
       previewChip = null;
@@ -1929,7 +1937,7 @@
     }
 
     function placePop(el, rect) {
-      shell.appendChild(el);
+      if (el.parentNode !== shell) shell.appendChild(el); // re-appending would drop the focus of a field inside
       var w = el.offsetWidth;
       var hh = el.offsetHeight;
       var left = Math.max(8, Math.min(rect.left, global.innerWidth - w - 8));
@@ -2623,7 +2631,7 @@
       if (editor === document.activeElement || (sugg && editor.contains(global.getSelection().anchorNode))) updateSuggest();
     });
     document.addEventListener('mousedown', function (e) {
-      if (pop && !pop.contains(e.target)) closePop();
+      if (pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.cf-pop, .tp-context-menu'))) closePop();
       if (sugg && !els.suggest.contains(e.target) && !(editor && editor.contains(e.target))) closeSuggest();
     });
     document.addEventListener('keydown', function (e) {
