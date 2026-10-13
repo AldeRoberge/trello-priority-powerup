@@ -123,7 +123,8 @@
    * of its open tasks, work progress (mean of task progress) and the Goals metric
    * whose objectif has the same name.
    */
-  function projectChain(goals, rows, metrics, objectifs) {
+  /** Parent links of the goal map. A task is an id that is not itself a node. */
+  function indexGoals(goals) {
     var nodes = (goals && goals.nodes) || [];
     var links = (goals && goals.links) || [];
     var byId = Object.create(null);
@@ -155,6 +156,49 @@
       }
       return out;
     }
+    return { byId: byId, parent: parent, chain: chain };
+  }
+
+  function placeOf(nodes) {
+    var place = { project: '', objective: '', goal: '' };
+    var i;
+    for (i = 0; i < (nodes || []).length; i++) {
+      var n = nodes[i];
+      if (!n) continue;
+      if (n.level === 'project' && !place.project) place.project = n.name || '';
+      else if (n.level === 'objective' && !place.objective) place.objective = n.name || '';
+      else if (n.level === 'goal' && !place.goal) place.goal = n.name || '';
+    }
+    return place;
+  }
+
+  /** cardId → { project, objective, goal } for tasks linked into the goal map. */
+  function places(goals) {
+    var g = indexGoals(goals);
+    var out = Object.create(null);
+    Object.keys(g.parent).forEach(function (id) {
+      if (g.byId[id]) return;
+      var place = placeOf(g.chain(id));
+      if (place.project || place.objective || place.goal) out[id] = place;
+    });
+    return out;
+  }
+
+  /** "Projet · Objectif", or the goal when the project has no objective. */
+  function placeLabel(place) {
+    if (!place) return '';
+    var parts = [];
+    if (place.project) parts.push(place.project);
+    if (place.objective) parts.push(place.objective);
+    else if (place.goal) parts.push(place.goal);
+    return parts.join(' · ');
+  }
+
+  function projectChain(goals, rows, metrics, objectifs) {
+    var indexed = indexGoals(goals);
+    var byId = indexed.byId;
+    var parent = indexed.parent;
+    function chain(id) { return indexed.chain(id); }
     var byRow = Object.create(null);
     (rows || []).forEach(function (r) {
       if (r && r.id) byRow[r.id] = r;
@@ -169,6 +213,7 @@
       if (o && o.name && o.id) objectifByName[fold(o.name)] = o;
     });
     var usesMetrics = (metrics || []).some(function (m) { return m && m.linkedGoalId; });
+    var nodes = (goals && goals.nodes) || [];
 
     return nodes
       .filter(function (n) { return n && n.level === 'project'; })
@@ -302,6 +347,8 @@
     ageDays: ageDays,
     backlinks: backlinks,
     projectChain: projectChain,
+    places: places,
+    placeLabel: placeLabel,
     wip: wip,
     review: review,
   };

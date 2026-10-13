@@ -322,6 +322,97 @@
     return new Date(a.getFullYear() + dir, a.getMonth(), 1);
   }
 
+  /** Move `count` periods (day, week, month, or year). Negative goes earlier. */
+  function addPeriods(mode, anchor, count) {
+    var m = normalizeViewMode(mode);
+    var a = parseIsoDate(anchor) || startOfDay(new Date());
+    var n = Math.trunc(Number(count) || 0);
+    if (m === 'day') return addDays(a, n);
+    if (m === 'week') return addDays(a, n * 7);
+    if (m === 'month') return new Date(a.getFullYear(), a.getMonth() + n, 1);
+    return new Date(a.getFullYear() + n, 0, 1);
+  }
+
+  /**
+   * Same window as viewRange, plus `before` / `after` extra periods.
+   * Year's base window stays the previous, current and next year; each extra
+   * period is one more year. Zero on both sides matches viewRange.
+   */
+  function spanRange(mode, anchor, before, after, now) {
+    var m = normalizeViewMode(mode);
+    var b = Math.max(0, Math.floor(Number(before) || 0));
+    var f = Math.max(0, Math.floor(Number(after) || 0));
+    if (b === 0 && f === 0) return viewRange(m, anchor, now);
+
+    var ref = now instanceof Date && !isNaN(now.getTime()) ? now : new Date();
+    var columns = [];
+    var start;
+    var end;
+    var cursor;
+    var h;
+    var isTodayDay;
+
+    if (m === 'year') {
+      var a = parseIsoDate(anchor) || startOfDay(new Date());
+      var y0 = a.getFullYear() - 1 - b;
+      var years = 3 + b + f;
+      start = new Date(y0, 0, 1);
+      end = new Date(y0 + years - 1, 11, 31);
+      for (var mi = 0; mi < years * 12; mi++) {
+        cursor = new Date(y0, mi, 1);
+        columns.push({
+          key: cursor.getFullYear() + '-' + pad2(cursor.getMonth() + 1),
+          label: columnLabel(cursor, m, ref),
+          relative: null,
+          start: cursor,
+          end: endOfMonth(cursor),
+        });
+      }
+      return { mode: m, start: start, end: end, columns: columns };
+    }
+
+    var origin = addPeriods(m, anchor, -b);
+    if (m === 'week') origin = startOfWeek(origin);
+    else if (m === 'month') origin = startOfMonth(origin);
+    else origin = startOfDay(origin);
+    var last = addPeriods(m, anchor, f);
+    if (m === 'week') end = endOfWeek(last);
+    else if (m === 'month') end = endOfMonth(last);
+    else end = startOfDay(last);
+    start = origin;
+
+    if (m === 'day') {
+      cursor = start;
+      while (cursor.getTime() <= end.getTime()) {
+        isTodayDay = dayDiff(cursor, startOfDay(ref)) === 0;
+        for (h = 0; h < 24; h++) {
+          columns.push({
+            key: toIsoDate(cursor) + 'T' + pad2(h),
+            label: String(h) + 'h',
+            relative: isTodayDay && ref.getHours() === h ? 'today' : null,
+            start: cursor,
+            end: cursor,
+            hour: h,
+          });
+        }
+        cursor = addDays(cursor, 1);
+      }
+    } else {
+      cursor = start;
+      while (cursor.getTime() <= end.getTime()) {
+        columns.push({
+          key: toIsoDate(cursor),
+          label: columnLabel(cursor, m, ref),
+          relative: relativeDayKey(cursor, ref),
+          start: cursor,
+          end: cursor,
+        });
+        cursor = addDays(cursor, 1);
+      }
+    }
+    return { mode: m, start: start, end: end, columns: columns };
+  }
+
   
   /**
    * Resolve [start, end] bar interval.
@@ -608,11 +699,12 @@
   function timelinePxPerSecond(date, range, widthPx, options) {
     if (!(date instanceof Date) || isNaN(date.getTime()) || !range) return 0;
     var x0 = dateTimeToX(date, range, widthPx, options);
-    var ahead = dateTimeToX(new Date(date.getTime() + 1000), range, widthPx, options);
-    var px = ahead - x0;
-    if (!(px > 1e-6)) {
-      px = x0 - dateTimeToX(new Date(date.getTime() - 1000), range, widthPx, options);
-    }
+    var fore =
+      dateTimeToX(new Date(date.getTime() + 1000), range, widthPx, options) - x0;
+    var back =
+      x0 - dateTimeToX(new Date(date.getTime() - 1000), range, widthPx, options);
+    // The timeline clamps at both ends, so one side can shrink to nothing.
+    var px = fore > back ? fore : back;
     if (!isFinite(px) || px < 0) return 0;
     return px;
   }
@@ -2018,6 +2110,8 @@
     normalizeViewMode: normalizeViewMode,
     viewRange: viewRange,
     shiftAnchor: shiftAnchor,
+    addPeriods: addPeriods,
+    spanRange: spanRange,
     resolveBarInterval: resolveBarInterval,
     rangeDayCount: rangeDayCount,
     dateToX: dateToX,

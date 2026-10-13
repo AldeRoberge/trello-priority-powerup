@@ -274,6 +274,8 @@
   }
 
   var SCALES = [
+    { id: 'minute', label: 'Minute' },
+    { id: 'hour', label: 'Heure' },
     { id: 'day', label: 'Jour' },
     { id: 'week', label: 'Semaine' },
     { id: 'month', label: 'Mois' },
@@ -289,17 +291,53 @@
     return addDays(iso, day === 0 ? -6 : 1 - day);
   }
 
+  /** "14:30" → minutes since midnight. "24:00" is 1440. Anything else is null. */
+  function parseClock(value) {
+    var m = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim());
+    if (!m) return null;
+    var h = +m[1];
+    var min = +m[2];
+    if (h === 24 && min === 0) return 1440;
+    if (h > 23 || min > 59) return null;
+    return h * 60 + min;
+  }
+
+  function clockText(mins) {
+    mins = Math.max(0, Math.min(1439, mins));
+    return ('0' + Math.floor(mins / 60)).slice(-2) + ':' + ('0' + (mins % 60)).slice(-2);
+  }
+
+  /** Start time of a planned task, in minutes. A vague horizon has none. */
+  function plannedMinutes(row) {
+    if (!row || row.dueVague) return null;
+    return parseClock(row.startTime || row.dueTime || '');
+  }
+
+  /** Open tasks planned on `from` with a day but no hour yet. */
+  function untimed(rows, from) {
+    return (rows || [])
+      .filter(function (r) {
+        return isOpen(r) && r.statutKey !== 'triage' && !r.dueVague && plannedDay(r) === from && plannedMinutes(r) == null;
+      })
+      .sort(byPriority);
+  }
+
   /** Columns for one orchestrator zoom. Vague tasks stay off every calendar scale. */
-  function horizonPlan(rows, from, scale, capacity, vagueOpts) {
+  function horizonPlan(rows, from, scale, capacity, vagueOpts, nowMinutes) {
     capacity = capacity > 0 ? capacity : DEFAULT_CAPACITY;
-    var buckets = scale === 'vague' ? vagueBuckets(vagueOpts) : calendarBuckets(from, scale);
+    var clock = scale === 'hour' || scale === 'minute';
+    var buckets = scale === 'vague' ? vagueBuckets(vagueOpts) : calendarBuckets(from, scale, nowMinutes);
     buckets.forEach(function (b) {
       b.tasks = [];
-      b.capacity = b.workdays ? capacity * b.workdays : 0;
+      b.capacity = b.slotMinutes > 0 ? b.slotMinutes : (b.workdays ? capacity * b.workdays : 0);
     });
     (rows || []).forEach(function (r) {
       if (!isOpen(r) || r.statutKey === 'triage') return;
-      var b = scale === 'vague' ? vagueBucketFor(r, buckets, from) : calendarBucketFor(r, buckets, from);
+      var b = scale === 'vague'
+        ? vagueBucketFor(r, buckets, from)
+        : clock
+          ? clockBucketFor(r, buckets, from)
+          : calendarBucketFor(r, buckets, from);
       if (b) b.tasks.push(r);
     });
     buckets.forEach(function (b) {
@@ -310,8 +348,9 @@
     return buckets;
   }
 
-  function calendarBuckets(from, scale) {
+  function calendarBuckets(from, scale, nowMinutes) {
     var out = [];
+    if (scale === 'hour' || scale === 'minute') return clockBuckets(from, scale, nowMinutes);
     if (scale === 'week') {
       var start = mondayOf(from);
       for (var w = 0; w < 8; w++) {
@@ -346,6 +385,52 @@
       out.push({ key: iso, date: iso, end: addDays(iso, 1), workdays: 1 });
     });
     return out;
+  }
+
+  /** Hours 8 h–19 h of `from`, or twelve 15-minute slots from the given clock (09:00 when none). */
+  function clockBuckets(from, scale, nowMinutes) {
+    var out = [];
+    if (scale === 'hour') {
+      for (var h = 8; h <= 19; h++) {
+        out.push(clockSlot(from, h * 60, 60));
+      }
+      return out;
+    }
+    var step = 15;
+    var origin = nowMinutes == null ? 9 * 60 : Math.floor(nowMinutes / step) * step;
+    if (origin < 0) origin = 0;
+    if (origin > 21 * 60) origin = 21 * 60;
+    for (var i = 0; i < 12; i++) {
+      if (origin + i * step >= 24 * 60) break;
+      out.push(clockSlot(from, origin + i * step, step));
+    }
+    return out;
+  }
+
+  function clockSlot(from, startMins, step) {
+    var endMins = startMins + step;
+    var time = clockText(startMins);
+    return {
+      key: from + 'T' + time,
+      date: from,
+      end: endMins >= 1440 ? addDays(from, 1) : from,
+      time: time,
+      endTime: endMins >= 1440 ? '24:00' : clockText(endMins),
+      slotMinutes: step,
+      workdays: 0,
+    };
+  }
+
+  function clockBucketFor(row, buckets, from) {
+    if (plannedDay(row) !== from) return null;
+    var mins = plannedMinutes(row);
+    if (mins == null) return null;
+    for (var i = 0; i < buckets.length; i++) {
+      var a = parseClock(buckets[i].time);
+      var b = parseClock(buckets[i].endTime);
+      if (a != null && b != null && mins >= a && mins < b) return buckets[i];
+    }
+    return null;
   }
 
   function calendarBucketFor(row, buckets, from) {
@@ -399,7 +484,7 @@
    * Returns [{ id, date }]. The date is the bucket start, or today when that start is past.
    */
   function placeAuto(rows, from, scale, capacity, vagueOpts) {
-    if (!scale || scale === 'day' || scale === 'vague') return [];
+    if (!scale || scale === 'day' || scale === 'vague' || scale === 'hour' || scale === 'minute') return [];
     var plan = horizonPlan(rows, from, scale, capacity, vagueOpts);
     var used = plan.map(function (b) { return b.used; });
     var out = [];
@@ -475,6 +560,42 @@
     });
   }
 
+  /**
+   * Pixel boxes for those blocks. The hour scale grows until each block is at
+   * least minPx tall. A block never paints over the next one: if the slot is
+   * still shorter than minPx, the box shrinks to the free gap.
+   * opts: { minPx, gap, hourPx, maxHourPx }. top is relative to dayStart.
+   */
+  function timelineLayout(blocks, dayStart, opts) {
+    opts = opts || {};
+    var minPx = opts.minPx > 0 ? opts.minPx : 22;
+    var gap = opts.gap >= 0 ? opts.gap : 3;
+    var base = opts.hourPx > 0 ? opts.hourPx : 56;
+    var cap = opts.maxHourPx > 0 ? opts.maxHourPx : 360;
+    var first = dayStart == null ? DAY_START : dayStart;
+    var list = blocks || [];
+    var shortest = 0;
+    list.forEach(function (b) {
+      var d = b.end - b.start;
+      if (d > 0 && (!shortest || d < shortest)) shortest = d;
+    });
+    var hourPx = base;
+    if (shortest > 0) {
+      var need = Math.ceil(((minPx + gap) * 60) / shortest);
+      if (need > hourPx) hourPx = need;
+    }
+    if (hourPx > cap) hourPx = cap;
+    var items = list.map(function (b, i) {
+      var top = ((b.start - first) / 60) * hourPx;
+      var nextTop = i + 1 < list.length ? ((list[i + 1].start - first) / 60) * hourPx : null;
+      var room = nextTop == null ? Infinity : Math.max(0, nextTop - top - gap);
+      var natural = Math.max(0, ((b.end - b.start) / 60) * hourPx - gap);
+      var height = Math.min(Math.max(natural, Math.min(minPx, room)), room);
+      return { id: b.id, top: top, height: height };
+    });
+    return { hourPx: hourPx, items: items };
+  }
+
   /** 540 → "09:00" */
   function hhmm(min) {
     var h = Math.floor(min / 60) % 24;
@@ -497,7 +618,7 @@
    * Otherwise the task takes the column day, or its vague horizon.
    * Returns { name, date, vague } or null when there is nothing to create.
    */
-  function taskDraft(typed, columnDate, parse, vague) {
+  function taskDraft(typed, columnDate, parse, vague, time) {
     var raw = String(typed || '').replace(/\s+/g, ' ').trim();
     if (!raw) return null;
     var q = typeof parse === 'function' ? parse(raw) : null;
@@ -505,7 +626,9 @@
     if (!name) name = raw;
     if (!name) return null;
     if (q && q.dueDate) return { name: name, date: q.dueDate, vague: '' };
-    return { name: name, date: columnDate || '', vague: vague || '' };
+    var out = { name: name, date: columnDate || '', vague: vague || '' };
+    if (time && !vague) out.time = time;
+    return out;
   }
 
   /** Sidebar badge counts. */
@@ -543,12 +666,15 @@
     weekPlan: weekPlan,
     autoPlan: autoPlan,
     SCALES: SCALES,
+    parseClock: parseClock,
+    untimed: untimed,
     horizonPlan: horizonPlan,
     placeAuto: placeAuto,
     todayList: todayList,
     nextAction: nextAction,
     suggestions: suggestions,
     timeline: timeline,
+    timelineLayout: timelineLayout,
     hhmm: hhmm,
     formatMinutes: formatMinutes,
     taskDraft: taskDraft,

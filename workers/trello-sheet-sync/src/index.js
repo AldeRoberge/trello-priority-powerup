@@ -8,7 +8,7 @@
 //   POST /push                   {cards:[...]} computed columns from the Power-Up
 //   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
 //   POST /alerts/ack             acknowledge CRITICAL alerts
-//   POST /documents/sync         mirror the Documents view into the Drive folder now
+//   POST /documents/sync         reconcile Documents ↔ the Drive folder now
 //   GET  /unsplash?q=            Unsplash photos for document covers (secret UNSPLASH_ACCESS_KEY)
 //   POST /webhook/register       (re)register the Trello webhook
 // Everything except the webhook and /health needs the header x-sync-secret.
@@ -161,8 +161,8 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       (async () => {
-        // Documents change rarely and the webhook already mirrors each save: reconcile every 10 minutes
-        if (new Date(event.scheduledTime).getUTCMinutes() % 10 === 0) await syncAllDocuments(env).catch((e) => console.error('documents sync failed', e));
+        // Drive has no push either: one pass a minute picks up edits and new .md files (unchanged boards are two reads)
+        await syncAllDocuments(env).catch((e) => console.error('documents sync failed', e));
         await watchSheet(env).catch((e) => console.error('scheduled sync failed', e));
       })(),
     );

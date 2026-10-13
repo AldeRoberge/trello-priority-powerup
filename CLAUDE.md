@@ -61,6 +61,8 @@ The UI copy is French (Québec). The user writes short, informal requests and ex
 
 - Simple first, detail on demand: progressive disclosure, submenus, no walls of options. The user types first, suggestions come after.
 - Compact: no huge buttons, no wasted vertical space, no redundant labels (like "Quoi ?" then "Nom"), no stray lines or odd padding.
+- **Every property is table-aligned.** On any list of items (Gantt, Tableau, Kanban, Orchestrateur, Mindmap, Documents, card chips), each property is its own column: score, estimate, date, statut, people, and trailing icons. The same property starts at the same horizontal position on every row. A short value (`5`), a longer one (`10 min`, `Estimer…`), or a missing value still occupies that column, so nothing to its right shifts. Never size a property to its text.
+- **A click never moves what is next to it.** Hover, press, and selected change color or background only, never the size (no bolder weight, no extra padding, no border that appears). A control that does not apply stays on screen, quieter, in the same place. Removing it shifts everything the user was about to click. True in every view.
 - Direct manipulation: inline edits (double-click a title, click a progress bar or circle, drag sliders), no modal for simple edits, create in place. Archive acts immediately (Ctrl+Z undoes).
 - Every item has a right-click menu with consistent icons and all card actions. Middle mouse pans; Ctrl+A/C/V/Delete work; selection and snapping behave like Miro or Draw.io.
 - Reference apps: Apple (clean, calm), Linear, Miro, Draw.io, Trello. A confusing screen gets redesigned, not patched.

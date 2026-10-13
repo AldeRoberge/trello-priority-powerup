@@ -75,6 +75,7 @@
     var state = {
       lists: [],
       rows: [],
+      places: {},
       columns: TM().DEFAULT_COLUMNS.slice(),
       widths: {},
       sheetTheme: 'light',
@@ -710,6 +711,33 @@
           h('td', { colspan: String(state.columns.length) }, [addInput]),
         ])
       );
+      if (global.InsertGap) {
+        global.InsertGap.watch(body, {
+          item: 'tr[data-id]',
+          tail: '.tb-add-row',
+          placeholder: 'Titre…',
+          enabled: function () { return canReorder(); },
+          wrap: function (input) {
+            var tr = document.createElement('tr');
+            tr.className = 'ig-compose';
+            var td0 = document.createElement('td');
+            td0.className = 'tb-num';
+            var td1 = document.createElement('td');
+            td1.colSpan = String(state.columns.length);
+            td1.appendChild(input);
+            tr.appendChild(td0);
+            tr.appendChild(td1);
+            return tr;
+          },
+          onCreate: function (title, info) {
+            var above = info.above && findRow(info.above.getAttribute('data-id'));
+            var below = info.below && findRow(info.below.getAttribute('data-id'));
+            var list = (above && listById(above.listId)) || newCardList();
+            if (!list) return Promise.resolve();
+            return createIn(list, title, null, { pos: above ? posUnder(above, below) : 'bottom' });
+          },
+        });
+      }
       table.appendChild(body);
       els.wrap.innerHTML = '';
       els.wrap.appendChild(table);
@@ -732,13 +760,29 @@
      * Creates a card. From the add row (`input`) focus returns there for the next title; from a menu
      * (`opts.rename`) the new title opens for editing, since "Nouvelle carte" is only a placeholder.
      */
+    /** Position in the row's list so the new card stays under the one that was hovered. */
+    function posUnder(above, below) {
+      var siblings = state.rows.filter(function (r) { return r.listId === above.listId; }).sort(function (a, b) {
+        return (a.pos || 0) - (b.pos || 0);
+      });
+      var index = siblings.length;
+      if (below && below.listId === above.listId) {
+        var bi = siblings.findIndex(function (r) { return r.id === below.id; });
+        if (bi >= 0) index = bi;
+      } else {
+        var ai = siblings.findIndex(function (r) { return r.id === above.id; });
+        if (ai >= 0) index = ai + 1;
+      }
+      return TM().dropPos(siblings, index);
+    }
+
     function createIn(list, typed, input, opts) {
       if (input) input.disabled = true;
       var QP = global.QuickParse;
       var q = QP && !(opts && opts.rename) ? QP.parse(typed) : { name: typed, dueDate: '' };
       var name = q.name;
       TT()
-        .createRow(t, name, list.id)
+        .createRow(t, name, list.id, opts && opts.pos)
         .then(function (res) {
           var cardId = res && res.cardId;
           if (cardId && q.dueDate && global.GanttTrello) {
@@ -1029,6 +1073,7 @@
         'data-key': key,
         style: heatStyle(key, row),
       });
+      if (key === 'due' && global.WorkOS && global.WorkOS.dateKind(row) === 'hard') td.classList.add('is-hard');
 
       if (isEditing) {
         td.classList.add('is-editing');
@@ -1044,6 +1089,8 @@
         if (step && (step.text || step.missing)) {
           td.appendChild(h('span', { class: 'tb-step' + (step.missing ? ' is-missing' : ''), text: step.text || 'Sans prochaine action' }));
         }
+        var place = state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[row.id]) : '';
+        if (place) td.appendChild(h('span', { class: 'tb-place', text: place }));
         td.addEventListener('click', function () {
           state.selected = { rowId: row.id, key: key };
           beginEdit(row.id, key);
@@ -1674,6 +1721,13 @@
     });
 
     /* ── Loading ───────────────────────────────────────────────────── */
+    function goalPlaces() {
+      var goals = global.MindmapGoalsTrello;
+      var os = global.WorkOS;
+      if (!goals || typeof goals.load !== 'function' || !os || typeof os.places !== 'function') return Promise.resolve({});
+      return goals.load(t).then(function (g) { return os.places(g || {}); }).catch(function () { return {}; });
+    }
+
     function reload(opts) {
       if (!opts || !opts.quiet) els.wrap.innerHTML = skeletonRows();
       return Promise.all([
@@ -1683,6 +1737,7 @@
         global.PriorityTrello.isRestAuthorized(t).catch(function () {
           return false;
         }),
+        goalPlaces(),
       ])
         .then(function (res) {
           var data = res[0];
@@ -1694,6 +1749,7 @@
           state.widths = res[1].widths || {};
           state.sheet = res[2];
           state.authOk = !!res[3];
+          state.places = res[4] || {};
           renderBanner();
           renderGrid();
           schedulePush();

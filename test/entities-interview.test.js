@@ -165,6 +165,35 @@ describe('EntitiesInterview', () => {
     assert.equal(I.next(c).kind, 'field');
   });
 
+  it('a typed genre searches the whole list, and a new word creates the genre', () => {
+    const schema = M.defaultSchema();
+    const draft = C.newDraft({ name: 'Buster' });
+    const c = { schema, entities: [], draft, now: NOW, library: L, hints: {} };
+    const card = I.next(c);
+    assert.equal(card.kind, 'type');
+    assert.equal(card.options.some((o) => o.typeId === 'animal'), false);
+
+    const animal = I.typeChoices(c, card, 'Animal');
+    assert.equal(animal[0].typeId, 'animal');
+    assert.notEqual(animal[0].action, 'create-type');
+    const byAlias = I.typeChoices(c, card, 'bête');
+    assert.equal(byAlias[0].typeId, 'animal');
+
+    const installed = I.answer(c, card, { text: 'Animal' });
+    assert.equal(installed.error, undefined);
+    assert.ok(installed.draft.types.includes('animal'));
+    assert.ok(installed.schema.types.some((t) => t.id === 'animal'));
+
+    const chat = I.typeChoices(c, card, 'Chat');
+    assert.equal(chat[0].action, 'create-type');
+    assert.equal(chat[0].createName, 'Chat');
+    const created = I.answer(c, card, { text: 'Chat' });
+    assert.equal(created.error, undefined);
+    const ty = created.schema.types.find((t) => t.name === 'Chat');
+    assert.ok(ty);
+    assert.ok(created.draft.types.includes(ty.id));
+  });
+
   it('asks the type first when none is set, installing a library genre on pick', () => {
     const schema = M.defaultSchema();
     const draft = C.newDraft({ name: 'Tablette graphique' });

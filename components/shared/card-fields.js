@@ -257,23 +257,45 @@
     PT.getCardInputsById(o.t, o.cardId)
       .then(function (inputs) {
         if (!guard(c, ld)) return;
-        c.body.removeChild(ld);
-        c.api = ui.mountMiniBlocked(c.body, {
-          value: !!(inputs && inputs.enAttente),
-          blockedReasons: (inputs && inputs.blockedReasons) || [],
-          blockedLinks: (inputs && inputs.blockedLinks) || [],
-          hideSubtaskPicker: true,
-          onChange: function (next) {
-            PT.saveCardInputsById(o.t, o.cardId, {
-              enAttente: !!next.enAttente,
-              blockedReasons: next.blockedReasons || [],
-              blockedLinks: next.blockedLinks || [],
-            }).then(function () {
-              c.saved('blocked');
-            }, c.fail);
-          },
+        var reasons = (inputs && inputs.blockedReasons) || [];
+        var links = (inputs && inputs.blockedLinks) || [];
+        var already = !!(inputs && inputs.enAttente);
+        function show(blocked) {
+          if (!guard(c, ld)) return;
+          c.body.removeChild(ld);
+          c.api = ui.mountMiniBlocked(c.body, {
+            value: !!blocked,
+            blockedReasons: reasons,
+            blockedLinks: links,
+            hideSubtaskPicker: true,
+            onChange: function (next) {
+              PT.saveCardInputsById(o.t, o.cardId, {
+                enAttente: !!next.enAttente,
+                blockedReasons: next.blockedReasons || [],
+                blockedLinks: next.blockedLinks || [],
+              }).then(function () {
+                c.saved('blocked');
+              }, c.fail);
+            },
+          });
+          position(c.pop, o.anchor);
+        }
+        if (already) {
+          show(true);
+          return;
+        }
+        // The reason is optional. Blocking applies as soon as the editor opens.
+        PT.saveCardInputsById(o.t, o.cardId, {
+          enAttente: true,
+          blockedReasons: reasons,
+          blockedLinks: links,
+        }).then(function () {
+          c.saved('blocked');
+          show(true);
+        }, function (err) {
+          c.fail(err);
+          show(false);
         });
-        position(c.pop, o.anchor);
       })
       .catch(function (err) {
         ld.textContent = 'Erreur : ' + msg(err);

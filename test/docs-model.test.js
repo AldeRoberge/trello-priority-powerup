@@ -334,8 +334,8 @@ describe('DocsModel', () => {
       assert.equal(toMd('<p>a\u00a0b\u200bc</p>'), 'a bc');
     });
 
-    it('flattens tables into paragraphs', () => {
-      assert.equal(toMd('<table><tr><td>a</td><td>b</td></tr></table>'), 'a\n\nb');
+    it('keeps a table instead of flattening it', () => {
+      assert.equal(toMd('<table><tr><td>a</td><td>b</td></tr></table>'), '| a | b |\n| --- | --- |');
     });
 
     it('fences code that itself contains fences', () => {

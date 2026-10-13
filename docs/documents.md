@@ -17,7 +17,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Commandes | `/` puis un mot (`/titre`, `/liste`, `/image`…) |
 | Bloc | survoler une ligne : **+** ajoute un bloc, la poignée la glisse ou ouvre le menu pour changer le type |
 | Raccourcis Markdown | `# ` `## ` `### ` titres, `- ` puces, `1. ` numérotée, `[] ` cases à cocher, `> ` citation, `---` + Entrée séparateur, ```` ``` ```` + Entrée bloc de code |
-| Mise en forme | barre d'outils ; Ctrl+B / I / U, Ctrl+Maj+X barré, Ctrl+E code, Ctrl+K lien, Ctrl+Maj+7/8/9 listes, Ctrl+Alt+0…3 styles, Tab / Maj+Tab pour imbriquer une liste |
+| Mise en forme | barre d'outils, ou la barre au-dessus d'une sélection (style, couleur, surlignage, gras, italique, lien, listes) ; Ctrl+B / I / U, Ctrl+Maj+X barré, Ctrl+E code, Ctrl+K lien, Ctrl+Maj+7/8/9 listes, Ctrl+Alt+0…3 styles, Tab / Maj+Tab pour imbriquer une sous-tâche (la puce ou la case ne change pas) |
 | Ouvrir ce qui est mentionné | clic sur une tâche (ouvre la carte), un document (l'ouvre), une personne (fiche) |
 | Prénom seulement | Retour arrière juste après le nom ne garde que le prénom ; la mention reste |
 
@@ -49,10 +49,11 @@ Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barr
 
 ## Synchronisation Google Drive
 
-Chaque document est copié dans un dossier Google Drive sous forme de fichier **`Titre.md`** (texte Markdown, sans le bloc caché de révision). La copie va dans un seul sens, Trello → Drive : modifier le fichier dans Drive ne change pas le document.
+Chaque document est un fichier **`Titre.md`** dans un dossier Google Drive (texte Markdown, sans le bloc caché). Les deux sens, comme les tâches avec Google Sheets. En cas de modification des deux côtés en même temps, Trello gagne.
 
-- À chaque enregistrement, le webhook Trello fait mettre à jour le fichier (quelques secondes) ; un document renommé renomme son fichier, un document supprimé met son fichier à la corbeille Drive.
-- Toutes les 10 minutes, le Worker rapproche aussi l'ensemble (rattrapage). Seuls les fichiers créés par le Worker sont touchés.
+- Un enregistrement dans Trello met à jour le fichier (quelques secondes). Un renommage renomme le fichier. Supprimer le document envoie le fichier à la corbeille.
+- Une modification dans Drive met à jour le document (environ une minute). Un nouveau fichier `.md` dans le dossier crée un document. Supprimer le fichier ne supprime pas le document : le fichier revient.
+- Les autres fichiers du dossier ne sont pas touchés. Le bouton **Afficher dans Google Drive** (en-tête du document, et réglages Google Sheets) ouvre le dossier.
 - `POST /documents/sync` (en-tête `x-sync-secret`) force une passe ; `GET /info` donne `documents.status` (dernière passe, erreur éventuelle).
 
 Installation, une fois (après `npm run setup:sheet-sync`) :

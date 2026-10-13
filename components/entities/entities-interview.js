@@ -49,6 +49,14 @@
   function key(s) {
     return EM().normKey(s);
   }
+  function stemLabel(s) {
+    return key(s)
+      .split(' ')
+      .map(function (w) {
+        return w.length > 3 && /(s|x)$/.test(w) ? w.slice(0, -1) : w;
+      })
+      .join(' ');
+  }
 
   /* ── 1. Words ────────────────────────────────────────────────────── */
 
@@ -373,6 +381,53 @@
     };
   }
 
+  /** Every genre the user can pick, installed or still in the library, with the names it also answers to. */
+  function catalogTypes(ctx) {
+    var lib = LIB(ctx);
+    return EC().archetypeChoices(ctx.schema, lib).map(function (c) {
+      var installed = EM().findById(ctx.schema.types, c.id);
+      var preset = !installed && lib ? (lib.TYPES || []).filter(function (t) { return t.id === c.id; })[0] : null;
+      var aliases = (installed && installed.aliases) || (preset && preset.aliases) || [];
+      return {
+        id: 't:' + c.id,
+        label: c.name,
+        detail: c.installed ? '' : 'à installer',
+        icon: c.icon,
+        action: 'type',
+        typeId: c.id,
+        installed: !!c.installed,
+        aliases: aliases,
+      };
+    });
+  }
+
+  /**
+   * What the genre field shows for the text typed. An empty field keeps the short suggestions. A word searches
+   * the whole catalog (name and aliases). A word that is not already a genre offers to create it.
+   */
+  function typeChoices(ctx, card, text) {
+    var raw = trim(text);
+    var k = key(raw);
+    if (!k) return (card.options || []).slice();
+    var stem = stemLabel(raw);
+    function isExact(o) {
+      if (stemLabel(o.label) === stem) return true;
+      return (o.aliases || []).some(function (a) { return stemLabel(a) === stem; });
+    }
+    function has(o) {
+      if (key(o.label).indexOf(k) >= 0) return true;
+      return (o.aliases || []).some(function (a) { return key(a).indexOf(k) >= 0; });
+    }
+    var all = catalogTypes(ctx);
+    var exacts = all.filter(isExact);
+    var rest = all.filter(function (o) { return !isExact(o) && has(o); });
+    var out = exacts.concat(rest).slice(0, 6);
+    if (!exacts.length) {
+      out.push({ id: 'new:' + k, label: 'Créer « ' + raw.slice(0, 80) + ' »', icon: 'plus', action: 'create-type', createName: raw.slice(0, 80) });
+    }
+    return out;
+  }
+
   function doneCard(ctx) {
     return { id: 'done', kind: 'done', question: 'C’est prêt. Créer « ' + (ctx.draft.name || 'cette entité') + ' » ?', options: [], best: -1, input: null };
   }
@@ -539,8 +594,40 @@
     return out;
   }
 
+  /** Installs a catalog genre when needed, then sets it on the draft. */
+  function applyPickedType(ctx, state, opt) {
+    var s = state.schema;
+    var typeId = opt.typeId;
+    if (!opt.installed) {
+      var r = LIB(ctx).install(s, [opt.typeId]);
+      if (r.error) return Object.assign(state, { error: 'Impossible d’ajouter ce genre.' });
+      s = r.schema;
+      typeId = (r.typeIds && r.typeIds[opt.typeId]) || opt.typeId;
+    }
+    var d = EC().pruneAnswers(s, EC().toggleType(s, state.draft, typeId, true));
+    var p = prepare({ schema: s, draft: d, library: ctx.library });
+    return { schema: p.schema, draft: p.draft, extra: [] };
+  }
+
+  /** A word that is not a genre yet becomes one, and the draft takes it. */
+  function createGenre(ctx, state, name) {
+    var label = trim(name).slice(0, 80);
+    if (!label) return Object.assign(state, { error: 'Choisissez un genre dans la liste.' });
+    var stem = stemLabel(label);
+    var have = catalogTypes(ctx).filter(function (o) {
+      return stemLabel(o.label) === stem || (o.aliases || []).some(function (a) { return stemLabel(a) === stem; });
+    })[0];
+    if (have) return applyPickedType(ctx, state, have);
+    var r = EC().defineType(state.schema, { name: label, icon: 'stack-2' });
+    if (r.error) return Object.assign(state, { error: 'Impossible de créer ce genre.' });
+    var d = EC().pruneAnswers(r.schema, EC().toggleType(r.schema, state.draft, r.typeId, true));
+    var p = prepare({ schema: r.schema, draft: d, library: ctx.library });
+    return { schema: p.schema, draft: p.draft, extra: [] };
+  }
+
   /**
    * One answer to a card: { option: index } picks a suggestion, { text } is what was typed, { skip: true } passes.
+   * A genre can also be { typeId } (a catalog genre) or { createName } (a genre that does not exist yet).
    * @returns {{schema, draft, extra:object[], sub?:object, error?:string}}
    */
   function answer(ctx, card, input) {
@@ -549,19 +636,14 @@
     input = input || {};
 
     if (card.kind === 'type') {
-      var opt = typeof input.option === 'number' ? card.options[input.option] : card.options[matchOptions(card, input.text)[0]];
+      var opt = null;
+      if (input.createName) opt = { action: 'create-type', createName: trim(input.createName).slice(0, 80) };
+      else if (input.typeId) opt = catalogTypes(ctx).filter(function (o) { return o.typeId === input.typeId; })[0] || null;
+      else if (typeof input.option === 'number') opt = card.options[input.option];
+      else if (trim(input.text)) opt = typeChoices(ctx, card, input.text)[0] || null;
       if (!opt) return Object.assign(state, { error: 'Choisissez un genre dans la liste.' });
-      var s = state.schema;
-      var typeId = opt.typeId;
-      if (!opt.installed) {
-        var r = LIB(ctx).install(s, [opt.typeId]);
-        if (r.error) return Object.assign(state, { error: 'Impossible d’ajouter ce genre.' });
-        s = r.schema;
-        typeId = (r.typeIds && r.typeIds[opt.typeId]) || opt.typeId;
-      }
-      var d = EC().pruneAnswers(s, EC().toggleType(s, state.draft, typeId, true));
-      var p = prepare({ schema: s, draft: d, library: ctx.library });
-      return { schema: p.schema, draft: p.draft, extra: [] };
+      if (opt.action === 'create-type') return createGenre(ctx, state, opt.createName);
+      return applyPickedType(ctx, state, opt);
     }
 
     if (card.kind === 'batch') {
@@ -688,6 +770,7 @@
     cardFor: cardFor,
     remaining: remaining,
     matchOptions: matchOptions,
+    typeChoices: typeChoices,
     resolveInput: resolveInput,
     answer: answer,
     reachable: reachable,

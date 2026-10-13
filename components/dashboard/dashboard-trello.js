@@ -36,6 +36,8 @@
       row.estimate = rec.estimatedMinutes || 0;
       row.dueVague = (rec.inputs && rec.inputs.dueVague) || '';
       row.dueMode = (rec.inputs && rec.inputs.dueMode) || '';
+      row.startTime = rec.startTime || '';
+      row.dueTime = rec.dueTime || '';
       return row;
     });
     return {
@@ -193,13 +195,16 @@
    * A horizon clears the hard date (same idea as setSomeday) so it stays off the day board.
    * A day clears the horizon.
    */
-  async function planAt(t, cardId, iso, vagueId) {
+  async function planAt(t, cardId, iso, vagueId, time) {
+    var hhmm = time || '';
     if (vagueId) {
       await savePriority(t, cardId, {
         dueMode: 'vague',
         dueVague: vagueId,
         dueDate: '',
         startDate: '',
+        startTime: '',
+        dueTime: '',
       });
       try {
         var put = await PT().restPutCard(t, cardId, { due: null, start: null });
@@ -209,12 +214,24 @@
       }
       return;
     }
-    await planDay(t, cardId, iso);
+    var saved = await GT().saveCardDates(t, cardId, {
+      startDate: iso || '',
+      dueDate: iso || '',
+      startTime: hhmm,
+      dueTime: hhmm,
+    });
+    if (!saved || !saved.ok) {
+      var err = new Error((saved && saved.reason) || 'dates-failed');
+      err.reason = saved && saved.reason;
+      throw err;
+    }
     await savePriority(t, cardId, {
       dueMode: 'precise',
       dueVague: '',
       dueDate: iso || '',
       startDate: iso || '',
+      startTime: hhmm,
+      dueTime: hhmm,
     });
   }
 

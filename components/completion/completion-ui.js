@@ -5785,6 +5785,28 @@
       } finally {
         endSuppressEmptyDraftDiscard();
         renderNodeView();
+        if (global.InsertGap && listEl) {
+          global.InsertGap.watch(listEl, {
+            item: '.tp-completion-item--depth1',
+            placeholder: 'Sous-tâche…',
+            wrap: function (input) {
+              var li = document.createElement('li');
+              li.className = 'ig-compose';
+              li.appendChild(input);
+              return li;
+            },
+            onCreate: function (title, info) {
+              var aboveId = info.above && info.above.getAttribute('data-id');
+              var idx = data.items.length;
+              if (aboveId) {
+                for (var ii = 0; ii < data.items.length; ii++) {
+                  if (data.items[ii].id === aboveId) { idx = ii + 1; break; }
+                }
+              }
+              addItem(title, { index: idx });
+            },
+          });
+        }
       }
     }
 
@@ -5850,7 +5872,11 @@
       if (estimateOpts.blocked === true) rawItem.blocked = true;
       var item = CT.normalizeItem(rawItem);
       if (!item) return null;
-      data.items.push(item);
+      if (typeof estimateOpts.index === 'number') {
+        data.items.splice(Math.max(0, Math.min(data.items.length, estimateOpts.index)), 0, item);
+      } else {
+        data.items.push(item);
+      }
       removeSuggestionMatch(trimmed);
       playCompletionUiSound(estimateOpts.blocked === true ? 'block' : 'add');
       emitChange();

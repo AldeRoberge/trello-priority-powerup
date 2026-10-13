@@ -4,8 +4,26 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Documents : l'aperçu d'une tâche s'agrandit par n'importe quel coin, et la molette zoome sous le curseur.
+- Aujourd'hui : une tâche courte ne recouvre plus la suivante sur la ligne du temps.
+- Documents : la poignée (+ et glisser) s’aligne sur la première ligne de chaque bloc.
+- Documents : Tab dans une liste indente une sous-tâche. La puce ou la case reste la même.
+- Saisie : le texte et le défilement ne recopient plus tout le document à chaque lettre.
+- Gantt : faire défiler charge le jour, la semaine, le mois ou l'année d'à côté, au lieu de rester bloqué sur la période affichée.
+- Orchestrateur : un zoom, des minutes aux années (puis Vague). Déposer une carte sur une heure la planifie à cette heure.
+- Documents : sélectionner du texte affiche une barre (style, couleur, surlignage, gras, italique, lien, listes) et « Créer une tâche ».
+- Documents : dans un bloc de code, la flèche bas ou un clic en dessous place le curseur sous le bloc.
+- Entités : le curseur au-dessus, au milieu ou en dessous d'une entité affiche un + pour en créer une à cet endroit.
+- Bloquer une carte n'exige plus une raison. Le champ reste là si on veut en ajouter une.
+- Kanban, Tableau et Dashboard : une carte rattachée à un projet affiche « Projet · Objectif ». Une échéance (heure ou date sans début) se distingue d’un jour prévu.
+- Aujourd'hui : la priorité, l'estimation, le jour et la flèche restent alignés d'une tâche à l'autre.
+- Entités : dans « quel genre », un mot cherche tous les genres. Un mot nouveau, comme Chat, crée le genre.
+- Documents : chaque document est un fichier .md dans Google Drive, dans les deux sens, comme les tâches avec Google Sheets.
+- Orchestrateur : chaque échelle a une icône.
+- Listes : le curseur sous une tâche ou un document affiche un + pour en créer un à cet endroit (Kanban, Tableau, Gantt, Mindmap, Documents, Tableau de bord, Entités, sous-tâches).
+- Saisie : quatre suites sont prévues d'un coup. Tant que les lettres suivent l'une d'elles, l'IA n'est pas rappelée.
+- Gantt : survoler la ligne rouge affiche l'heure exacte, à la milliseconde près quand on zoome.
 - Saisie : la suite proposée par l'IA (Tab pour garder) suit aussi les descriptions, les nouvelles cartes et les autres champs de texte.
-- Mindmap : un groupe se sélectionne, se déplace avec son contenu, se renomme, et une carte glissée dessus en fait partie.
 - Mindmap : un groupe se sélectionne, se déplace avec son contenu, se renomme, et une carte glissée dessus en fait partie.
 - Orchestrateur : « Nouvelle tâche » en bas de chaque colonne crée la tâche là (à planifier, ce jour, ou cet horizon). « Demain » dans le titre choisit le jour.
 - Tableau de bord : clic droit sur une carte pour trier, planifier, modifier, ouvrir ou archiver.

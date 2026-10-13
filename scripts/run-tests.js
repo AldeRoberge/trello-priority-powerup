@@ -72,6 +72,7 @@ const UNIT_FILES = [
   'outlook-ics.test.js',
   'desc-meta.test.js',
   'docs-model.test.js',
+  'docs-rich.test.js',
   'docs-trello.test.js',
   'docs-history.test.js',
   'card-quick.test.js',
@@ -89,7 +90,9 @@ const UNIT_FILES = [
   'entities-systems.test.js',
   'entities-systems-ai.test.js',
   'agent-entities.test.js',
+  'insert-gap.test.js',
   'dashboard-model.test.js',
+  'dashboard-menu.test.js',
   'dashboard-trello.test.js',
 ];
 

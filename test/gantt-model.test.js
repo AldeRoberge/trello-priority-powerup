@@ -101,6 +101,45 @@ describe('GanttModel', () => {
     assert.equal(range.columns.length, 36);
   });
 
+  it('spanRange with no extra periods matches viewRange', () => {
+    ['day', 'week', 'month', 'year'].forEach((mode) => {
+      const base = GanttModel.viewRange(mode, '2026-07-22');
+      const span = GanttModel.spanRange(mode, '2026-07-22', 0, 0);
+      assert.equal(GanttModel.toIsoDate(span.start), GanttModel.toIsoDate(base.start));
+      assert.equal(GanttModel.toIsoDate(span.end), GanttModel.toIsoDate(base.end));
+      assert.equal(span.columns.length, base.columns.length);
+    });
+  });
+
+  it('spanRange loads the next and previous period in each mode', () => {
+    const week = GanttModel.spanRange('week', '2026-07-22', 0, 1);
+    assert.equal(GanttModel.toIsoDate(week.start), '2026-07-20');
+    assert.equal(GanttModel.toIsoDate(week.end), '2026-08-02');
+    assert.equal(week.columns.length, 14);
+    const prevWeek = GanttModel.spanRange('week', '2026-07-22', 1, 0);
+    assert.equal(GanttModel.toIsoDate(prevWeek.start), '2026-07-13');
+    assert.equal(GanttModel.toIsoDate(prevWeek.end), '2026-07-26');
+
+    const month = GanttModel.spanRange('month', '2026-07-15', 0, 1);
+    assert.equal(GanttModel.toIsoDate(month.start), '2026-07-01');
+    assert.equal(GanttModel.toIsoDate(month.end), '2026-08-31');
+    assert.equal(month.columns.length, 62);
+
+    const day = GanttModel.spanRange('day', '2026-07-22', 0, 1);
+    assert.equal(GanttModel.toIsoDate(day.start), '2026-07-22');
+    assert.equal(GanttModel.toIsoDate(day.end), '2026-07-23');
+    assert.equal(day.columns.length, 48);
+    assert.equal(day.columns[24].label, '0h');
+
+    const year = GanttModel.spanRange('year', '2026-07-15', 0, 1);
+    assert.equal(GanttModel.toIsoDate(year.start), '2025-01-01');
+    assert.equal(GanttModel.toIsoDate(year.end), '2028-12-31');
+    assert.equal(year.columns.length, 48);
+    const earlier = GanttModel.spanRange('year', '2026-07-15', 1, 0);
+    assert.equal(GanttModel.toIsoDate(earlier.start), '2024-01-01');
+    assert.equal(earlier.columns.length, 48);
+  });
+
   it('resolveBarInterval uses start→due when both set', () => {
     const iv = GanttModel.resolveBarInterval({
       startDate: '2026-07-01',
@@ -1023,6 +1062,36 @@ describe('GanttModel', () => {
       checked: true,
       indeterminate: false,
     });
+  });
+
+  it('formatNowLineTitle adds seconds then milliseconds as the scale grows', () => {
+    const when = new Date(2026, 9, 13, 19, 6, 42, 318);
+    assert.equal(GanttModel.formatNowLineTitle(when, 0), 'Maintenant · 19:06');
+    assert.equal(GanttModel.formatNowLineTitle(when, 0.003), 'Maintenant · 19:06:42');
+    assert.equal(
+      GanttModel.formatNowLineTitle(when, 0.004),
+      'Maintenant · 19:06:42.318'
+    );
+    assert.equal(GanttModel.formatNowLineTitle(when, 1), 'Maintenant · 19:06:42.318');
+    assert.equal(GanttModel.formatNowLineTitle(new Date(NaN), 1), '');
+  });
+
+  it('timelinePxPerSecond follows the zoom and stays positive at the range edge', () => {
+    const range = GanttModel.viewRange('week', '2026-10-13');
+    const noon = new Date(2026, 9, 13, 12, 0, 0, 0);
+    const wide = 7 * 86400;
+    const px = GanttModel.timelinePxPerSecond(noon, range, wide, null);
+    assert.ok(Math.abs(px - 1) < 0.002, 'one second is one pixel at 86400 px/day');
+    const end = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate(), 23, 59, 59, 900);
+    const edge = GanttModel.timelinePxPerSecond(end, range, wide, null);
+    assert.ok(edge > 0.5, 'edge sample does not collapse to zero');
+    const back = GanttModel.xToDateTime(
+      GanttModel.dateTimeToX(noon, range, wide, null),
+      range,
+      wide,
+      null
+    );
+    assert.ok(Math.abs(back.getTime() - noon.getTime()) <= 2);
   });
 
   it('snapDate week keeps day; xToDate clamps to range', () => {

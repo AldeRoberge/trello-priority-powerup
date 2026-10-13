@@ -148,6 +148,11 @@
     return workerCall(settings, 'POST', '/sync');
   }
 
+  /** Documents ↔ the Drive folder (no-op when the folder is not configured). */
+  function syncDocuments(settings) {
+    return workerCall(settings, 'POST', '/documents/sync');
+  }
+
   /** Sets the Sheet's column set (the Worker re-lays out the tab, keeping the values). */
   function pushColumns(settings, columns) {
     return workerCall(settings, 'PUT', '/config', { columns: columns });
@@ -212,6 +217,7 @@
     workerCall: workerCall,
     info: info,
     syncNow: syncNow,
+    syncDocuments: syncDocuments,
     pushColumns: pushColumns,
     pushComputed: pushComputed,
     logs: logs,

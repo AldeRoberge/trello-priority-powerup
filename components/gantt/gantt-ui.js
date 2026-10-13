@@ -409,6 +409,10 @@
     var state = {
       viewMode: 'week',
       anchor: model.toIsoDate(new Date()),
+      // Extra periods loaded by scrolling past the current day / week / month / year.
+      spanBefore: 0,
+      spanAfter: 0,
+      spanLock: false,
       tree: [],
       cardsById: Object.create(null),
       expanded: Object.create(null),
@@ -655,23 +659,23 @@
             onViewMode: function (mode) {
               state.viewMode = mode;
               state.zoom = 1;
+              state.spanBefore = 0;
+              state.spanAfter = 0;
+              state.scrollToToday = true;
               render();
             },
             onPrev: function () {
-              state.anchor = model.toIsoDate(
-                model.shiftAnchor(state.viewMode, state.anchor, -1)
-              );
-              render();
+              nudgePeriod(-1);
             },
             onToday: function () {
               state.anchor = model.toIsoDate(new Date());
+              state.spanBefore = 0;
+              state.spanAfter = 0;
+              state.scrollToToday = true;
               render();
             },
             onNext: function () {
-              state.anchor = model.toIsoDate(
-                model.shiftAnchor(state.viewMode, state.anchor, 1)
-              );
-              render();
+              nudgePeriod(1);
             },
             onToggleHideCompleted: function (nextVal) {
               state.hideCompleted = !!nextVal;
@@ -740,13 +744,7 @@
       if (!scroll) return;
       var avail = availableTimelineWidth(scroll);
       if (avail < 1) return;
-      var r = range();
-      var nextW = computeTimelineWidth(
-        avail,
-        state.viewMode,
-        r.columns && r.columns.length,
-        state.zoom
-      );
+      var nextW = chartTimelineWidth(avail);
       if (!force && Math.abs(nextW - state.timelineWidth) <= 2) {
         state.widthMeasured = true;
         return;
@@ -995,7 +993,102 @@
     }
 
     function range() {
+      if (typeof model.spanRange === 'function') {
+        return model.spanRange(
+          state.viewMode,
+          state.anchor,
+          state.spanBefore || 0,
+          state.spanAfter || 0
+        );
+      }
       return model.viewRange(state.viewMode, state.anchor);
+    }
+
+    function baseColumnCount() {
+      var base = model.viewRange(state.viewMode, state.anchor);
+      var n = base && base.columns ? base.columns.length : 1;
+      return Math.max(1, n);
+    }
+
+    /** Width of the loaded span, keeping the same pixels per column as one period. */
+    function chartTimelineWidth(avail) {
+      var cols = Math.max(1, (range().columns || []).length);
+      var base = baseColumnCount();
+      var one = computeTimelineWidth(avail, state.viewMode, base, state.zoom);
+      return Math.max(1, Math.round((one / base) * cols));
+    }
+
+    var SPAN_MAX = { day: 90, week: 52, month: 36, year: 12 };
+
+    /**
+     * Append or prepend one period. `where` is 'keep' (scroll stays put),
+     * 'end', or 'start'.
+     */
+    function extendSpan(dir, where) {
+      if (state.spanLock || state.drag || state.paint || state.loading) return false;
+      var max = SPAN_MAX[state.viewMode] || 24;
+      var before = state.spanBefore || 0;
+      var after = state.spanAfter || 0;
+      if (dir < 0) {
+        if (before >= max) return false;
+      } else if (after >= max) return false;
+      var oldCols = (range().columns || []).length || 1;
+      var scroll = body.querySelector('.gantt-timeline-scroll');
+      var oldLeft = scroll ? scroll.scrollLeft : 0;
+      var avail = scroll ? availableTimelineWidth(scroll) : 0;
+      if (dir < 0) state.spanBefore = before + 1;
+      else state.spanAfter = after + 1;
+      var nextW = avail >= 1 ? chartTimelineWidth(avail) : state.timelineWidth;
+      var newCols = (range().columns || []).length || oldCols;
+      var addedPx = 0;
+      if (dir < 0 && newCols > 0) {
+        addedPx = nextW * ((newCols - oldCols) / newCols);
+      }
+      var left = oldLeft + addedPx;
+      if (where === 'end') left = nextW;
+      if (where === 'start') left = 0;
+      if (where === 'page') {
+        var view = scroll ? Math.round(scroll.clientWidth * 0.85) : 0;
+        left = dir > 0 ? oldLeft + view : Math.max(0, oldLeft + addedPx - view);
+      }
+      state.pendingScrollLeft = left;
+      state.timelineWidth = nextW;
+      state.widthMeasured = true;
+      state.scrollToToday = false;
+      state.spanLock = true;
+      render();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          state.spanLock = false;
+        });
+      });
+      return true;
+    }
+
+    /** Page sideways, and load another period when the scroll is already at the edge. */
+    function nudgePeriod(dir) {
+      var scroll = body.querySelector('.gantt-timeline-scroll');
+      if (!scroll || state.loading) {
+        state.spanBefore = 0;
+        state.spanAfter = 0;
+        state.anchor = model.toIsoDate(
+          model.shiftAnchor(state.viewMode, state.anchor, dir < 0 ? -1 : 1)
+        );
+        state.scrollToToday = true;
+        render();
+        return;
+      }
+      var maxScroll = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+      var page = Math.max(80, Math.round(scroll.clientWidth * 0.85));
+      if (dir > 0 && scroll.scrollLeft < maxScroll - 4) {
+        scroll.scrollLeft = Math.min(maxScroll, scroll.scrollLeft + page);
+        return;
+      }
+      if (dir < 0 && scroll.scrollLeft > 4) {
+        scroll.scrollLeft = Math.max(0, scroll.scrollLeft - page);
+        return;
+      }
+      extendSpan(dir, dir > 0 ? 'end' : 'start');
     }
 
     function intervalOptions() {
@@ -1052,6 +1145,7 @@
       tip.setAttribute('role', 'tooltip');
       timelineCol.appendChild(tip);
       var offTitle = timelineCol.getAttribute('title') || '';
+      var anchorX = 0;
       var anchorY = 0;
 
       function hide() {
@@ -1062,18 +1156,30 @@
 
       function paint() {
         var width = state.timelineWidth;
-        var when = new Date();
-        var x =
+        var colRect = timelineCol.getBoundingClientRect();
+        var cursorX = anchorX - colRect.left;
+        var drawn = parseFloat(marker.style.left);
+        if (!isFinite(drawn)) drawn = cursorX;
+        var live = new Date();
+        var liveX =
           typeof model.dateTimeToX === 'function'
-            ? model.dateTimeToX(when, range, width, mapOpts)
-            : parseFloat(marker.style.left) || 0;
-        marker.style.left = x + 'px';
+            ? model.dateTimeToX(live, range, width, mapOpts)
+            : drawn;
+        // Follow the clock only while that stays under the cursor. A stale
+        // line keeps the instant it was drawn at, so the tip matches the pixel.
+        var follow = Math.abs(liveX - cursorX) <= 14;
+        var x = follow ? liveX : drawn;
+        var when = follow
+          ? live
+          : (typeof model.xToDateTime === 'function' &&
+              model.xToDateTime(x, range, width, mapOpts)) ||
+            live;
+        if (follow) marker.style.left = x + 'px';
         var px =
           typeof model.timelinePxPerSecond === 'function'
             ? model.timelinePxPerSecond(when, range, width, mapOpts)
             : 0;
         tip.textContent = model.formatNowLineTitle(when, px);
-        var colRect = timelineCol.getBoundingClientRect();
         var top = anchorY - colRect.top + 14;
         if (top < 36) top = 36;
         var maxTop = (timelineCol.offsetHeight || 0) - 28;
@@ -1109,99 +1215,7 @@
           hide();
           return;
         }
-        anchorY = ev.clientY;
-        if (offTitle) timelineCol.removeAttribute('title');
-        if (!nowTipTimer) {
-          paint();
-          nowTipTimer = setInterval(paint, 80);
-        } else {
-          var colRect = timelineCol.getBoundingClientRect();
-          var top = anchorY - colRect.top + 14;
-          if (top < 36) top = 36;
-          tip.style.top = top + 'px';
-        }
-      });
-      timelineCol.addEventListener('pointerleave', hide);
-      scroll.addEventListener('scroll', hide);
-    }
-    var nowTipTimer = 0;
-
-    function clearNowTip() {
-      if (nowTipTimer) {
-        clearInterval(nowTipTimer);
-        nowTipTimer = 0;
-      }
-    }
-
-    /**
-     * Hovering the red now-line shows its clock. The line itself ignores the
-     * pointer (so bars stay draggable); proximity on the timeline opens the tip.
-     * Precision comes from GanttModel.formatNowLineTitle (milliseconds when zoomed in).
-     */
-    function bindNowLineTip(scroll, timelineCol, marker, range, mapOpts) {
-      if (!marker || typeof model.formatNowLineTitle !== 'function') return;
-      var tip = el('div', 'gantt-now-tip');
-      tip.hidden = true;
-      tip.setAttribute('role', 'tooltip');
-      timelineCol.appendChild(tip);
-      var offTitle = timelineCol.getAttribute('title') || '';
-      var anchorY = 0;
-
-      function hide() {
-        clearNowTip();
-        tip.hidden = true;
-        if (offTitle) timelineCol.setAttribute('title', offTitle);
-      }
-
-      function paint() {
-        var width = state.timelineWidth;
-        var when = new Date();
-        var x =
-          typeof model.dateTimeToX === 'function'
-            ? model.dateTimeToX(when, range, width, mapOpts)
-            : parseFloat(marker.style.left) || 0;
-        marker.style.left = x + 'px';
-        var px =
-          typeof model.timelinePxPerSecond === 'function'
-            ? model.timelinePxPerSecond(when, range, width, mapOpts)
-            : 0;
-        tip.textContent = model.formatNowLineTitle(when, px);
-        var colRect = timelineCol.getBoundingClientRect();
-        var top = anchorY - colRect.top + 14;
-        if (top < 36) top = 36;
-        var maxTop = (timelineCol.offsetHeight || 0) - 28;
-        if (maxTop > 36 && top > maxTop) top = maxTop;
-        tip.style.top = top + 'px';
-        tip.hidden = false;
-        var tipW = tip.offsetWidth || 140;
-        if (x + 12 + tipW > width) {
-          tip.style.left = Math.max(0, x - 8) + 'px';
-          tip.style.transform = 'translateX(-100%)';
-        } else {
-          tip.style.left = x + 12 + 'px';
-          tip.style.transform = 'none';
-        }
-      }
-
-      function blocked(ev) {
-        var node = ev.target;
-        if (!node || !node.closest) return false;
-        return !!node.closest(
-          '.gantt-bar, .gantt-col-head, .gantt-hour-label, .gantt-timeline-header'
-        );
-      }
-
-      timelineCol.addEventListener('pointermove', function (ev) {
-        if (state.paint || state.drag || state.saving || blocked(ev)) {
-          hide();
-          return;
-        }
-        var rect = marker.getBoundingClientRect();
-        var lineX = rect.left + rect.width / 2;
-        if (Math.abs(ev.clientX - lineX) > 10) {
-          hide();
-          return;
-        }
+        anchorX = ev.clientX;
         anchorY = ev.clientY;
         if (offTitle) timelineCol.removeAttribute('title');
         if (!nowTipTimer) {
@@ -1269,9 +1283,25 @@
       }
       var modeChanged = mode !== state.viewMode;
       var anchorIso = modeChanged ? focalIso : state.anchor;
+      if (modeChanged) {
+        state.spanBefore = 0;
+        state.spanAfter = 0;
+      }
       var info = levelInfo(mode, anchorIso, avail, 1);
       var z = Math.max(1, p / info.natural);
-      var width = levelInfo(mode, anchorIso, avail, z).width;
+      var fitted = levelInfo(mode, anchorIso, avail, z).width;
+      var baseCols = (info.range.columns && info.range.columns.length) || 1;
+      var spanCols = baseCols;
+      if (!modeChanged && typeof model.spanRange === 'function') {
+        var spanned = model.spanRange(
+          mode,
+          anchorIso,
+          state.spanBefore || 0,
+          state.spanAfter || 0
+        );
+        spanCols = (spanned.columns && spanned.columns.length) || baseCols;
+      }
+      var width = Math.round(fitted * (spanCols / baseCols));
 
       state.viewMode = mode;
       state.anchor = anchorIso;
@@ -1626,6 +1656,8 @@
         btn.addEventListener('click', function () {
           state.viewMode = spec.mode;
           state.zoom = 1;
+          state.spanBefore = 0;
+          state.spanAfter = 0;
           state.scrollToToday = true;
           render();
         });
@@ -1639,11 +1671,7 @@
       var prev = el('button', 'gantt-btn', { type: 'button', text: '\u2039' });
       prev.title = 'Pr\u00e9c\u00e9dent';
       prev.addEventListener('click', function () {
-        state.anchor = model.toIsoDate(
-          model.shiftAnchor(state.viewMode, state.anchor, -1)
-        );
-        state.scrollToToday = true;
-        render();
+        nudgePeriod(-1);
       });
       var today = el('button', 'gantt-btn', { type: 'button', text: "Aujourd'hui" });
       var todayIcon = el('i', 'ti ti-circle-dot');
@@ -1651,17 +1679,15 @@
       today.insertBefore(todayIcon, today.firstChild);
       today.addEventListener('click', function () {
         state.anchor = model.toIsoDate(new Date());
+        state.spanBefore = 0;
+        state.spanAfter = 0;
         state.scrollToToday = true;
         render();
       });
       var next = el('button', 'gantt-btn', { type: 'button', text: '\u203a' });
       next.title = 'Suivant';
       next.addEventListener('click', function () {
-        state.anchor = model.toIsoDate(
-          model.shiftAnchor(state.viewMode, state.anchor, 1)
-        );
-        state.scrollToToday = true;
-        render();
+        nudgePeriod(1);
       });
       nav.appendChild(prev);
       nav.appendChild(today);
@@ -1671,12 +1697,22 @@
 
       var title = el('div', 'gantt-title');
       var r = range();
+      var multiSpan = (state.spanBefore || 0) + (state.spanAfter || 0) > 0;
       if (state.viewMode === 'year') {
         title.textContent = r.start.getFullYear() + ' – ' + r.end.getFullYear();
-      } else if (state.viewMode === 'month') {
+      } else if (state.viewMode === 'month' && !multiSpan) {
         title.textContent =
           r.start.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-      } else if (state.viewMode === 'day') {
+      } else if (state.viewMode === 'month') {
+        var sameMonthYear = r.start.getFullYear() === r.end.getFullYear();
+        title.textContent =
+          r.start.toLocaleDateString(
+            'fr-FR',
+            sameMonthYear ? { month: 'long' } : { month: 'long', year: 'numeric' }
+          ) +
+          ' \u2013 ' +
+          r.end.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      } else if (state.viewMode === 'day' && !multiSpan) {
         title.textContent = r.start.toLocaleDateString('fr-FR', {
           weekday: 'long',
           day: 'numeric',
@@ -2540,6 +2576,50 @@
      */
     function refreshBoardQuiet() {
       return reload({ quiet: true });
+    }
+
+    /** + under a Gantt row creates a card in that list, between its neighbours. */
+    function bindLabelInsert(labelsCol) {
+      if (!global.InsertGap) return;
+      global.InsertGap.watch(labelsCol, {
+        item: '.gantt-row[data-card-id]',
+        float: true,
+        placeholder: 'Titre…',
+        onCreate: function (title, info) {
+          var above = info.above;
+          var id = above && above.getAttribute('data-card-id');
+          var rec = (id && state.cardsById[id]) || {};
+          var listId = rec.listId;
+          if (!listId || !global.PriorityTrello) return Promise.resolve();
+          var QP = global.QuickParse;
+          var q = QP && QP.parse ? QP.parse(title) : { name: title, dueDate: '' };
+          var siblings = [];
+          Object.keys(state.cardsById).forEach(function (k) {
+            var c = state.cardsById[k];
+            if (c && c.listId === listId) siblings.push({ id: c.id || k, pos: c.pos || 0 });
+          });
+          siblings.sort(function (a, b) { return a.pos - b.pos; });
+          var belowId = info.below && info.below.getAttribute('data-card-id');
+          var index = siblings.length;
+          if (belowId) {
+            for (var i = 0; i < siblings.length; i++) if (siblings[i].id === belowId) { index = i; break; }
+          } else if (id) {
+            for (var j = 0; j < siblings.length; j++) if (siblings[j].id === id) { index = j + 1; break; }
+          }
+          var pos = global.TableModel && global.TableModel.dropPos ? global.TableModel.dropPos(siblings, index) : 'bottom';
+          return global.PriorityTrello.createCard(t, { name: q.name || title, idList: listId, pos: pos }).then(function (res) {
+            if (!res || res.ok === false) throw new Error((res && res.reason) || 'erreur');
+            var cardId = res.cardId;
+            var dates = q.dueDate && global.GanttTrello
+              ? global.GanttTrello.saveCardDates(t, cardId, { dueDate: q.dueDate }).catch(function () {})
+              : Promise.resolve();
+            return Promise.resolve(dates).then(function () {
+              record({ type: 'create', targetId: cardId, title: q.name || title, after: rec.listName || '' });
+              return refreshBoardQuiet();
+            });
+          });
+        },
+      });
     }
 
     function closeMiniPopover(opts) {
@@ -4402,8 +4482,10 @@
       var mapOpts = timelineMapOptions();
       var timeWarp = mapOpts && mapOpts.timeWarp;
       if (usesTimedTimeline() && timeWarp) {
+        var dayCount =
+          state.viewMode === 'day' ? Math.max(1, Math.round(colCount / 24)) : 1;
         var offUnit =
-          state.viewMode === 'day' ? state.timelineWidth : colW;
+          state.viewMode === 'day' ? state.timelineWidth / dayCount : colW;
         timelineCol.classList.add('gantt-timeline--timed');
         timelineCol.style.setProperty('--gantt-off-unit-w', offUnit + 'px');
         timelineCol.style.setProperty(
@@ -4564,7 +4646,8 @@
         ) {
           var v0 = model.realFracToVisual(col.hour / 24, timeWarp);
           var v1 = model.realFracToVisual((col.hour + 1) / 24, timeWarp);
-          cell.style.width = Math.max(0, (v1 - v0) * 100) + '%';
+          var hourDays = Math.max(1, Math.round(r.columns.length / 24));
+          cell.style.width = Math.max(0, ((v1 - v0) / hourDays) * 100) + '%';
           cell.style.flex = '0 0 auto';
         } else {
           cell.style.width = 100 / r.columns.length + '%';
@@ -5050,6 +5133,7 @@
       });
 
       chart.appendChild(labelsCol);
+      bindLabelInsert(labelsCol);
 
       var splitter = el('div', 'gantt-splitter');
       splitter.title = 'Glisser pour redimensionner';
@@ -5066,7 +5150,6 @@
       if (restoreLeft != null && isFinite(restoreLeft)) scroll.scrollLeft = restoreLeft;
       bindHourScale(scroll, timelineCol, headerTimeline, r, mapOpts);
       bindWeekScale(scroll, timelineCol, headerTimeline, r);
-      if (nowMarker) bindNowLineTip(scroll, timelineCol, nowMarker, r, mapOpts);
       if (nowMarker) bindNowLineTip(scroll, timelineCol, nowMarker, r, mapOpts);
 
       labelsCol.style.width = clampLabelsWidth(state.labelsWidth, chart) + 'px';
@@ -5125,11 +5208,43 @@
       });
       // Mouse wheel over the timeline zooms continuously (year > month > week >
       // hours, see applyZoomPx); the task list on the left keeps scrolling rows,
-      // and shift + wheel still pans sideways.
+      // and shift + wheel still pans sideways. Reaching either edge loads the
+      // next or previous period instead of stopping at this day / week / month / year.
+      function nearSpanEdge(dir) {
+        var max = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+        if (dir > 0) return max <= 8 || scroll.scrollLeft >= max - 64;
+        return scroll.scrollLeft <= 64;
+      }
+      var spanReady = false;
+      var spanLeft = scroll.scrollLeft;
+      scroll.addEventListener('scroll', function () {
+        var left = scroll.scrollLeft;
+        var delta = left - spanLeft;
+        spanLeft = left;
+        if (!spanReady || state.spanLock || state.drag || state.paint) return;
+        if (delta > 1 && nearSpanEdge(1)) extendSpan(1, 'keep');
+        else if (delta < -1 && nearSpanEdge(-1)) extendSpan(-1, 'keep');
+      });
       scroll.addEventListener(
         'wheel',
         function (ev) {
-          if (ev.shiftKey || !ev.deltaY) return;
+          var horizontal =
+            ev.shiftKey || Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+          if (horizontal) {
+            if (state.splitDrag || state.drag || state.paint || state.spanLock) return;
+            var pan = ev.shiftKey ? ev.deltaY : ev.deltaX;
+            if (!pan) return;
+            var room = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+            if (pan > 0 && nearSpanEdge(1)) {
+              ev.preventDefault();
+              extendSpan(1, room <= 8 ? 'page' : 'keep');
+            } else if (pan < 0 && nearSpanEdge(-1)) {
+              ev.preventDefault();
+              extendSpan(-1, room <= 8 ? 'page' : 'keep');
+            }
+            return;
+          }
+          if (!ev.deltaY) return;
           if (state.splitDrag || state.drag || state.paint) return;
           ev.preventDefault();
           onWheelZoom(ev);
@@ -5148,7 +5263,7 @@
           scroll.scrollLeft = restoreLeft;
         }
         var avail = availableTimelineWidth(scroll);
-        var nextW = computeTimelineWidth(avail, state.viewMode, colCount, state.zoom);
+        var nextW = chartTimelineWidth(avail);
         if (!state.widthMeasured || Math.abs(nextW - state.timelineWidth) > 2) {
           if (applyTimelineWidth(nextW, scroll.scrollLeft)) {
             renderChart(); // width changed: the next pass (stable width) does the centering
@@ -5166,6 +5281,8 @@
               ? 0
               : Math.max(0, todayLineX - scroll.clientWidth * 0.3);
         }
+        spanReady = true;
+        spanLeft = scroll.scrollLeft;
       });
     }
 
@@ -5347,7 +5464,6 @@
 
     return {
       destroy: function () {
-        clearNowTip();
         clearNowTip();
         if (measureRaf) {
           cancelAnimationFrame(measureRaf);

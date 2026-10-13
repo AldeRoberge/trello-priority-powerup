@@ -96,4 +96,22 @@ describe('WorkOS', () => {
     assert.deepEqual(WO.backlinks(docs, 'task', 'card'), [{ id: 'd1', title: 'Notes' }]);
     assert.deepEqual(WO.backlinks(docs, 'doc', 'd1'), [{ id: 'd2', title: 'Autre' }]);
   });
+
+  it('a task linked under a project keeps that project and its objective', () => {
+    const goals = {
+      nodes: [
+        { id: 'g', level: 'goal', name: 'Être lu' },
+        { id: 'o', level: 'objective', name: 'Lancer le site' },
+        { id: 'p', level: 'project', name: 'Page d’accueil' },
+      ],
+      links: [
+        { from: 'o', to: 'g' },
+        { from: 'p', to: 'o' },
+        { from: 'card', to: 'p' },
+      ],
+    };
+    const map = WO.places(goals);
+    assert.equal(WO.placeLabel(map.card), 'Page d’accueil · Lancer le site');
+    assert.equal(map.missing, undefined);
+  });
 });

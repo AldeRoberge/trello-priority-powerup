@@ -1,5 +1,5 @@
 /**
- * Ghost text while typing. A short continuation from the assistant, accepted with Tab.
+ * Ghost text while typing. The next few words of the same sentence, accepted with Tab.
  * Knows the field (document, task name, document name, person, label, or any other
  * text you are writing) and a slim snapshot of the board plus whatever is on screen.
  *
@@ -26,7 +26,7 @@
   };
   var KIND_GUIDE = {
     document:
-      'Tu continues une phrase dans un document. Quelques mots, le même ton, la même langue.',
+      'Tu continues la phrase dans un document. Quelques mots, le même sujet, le même ton, la même langue.',
     'doc-name': 'Tu complètes le titre d\'un document. Court, comme un titre, pas une phrase.',
     'task-name':
       'Tu complètes le nom d\'une tâche. Court et concret, comme les autres tâches. Pas de point final.',
@@ -34,7 +34,7 @@
       'Tu complètes un nom de personne. Si le début correspond à quelqu\'un du contexte, finis ce nom. Sinon, seulement la suite naturelle du prénom ou du nom, pas une phrase.',
     tag: 'Tu complètes le nom d\'une étiquette. Un ou deux mots, comme les autres étiquettes.',
     name: 'Tu complètes un nom court, dans le même style que les noms du contexte. Pas une phrase.',
-    text: 'Tu continues la phrase en cours. Quelques mots, le même ton, la même langue.'
+    text: 'Tu continues la phrase en cours. Quelques mots, le même sujet, le même ton, la même langue.'
   };
   var KIND_WORDS = {
     document: 8,
@@ -96,8 +96,10 @@
       'Pas de guillemets, pas d\'explication, pas de préambule.',
       'Si le mot n\'est pas fini, complète-le sans espace devant.',
       'Si le mot est fini, commence par un espace quand il en faut un.',
-      'Si rien d\'utile ne vient, réponds exactement: .',
-      'N\'invente pas de faits. Préfère les noms déjà donnés dans le contexte.'
+      'Si la suite n\'est pas naturelle, réponds exactement: .',
+      'N\'invente pas de faits. Un nom du contexte ne s\'ajoute que s\'il a déjà sa place dans la phrase.',
+      'Donne jusqu\'à 4 suites, une par ligne, sans numéro ni puce.',
+      'La première est la plus probable. Les autres continuent la même phrase avec d\'autres mots, pas un autre sujet.'
     ].join(' ');
     var lines = [];
     function add(label, list) {
@@ -110,9 +112,12 @@
     add('Étiquettes', hints.tags);
     if (hints.note) lines.push(String(hints.note).replace(/\s+/g, ' ').trim().slice(0, 200));
     var prefix = String((snap && (snap.prefix || snap.before)) || '').slice(-500);
-    var user = (lines.length ? lines.join('\n') + '\n\n' : '') + 'Avant le curseur:\n' + prefix;
+    var user = 'Avant le curseur:\n' + prefix;
     var after = String((snap && (snap.lineAfter || snap.after)) || '');
     if (after.trim()) user += '\n\nAprès le curseur:\n' + after.slice(0, 280);
+    if (lines.length) {
+      user += '\n\nNoms déjà connus, seulement s\'ils continuent cette phrase:\n' + lines.join('\n');
+    }
     return [
       { role: 'system', content: system },
       { role: 'user', content: user }
@@ -131,6 +136,73 @@
       if (fold(b.slice(-i)) === fold(body.slice(0, i))) return leadStr + body.slice(i);
     }
     return s;
+  }
+
+  /** Words that start a new word, never the tail of the one before the caret. */
+  var CLOSED_WORD = {
+    a: 1, an: 1, and: 1, as: 1, at: 1, by: 1, for: 1, from: 1, he: 1, her: 1, his: 1,
+    in: 1, it: 1, of: 1, on: 1, or: 1, she: 1, that: 1, the: 1, their: 1, they: 1,
+    to: 1, we: 1, with: 1,
+    '\u00e0': 1, au: 1, aux: 1, car: 1, ce: 1, ces: 1, cette: 1, dans: 1, de: 1, des: 1,
+    donc: 1, du: 1, elle: 1, en: 1, et: 1, est: 1, il: 1, ils: 1, je: 1, la: 1,
+    le: 1, les: 1, mais: 1, nous: 1, on: 1, ou: 1, pas: 1, pour: 1, que: 1, qui: 1,
+    sont: 1, sur: 1, tu: 1, un: 1, une: 1, vous: 1, avec: 1
+  };
+
+  /** First word of a continuation that is still about the same sentence. */
+  var CONTINUE_CUE = {
+    because: 1, since: 1, which: 1, that: 1, where: 1, when: 1, if: 1, so: 1,
+    for: 1, to: 1, while: 1, whose: 1, until: 1, unless: 1, although: 1, though: 1,
+    after: 1, before: 1, without: 1, within: 1, including: 1, especially: 1,
+    car: 1, parce: 1, qui: 1, que: 1, dont: 1, 'o\u00f9': 1, pour: 1, afin: 1,
+    donc: 1, lorsque: 1, si: 1, quand: 1, comme: 1
+  };
+
+  function firstToken(text) {
+    return fold(String(text || '').trim().split(/[\s,.;:!?]+/)[0] || '');
+  }
+
+  function contentWords(text) {
+    return fold(text).split(/[^0-9a-z\u00c0-\u024f]+/).filter(function (w) {
+      return w.length >= 4 && !CLOSED_WORD[w];
+    });
+  }
+
+  function tongue(text) {
+    var s = ' ' + fold(text) + ' ';
+    var fr = (s.match(/\b(le|la|les|des|une|est|dans|pour|avec|pas|que|qui|sur|nous|vous|cette|sont)\b/g) || []).length;
+    var en = (s.match(/\b(the|and|of|to|is|in|for|with|on|that|this|are|was|be|an|from)\b/g) || []).length;
+    if (/[\u00e0\u00e2\u00e4\u00e9\u00e8\u00ea\u00eb\u00ef\u00ee\u00f4\u00f9\u00fb\u00fc\u00e7\u0153\u00e6]/i.test(String(text || ''))) fr += 2;
+    if (fr >= 2 && fr > en) return 'fr';
+    if (en >= 2 && en > fr) return 'en';
+    return '';
+  }
+
+  /** Another story, no shared word with the sentence already typed. */
+  function driftsOff(before, suggestion) {
+    var left = contentWords(before);
+    var right = contentWords(suggestion);
+    if (left.length < 2 || right.length < 2) return false;
+    var i;
+    var j;
+    for (i = 0; i < right.length; i++) {
+      for (j = 0; j < left.length; j++) {
+        if (right[i] === left[j]) return false;
+      }
+    }
+    if (CONTINUE_CUE[firstToken(suggestion)]) return false;
+    return /\b(he|she|they|il|elle|ils|elles)\b/i.test(' ' + suggestion + ' ');
+  }
+
+  function needsLeadingSpace(before, body) {
+    if (!before || !body) return false;
+    if (/\s$/.test(before)) return false;
+    if (!isWordChar(before.slice(-1)) || !isWordChar(body.charAt(0))) return false;
+    var parts = body.split(' ');
+    var word = fold(parts[0]);
+    if (!CLOSED_WORD[word]) return false;
+    if (parts.length > 1 && parts[1]) return true;
+    return word.length >= 3;
   }
 
   /**
@@ -167,6 +239,7 @@
     if (!s) return '';
     var ended = /\s$/.test(String(before || ''));
     if (ended) wantsSpace = false;
+    if (!wantsSpace && needsLeadingSpace(before, s)) wantsSpace = true;
     if (wantsSpace) s = ' ' + s;
     var maxWords = KIND_WORDS[kind] || 8;
     var maxChars = KIND_MAX[kind] || 80;
@@ -176,7 +249,65 @@
     if (words.length > maxWords) body = words.slice(0, maxWords).join(' ');
     s = lead + body;
     if (s.length > maxChars) s = s.slice(0, maxChars).replace(/\s+\S*$/, '');
-    return s.trim() ? s : '';
+    if (!s.trim()) return '';
+    if (driftsOff(before, s)) return '';
+    var fromTongue = tongue(before);
+    var toTongue = tongue(s);
+    if (fromTongue && toTongue && fromTongue !== toTongue) return '';
+    return s;
+  }
+
+  var BRANCH_COUNT = 4;
+
+  /**
+   * One model reply -> up to 4 different continuations.
+   * Each entry is text to insert at the caret (may start with a space).
+   */
+  function parseBranches(raw, before, kind) {
+    var text = String(raw == null ? '' : raw).replace(/^\uFEFF/, '').replace(/\s+$/, '');
+    if (!text.trim()) return [];
+    var probe = text.trim();
+    if (probe.charAt(0) === '{' || probe.charAt(0) === '[') {
+      try {
+        var parsed = JSON.parse(probe);
+        if (Array.isArray(parsed)) text = parsed.join('\n');
+        else if (parsed && Array.isArray(parsed.suites)) text = parsed.suites.join('\n');
+        else if (parsed && Array.isArray(parsed.suggestions)) text = parsed.suggestions.join('\n');
+      } catch (e) {
+        /* keep the raw text */
+      }
+    }
+    var lines = text.split(/\r?\n/);
+    if (lines.length === 1 && /\s\|\s/.test(lines[0])) lines = lines[0].split(/\s\|\s/);
+    var out = [];
+    var seen = Object.create(null);
+    lines.forEach(function (line) {
+      if (out.length >= BRANCH_COUNT) return;
+      var cleaned = String(line || '').replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '');
+      var one = parseCompletion(cleaned, before, kind);
+      if (!one) return;
+      var k = fold(one);
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(one);
+    });
+    return out;
+  }
+
+  /**
+   * Remainder of the first branch that still starts with `typed`, or ''.
+   * Empty means the letters left every branch, or the branch is fully typed.
+   */
+  function matchBranch(branches, typed) {
+    typed = String(typed || '');
+    var i;
+    for (i = 0; i < (branches || []).length; i++) {
+      var branch = String(branches[i] || '');
+      if (!branch || branch.indexOf(typed) !== 0) continue;
+      var rest = branch.slice(typed.length);
+      if (rest) return rest;
+    }
+    return '';
   }
 
   function shouldRequest(snap) {
@@ -224,7 +355,9 @@
   function isEditableHost(el) {
     if (!el || isTextControl(el)) return false;
     if (el.isContentEditable) return true;
-    var c = attr(el, 'contenteditable');
+    if (typeof el.getAttribute !== 'function') return false;
+    var c = el.getAttribute('contenteditable');
+    if (c == null) return false;
     return c === 'true' || c === '';
   }
 
@@ -362,6 +495,52 @@
     return range.toString();
   }
 
+  /**
+   * The last `limit` characters before the caret, walking backward.
+   * Avoids serializing the whole document on every keystroke.
+   */
+  function tailBefore(endNode, endOff, root, limit) {
+    var parts = [];
+    var left = limit;
+    function take(text) {
+      if (!text || left <= 0) return;
+      if (text.length > left) text = text.slice(text.length - left);
+      parts.push(text);
+      left -= text.length;
+    }
+    function collectBack(node) {
+      if (!node || left <= 0) return;
+      if (node.nodeType === 3) {
+        take(node.nodeValue || '');
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      var kids = node.childNodes;
+      var i;
+      for (i = kids.length - 1; i >= 0 && left > 0; i--) collectBack(kids[i]);
+    }
+    if (!endNode || !root) return '';
+    if (endNode.nodeType === 3) take(String(endNode.nodeValue || '').slice(0, endOff));
+    else if (endNode.nodeType === 1) {
+      var startKids = endNode.childNodes;
+      var k = Math.min(endOff, startKids.length) - 1;
+      while (k >= 0 && left > 0) {
+        collectBack(startKids[k]);
+        k--;
+      }
+    }
+    var n = endNode;
+    while (left > 0 && n && n !== root) {
+      var prev = n.previousSibling;
+      while (prev && left > 0) {
+        collectBack(prev);
+        prev = prev.previousSibling;
+      }
+      n = n.parentNode;
+    }
+    return parts.reverse().join('');
+  }
+
   function readCaret(field) {
     if (!field) return null;
     if (!isEditableHost(field)) {
@@ -396,7 +575,7 @@
       afterRange.selectNodeContents(block);
       afterRange.setStart(range.endContainer, range.endOffset);
       lineAfter = afterRange.toString();
-      before = rangeText(field, 0, range.endContainer, range.endOffset);
+      before = tailBefore(range.endContainer, range.endOffset, field, 600);
     } catch (e) {
       return null;
     }
@@ -427,6 +606,12 @@
 
   var installed = false;
   var ghost = null;
+  var ghostFontFor = null;
+  var placeQueued = false;
+  var mirrorHost = null;
+  var mirrorMark = null;
+  var mirrorText = null;
+  var mirrorFor = null;
   var bridge = null;
   var providerCache = { at: 0, value: null };
   var boardHints = { at: 0, tasks: [], docs: [], people: [], tags: [] };
@@ -440,7 +625,14 @@
     forLine: '',
     timer: 0,
     composing: false,
-    pending: false
+    pending: false,
+    anchor: '',
+    kind: '',
+    branches: [],
+    pendingAnchor: '',
+    pendingKind: '',
+    fresh: false,
+    freshTimer: 0
   };
 
   function addHints(fn, id) {
@@ -631,38 +823,46 @@
       return { left: rect.left, top: rect.top, height: rect.height || 18 };
     }
     if (!global.getComputedStyle || !document.body) return null;
-    var cs = global.getComputedStyle(el);
     var host = el.getBoundingClientRect();
-    var mirror = document.createElement('div');
-    [
-      'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
-      'textTransform', 'textIndent', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-      'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-      'boxSizing', 'lineHeight'
-    ].forEach(function (p) {
-      mirror.style[p] = cs[p];
-    });
-    mirror.style.position = 'fixed';
-    mirror.style.left = host.left + 'px';
-    mirror.style.top = host.top + 'px';
-    mirror.style.width = el.clientWidth + 'px';
-    mirror.style.height = el.clientHeight + 'px';
-    mirror.style.overflow = 'hidden';
-    mirror.style.visibility = 'hidden';
-    mirror.style.pointerEvents = 'none';
-    mirror.style.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre';
-    mirror.style.wordWrap = 'break-word';
+    if (!mirrorHost) {
+      mirrorHost = document.createElement('div');
+      mirrorText = document.createTextNode('');
+      mirrorMark = document.createElement('span');
+      mirrorMark.textContent = '\u200b';
+      mirrorHost.appendChild(mirrorText);
+      mirrorHost.appendChild(mirrorMark);
+      mirrorHost.style.position = 'fixed';
+      mirrorHost.style.overflow = 'hidden';
+      mirrorHost.style.visibility = 'hidden';
+      mirrorHost.style.pointerEvents = 'none';
+      mirrorHost.style.wordWrap = 'break-word';
+      document.body.appendChild(mirrorHost);
+    }
+    if (mirrorFor !== el) {
+      mirrorFor = el;
+      var cs = global.getComputedStyle(el);
+      [
+        'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+        'textTransform', 'textIndent', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+        'boxSizing', 'lineHeight'
+      ].forEach(function (p) {
+        mirrorHost.style[p] = cs[p];
+      });
+    }
+    mirrorHost.style.left = host.left + 'px';
+    mirrorHost.style.top = host.top + 'px';
+    mirrorHost.style.width = el.clientWidth + 'px';
+    mirrorHost.style.height = el.clientHeight + 'px';
+    mirrorHost.style.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre';
     var start = el.selectionStart || 0;
-    mirror.textContent = String(el.value || '').slice(0, start);
-    var mark = document.createElement('span');
-    mark.textContent = '\u200b';
-    mirror.appendChild(mark);
-    document.body.appendChild(mirror);
-    mirror.scrollLeft = el.scrollLeft || 0;
-    mirror.scrollTop = el.scrollTop || 0;
-    var m = mark.getBoundingClientRect();
-    document.body.removeChild(mirror);
-    return { left: m.left, top: m.top, height: m.height || parseFloat(cs.lineHeight) || 18 };
+    var typed = String(el.value || '').slice(0, start);
+    if (mirrorText.nodeValue !== typed) mirrorText.nodeValue = typed;
+    mirrorHost.scrollLeft = el.scrollLeft || 0;
+    mirrorHost.scrollTop = el.scrollTop || 0;
+    var m = mirrorMark.getBoundingClientRect();
+    var lh = mirrorHost.style.lineHeight;
+    return { left: m.left, top: m.top, height: m.height || parseFloat(lh) || 18 };
   }
 
   function placeGhost(el, text) {
@@ -676,8 +876,9 @@
       hideGhost();
       return;
     }
-    var cs = global.getComputedStyle ? global.getComputedStyle(el) : null;
-    if (cs) {
+    if (ghostFontFor !== el && global.getComputedStyle) {
+      ghostFontFor = el;
+      var cs = global.getComputedStyle(el);
       node.style.fontFamily = cs.fontFamily;
       node.style.fontSize = cs.fontSize;
       node.style.fontWeight = cs.fontWeight;
@@ -755,73 +956,199 @@
     return true;
   }
 
-  function applySuggestion(gen, forLine, text) {
+  function predictionRest(snap) {
+    if (!snap || !session.branches || !session.branches.length) return '';
+    if (session.kind !== snap.kind || !session.anchor) return '';
+    if (snap.lineBefore.indexOf(session.anchor) !== 0) return '';
+    return matchBranch(session.branches, snap.lineBefore.slice(session.anchor.length));
+  }
+
+  function queuePlace() {
+    if (placeQueued || !session.suggestion || !session.el) return;
+    placeQueued = true;
+    var raf = global.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+    raf(function () {
+      placeQueued = false;
+      var el = activeField();
+      if (!el || !session.suggestion) return;
+      placeGhost(el, session.suggestion);
+    });
+  }
+
+  function markFresh() {
+    session.fresh = true;
+    clearTimeout(session.freshTimer);
+    session.freshTimer = setTimeout(function () { session.fresh = false; }, 0);
+  }
+
+  function showRest(el, snap, rest) {
+    session.suggestion = rest;
+    session.forLine = snap.lineBefore;
+    markFresh();
+    queuePlace();
+  }
+
+  function adoptBranches(kind, anchor, branches) {
+    session.kind = kind;
+    session.anchor = anchor;
+    session.branches = branches.slice();
+    cacheSet(kind + '\n' + anchor, session.branches);
+  }
+
+  function recallBranches(kind, line) {
+    var best = null;
+    var bestLen = -1;
+    var i;
+    for (i = 0; i < cacheOrder.length; i++) {
+      var key = cacheOrder[i];
+      var prefix = kind + '\n';
+      if (key.indexOf(prefix) !== 0) continue;
+      var anchor = key.slice(prefix.length);
+      if (!anchor || line.indexOf(anchor) !== 0 || anchor.length <= bestLen) continue;
+      var branches = cache[key];
+      if (!branches || !branches.length) continue;
+      var rest = matchBranch(branches, line.slice(anchor.length));
+      if (!rest) continue;
+      bestLen = anchor.length;
+      best = { anchor: anchor, branches: branches, rest: rest };
+    }
+    return best;
+  }
+
+  function applyBranches(gen, kind, anchor, branches) {
     if (gen !== session.gen) return;
-    var el = activeField();
-    if (!el) return;
-    var snap = snapshot(el);
-    if (!snap || snap.lineBefore !== forLine || !shouldRequest(snap)) return;
-    if (!text) {
+    session.pending = false;
+    session.pendingAnchor = '';
+    if (!branches || !branches.length) {
       hideGhost();
       return;
     }
-    session.suggestion = text;
-    session.forLine = forLine;
-    placeGhost(el, text);
+    adoptBranches(kind, anchor, branches);
+    var el = activeField();
+    if (!el) return;
+    var snap = snapshot(el);
+    if (!snap || snap.kind !== kind || !shouldRequest(snap)) return;
+    if (snap.lineBefore.indexOf(anchor) !== 0) {
+      schedule();
+      return;
+    }
+    var rest = matchBranch(branches, snap.lineBefore.slice(anchor.length));
+    if (!rest) {
+      if (snap.lineBefore !== anchor) {
+        session.branches = [];
+        session.anchor = '';
+        schedule();
+      }
+      return;
+    }
+    showRest(el, snap, rest);
   }
 
   function ask(gen, snap) {
     var key = snap.kind + '\n' + snap.lineBefore;
     var hit = cacheGet(key);
-    if (hit !== undefined) {
-      applySuggestion(gen, snap.lineBefore, hit);
+    if (hit && hit.length) {
+      applyBranches(gen, snap.kind, snap.lineBefore, hit);
       return;
     }
+    if (hit) return;
     var Agent = global.PriorityAgent;
     if (!Agent || typeof Agent.chatCompletions !== 'function') return;
     session.pending = true;
+    session.pendingAnchor = snap.lineBefore;
+    session.pendingKind = snap.kind;
     loadProvider().then(function (provider) {
       if (gen !== session.gen) return;
       if (!provider || (typeof Agent.isConfigured === 'function' && !Agent.isConfigured(provider))) return;
       var messages = buildMessages(snap, mergeHints());
       var model =
         typeof Agent.modelForTier === 'function'
-          ? Agent.modelForTier(provider, 'efficient')
+          ? Agent.modelForTier(provider, 'balanced')
           : provider.model;
       var tuned = Object.assign({}, provider, { model: model || provider.model });
-      return Agent.chatCompletions(tuned, messages, {
+      var call = {
         model: model || provider.model,
         jsonMode: false,
-        max_tokens: 24,
+        max_tokens: 128,
         reasoningEffort: 'none',
-        _drop: ['temperature']
-      }).then(function (res) {
+        temperature: 0
+      };
+      var modelId = String(call.model || '').toLowerCase().replace(/^.*\//, '');
+      if (/^(gpt-5|o\d)/.test(modelId)) call._drop = ['temperature'];
+      return Agent.chatCompletions(tuned, messages, call).then(function (res) {
         if (gen !== session.gen) return;
-        var text = parseCompletion(res && res.content, snap.lineBefore, snap.kind);
-        cacheSet(key, text);
-        applySuggestion(gen, snap.lineBefore, text);
+        var branches = parseBranches(res && res.content, snap.lineBefore, snap.kind);
+        cacheSet(key, branches);
+        applyBranches(gen, snap.kind, snap.lineBefore, branches);
       });
     }).catch(function () {
       /* stay quiet while typing */
     }).then(function () {
-      if (gen === session.gen) session.pending = false;
+      if (gen === session.gen) {
+        session.pending = false;
+        session.pendingAnchor = '';
+      }
     });
+  }
+
+  function forgetField() {
+    session.branches = [];
+    session.anchor = '';
+    session.pending = false;
+    session.pendingAnchor = '';
   }
 
   function schedule() {
     clearTimeout(session.timer);
-    hideGhost();
-    var gen = ++session.gen;
     var el = activeField();
-    if (!el || session.composing) return;
+    if (!el || session.composing) {
+      hideGhost();
+      return;
+    }
     session.el = el;
     var snap = snapshot(el);
-    if (!snap || !shouldRequest(snap)) return;
-    var forLine = snap.lineBefore;
+    if (!snap || !shouldRequest(snap)) {
+      hideGhost();
+      return;
+    }
+    var line = snap.lineBefore;
+    var rest = '';
+    var onTree =
+      session.branches.length &&
+      session.kind === snap.kind &&
+      session.anchor &&
+      line.indexOf(session.anchor) === 0;
+    if (onTree) rest = matchBranch(session.branches, line.slice(session.anchor.length));
+    if (rest) {
+      showRest(el, snap, rest);
+      return;
+    }
+    if (!onTree) {
+      var remembered = recallBranches(snap.kind, line);
+      if (remembered) {
+        session.kind = snap.kind;
+        session.anchor = remembered.anchor;
+        session.branches = remembered.branches;
+        showRest(el, snap, remembered.rest);
+        return;
+      }
+    }
+    if (
+      session.pending &&
+      session.pendingKind === snap.kind &&
+      session.pendingAnchor &&
+      line.indexOf(session.pendingAnchor) === 0
+    ) {
+      return;
+    }
+    hideGhost();
+    session.branches = [];
+    session.anchor = '';
+    var gen = ++session.gen;
     session.timer = setTimeout(function () {
       if (gen !== session.gen) return;
       var now = snapshot(activeField());
-      if (!now || now.lineBefore !== forLine || !shouldRequest(now)) return;
+      if (!now || now.lineBefore !== line || !shouldRequest(now)) return;
       refreshBoardHints();
       ask(gen, now);
     }, DEBOUNCE_MS);
@@ -836,6 +1163,7 @@
       }
       return;
     }
+    if (el !== session.el) forgetField();
     session.el = el;
     schedule();
   }
@@ -850,6 +1178,8 @@
     if (session.composing) return;
     if (e.key === 'Escape' && session.suggestion) {
       hideGhost();
+      session.branches = [];
+      session.anchor = '';
       session.gen += 1;
       e.preventDefault();
       e.stopPropagation();
@@ -864,11 +1194,25 @@
   }
 
   function onSelectionChange() {
+    if (session.fresh) {
+      session.fresh = false;
+      queuePlace();
+      return;
+    }
+    if (!session.suggestion && !(session.branches && session.branches.length)) return;
     var el = activeField();
-    if (!el || !session.suggestion) return;
+    if (!el) return;
     var snap = snapshot(el);
-    if (!snap || snap.lineBefore !== session.forLine) hideGhost();
-    else placeGhost(el, session.suggestion);
+    if (!snap || !shouldRequest(snap)) {
+      if (session.suggestion) hideGhost();
+      return;
+    }
+    var rest = predictionRest(snap);
+    if (rest) {
+      showRest(el, snap, rest);
+      return;
+    }
+    if (session.suggestion && snap.lineBefore !== session.forLine) hideGhost();
   }
 
   function install() {
@@ -882,6 +1226,7 @@
       var el = e.target;
       if (el !== session.el && !(session.el && session.el.contains && session.el.contains(el))) {
         if (!classifyField(el)) return;
+        forgetField();
         session.el = el;
       }
       schedule();
@@ -897,10 +1242,10 @@
     }, true);
     document.addEventListener('selectionchange', onSelectionChange);
     document.addEventListener('scroll', function () {
-      if (session.suggestion && session.el) placeGhost(session.el, session.suggestion);
+      queuePlace();
     }, true);
     global.addEventListener('resize', function () {
-      if (session.suggestion && session.el) placeGhost(session.el, session.suggestion);
+      queuePlace();
     });
   }
 
@@ -914,6 +1259,8 @@
     shouldRequest: shouldRequest,
     buildMessages: buildMessages,
     parseCompletion: parseCompletion,
+    parseBranches: parseBranches,
+    matchBranch: matchBranch,
     dropOverlap: dropOverlap,
     addHints: addHints,
     setBridge: function (t) { bridge = t || null; },

@@ -573,6 +573,20 @@
       positionAll();
       applyFocus();
       applyLod(true);
+      if (global.InsertGap) {
+        global.InsertGap.watch(els.canvas, {
+          item: '.mm-node--task',
+          mode: 'under',
+          float: true,
+          placeholder: 'Titre…',
+          onCreate: function (title, info) {
+            var id = info.above && info.above.getAttribute('data-id');
+            var n = id && nodeById(id);
+            if (!n || n.kind !== 'task') return Promise.resolve();
+            return createTaskAt(n, 'bottom', { x: n.x, y: n.y }, title);
+          },
+        });
+      }
     }
 
     function buildNodeEl(n) {
@@ -2321,10 +2335,14 @@
       renderPanel();
       paintGroupSelection();
     }
-    function startGroupGesture(ev, g) {
+    function startGroupGesture(ev, g, kind) {
       if (!ev || ev.button) return;
       ev.stopPropagation();
       ev.preventDefault();
+      kind = kind || 'shape';
+      var now = Date.now();
+      var again = state.groupTap && state.groupTap.id === g.id && state.groupTap.kind === kind && now - state.groupTap.at < 450;
+      state.groupTap = { id: g.id, at: now, kind: kind };
       var ids = groupMoveIds(g);
       var nodes = state.graph.nodes.filter(function (n) { return ids[n.id]; });
       var lead = (g.anchorId && nodeById(g.anchorId)) || nodes[0];
@@ -2345,8 +2363,11 @@
         document.removeEventListener('pointerup', up);
         document.removeEventListener('pointercancel', up);
         gGuides.textContent = '';
-        if (!moved) selectGroup(g.id);
-        else paintGroupSelection();
+        if (moved) { state.groupTap = null; paintGroupSelection(); return; }
+        selectGroup(g.id);
+        if (!again) return;
+        if (kind === 'label') renameGroupInline(g);
+        else toggleGroup(g.id);
       }
       document.addEventListener('pointermove', move);
       document.addEventListener('pointerup', up);
@@ -2473,12 +2494,7 @@
       return 'mm-hull ' + (closed ? 'is-closed' : 'is-open') + (state.selectedGroup === g.id ? ' is-selected' : '');
     }
     function bindShape(el, g) {
-      el.addEventListener('pointerdown', function (ev) { startGroupGesture(ev, g); });
-      el.addEventListener('dblclick', function (ev) {
-        ev.stopPropagation();
-        ev.preventDefault();
-        toggleGroup(g.id);
-      });
+      el.addEventListener('pointerdown', function (ev) { startGroupGesture(ev, g, 'shape'); });
     }
     function hullLabel(g, x, y, text) {
       var sc = 1 / (state.view.k || 1);
@@ -2488,12 +2504,7 @@
         transform: 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + sc.toFixed(3) + ')',
       });
       t.textContent = text;
-      t.addEventListener('pointerdown', function (ev) { startGroupGesture(ev, g); });
-      t.addEventListener('dblclick', function (ev) {
-        ev.stopPropagation();
-        ev.preventDefault();
-        renameGroupInline(g);
-      });
+      t.addEventListener('pointerdown', function (ev) { startGroupGesture(ev, g, 'label'); });
       return t;
     }
     function drawHulls() {
@@ -2708,7 +2719,7 @@
       applyLod(true);
     }
     function renameGroupInline(g) {
-      var el = gGroups.querySelector('.mm-hull-label[data-group="' + g.id + '"]');
+      var el = svg.querySelector('.mm-hull-label[data-group="' + g.id + '"]');
       if (!el || els.canvas.querySelector('.mm-title-edit')) return;
       var r = el.getBoundingClientRect();
       var cr = els.canvas.getBoundingClientRect();

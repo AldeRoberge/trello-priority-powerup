@@ -573,6 +573,26 @@
       var sel = listBox.querySelector('.en-row.is-on');
       if (sel && opts && opts.reveal) sel.scrollIntoView({ block: 'nearest' });
       if (sel && opts && opts.focus) sel.focus();
+      if (global.InsertGap) {
+        global.InsertGap.watch(listBox, {
+          item: '.en-row',
+          mode: 'split',
+          placeholder: 'Nom…',
+          onCreate: function (title, info) {
+            var src = info.anchor === 'below' ? (info.below || info.above) : (info.above || info.below);
+            var id = src && src.getAttribute('data-id');
+            var near = id && state.entities.filter(function (e) { return e.id === id; })[0];
+            var types = near && near.types && near.types.length ? near.types.slice(0, 1) : (state.typeFilter ? [state.typeFilter] : []);
+            var created = EM().createEntity(state.schema, { name: title, types: types });
+            state.entities = state.entities.concat([created]);
+            state.selId = created.id;
+            state.mode = 'entity';
+            scheduleSave();
+            paintList({ reveal: true });
+            paintMain();
+          },
+        });
+      }
     }
 
     function rowSummary(e) {

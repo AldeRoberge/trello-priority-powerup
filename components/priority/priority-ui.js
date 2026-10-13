@@ -9896,12 +9896,8 @@
 
       function commitCustom() {
         var reason = normalizeBlockedReason(input.value);
-        if (!reason) {
-          input.focus();
-          return;
-        }
-        bumpBlockedReasonFreq(reason);
-        emitAction('block', { reasons: [reason] });
+        if (reason) bumpBlockedReasonFreq(reason);
+        emitAction('block', { reasons: reason ? [reason] : [] });
         closeComposer();
       }
 

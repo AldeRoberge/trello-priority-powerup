@@ -120,6 +120,55 @@
     return idx;
   }
 
+  /**
+   * Each folder is a document. Folders that have no live document card get one (empty), and the
+   * index stores its id. Already-linked folders are left alone. An extra card created in a race
+   * (someone else linked first) is deleted.
+   * @returns {Promise<{docs:object[], idx:object, created:object[]}>}
+   */
+  async function ensureFolderDocs(t, docs) {
+    docs = Array.isArray(docs) ? docs : [];
+    var idx = getFolderIndex();
+    var live = {};
+    docs.forEach(function (d) { if (d && d.id) live[d.id] = true; });
+    var missing = (idx.folders || []).filter(function (f) { return !f.doc || !live[f.doc]; });
+    if (!missing.length) return { docs: docs, idx: idx, created: [] };
+    var made = [];
+    for (var i = 0; i < missing.length; i++) {
+      made.push({ folderId: missing[i].id, doc: await createDoc(t, missing[i].name, '') });
+    }
+    var orphans = [];
+    var next = await updateFolderIndex(t, function (tree) {
+      made.forEach(function (c) {
+        var x = DM().folderById(tree, c.folderId);
+        if (!x || (x.doc && live[x.doc])) {
+          orphans.push(c.doc.id);
+          return;
+        }
+        x.doc = c.doc.id;
+        var name = DM().cleanFolderName(c.doc.title);
+        if (name) x.name = name;
+      });
+    });
+    for (var j = 0; j < orphans.length; j++) {
+      await deleteDoc(t, orphans[j]).catch(function () {});
+    }
+    var out = docs.slice();
+    var created = [];
+    made.forEach(function (c) {
+      if (orphans.indexOf(c.doc.id) >= 0) return;
+      created.push(c.doc);
+      out.unshift({
+        id: c.doc.id,
+        title: c.doc.title,
+        updatedAt: c.doc.updatedAt || '',
+        size: String(c.doc.body || '').length,
+        body: c.doc.body || '',
+      });
+    });
+    return { docs: out, idx: next, created: created };
+  }
+
   /** @returns {Promise<{id:string,title:string,updatedAt:string}[]>} newest first */
   async function listDocs(t) {
     var id = await boardId(t);
@@ -544,6 +593,7 @@
     listDocs: listDocs,
     getFolderIndex: getFolderIndex,
     updateFolderIndex: updateFolderIndex,
+    ensureFolderDocs: ensureFolderDocs,
     loadDoc: loadDoc,
     createDoc: createDoc,
     ensureDefaultDoc: ensureDefaultDoc,

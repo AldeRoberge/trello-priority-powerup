@@ -202,6 +202,34 @@ describe('DashboardModel', () => {
     assert.equal(DM.hhmm(630), '10:30');
   });
 
+  it('timeline layout keeps a short task from covering the next one', () => {
+    const long = DM.timelineLayout(
+      [{ id: 'a', start: 540, end: 630 }, { id: 'b', start: 630, end: 660 }],
+      540,
+      { minPx: 22, gap: 3, hourPx: 56 }
+    );
+    assert.equal(long.hourPx, 56);
+    assert.ok(long.items[0].top + long.items[0].height <= long.items[1].top);
+
+    const short = DM.timelineLayout(
+      [{ id: 'a', start: 540, end: 550 }, { id: 'b', start: 550, end: 560 }],
+      540,
+      { minPx: 22, gap: 3, hourPx: 56 }
+    );
+    assert.ok(short.hourPx > 56);
+    assert.ok(short.items[0].height >= 22);
+    assert.ok(short.items[1].height >= 22);
+    assert.ok(short.items[0].top + short.items[0].height <= short.items[1].top);
+
+    const tiny = DM.timelineLayout(
+      [{ id: 'a', start: 540, end: 541 }, { id: 'b', start: 541, end: 542 }],
+      540,
+      { minPx: 22, gap: 3, hourPx: 56, maxHourPx: 360 }
+    );
+    assert.equal(tiny.hourPx, 360);
+    assert.ok(tiny.items[0].top + tiny.items[0].height <= tiny.items[1].top);
+  });
+
   it('formatMinutes', () => {
     assert.equal(DM.formatMinutes(45), '45 min');
     assert.equal(DM.formatMinutes(120), '2 h');
@@ -237,10 +265,34 @@ describe('DashboardModel', () => {
     assert.equal(DM.plannedDay(vague[0] && { dueVague: 'long-terme', due: '2027-07-01' }), '');
   });
 
+  it('horizonPlan hour and minute place a task on its clock', () => {
+    const rows = [
+      row('h', { due: '2026-10-13', startTime: '14:30' }),
+      row('plain', { due: '2026-10-13' }),
+      row('other', { due: '2026-10-14', startTime: '14:00' }),
+    ];
+    const hours = DM.horizonPlan(rows, '2026-10-13', 'hour', 360);
+    assert.equal(hours.length, 12);
+    assert.equal(hours[0].time, '08:00');
+    assert.equal(hours[0].slotMinutes, 60);
+    assert.deepEqual(hours.find((b) => b.time === '14:00').tasks.map((r) => r.id), ['h']);
+    assert.ok(hours.every((b) => !b.tasks.some((r) => r.id === 'plain' || r.id === 'other')));
+    assert.deepEqual(DM.untimed(rows, '2026-10-13').map((r) => r.id), ['plain']);
+
+    const mins = DM.horizonPlan([row('m', { due: '2026-10-13', startTime: '14:40' })], '2026-10-13', 'minute', 360, null, 14 * 60 + 10);
+    assert.equal(mins.length, 12);
+    assert.equal(mins[0].time, '14:00');
+    assert.equal(mins[0].slotMinutes, 15);
+    assert.deepEqual(mins.find((b) => b.time === '14:30').tasks.map((r) => r.id), ['m']);
+    assert.deepEqual(DM.SCALES.map((s) => s.id), ['minute', 'hour', 'day', 'week', 'month', 'year', 'years', 'vague']);
+  });
+
   it('placeAuto stays manual on Jour and Vague', () => {
     const rows = [row('a')];
     assert.deepEqual(DM.placeAuto(rows, '2026-10-13', 'day', 360), []);
     assert.deepEqual(DM.placeAuto(rows, '2026-10-13', 'vague', 360, []), []);
+    assert.deepEqual(DM.placeAuto(rows, '2026-10-13', 'hour', 360), []);
+    assert.deepEqual(DM.placeAuto(rows, '2026-10-13', 'minute', 360), []);
     const week = DM.placeAuto(rows, '2026-10-13', 'week', 360);
     assert.equal(week.length, 1);
     assert.equal(week[0].id, 'a');
@@ -253,6 +305,9 @@ describe('DashboardModel', () => {
     });
     assert.deepEqual(DM.taskDraft('Ranger', '', null), { name: 'Ranger', date: '', vague: '' });
     assert.deepEqual(DM.taskDraft('Lire', '', null, 'bientot'), { name: 'Lire', date: '', vague: 'bientot' });
+    assert.deepEqual(DM.taskDraft('Appel', '2026-10-13', null, '', '14:00'), {
+      name: 'Appel', date: '2026-10-13', vague: '', time: '14:00',
+    });
     assert.deepEqual(
       DM.taskDraft('Rapport demain', '2026-10-14', function () { return { name: 'Rapport', dueDate: '2026-10-15' }; }, 'bientot'),
       { name: 'Rapport', date: '2026-10-15', vague: '' }

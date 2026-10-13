@@ -1,20 +1,20 @@
-// Mirrors the Power-Up's Documents view with a Google Drive folder, one Markdown file per document.
+// Documents ↔ a Google Drive folder, one Markdown file per document.
 // Documents are archived Trello cards named "📄 Title" whose description holds the text (see
-// components/docs/docs-trello.js). Same rule as the Sheet: both sides are edited, and when the same
-// document changed on both sides since the last pass, Trello wins.
+// components/docs/docs-trello.js). Same rule as the Sheet: both sides are editable, and when the
+// same document changes on both sides before a pass, Trello wins.
 //
-//   Trello save  -> file updated (webhook, syncDocumentCard)
-//   Drive edit   -> document updated (cron / POST /documents/sync)
-//   new .md file -> new document
-//   file deleted -> document stays; the file is recreated (same as deleting a Sheet row)
-//   document deleted -> file goes to the Drive trash
+//   Trello save  → webhook → syncDocumentCard → file create / update / trash
+//   Drive edit   → cron (every minute) or POST /documents/sync → card title + text
+//   New .md file → a new archived document. Deleting the file does not delete the document
+//   (the file is recreated), same as deleting a Sheet row.
 //
-// Files this module owns carry appProperties { trelloCardId, sig, md5 }. sig is a hash of the Trello
-// title + text; md5 is Drive's checksum of the file bytes, so a Drive edit is visible without
-// downloading every file. Files that are not .md and have no trelloCardId are never touched.
+// Files this module created are found again through appProperties { trelloCardId, sig, md5 }.
+// sig is a hash of the Trello title + text. md5 is Drive's md5Checksum of the file bytes, so a
+// Drive edit is visible without downloading every file. Files that are not Markdown and have no
+// trelloCardId are never touched.
 //
-//   syncDocumentCard(env, cardId)  one document, from the Trello webhook (Trello wins)
-//   syncAllDocuments(env)          full reconcile, cron and POST /sync
+//   syncDocumentCard(env, cardId)  one document, from the Trello webhook (debounced per card)
+//   syncAllDocuments(env)          full reconcile, cron and POST /documents/sync
 
 import { authedFetch } from './googleSheets.js';
 import { joinDesc, splitDesc } from './descMeta.js';
@@ -26,7 +26,7 @@ const MARK = '📄';
 const UNTITLED = 'Sans titre';
 const MAX_TITLE = 120;
 const MAX_DESC = 16384;
-// Each change is an upload plus a metadata stamp. Leave room for the Sheet sync (50 subrequests).
+// Each change is a Drive write plus a Trello write. Leave room for the Sheet sync (50 subrequests).
 const MAX_CHANGES_PER_PASS = 8;
 
 export let docSyncStatus = null;
@@ -48,7 +48,7 @@ export function fileName(title) {
   return `${t || UNTITLED}.md`;
 }
 
-/** "Notes.md" -> "Notes". The title keeps characters fileName() would strip. */
+/** "Notes.md" -> "Notes". The title keeps characters fileName would strip. */
 export function titleFromFile(name) {
   const base = String(name || '')
     .replace(/\.md$/i, '')
@@ -63,20 +63,17 @@ export function docMarkdown(desc) {
   return `${splitDesc(desc).visible.replace(/\s+$/, '')}\n`;
 }
 
-function bumpRev(hidden) {
-  if (hidden && /rev:\s*\d+/.test(hidden)) return hidden.replace(/rev:\s*(\d+)/, (_, n) => `rev: ${Number(n) + 1}`);
-  return '<!--cerveau-meta\ntype: document\nrev: 2\n-->';
-}
-
 /**
- * Card name + description for a Drive file. Keeps the hidden block (cover, subject, tags) and bumps
- * its revision so an open editor notices. Null when the result would not fit in a Trello description.
- * `title` is already the document title, not a file name.
+ * Card name + description for a Drive file. Keeps the hidden block (cover, subject, tags) and
+ * bumps rev so an open editor notices. Null when the result would exceed Trello's description cap.
+ * `title` is already a document title, not a file name.
  */
 export function cardFromDrive(card, title, markdown) {
   const clean = String(title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || UNTITLED;
   const body = String(markdown || '').replace(/\r\n/g, '\n').replace(/\s+$/, '');
-  const hidden = card ? bumpRev(splitDesc(card.desc).hidden) : '<!--cerveau-meta\ntype: document\nrev: 1\n-->';
+  let hidden = card ? splitDesc(card.desc).hidden : '';
+  if (hidden && /rev:\s*\d+/.test(hidden)) hidden = hidden.replace(/rev:\s*(\d+)/, (_, n) => `rev: ${Number(n) + 1}`);
+  else hidden = `<!--cerveau-meta\ntype: document\nrev: ${card ? 2 : 1}\n-->`;
   const desc = joinDesc(body, hidden);
   if (desc.length > MAX_DESC) return null;
   return { name: `${MARK} ${clean}`, desc, title: clean };
@@ -88,22 +85,22 @@ export async function signature(title, markdown) {
   return [...hash].slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function propsOf(cardId, sig, md5, prev) {
-  const out = { trelloCardId: cardId, sig };
-  const m = md5 || (prev && prev.md5) || '';
-  if (m) out.md5 = m;
-  return out;
-}
-
 function isLooseMarkdown(f) {
-  if (f.appProperties && f.appProperties.trelloCardId) return false;
+  if (!f || (f.appProperties && f.appProperties.trelloCardId)) return false;
   if (f.mimeType === 'application/vnd.google-apps.folder') return false;
   return /\.md$/i.test(f.name || '') || f.mimeType === 'text/markdown';
 }
 
-/** Drive renamed the file (not just our ":" -> "-" file name). */
+/** A Drive rename, not the sanitizing we do ourselves when the title contains : or /. */
 function driveRenamed(file, title) {
   return titleFromFile(file.name) !== title && file.name !== fileName(title);
+}
+
+function propsOf(cardId, sig, md5, prev) {
+  const p = { trelloCardId: cardId, sig };
+  const m = md5 || (prev && prev.md5) || '';
+  if (m) p.md5 = m;
+  return p;
 }
 
 function multipart(metadata, content) {
@@ -141,7 +138,7 @@ function stamp(env, fileId, appProperties) {
   });
 }
 
-/** Files in the Drive folder. `cardId` narrows to one document; otherwise every file (not folders). */
+/** Files in the Drive folder. `cardId` narrows to one document; otherwise every file (folders aside). */
 async function listFiles(env, cardId) {
   const only = cardId ? ` and appProperties has { key='trelloCardId' and value='${cardId}' }` : '';
   const q = `'${env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed=false${only}`;
@@ -166,12 +163,12 @@ function trash(env, fileId) {
   });
 }
 
-/** Uploads the card's text. Drive's checksum is stored so the next pass can see edits. */
+/** Writes the Trello text into the file (create or replace) and stores Drive's md5 on it. */
 async function writeFile(env, card, keep, title, markdown, sig) {
-  const appProperties = propsOf(card.id, sig, keep && keep.appProperties && keep.appProperties.md5, keep && keep.appProperties);
+  const appProperties = { trelloCardId: card.id, sig };
   const metadata = { name: fileName(title), appProperties };
-  let id;
   let uploaded;
+  let id;
   if (!keep) {
     const m = multipart({ ...metadata, parents: [env.GOOGLE_DRIVE_FOLDER_ID], mimeType: 'text/markdown' }, markdown);
     uploaded = await drive(env, `${UPLOAD}?uploadType=multipart&supportsAllDrives=true&fields=id,md5Checksum`, {
@@ -189,13 +186,13 @@ async function writeFile(env, card, keep, title, markdown, sig) {
     });
     id = keep.id;
   }
-  const md5 = (uploaded && uploaded.md5Checksum) || '';
-  if (id && md5) await stamp(env, id, propsOf(card.id, sig, md5, null));
-  return keep ? 'updated' : 'created';
+  const md5 = (uploaded && uploaded.md5Checksum) || (keep && keep.md5Checksum) || '';
+  if (id && md5) await stamp(env, id, propsOf(card.id, sig, md5, keep && keep.appProperties));
+  return id;
 }
 
 /**
- * Pushes one document to its file. Used by the webhook: Trello just changed, so it wins.
+ * Trello → Drive for one card. `files` are the folder's files already tied to this card.
  * @returns {Promise<'created'|'updated'|'unchanged'>}
  */
 async function push(env, card, files) {
@@ -205,10 +202,11 @@ async function push(env, card, files) {
   const [keep, ...duplicates] = files;
   for (const dup of duplicates) await trash(env, dup.id);
   if (keep && keep.appProperties && keep.appProperties.sig === sig) return 'unchanged';
-  return writeFile(env, card, keep, title, markdown, sig);
+  await writeFile(env, card, keep, title, markdown, sig);
+  return keep ? 'updated' : 'created';
 }
 
-/** Writes Drive text (or just a new title) onto the card and remembers the file's checksum. */
+/** Drive → Trello. `title` is the document title to store (the file name only when Drive renamed it). */
 async function pullIntoCard(env, card, file, markdown, title) {
   const built = cardFromDrive(card, title, markdown);
   if (!built) return 'skipped';
@@ -219,8 +217,8 @@ async function pullIntoCard(env, card, file, markdown, title) {
 }
 
 /**
- * One document against its files. Drive wins only when Trello has not changed since the last pass.
- * @returns {Promise<'created'|'updated'|'pulled'|'unchanged'|'skipped'|'stamped'>}
+ * One document against its files. Drive content or a Drive rename is applied when Trello
+ * has not changed; otherwise Trello is written out (and wins a conflict).
  */
 async function reconcile(env, card, files) {
   const [keep, ...duplicates] = files;
@@ -262,9 +260,9 @@ const inflight = new Map(); // cardId -> { again } : autosave fires a webhook ev
 
 async function syncOne(env, cardId) {
   const card = await trello.getCard(env, cardId);
-  const files = await listFiles(env, cardId);
+  const files = (await listFiles(env, cardId)).filter((f) => f.appProperties && f.appProperties.trelloCardId === cardId);
   if (!card || !isDocCard(card) || !card.closed) {
-    for (const f of files) await trash(env, f.id);
+    for (const f of files) await trash(env, f.id); // deleted, or no longer a document
     return files.length ? 'trashed' : 'none';
   }
   return push(env, card, files);
@@ -296,18 +294,7 @@ export async function syncDocumentCard(env, cardId) {
   }
 }
 
-function needsWrite(card, mine) {
-  if (!mine.length || mine.length > 1) return true;
-  const f = mine[0];
-  const title = titleOf(card.name);
-  const storedMd5 = (f.appProperties && f.appProperties.md5) || '';
-  const driveMd5 = f.md5Checksum || '';
-  if (storedMd5 && driveMd5 && storedMd5 !== driveMd5) return true;
-  if (driveRenamed(f, title)) return true;
-  return false; // caller also compares sig
-}
-
-/** Full pass: documents and files meet in the middle. At most MAX_CHANGES_PER_PASS writes. */
+/** Full pass: documents ↔ files, new .md files → documents, orphan files → trash. */
 export async function syncAllDocuments(env) {
   if (!driveEnabled(env)) return { enabled: false };
   const summary = {
@@ -337,7 +324,7 @@ export async function syncAllDocuments(env) {
     let budget = MAX_CHANGES_PER_PASS;
     const spend = (result) => {
       summary[result] = (summary[result] || 0) + 1;
-      if (result !== 'unchanged') budget -= 1;
+      if (result !== 'unchanged') budget--;
     };
     for (const card of cards) {
       const mine = byCard.get(card.id) || [];
@@ -345,8 +332,14 @@ export async function syncAllDocuments(env) {
       if (budget <= 0) {
         const sig = await signature(titleOf(card.name), docMarkdown(card.desc));
         const f = mine[0];
-        const changed = needsWrite(card, mine) || !f || !f.appProperties || f.appProperties.sig !== sig;
-        summary[changed ? 'remaining' : 'unchanged'] += 1;
+        const changed =
+          !f ||
+          mine.length > 1 ||
+          !f.appProperties ||
+          f.appProperties.sig !== sig ||
+          (f.appProperties.md5 && f.md5Checksum && f.appProperties.md5 !== f.md5Checksum) ||
+          driveRenamed(f, titleOf(card.name));
+        summary[changed ? 'remaining' : 'unchanged']++;
         continue;
       }
       spend(await reconcile(env, card, mine));
@@ -354,7 +347,7 @@ export async function syncAllDocuments(env) {
     for (const orphans of byCard.values()) {
       for (const f of orphans) {
         if (budget <= 0) {
-          summary.remaining += 1;
+          summary.remaining++;
           continue;
         }
         await trash(env, f.id);
@@ -364,7 +357,7 @@ export async function syncAllDocuments(env) {
     let listId;
     for (const f of loose) {
       if (budget <= 0) {
-        summary.remaining += 1;
+        summary.remaining++;
         continue;
       }
       if (listId === undefined) {

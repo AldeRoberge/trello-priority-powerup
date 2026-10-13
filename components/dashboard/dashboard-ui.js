@@ -2,7 +2,7 @@
  * Role: UI of the Dashboard view, a Linear-style workspace:
  *   Ingest        type tasks (one per line) → cards land in the triage list; optional "Demander à l'IA"
  *   Triage        what the item is, then priority / estimate / date: accept, backlog, reference, waiting, someday, cancel
- *   Orchestrateur plan across Jour, Semaine, Mois, Année, Années, then Vague. Each column creates a task in place.
+ *   Orchestrateur zoom from minutes to hours, days, weeks, months, years, then Vague. Each column creates a task in place.
  *   Aujourd'hui   focus list + hour-by-hour timeline of the day. The next action is the first open checklist item.
  *   Revue         flags: triage, missing next step, waiting, work in progress, project outcome
  * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel + WorkOS (pure).
@@ -36,6 +36,16 @@
   var QUICK_ESTIMATES = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 0];
   var DAYS_FR =['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   var HORIZON = 7;
+  var SCALE_ICON = {
+    minute: 'clock',
+    hour: 'clock-hour-4',
+    day: 'calendar-event',
+    week: 'calendar-week',
+    month: 'calendar-month',
+    year: 'calendar',
+    years: 'calendar-stats',
+    vague: 'tilde',
+  };
 
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -85,6 +95,15 @@
   function isWeekend(iso) {
     var d = new Date(iso + 'T00:00:00').getDay();
     return d === 0 || d === 6;
+  }
+
+  /** "14:00" → "14 h", "14:15" → "14 h 15". */
+  function clockLabel(hhmm) {
+    var n = DM().parseClock ? DM().parseClock(hhmm) : null;
+    if (n == null || n >= 1440) return '';
+    var h = Math.floor(n / 60);
+    var m = n % 60;
+    return m ? h + ' h ' + ('0' + m).slice(-2) : h + ' h';
   }
 
   /**
@@ -221,6 +240,7 @@
       lists: [],
       rows: [],
       projects: [],
+      places: {},
       selected: null, // triage selection (card id)
       capacity: DT().getCapacity(),
       scale: DT().getScale ? DT().getScale() : 'day',
@@ -1029,11 +1049,11 @@
       }));
       els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
         h('div', { class: 'db-split-l' }, [pageHead('Triage', q.length + (q.length > 1 ? ' cartes à définir' : ' carte à définir')), list]),
-        h('div', { class: 'db-split-r' }, [triageDetail(sel, q)]),
+        h('div', { class: 'db-split-r' }, [triageDetail(sel)]),
       ]));
     }
 
-    function triageDetail(row, q) {
+    function triageDetail(row) {
       var nextStep = h('input', {
         class: 'db-input',
         type: 'text',
@@ -1138,6 +1158,7 @@
       }
       var day = draft.date || '';
       var vague = draft.vague || '';
+      var hhmm = vague ? '' : (draft.time || '');
       var row = {
         id: 'new-' + Date.now(),
         listId: list.id,
@@ -1149,6 +1170,8 @@
         due: vague ? '' : day,
         dueVague: vague,
         dueMode: vague ? 'vague' : (day ? 'precise' : ''),
+        startTime: hhmm,
+        dueTime: hhmm,
         estimate: 0,
         priority: null,
         items: [],
@@ -1166,19 +1189,22 @@
         if (!id) throw new Error('no-card');
         row.id = id;
         if (!day && !vague) return res;
-        return DT().planAt ? DT().planAt(t, id, day, vague) : DT().planDay(t, id, day);
+        return DT().planAt ? DT().planAt(t, id, day, vague, hhmm) : DT().planDay(t, id, day);
       });
       write(job, '« ' + draft.name + ' » créée');
     }
 
     /* ── 3. Orchestrator ───────────────────────────────────────────── */
-    function plan(row, iso, vague) {
+    function plan(row, iso, vague, time) {
+      var hhmm = vague ? '' : (time || '');
       row.dueVague = vague || '';
       row.dueMode = vague ? 'vague' : (iso ? 'precise' : '');
       row.start = vague ? '' : iso;
       row.due = vague ? '' : iso;
+      row.startTime = hhmm;
+      row.dueTime = hhmm;
       var writePlan = DT().planAt
-        ? DT().planAt(t, row.id, iso, vague || '')
+        ? DT().planAt(t, row.id, iso, vague || '', hhmm)
         : DT().planDay(t, row.id, iso);
       write(writePlan);
       render();
@@ -1192,16 +1218,24 @@
       return null;
     }
 
+    function placeLine(row) {
+      var label = WO() && state.places ? WO().placeLabel(state.places[row.id]) : '';
+      if (!label) return null;
+      return h('span', { class: 'db-place', text: label });
+    }
+
     function taskCard(row, showDue) {
       var late = !!(DM().plannedDay(row) && DM().plannedDay(row) < today);
       var hard = WO() && WO().dateKind(row) === 'hard';
       var el = h('div', { class: 'db-task' + (late ? ' is-late' : '') + (hard ? ' is-hard' : ''), draggable: 'true', title: row.name, 'data-id': row.id, 'data-card': row.id }, [
         h('div', { class: 'db-task-name', text: row.name }),
         stepLine(row),
+        placeLine(row),
         h('div', { class: 'db-task-meta' }, [
           hard ? h('span', { class: 'db-chip', text: 'Échéance' }) : null,
           prioBadge(row, true),
           estChip(row),
+          row.startTime ? h('span', { class: 'db-chip', text: clockLabel(row.startTime) }) : null,
           showDue === true ? dueChip(row) : null,
         ]),
       ]);
@@ -1226,11 +1260,13 @@
         var id = e.dataTransfer.getData('text/plain');
         var row = state.rows.filter(function (r) { return r.id === id; })[0];
         if (!row) return;
+        var wantTime = spec && spec.time ? spec.time : '';
         if (vague) {
           if (row.dueVague !== vague) plan(row, '', vague);
           return;
         }
-        if ((row.dueVague || '') || (row.start || row.due || '') !== iso) plan(row, iso, '');
+        var curDay = row.dueVague ? '' : (row.start || row.due || '');
+        if (row.dueVague || curDay !== iso || (row.startTime || '') !== wantTime) plan(row, iso, '', wantTime);
       });
       return el;
     }
@@ -1260,36 +1296,70 @@
 
     function renderOrchestrator() {
       var scale = state.scale || 'day';
-      var buckets = DM().horizonPlan(state.rows, today, scale, state.capacity, vagueOptions());
+      var nowM = (function () { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
+      var manual = scale === 'vague' || scale === 'hour' || scale === 'minute';
+      var buckets = DM().horizonPlan(state.rows, today, scale, state.capacity, vagueOptions(), nowM);
       var pool = DM().unplanned(state.rows);
-      var autoBtn = h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () {
-        var moves = scale === 'day'
-          ? DM().autoPlan(state.rows, today, HORIZON, state.capacity)
-          : DM().placeAuto(state.rows, today, scale, state.capacity, vagueOptions());
-        if (!moves.length) return setStatus('Rien à planifier.', 'ok');
-        moves.forEach(function (m) {
-          var row = state.rows.filter(function (r) { return r.id === m.id; })[0];
-          if (row) { row.start = m.date; row.due = m.date; row.dueVague = ''; row.dueMode = 'precise'; }
-        });
+      if (manual && scale !== 'vague' && DM().untimed) pool = pool.concat(DM().untimed(state.rows, today));
+      var moves = manual ? [] : (scale === 'day'
+        ? DM().autoPlan(state.rows, today, HORIZON, state.capacity)
+        : DM().placeAuto(state.rows, today, scale, state.capacity, vagueOptions()));
+      var autoBtn = moves.length ? h('button', {
+        class: 'db-btn db-btn--primary db-auto',
+        type: 'button',
+        onclick: function () {
+          moves.forEach(function (m) {
+            var row = state.rows.filter(function (r) { return r.id === m.id; })[0];
+            if (row) { row.start = m.date; row.due = m.date; row.dueVague = ''; row.dueMode = 'precise'; row.startTime = ''; row.dueTime = ''; }
+          });
+          render();
+          var place = DT().planAt
+            ? function (m) { return DT().planAt(t, m.id, m.date, '', ''); }
+            : function (m) { return DT().planDay(t, m.id, m.date); };
+          write(moves.reduce(function (p, m) { return p.then(function () { return place(m); }); }, Promise.resolve()), moves.length + (moves.length > 1 ? ' tâches planifiées' : ' tâche planifiée'));
+        },
+      }, [icon('wand'), document.createTextNode('Planifier auto')]) : null;
+      var list = DM().SCALES || [];
+      var idx = 0;
+      for (var si = 0; si < list.length; si++) if (list[si].id === scale) idx = si;
+      function goScale(i) {
+        if (i < 0 || i >= list.length || !list[i] || list[i].id === state.scale) return;
+        state.scale = list[i].id;
+        if (DT().setScale) DT().setScale(state.scale);
         render();
-        var place = DT().planAt
-          ? function (m) { return DT().planAt(t, m.id, m.date, ''); }
-          : function (m) { return DT().planDay(t, m.id, m.date); };
-        write(moves.reduce(function (p, m) { return p.then(function () { return place(m); }); }, Promise.resolve()), moves.length + (moves.length > 1 ? ' tâches planifiées' : ' tâche planifiée'));
-      } }, [icon('wand'), document.createTextNode('Planifier auto')]);
-      var scales = h('div', { class: 'db-scales', role: 'tablist' }, (DM().SCALES || []).map(function (s) {
-        return h('button', {
-          class: 'db-scale' + (scale === s.id ? ' is-on' : ''),
+      }
+      var range = h('input', {
+        class: 'db-zoom-range',
+        type: 'range',
+        min: '0',
+        max: String(Math.max(0, list.length - 1)),
+        step: '1',
+        value: String(idx),
+        'aria-label': 'Zoom',
+        title: (list[idx] && list[idx].label) || '',
+      });
+      range.addEventListener('input', function () { goScale(Number(range.value)); });
+      var scales = h('div', { class: 'db-zoom' }, [
+        h('button', {
+          class: 'db-zoom-btn',
           type: 'button',
-          role: 'tab',
-          'aria-selected': scale === s.id ? 'true' : 'false',
-          onclick: function () {
-            state.scale = s.id;
-            if (DT().setScale) DT().setScale(s.id);
-            render();
-          },
-        }, [document.createTextNode(s.label)]);
-      }));
+          title: 'Zoom avant',
+          disabled: idx === 0,
+          onclick: function () { goScale(idx - 1); },
+        }, [icon('zoom-in')]),
+        range,
+        h('button', {
+          class: 'db-zoom-btn',
+          type: 'button',
+          title: 'Zoom arrière',
+          disabled: idx >= list.length - 1,
+          onclick: function () { goScale(idx + 1); },
+        }, [icon('zoom-out')]),
+        h('span', { class: 'db-zoom-label' }, [
+          icon(SCALE_ICON[scale] || 'calendar'),
+          document.createTextNode((list[idx] && list[idx].label) || ''),
+        ]),
+      ]);
       function capacityMenu(anchor) {
         var CM = global.ContextMenu;
         if (!CM || typeof CM.show !== 'function') return;
@@ -1321,12 +1391,14 @@
       function columnKey(spec) {
         if (spec && spec.vague) return 'vague:' + spec.vague;
         var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
+        var time = spec && spec.time ? spec.time : '';
+        if (time) return 'clock:' + iso + 'T' + time;
         return iso ? 'cal:' + iso : 'pool';
       }
       function columnPlace(spec) {
-        if (spec && spec.vague) return { date: '', vague: spec.vague };
+        if (spec && spec.vague) return { date: '', vague: spec.vague, time: '' };
         var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
-        return { date: iso, vague: '' };
+        return { date: iso, vague: '', time: (spec && spec.time) || '' };
       }
       function addSlot(spec) {
         var key = columnKey(spec);
@@ -1344,7 +1416,7 @@
           function finish(fromBlur) {
             if (closed) return;
             var parse = global.QuickParse && global.QuickParse.parse;
-            var draft = DM().taskDraft(input.value, place.date, parse, place.vague);
+            var draft = DM().taskDraft(input.value, place.date, parse, place.vague, place.time);
             if (!draft) {
               if (fromBlur && state.composer === key) {
                 closed = true;
@@ -1387,13 +1459,28 @@
       function column(extra, head, bar, body, spec) {
         var cards = (body || []).slice();
         cards.push(addSlot(spec));
+        var bodyEl = h('div', { class: 'db-col-body' }, cards);
+        if (global.InsertGap) {
+          global.InsertGap.watch(bodyEl, {
+            item: '.db-task',
+            tail: '.db-add, .db-add-input',
+            placeholder: 'Titre…',
+            onCreate: function (title) {
+              var parse = global.QuickParse && global.QuickParse.parse;
+              var place = columnPlace(spec);
+              var draft = DM().taskDraft(title, place.date, parse, place.vague, place.time);
+              if (draft) createHere(draft);
+            },
+          });
+        }
         return dropZone(h('section', { class: 'db-col-card' + (extra ? ' ' + extra : '') }, [
           h('header', { class: 'db-col-head' }, head),
           bar,
-          h('div', { class: 'db-col-body' }, cards),
+          bodyEl,
         ]), spec);
       }
       function bucketLabel(b) {
+        if (b.time) return clockLabel(b.time);
         if (scale === 'vague') return VAGUE_SHORT[b.vague] || b.label || b.key;
         if (scale === 'day') return dayLabel(b.date, today);
         if (scale === 'week') {
@@ -1410,23 +1497,24 @@
         return b.key;
       }
       function bucketIcon(b) {
+        if (b.time) return 'clock';
         if (scale === 'day') return dayIconName(b.date, today);
-        if (scale === 'week') return 'calendar-week';
-        if (scale === 'month') return 'calendar-month';
-        if (scale === 'vague') return 'tilde';
-        return 'calendar';
+        return SCALE_ICON[scale] || 'calendar';
       }
       var spacer = h('div', { class: 'db-meter-hit db-meter-hit--spacer', 'aria-hidden': 'true' }, [
         h('span', { class: 'db-meter' }),
       ]);
+      var poolBody = pool.length
+        ? pool.map(function (r) { return taskCard(r, true); })
+        : [h('div', { class: 'db-col-empty', text: 'Tout est planifié.' })];
+      if (autoBtn) poolBody.unshift(autoBtn);
       var poolCol = column('db-col-card--pool', [
         h('span', { class: 'db-col-name', text: 'À planifier' }),
         h('span', { class: 'db-col-count', text: String(pool.length) }),
-      ], spacer, pool.length
-        ? pool.map(function (r) { return taskCard(r, true); })
-        : [h('div', { class: 'db-col-empty', text: 'Tout est planifié.' })], '');
+      ], spacer, poolBody, '');
       var days = buckets.map(function (b) {
-        var current = b.date && today >= b.date && today < b.end;
+        var slotNow = b.time && b.date === today && DM().parseClock(b.time) <= nowM && nowM < DM().parseClock(b.endTime);
+        var current = b.time ? slotNow : (b.date && today >= b.date && today < b.end);
         var extra = (current ? 'is-today' : '') + (scale === 'day' && isWeekend(b.date) ? ' is-weekend' : '');
         var head = [
           h('span', { class: 'db-col-name', title: scale === 'vague' ? (b.label || null) : null }, [
@@ -1438,16 +1526,29 @@
         else if (b.used) head.push(h('span', { class: 'db-cap-n' + (b.over ? ' is-over' : ''), text: DM().formatMinutes(b.used) }));
         var spec = scale === 'vague'
           ? { vague: b.vague }
-          : { iso: b.date < today ? today : b.date };
+          : b.time
+            ? { iso: b.date, time: b.time }
+            : { iso: b.date < today ? today : b.date };
         return column(extra.trim(), head, scale === 'vague' ? spacer.cloneNode(true) : dayBar(b), b.tasks.map(taskCard), spec);
       });
-      els.main.appendChild(h('div', { class: 'db-page db-page--board' }, [
-        pageHead('Orchestrateur', null, h('div', { class: 'db-head-tools' }, [scales, scale === 'vague' ? null : autoBtn])),
+      var minCol = (scale === 'hour' || scale === 'minute') ? 112 : 168;
+      var page = h('div', { class: 'db-page db-page--board' }, [
+        pageHead('Orchestrateur', null, h('div', { class: 'db-head-tools' }, [scales])),
         h('div', { class: 'db-board' }, [
           poolCol,
-          h('div', { class: 'db-board-days', style: 'grid-template-columns:repeat(' + days.length + ',minmax(168px,1fr))' }, days),
+          h('div', { class: 'db-board-days', style: 'grid-template-columns:repeat(' + days.length + ',minmax(' + minCol + 'px,1fr))' }, days),
         ]),
-      ]));
+      ]);
+      page.addEventListener('wheel', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('db-zoom-range')) return;
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        var at = Date.now();
+        if (at - (state.zoomAt || 0) < 180) { e.preventDefault(); return; }
+        state.zoomAt = at;
+        e.preventDefault();
+        goScale(idx + (e.deltaY > 0 ? 1 : -1));
+      }, { passive: false });
+      els.main.appendChild(page);
     }
 
     /* ── 4. Today ──────────────────────────────────────────────────── */
@@ -1472,33 +1573,60 @@
             },
           }, [icon('circle-check')]),
           h('span', { class: 'db-row-main' }, [
-            h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+            h('span', { class: 'db-row-line' }, [
+              h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+              late ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
+            ]),
             stepLine(r),
+            placeLine(r),
           ]),
-          late ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
-          prioBadge(r),
-          estChip(r),
-          dueChip(r),
-          h('button', { class: 'db-icon-btn', type: 'button', title: 'Reporter à demain', onclick: function () { plan(r, DM().addDays(today, 1)); } }, [icon('arrow-curve-right')]),
+          h('span', { class: 'db-props' }, [
+            h('span', { class: 'db-prop db-prop--prio' }, [prioBadge(r)]),
+            h('span', { class: 'db-prop db-prop--est' }, [estChip(r)]),
+            h('span', { class: 'db-prop db-prop--due' }, [dueChip(r)]),
+            h('span', { class: 'db-prop db-prop--go' }, [
+              h('button', { class: 'db-icon-btn', type: 'button', title: 'Reporter à demain', onclick: function () { plan(r, DM().addDays(today, 1)); } }, [icon('arrow-curve-right')]),
+            ]),
+          ]),
         ]);
       }) : [h('div', { class: 'db-empty' }, [icon('sun'), h('p', { text: 'Rien de prévu aujourd’hui.' }),
         h('button', { class: 'db-btn', type: 'button', onclick: function () { go('orchestrator'); } }, [icon('calendar-event'), document.createTextNode('Ouvrir l’orchestrateur')])])]);
+      if (global.InsertGap) {
+        global.InsertGap.watch(focus, {
+          item: '.db-row',
+          placeholder: 'Titre…',
+          onCreate: function (title) {
+            var parse = global.QuickParse && global.QuickParse.parse;
+            var draft = DM().taskDraft(title, today, parse, '');
+            if (draft) createHere(draft);
+          },
+        });
+      }
 
       var first = DM().DAY_START;
       var last = Math.max(first + 8 * 60, blocks.length ? blocks[blocks.length - 1].end : 0);
-      var hourPx = 56;
+      var lay = DM().timelineLayout
+        ? DM().timelineLayout(blocks, first, { minPx: 22, gap: 3, hourPx: 56 })
+        : { hourPx: 56, items: blocks.map(function (b) {
+          return { id: b.id, top: ((b.start - first) / 60) * 56, height: Math.max(22, ((b.end - b.start) / 60) * 56 - 3) };
+        }) };
+      var hourPx = lay.hourPx;
+      var boxOf = {};
+      lay.items.forEach(function (item) { boxOf[item.id] = item; });
       var grid = h('div', { class: 'db-tl', style: 'height:' + Math.ceil(((last - first) / 60) * hourPx) + 'px' });
       for (var m = first; m <= last; m += 60) {
         grid.appendChild(h('div', { class: 'db-tl-hour', style: 'top:' + ((m - first) / 60) * hourPx + 'px' }, [h('span', { text: DM().hhmm(m) })]));
       }
       blocks.forEach(function (b) {
         var r = byId[b.id];
+        var box = boxOf[b.id] || { top: 0, height: 22 };
+        var when = DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end);
         grid.appendChild(h('div', {
           class: 'db-tl-block',
           'data-card': r ? r.id : null,
-          style: 'top:' + ((b.start - first) / 60) * hourPx + 'px;height:' + Math.max(20, ((b.end - b.start) / 60) * hourPx - 2) + 'px',
-          title: DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end),
-        }, [h('b', { text: (function () { var s = WO() && WO().stepState(r); return s && s.text ? s.text : r.name; })() }), h('span', { text: DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end) })]));
+          style: 'top:' + box.top + 'px;height:' + box.height + 'px',
+          title: when,
+        }, [h('b', { text: (function () { var s = WO() && WO().stepState(r); return s && s.text ? s.text : r.name; })() }), h('span', { text: when })]));
       });
       var pct = Math.min(100, Math.round((used / state.capacity) * 100));
       var next = DM().nextAction(state.rows, today);
@@ -1509,6 +1637,7 @@
         h('div', { class: 'db-now-k' }, [icon('target-arrow'), document.createTextNode(next.from === 'today' ? ' Prochaine action' : ' Rien de prévu : je suggère')]),
         h('div', { class: 'db-now-name', text: actionText, onclick: function () { openCard(next.row); } }),
         nextStep && nextStep.text ? h('div', { class: 'db-now-card', text: next.row.name }) : null,
+        placeLine(next.row),
         nextStep && nextStep.missing ? h('div', { class: 'db-step is-missing', text: 'Sans prochaine action' }) : null,
         h('div', { class: 'db-now-meta' }, [
           next.row.due && next.row.due < today && DM().isOpen(next.row) ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
@@ -1681,6 +1810,7 @@
         var objectifs = (res[1][1] && res[1][1][0]) || [];
         var metrics = (res[1][1] && res[1][1][1]) || [];
         state.projects = WO() ? WO().projectChain(goals, state.rows, metrics, objectifs) : [];
+        state.places = WO() ? WO().places(goals) : {};
         // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Capture.
         if (!state.landed) {
           state.landed = true;
@@ -1753,13 +1883,19 @@
       }
       e.preventDefault();
       var anchor = e.target && e.target.nodeType === 1 ? e.target : cardEl;
-      var entries = row ? menuEntries(row, menuCtx()) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
-      var items = withActions(row, entries, anchor || cardEl);
+      // A text field keeps cut / copy / paste. The full card menu is for the row itself,
+      // so "Annuler" (discard) does not sit next to "Annuler" (undo).
       if (row && editable && typeof CM.buildGenericItems === 'function') {
-        var field = CM.buildGenericItems(e.target, document);
-        if (field && field.length) items = items.concat([{ sep: true }]).concat(field);
+        var field = CM.buildGenericItems(e.target, document) || [];
+        CM.show(e, [
+          { id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', group: 'Ouvrir', action: function () { openCard(row); } },
+          { id: 'open-document', label: 'Document', icon: 'file-text', group: 'Ouvrir', action: function () { if (global.ViewTabs && typeof global.ViewTabs.openSubject === 'function') global.ViewTabs.openSubject('task', row.id); } },
+          { sep: true },
+        ].concat(field));
+        return;
       }
-      CM.show(e, items);
+      var entries = row ? menuEntries(row, menuCtx()) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
+      CM.show(e, withActions(row, entries, anchor || cardEl));
     });
 
     reload();

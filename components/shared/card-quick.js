@@ -81,6 +81,59 @@
     return Math.max(0, Math.min(100, Math.round(((x - left) / width) * 100)));
   }
 
+  /**
+   * Resize a box from one corner. `corner` is nw, ne, sw or se.
+   * dx/dy are pointer deltas. The opposite corner stays put. Min size is enforced
+   * without pulling that opposite corner.
+   */
+  function resizeRect(rect, corner, dx, dy, minW, minH) {
+    rect = rect || {};
+    var left = rect.left || 0;
+    var top = rect.top || 0;
+    var width = rect.width || 0;
+    var height = rect.height || 0;
+    var growE = corner === 'ne' || corner === 'se';
+    var growS = corner === 'sw' || corner === 'se';
+    minW = minW > 0 ? minW : 0;
+    minH = minH > 0 ? minH : 0;
+    if (growE) width += dx;
+    else { width -= dx; left += dx; }
+    if (growS) height += dy;
+    else { height -= dy; top += dy; }
+    if (width < minW) {
+      if (!growE) left -= minW - width;
+      width = minW;
+    }
+    if (height < minH) {
+      if (!growS) top -= minH - height;
+      height = minH;
+    }
+    return { left: left, top: top, width: width, height: height };
+  }
+
+  /**
+   * Next zoom of a box so the point (x, y) stays under the cursor.
+   * `box` is the visual rectangle; scales are the layout multiplier (1 = natural).
+   */
+  function zoomAt(box, x, y, prevScale, nextScale) {
+    box = box || {};
+    var scale = prevScale > 0 ? prevScale : 1;
+    var next = nextScale > 0 ? nextScale : scale;
+    var width = box.width || 0;
+    var height = box.height || 0;
+    var left = box.left || 0;
+    var top = box.top || 0;
+    var fx = width ? (x - left) / width : 0;
+    var fy = height ? (y - top) / height : 0;
+    var layoutW = width / scale;
+    var layoutH = height / scale;
+    return {
+      scale: next,
+      left: x - fx * layoutW * next,
+      top: y - fy * layoutH * next,
+    };
+  }
+
   function todayIso() {
     var d = new Date();
     var p = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -522,6 +575,8 @@
     mount: mount,
     describe: describe,
     pctFromX: pctFromX,
+    resizeRect: resizeRect,
+    zoomAt: zoomAt,
     invalidate: invalidate,
     setProgress: setProgress,
   };

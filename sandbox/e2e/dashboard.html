@@ -33,6 +33,7 @@
   <script src="/components/statut/statut-match.js"></script>
   <script src="/components/statut/statut-trello.js"></script>
   <script src="/components/completion/completion-trello.js"></script>
+  <script src="/components/shared/insert-gap.js"></script>
   <script src="/components/completion/completion-ui.js"></script>
   <script src="/components/gantt/gantt-model.js"></script>
   <script src="/components/gantt/gantt-trello.js"></script>
@@ -92,7 +93,8 @@
       mk('c4', 'Archiver les anciennes cartes', 'l1', { priority: 2, tierI: 3, tier: 'Basse', estimate: 30 }),
       mk('c5', 'Écrire le rapport mensuel', 'lb', { priority: 6.3, estimate: 180 }),
       mk('c6', 'Réserver la salle', 'l1', { priority: 4, due: day(2), start: day(2), estimate: 15 }),
-      mk('c7', 'Revoir la vision', 'lb', { priority: 3, dueVague: 'long-terme', dueMode: 'vague' })
+      mk('c7', 'Revoir la vision', 'lb', { priority: 3, dueVague: 'long-terme', dueMode: 'vague' }),
+      mk('c8', 'Bloquer 14 h', 'l1', { priority: 6, due: DashboardModel.isoOf(new Date()), start: DashboardModel.isoOf(new Date()), startTime: '14:00', dueTime: '14:00', estimate: 45 })
     ];
     var log = (window.__log = []);
     function find(id) { return rows.filter(function (r) { return r.id === id; })[0]; }
@@ -114,13 +116,13 @@
     DashboardTrello.savePriority = function (t, id, p) { log.push(['prio', id, p]); return Promise.resolve(); };
     DashboardTrello.saveEstimate = function (t, id, m) { var r = find(id); if (r) r.estimate = m; log.push(['est', id, m]); return Promise.resolve(); };
     DashboardTrello.planDay = function (t, id, iso) { var r = find(id); if (r) { r.start = iso; r.due = iso; } log.push(['plan', id, iso]); return Promise.resolve(); };
-    DashboardTrello.planAt = function (t, id, iso, vague) {
+    DashboardTrello.planAt = function (t, id, iso, vague, time) {
       var r = find(id);
       if (r) {
-        if (vague) { r.dueVague = vague; r.dueMode = 'vague'; r.start = ''; r.due = ''; }
-        else { r.dueVague = ''; r.dueMode = ''; r.start = iso; r.due = iso; }
+        if (vague) { r.dueVague = vague; r.dueMode = 'vague'; r.start = ''; r.due = ''; r.startTime = ''; r.dueTime = ''; }
+        else { r.dueVague = ''; r.dueMode = ''; r.start = iso; r.due = iso; r.startTime = time || ''; r.dueTime = time || ''; }
       }
-      log.push(['planAt', id, iso, vague || '']);
+      log.push(['planAt', id, iso, vague || '', time || '']);
       return Promise.resolve();
     };
     DashboardTrello.complete = function (t, row) { var r = find(row.id); if (r) { r.dueDone = true; r.statutKey = 'completed'; } log.push(['done', row.id]); return Promise.resolve(); };

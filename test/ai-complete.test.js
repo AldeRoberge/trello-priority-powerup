@@ -68,6 +68,7 @@ describe('AiComplete', () => {
       assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { 'aria-label': 'Nom du composant' } })), 'name');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { placeholder: 'Décrire une règle…' } })), 'text');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { id: 'settingsProfileDisplayName' } })), 'person-name');
+      assert.equal(AI.classifyField(el({ editable: true, attrs: { 'aria-label': 'Notes' } })), 'text');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', editable: true, classes: ['memory-ui-input'] })), '');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['kb-ai-input'] })), '');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { placeholder: 'Chercher un genre…' } })), '');
@@ -147,6 +148,43 @@ describe('AiComplete', () => {
       assert.match(messages[1].content, /Urgent/);
       assert.equal(messages[0].content.indexOf('\u2014'), -1);
       assert.match(messages[0].content, /ne réponds pas à une question/);
+      assert.match(messages[0].content, /4 suites/);
+    });
+  });
+
+  describe('parseBranches', () => {
+    it('keeps four different continuations and drops the rest', () => {
+      const raw = [
+        ' demain matin',
+        ' aujourd\'hui',
+        ' avec Marie',
+        ' plus tard',
+        ' cinquième ignorée'
+      ].join('\n');
+      const branches = AI.parseBranches(raw, 'Réunion', 'document');
+      assert.equal(branches.length, 4);
+      assert.equal(branches[0], ' demain matin');
+      assert.equal(branches[2], ' avec Marie');
+    });
+  });
+
+  describe('matchBranch', () => {
+    const branches = [' tomorrow morning', ' today', ' with Marie'];
+
+    it('keeps the first branch while the letters still match it', () => {
+      assert.equal(AI.matchBranch(branches, ''), ' tomorrow morning');
+      assert.equal(AI.matchBranch(branches, ' t'), 'omorrow morning');
+      assert.equal(AI.matchBranch(branches, ' to'), 'morrow morning');
+    });
+
+    it('switches branch when the letters leave the first one', () => {
+      assert.equal(AI.matchBranch(branches, ' tod'), 'ay');
+      assert.equal(AI.matchBranch(branches, ' w'), 'ith Marie');
+    });
+
+    it('is empty when the letters match nothing, or the branch is finished', () => {
+      assert.equal(AI.matchBranch(branches, ' x'), '');
+      assert.equal(AI.matchBranch(branches, ' tomorrow morning'), '');
     });
   });
 });

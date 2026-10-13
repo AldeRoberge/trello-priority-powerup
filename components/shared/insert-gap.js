@@ -9,11 +9,14 @@
  *     float: false,              // composer follows the seam instead of joining the list
  *     tail: '.tb-add-row',       // when inserting after the last item, land before this
  *     wrap: function (input) {}, // optional node that holds the input (a <tr>, an <li>)
+ *     mode: 'split',              // whole row: top half inserts before, bottom half after
  *     onCreate: function (title, info) {}, // info.above / info.below / info.index
  *   })
  *
- * gapAt / underAt are pure and unit-tested. `under` is for free-positioned items
- * (a mindmap node): the pointer sits just below that item, not in a column seam.
+ * gapAt / underAt / splitAt are pure and unit-tested. `under` is for free-positioned
+ * items (a mindmap node): the pointer sits just below that item, not in a column seam.
+ * `split` covers the row itself, so a flush list still offers a spot above, in the
+ * middle, and below.
  */
 (function (global) {
   'use strict';
@@ -51,6 +54,41 @@
       }
     }
     return best;
+  }
+
+  /**
+   * The whole row is a target: the top half (and the space above) inserts before it,
+   * the bottom half and the gap under it insert after it. Used by the entity list,
+   * where rows sit flush and the thin seam is too easy to miss.
+   */
+  function splitAt(rects, x, y, slack) {
+    var rows = (rects || []).slice().sort(function (a, b) {
+      return a.top - b.top || a.left - b.left;
+    });
+    if (!rows.length) return null;
+    slack = slack == null ? 36 : slack;
+    var left = rows[0].left;
+    var right = rows[0].right;
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i].left < left) left = rows[i].left;
+      if (rows[i].right > right) right = rows[i].right;
+    }
+    if (x < left - 12 || x > right + 12) return null;
+    for (var j = 0; j < rows.length; j++) {
+      var row = rows[j];
+      var prev = rows[j - 1] || null;
+      var next = rows[j + 1] || null;
+      var mid = (row.top + row.bottom) / 2;
+      var zoneStart = prev ? (prev.bottom + row.top) / 2 : row.top - slack;
+      var zoneEnd = next ? (row.bottom + next.top) / 2 : row.bottom + slack;
+      if (y < zoneStart || y >= zoneEnd) continue;
+      if (y < mid) {
+        return { index: j, seam: row.top, dist: Math.abs(y - row.top), above: prev, below: row, anchor: 'below' };
+      }
+      var seam = next ? (row.bottom + next.top) / 2 : row.bottom + 6;
+      return { index: j + 1, seam: seam, dist: Math.abs(y - seam), above: row, below: next, anchor: 'above' };
+    }
+    return null;
   }
 
   /** Pointer just under a free-positioned item (not a vertical list). */
@@ -108,9 +146,12 @@
 
   function placeButton(w, hit) {
     var btn = w.btn;
-    var box = hit.above;
-    var x = hit.below
-      ? (Math.min(box.left, hit.below.left) + Math.max(box.right, hit.below.right)) / 2
+    var a = hit.above;
+    var b = hit.below;
+    var box = a || b;
+    if (!box) return;
+    var x = a && b
+      ? (Math.min(a.left, b.left) + Math.max(a.right, b.right)) / 2
       : (box.left + box.right) / 2;
     btn.style.left = x + 'px';
     btn.style.top = hit.seam + 'px';
@@ -125,7 +166,9 @@
     var rows = rectsOf(w);
     var hit = w.opts.mode === 'under'
       ? underAt(rows, e.clientX, e.clientY, w.opts.slack)
-      : gapAt(rows, e.clientX, e.clientY, w.opts.slack);
+      : w.opts.mode === 'split'
+        ? splitAt(rows, e.clientX, e.clientY, w.opts.slack)
+        : gapAt(rows, e.clientX, e.clientY, w.opts.slack);
     if (!hit) { hide(w); return; }
     placeButton(w, hit);
   }
@@ -165,9 +208,10 @@
         node.appendChild(input);
       }
       if (!node.classList.contains('ig-compose')) node.classList.add('ig-compose');
-      var below = hit.below ? childOf(w.container, hit.below.el) : null;
-      var tail = !below && w.opts.tail ? w.container.querySelector(w.opts.tail) : null;
-      var ref = below || tail;
+      var aboveEl = hit.above ? childOf(w.container, hit.above.el) : null;
+      var belowEl = hit.below ? childOf(w.container, hit.below.el) : null;
+      var ref = hit.anchor === 'above' && aboveEl ? aboveEl.nextSibling : belowEl;
+      if (!ref && w.opts.tail) ref = w.container.querySelector(w.opts.tail);
       if (ref) w.container.insertBefore(node, ref);
       else w.container.appendChild(node);
     }
@@ -182,8 +226,9 @@
       input.disabled = true;
       var info = {
         index: hit.index,
-        above: hit.above.el,
+        above: hit.above ? hit.above.el : null,
         below: hit.below ? hit.below.el : null,
+        anchor: hit.anchor || '',
       };
       var job;
       try { job = w.opts.onCreate(title, info); }
@@ -257,5 +302,5 @@
     return { detach: function () { detach(w); } };
   }
 
-  global.InsertGap = { watch: watch, gapAt: gapAt, underAt: underAt };
+  global.InsertGap = { watch: watch, gapAt: gapAt, underAt: underAt, splitAt: splitAt };
 })(typeof window !== 'undefined' ? window : global);

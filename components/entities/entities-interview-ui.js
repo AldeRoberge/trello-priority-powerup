@@ -251,15 +251,26 @@
       if (old) old.parentNode.replaceChild(paintMap(), old);
     }
 
+    /** Rows under the field: genre search covers the whole catalog; other cards filter their own suggestions. */
+    function listed(card) {
+      if (!card) return [];
+      if (card.kind === 'type' && (st.text || '').trim()) {
+        return EI().typeChoices(cx(), card, st.text).map(function (o, i) { return { sel: i, option: o }; });
+      }
+      var idxs = st.text ? EI().matchOptions(card, st.text) : (card.options || []).map(function (o, i) { return i; });
+      return idxs.map(function (i) { return { sel: i, option: card.options[i] }; });
+    }
+
     function paintOptions(card) {
-      if (!card.options.length) return null;
-      var visible = st.text ? EI().matchOptions(card, st.text) : card.options.map(function (o, i) { return i; });
+      var rows = listed(card);
+      if (!rows.length && !card.options.length) return null;
       var box = h('div', { class: 'iv-opts', role: 'listbox', 'aria-label': 'Suggestions' });
-      visible.forEach(function (i, n) {
-        var o = card.options[i];
-        var cls = 'iv-opt' + (i === st.sel ? ' iv-opt--sel' : '') + (i === card.best ? ' iv-opt--best' : '');
+      rows.forEach(function (row, n) {
+        var o = row.option;
+        var on = row.sel === st.sel;
+        var cls = 'iv-opt' + (on ? ' iv-opt--sel' : '') + (!st.text && row.sel === card.best ? ' iv-opt--best' : '');
         box.appendChild(
-          h('button', { class: cls, type: 'button', role: 'option', 'aria-selected': i === st.sel ? 'true' : 'false', onclick: function () { st.sel = i; st.picked = true; submit(); } }, [
+          h('button', { class: cls, type: 'button', role: 'option', 'aria-selected': on ? 'true' : 'false', onclick: function () { st.sel = row.sel; st.pick = o; st.picked = true; submit(); } }, [
             h('kbd', { text: String(n + 1) }),
             o.icon ? icon(o.icon) : null,
             h('span', { class: 'iv-opt-label', text: o.label }),
@@ -268,7 +279,7 @@
           ])
         );
       });
-      if (!visible.length) box.appendChild(h('span', { class: 'cp-hint', text: 'Aucune suggestion.' }));
+      if (!rows.length) box.appendChild(h('span', { class: 'cp-hint', text: 'Aucune suggestion.' }));
       return box;
     }
 
@@ -314,7 +325,11 @@
           oninput: function () {
             st.text = input.value;
             st.picked = false;
-            if (!st.text && st.card.best >= 0) st.sel = st.card.best;
+            st.pick = null;
+            if (st.card.kind === 'type') {
+              var list = (st.text || '').trim() ? EI().typeChoices(cx(), st.card, st.text) : [];
+              st.sel = (st.text || '').trim() ? (list.length ? 0 : -1) : st.card.best >= 0 ? st.card.best : -1;
+            } else if (!st.text && st.card.best >= 0) st.sel = st.card.best;
             else if (st.text) {
               var m = EI().matchOptions(st.card, st.text);
               st.sel = m.length ? m[0] : -1;
@@ -408,6 +423,7 @@
       st.picked = false;
       st.error = '';
       st.sel = card && card.best >= 0 ? card.best : -1;
+      st.pick = null;
     }
 
     function advance() {
@@ -532,19 +548,23 @@
       advance();
     }
 
+    function inputFor(c) {
+      var typed = (st.text || '').trim();
+      if (c.kind === 'batch') return { option: st.sel >= 0 ? st.sel : 0 };
+      if (c.kind === 'type' && st.picked && st.pick && st.pick.action === 'create-type') return { createName: st.pick.createName };
+      if (c.kind === 'type' && st.picked && st.pick && st.pick.typeId && typed) return { typeId: st.pick.typeId };
+      if (typed && !st.picked) return { text: typed };
+      if (st.sel >= 0) return { option: st.sel };
+      if (typed) return { text: typed };
+      return { skip: true };
+    }
+
     function submit() {
       if (st.stage === 'name') return startWith(st.text);
       var c = st.card;
       if (!c) return;
       if (c.kind === 'done') return finish(false);
-      var typed = (st.text || '').trim();
-      var inputSpec;
-      if (c.kind === 'batch') inputSpec = { option: st.sel >= 0 ? st.sel : 0 };
-      else if (typed && !st.picked) inputSpec = { text: typed };
-      else if (st.sel >= 0) inputSpec = { option: st.sel };
-      else if (typed) inputSpec = { text: typed };
-      else inputSpec = { skip: true };
-      apply(EI().answer(cx(), c, inputSpec));
+      apply(EI().answer(cx(), c, inputFor(c)));
     }
 
     function skip() {
@@ -579,6 +599,15 @@
 
     function finish(again) {
       if (!st.draft || !st.draft.name) return;
+      if (st.card && st.card.kind === 'type' && (st.text || '').trim() && !(st.draft.types && st.draft.types.length)) {
+        var pending = EI().answer(cx(), st.card, inputFor(st.card));
+        if (pending.error) {
+          st.error = pending.error;
+          return paint();
+        }
+        st.schema = pending.schema;
+        st.draft = pending.draft;
+      }
       var o = overlay();
       var r = EC().finalize(o.schema, st.entities, allDrafts());
       if (r.skipped.length) {
@@ -634,12 +663,14 @@
 
     function moveSel(dir) {
       var c = st.card;
-      if (!c || !c.options.length) return;
-      var vis = st.text ? EI().matchOptions(c, st.text) : c.options.map(function (o, i) { return i; });
-      if (!vis.length) return;
-      var at = vis.indexOf(st.sel);
-      var nextAt = at < 0 ? (dir > 0 ? 0 : vis.length - 1) : (at + dir + vis.length) % vis.length;
-      st.sel = vis[nextAt];
+      if (!c) return;
+      var rows = listed(c);
+      if (!rows.length) return;
+      var at = -1;
+      rows.forEach(function (r, i) { if (r.sel === st.sel) at = i; });
+      var next = rows[at < 0 ? (dir > 0 ? 0 : rows.length - 1) : (at + dir + rows.length) % rows.length];
+      st.sel = next.sel;
+      st.pick = next.option;
       st.picked = true;
       repaintOptions();
     }

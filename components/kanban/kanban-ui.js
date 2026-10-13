@@ -60,6 +60,7 @@
     var state = {
       lists: [],
       rows: [],
+      places: {},
       filter: '',
       hideDone: HD.get(),
       authOk: true,
@@ -352,7 +353,8 @@
       if (row.due) {
         var closed = KM().isClosedKey(row.statutKey);
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < todayIso() && !closed;
-        badges.push(chip('kb-chip--due' + (overdue ? ' is-overdue' : ''), overdue ? 'calendar-exclamation' : 'calendar-event', TM().formatDay(row.due), (overdue ? 'En retard · ' : '') + row.due, function (e) {
+        var hard = global.WorkOS && global.WorkOS.dateKind(row) === 'hard';
+        badges.push(chip('kb-chip--due' + (overdue ? ' is-overdue' : '') + (hard ? ' is-hard' : ''), overdue ? 'calendar-exclamation' : 'calendar-event', TM().formatDay(row.due), (overdue ? 'En retard · ' : (hard ? 'Échéance · ' : '')) + row.due, function (e) {
           e.stopPropagation();
           openEditor(row, 'due', e.currentTarget);
         }));
@@ -383,6 +385,8 @@
       var step = global.WorkOS && global.WorkOS.stepState(row);
       if (step && step.text) kids.push(h('div', { class: 'kb-step', text: step.text }));
       else if (step && step.missing) kids.push(h('div', { class: 'kb-step is-missing', text: 'Sans prochaine action' }));
+      var place = state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[row.id]) : '';
+      if (place) kids.push(h('div', { class: 'kb-place', text: place }));
       if (badges.length) kids.push(h('div', { class: 'kb-badges' }, badges));
       var prog = null;
       if (typeof row.progress === 'number') {
@@ -930,15 +934,24 @@
     }
 
     /* ── Loading ───────────────────────────────────────────────────── */
+    function goalPlaces() {
+      var goals = global.MindmapGoalsTrello;
+      var os = global.WorkOS;
+      if (!goals || typeof goals.load !== 'function' || !os || typeof os.places !== 'function') return Promise.resolve({});
+      return goals.load(t).then(function (g) { return os.places(g || {}); }).catch(function () { return {}; });
+    }
+
     function reload(opts) {
       if (!opts || !opts.quiet) els.board.innerHTML = skeletonCols();
       return Promise.all([
         TT().load(t),
         global.PriorityTrello.isRestAuthorized(t).catch(function () { return false; }),
+        goalPlaces(),
       ]).then(function (res) {
         state.lists = res[0].lists;
         state.rows = res[0].rows;
         state.authOk = !!res[1];
+        state.places = res[2] || {};
         renderBanner();
         renderBar();
         renderBoard();

@@ -397,32 +397,5 @@ describe('MindmapModel', () => {
       const unknown = MM.applyGroupEdits(project ? [project] : [], { 'grp:g:p': { extra: ['missing'] } }, { 't:a': { id: 't:a' } });
       assert.ok(!unknown[0].members.includes('missing'));
     });
-
-    it('renames a boundary, pulls a card in and takes one out', () => {
-      const edited = MM.scene(graph(), {
-        lens: 'project',
-        zoom: 1,
-        edits: {
-          'grp:g:p': { name: 'Chantier', extra: ['t:b'] },
-          'grp:loose': { omit: ['t:b'] },
-        },
-      });
-      const project = edited.groups.find((g) => g.id === 'grp:g:p');
-      assert.equal(project.label, 'Chantier');
-      assert.ok(project.members.includes('t:a'));
-      assert.ok(project.members.includes('t:b'));
-      assert.equal(project.taskCount, 2);
-      const loose = edited.groups.find((g) => g.id === 'grp:loose');
-      assert.ok(!loose || !loose.members.includes('t:b'));
-      const closed = MM.scene(graph(), {
-        lens: 'project',
-        zoom: 0.2,
-        edits: { 'grp:g:p': { extra: ['t:b'], omit: ['t:a'] } },
-      });
-      assert.equal(closed.hidden['t:b'], true);
-      assert.ok(!closed.hidden['t:a']);
-      const unknown = MM.applyGroupEdits(project ? [project] : [], { 'grp:g:p': { extra: ['missing'] } }, { 't:a': { id: 't:a' } });
-      assert.ok(!unknown[0].members.includes('missing'));
-    });
   });
 });

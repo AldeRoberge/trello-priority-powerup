@@ -1,11 +1,11 @@
 /*
  * Role: UI of the Document view, a Google-Docs-like editor for the board's documents.
  *  - left: the board's documents (search, new, duplicate, export, delete); right: outline of the headings
- *  - toolbar + keyboard shortcuts + Markdown shortcuts ("# ", "- ", "1. ", "[] ", "> ") + "/" command menu
+ *  - toolbar (marks, color, highlight, align) + keyboard shortcuts + Markdown shortcuts + "/" (tables, callouts)
  *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
  *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
  *    Backspace right after a person keeps the first name; another Backspace removes the mention
- *  - selecting text shows "Créer une tâche": the selection becomes a board card, linked in place
+ *  - selecting text shows a bar (style, color, bold, italic, …) and "Créer une tâche"
  *  - autosave (debounced) with revision check, so two people editing the same document are warned
  * Data + writes: DocsTrello; pure helpers (Markdown <-> HTML, mention search): DocsModel. Icons: Tabler webfont.
  *
@@ -122,7 +122,12 @@
     return r === 'not-authorized' || r === 'no-token' || r === 'auth-failed' || r === 'http-401';
   }
 
-  var BLOCK_SEL = 'P,DIV,H1,H2,H3,H4,H5,H6,LI,BLOCKQUOTE,PRE';
+  var BLOCK_SEL = 'P,DIV,H1,H2,H3,H4,H5,H6,LI,BLOCKQUOTE,PRE,TD,TH';
+
+  var INK_LABELS = {
+    gray: 'Gris', brown: 'Brun', orange: 'Orange', yellow: 'Jaune', green: 'Vert',
+    blue: 'Bleu', purple: 'Violet', pink: 'Rose', red: 'Rouge',
+  };
 
   var COMMANDS = [
     { id: 'p', label: 'Texte', icon: 'text-size', kw: 'paragraphe normal texte' },
@@ -136,6 +141,13 @@
     { id: 'codeblock', label: 'Bloc de code', icon: 'file-code', kw: 'code' },
     { id: 'hr', label: 'Séparateur', icon: 'separator-horizontal', kw: 'ligne separateur' },
     { id: 'image', label: 'Image', icon: 'photo', kw: 'image photo picture illustration fichier' },
+    { id: 'table', label: 'Tableau', icon: 'table', kw: 'tableau table grille colonnes' },
+    { id: 'callout-note', label: 'Note', icon: 'info-circle', kw: 'encadre note info appel' },
+    { id: 'callout-tip', label: 'Conseil', icon: 'bulb', kw: 'encadre conseil astuce tip' },
+    { id: 'callout-warning', label: 'Attention', icon: 'alert-triangle', kw: 'encadre attention avertissement warning' },
+    { id: 'align-left', label: 'Aligner à gauche', icon: 'align-left', kw: 'aligner gauche left', slashOnly: true },
+    { id: 'align-center', label: 'Aligner au centre', icon: 'align-center', kw: 'aligner centre center milieu', slashOnly: true },
+    { id: 'align-right', label: 'Aligner à droite', icon: 'align-right', kw: 'aligner droite right', slashOnly: true },
     { id: 'mention-person', label: 'Mentionner une personne', icon: 'user', hint: '@', kw: 'personne mention arobase' },
     { id: 'mention-task', label: 'Lier une tâche', icon: 'checkbox', hint: '@@', kw: 'tache carte lien' },
     { id: 'mention-doc', label: 'Lier un document', icon: 'file-text', hint: '@@@', kw: 'document page lien' },
@@ -162,6 +174,7 @@
       sideCollapsed: false,
       face: null,
       labelCatalog: null,
+      driveUrl: '',
     };
     var editor = null;
     var saving = false;
@@ -171,6 +184,44 @@
     var lastRange = null;
     var sugg = null; // {kind:'mention'|'slash', trig, entries, active}
     var pop = null; // open popover element
+    var rich = null;
+    function docsRich() {
+      if (rich || !global.DocsRich) return rich;
+      rich = global.DocsRich.create({
+        doc: document,
+        getEditor: function () { return editor; },
+        h: h,
+        icon: icon,
+        inkLabels: INK_LABELS,
+        inks: function () { return DM().RICH_INKS; },
+        closestIn: closestIn,
+        selNode: selNode,
+        saveSel: saveSel,
+        restoreSel: restoreSel,
+        closePop: closePop,
+        placePop: placePop,
+        setPop: function (el) { pop = el; },
+        onEdit: onEdit,
+        paintToolbarState: paintToolbarState,
+        currentRow: currentRow,
+        isEmptyBlock: isEmptyBlock,
+        focusInside: focusInside,
+      });
+      return rich;
+    }
+    function fixTables() { var r = docsRich(); if (r) r.fixTables(); }
+    function focusCell(cell) { var r = docsRich(); if (r) r.focusCell(cell); }
+    function moveTableCell(cell, dir) { var r = docsRich(); if (r) r.moveTableCell(cell, dir); }
+    function cellBelow(cell) { var r = docsRich(); return r ? r.cellBelow(cell) : null; }
+    function insertTable() { var r = docsRich(); if (r) r.insertTable(); }
+    function setAlign(dir) { var r = docsRich(); if (r) r.setAlign(dir); }
+    function setCallout(kind) { var r = docsRich(); if (r) r.setCallout(kind); }
+    function applyRich(kind, color) { var r = docsRich(); if (r) r.applyRich(kind, color); }
+    function openChoiceMenu(anchor, items) { var r = docsRich(); if (r) r.openChoiceMenu(anchor, items); }
+    function openColorPop(anchor) { var r = docsRich(); if (r) r.openColorPop(anchor); }
+    function openTableMenu(anchor) { var r = docsRich(); if (r) r.openTableMenu(anchor); }
+    function openCalloutMenu(anchor) { var r = docsRich(); if (r) r.openCalloutMenu(anchor); }
+    function openAlignMenu(anchor) { var r = docsRich(); if (r) r.openAlignMenu(anchor); }
     var selBar = null; // floating "Créer une tâche" bar for the current text selection
     var blockHover = null;
     var dragBlock = null;
@@ -490,6 +541,26 @@
         wireDrag(row, 'doc', d.id, docFolderOf(d.id));
         list.appendChild(row);
       });
+      bindDocInsert();
+    }
+
+    /** + in the seam under a document (or a folder) creates one there. */
+    function bindDocInsert() {
+      if (!global.InsertGap) return;
+      global.InsertGap.watch(els.sideList, {
+        item: '.dc-item',
+        placeholder: 'Titre…',
+        onCreate: function (title, info) {
+          var above = info.above;
+          if (!above) return;
+          if (above.classList.contains('dc-folder')) {
+            newDoc(title, '', above.getAttribute('data-folder') || '', '');
+            return;
+          }
+          var id = above.getAttribute('data-id');
+          newDoc(title, '', id ? docFolderOf(id) : '', (id && state.idx.parents && state.idx.parents[id]) || '');
+        },
+      });
     }
 
     /* Folders */
@@ -506,7 +577,52 @@
       var hops = 0;
       var parents = state.idx.parents || {};
       while (parents[cur] && hops++ < 1000) cur = parents[cur];
-      return state.idx.docs[cur] || '';
+      if (state.idx.docs[cur]) return state.idx.docs[cur];
+      var own = DM().folderByDoc(state.idx, cur);
+      return own ? own.id : '';
+    }
+
+    /** Title shown for a folder: its document's title when that card exists. */
+    function folderLabel(f) {
+      if (!f) return '';
+      var d = f.doc && state.docs.filter(function (x) { return x.id === f.doc; })[0];
+      return (d && d.title) || f.name;
+    }
+
+    /** Opens the document the folder is. Creates that document the first time, for an old folder. */
+    function openFolder(id) {
+      var f = DM().folderById(state.idx, id);
+      if (!f) return;
+      if (f.doc && state.docs.some(function (d) { return d.id === f.doc; })) {
+        openDoc(f.doc);
+        return;
+      }
+      setBusy('Création du document…');
+      DT().createDoc(t, f.name, '').then(function (doc) {
+        setBusy('');
+        state.docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt || '', size: 0, body: '' });
+        sortDocs();
+        return editFolders(function (idx) {
+          var x = DM().folderById(idx, id);
+          if (x && !x.doc) x.doc = doc.id;
+        }).then(function () {
+          return openDoc(doc.id, { skipSave: true });
+        });
+      }, function (err) {
+        setBusy('');
+        failure(err);
+      });
+    }
+
+    /** Keeps the folder name in the tree equal to the document title. */
+    function syncFolderName(docId, title) {
+      var f = DM().folderByDoc(state.idx, docId);
+      var name = DM().cleanFolderName(title);
+      if (!f || !name || f.name === name) return;
+      editFolders(function (idx) {
+        var x = DM().folderByDoc(idx, docId);
+        if (x && x.name !== name) x.name = name;
+      });
     }
 
     function docChev(r) {
@@ -522,6 +638,7 @@
 
     function folderRow(r) {
       var f = r.folder;
+      var on = !!(state.current && f.doc && state.current.id === f.doc);
       var more = h('button', {
         class: 'dc-item-more',
         title: 'Actions',
@@ -531,22 +648,28 @@
           openFolderMenu(more, f.id);
         },
       }, [icon('dots')]);
-      function toggle() {
+      var chev = icon(r.open ? 'chevron-down' : 'chevron-right', 'dc-folder-chev dc-doc-chev');
+      chev.addEventListener('click', function (e) {
+        e.stopPropagation();
         setFolderOpen(f.id, !state.openFolders[f.id]);
         paintList();
-      }
+      });
+      var when = r.doc
+        ? DM().relativeTime(r.doc.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(r.doc.size) : '')
+        : String(r.count);
       var row = h('div', {
-        class: 'dc-item dc-folder' + (r.archived ? ' is-archived' : ''),
+        class: 'dc-item dc-folder' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
         style: 'padding-left:' + (8 + r.depth * 16) + 'px',
         role: 'treeitem',
         'aria-expanded': r.open ? 'true' : 'false',
+        'aria-selected': on ? 'true' : 'false',
         tabindex: '0',
         'data-folder': f.id,
-        onclick: toggle,
+        onclick: function () { openFolder(f.id); },
         onkeydown: function (e) {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            toggle();
+            openFolder(f.id);
           }
         },
         oncontextmenu: function (e) {
@@ -554,10 +677,12 @@
           openFolderMenu(more, f.id);
         },
       }, [
-        icon(r.open ? 'chevron-down' : 'chevron-right', 'dc-folder-chev'),
+        chev,
         icon(r.open ? 'folder-open' : 'folder', 'dc-item-icon'),
-        h('span', { class: 'dc-item-main' }, [h('span', { class: 'dc-item-title', text: f.name })]),
-        h('span', { class: 'dc-item-time', text: String(r.count) }),
+        h('span', { class: 'dc-item-main' }, [
+          h('span', { class: 'dc-item-title', text: (r.doc && r.doc.title) || f.name }),
+          h('span', { class: 'dc-item-time', text: when }),
+        ]),
         more,
       ]);
       wireDrag(row, 'folder', f.id, f.id);
@@ -708,11 +833,29 @@
           return;
         }
         var parentId = pend.parent;
-        editFolders(function (idx) {
-          var parent = parentId && DM().folderById(idx, parentId) ? parentId : null;
-          idx.folders.push({ id: DM().newFolderId(), name: name, parent: parent });
+        setBusy('Création du dossier…');
+        DT().createDoc(t, name, '').then(function (doc) {
+          setBusy('');
+          state.docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt || '', size: 0, body: '' });
+          sortDocs();
+          return editFolders(function (idx) {
+            var parent = parentId && DM().folderById(idx, parentId) ? parentId : null;
+            idx.folders.push({
+              id: DM().newFolderId(),
+              name: DM().cleanFolderName(doc.title) || name,
+              parent: parent,
+              doc: doc.id,
+            });
+          }).then(function () {
+            return openDoc(doc.id, { skipSave: true });
+          }).then(function () {
+            if (editor) editor.focus();
+          });
+        }, function (err) {
+          setBusy('');
+          failure(err);
+          paintList();
         });
-        paintList();
       }
       input.addEventListener('input', function () { pend.value = input.value; });
       input.addEventListener('keydown', function (e) {
@@ -742,13 +885,26 @@
     function renameFolder(id) {
       var f = DM().folderById(state.idx, id);
       if (!f) return;
-      dialog({ title: 'Renommer le dossier', text: DM().folderPath(state.idx, id), input: f.name, ok: 'Renommer' }).then(function (name) {
+      dialog({ title: 'Renommer le dossier', text: DM().folderPath(state.idx, id), input: folderLabel(f), ok: 'Renommer' }).then(function (name) {
         name = typeof name === 'string' ? DM().cleanFolderName(name) : '';
-        if (!name || name === f.name) return;
-        editFolders(function (idx) {
-          var x = DM().folderById(idx, id);
-          if (x) x.name = name;
-        });
+        if (!name || name === folderLabel(f)) return;
+        var renamed = f.doc
+          ? DT().renameDoc(t, f.doc, name).then(function (r) {
+            touchListItem(f.doc, { title: r.title });
+            if (state.current && state.current.id === f.doc) {
+              state.current.title = r.title;
+              savedTitle = r.title;
+              els.title.value = r.title === DM().UNTITLED ? '' : r.title;
+            }
+            return r.title;
+          })
+          : Promise.resolve(name);
+        renamed.then(function (title) {
+          editFolders(function (idx) {
+            var x = DM().folderById(idx, id);
+            if (x) x.name = DM().cleanFolderName(title) || name;
+          });
+        }, failure);
       });
     }
 
@@ -757,7 +913,7 @@
       var f = DM().folderById(state.idx, id);
       if (!f) return;
       dialog({
-        title: 'Archiver le dossier « ' + f.name + ' » ?',
+        title: 'Archiver le dossier « ' + folderLabel(f) + ' » ?',
         text: 'Voulez-vous aussi archiver son contenu (documents et sous-dossiers) ? Sinon, le contenu reste visible et remonte d’un niveau. Les archives se retrouvent avec « Afficher les archives ».',
         ok: 'Avec son contenu',
         alt: 'Dossier seulement',
@@ -826,7 +982,8 @@
         delete idx.docs[docId];
       }).then(function (ok) {
         if (!ok) return;
-        setFolderOpen('doc:' + parentId, true);
+        var holder = DM().folderByDoc(state.idx, parentId);
+        setFolderOpen(holder ? holder.id : 'doc:' + parentId, true);
         paintList();
         if (state.current && (state.current.id === docId || state.current.id === parentId)) paintProps();
       });
@@ -841,7 +998,9 @@
         var hops = 0;
         while (idx.parents[cur] && hops++ < 1000) cur = idx.parents[cur];
         delete idx.parents[docId];
+        var holder = DM().folderByDoc(idx, cur);
         if (idx.docs[cur]) idx.docs[docId] = idx.docs[cur];
+        else if (holder) idx.docs[docId] = holder.id;
       });
     }
 
@@ -1021,7 +1180,18 @@
     }
 
     function isEmptyDoc() {
-      return !editor.querySelector('.dc-mention, hr, li, pre, blockquote, h1, h2, h3, figure') && !/\S/.test(editor.textContent.replace(/\u200b/g, ''));
+      var n = editor.firstChild;
+      while (n) {
+        if (n.nodeType === 3) {
+          if (/\S/.test(String(n.nodeValue || '').replace(/\u200b/g, ''))) return false;
+        } else if (n.nodeType === 1) {
+          if (n.matches && n.matches('hr, figure, table, img, li, pre, blockquote, h1, h2, h3')) return false;
+          if (n.querySelector && n.querySelector('.dc-mention, hr, figure, table, img, li, pre, blockquote, h1, h2, h3')) return false;
+          if (/\S/.test(String(n.textContent || '').replace(/\u200b/g, ''))) return false;
+        }
+        n = n.nextSibling;
+      }
+      return true;
     }
 
     function paintEmptyClass() {
@@ -1064,11 +1234,18 @@
       on('todo', !!list && list.tagName === 'UL' && list.classList.contains('dc-todo'));
       on('quote', inEditor && !!closestIn(n, 'BLOCKQUOTE'));
       on('codeblock', inEditor && !!closestIn(n, 'PRE'));
+      on('highlight', inEditor && !!closestIn(n, 'MARK'));
+      on('callout', inEditor && !!closestIn(n, 'BLOCKQUOTE[data-callout]'));
+      var aligned = inEditor && closestIn(n, 'P,H1,H2,H3,BLOCKQUOTE,TD,TH');
+      var align = aligned && aligned.getAttribute('data-align');
+      on('align', align === 'center' || align === 'right');
       var sel = els.toolbar.querySelector('.dc-select');
       if (sel && inEditor) sel.value = blockType() === 'codeblock' ? 'p' : blockType();
+      paintSelBarState();
     }
 
     function onEdit() {
+      fixTables();
       normalizeRoot();
       fixImages();
       fixChips();
@@ -1636,6 +1813,7 @@
       lastRange = null;
       ensureTail();
       fixImages();
+      fixTables();
       hydrateImages();
       hideBlockUi();
       lastMd = DM().domToMd(ed); // baseline = the normalized form, so opening never rewrites a document
@@ -1658,7 +1836,13 @@
         if (state.saveState === 'dirty') saveNow();
       });
       ed.addEventListener('mousedown', function (e) {
-        if (e.target === ed) {
+        if (e.target === ed && e.button === 0) {
+          var under = preBelowClick(e.clientY);
+          if (under) {
+            e.preventDefault();
+            focusEdge(placeAfter(under), false);
+            return;
+          }
           ensureTail();
           var tail = ed.lastElementChild;
           if (tail && tail.tagName === 'P') focusInside(tail);
@@ -1727,7 +1911,7 @@
       var n = selNode();
       if (!n) return;
       var block = closestIn(n, 'P,DIV');
-      if (!block || closestIn(block, 'PRE')) return;
+      if (!block || closestIn(block, 'PRE') || closestIn(block, 'TD,TH')) return;
       var text = block.textContent.replace(/[\u00a0\u200b]/g, ' ');
       var cmd = null;
       var m = /^(#{1,3}) $/.exec(text);
@@ -1790,6 +1974,98 @@
       else chip.appendChild(document.createTextNode(first));
     }
 
+    /** Same list kind, so a checklist stays checkboxes and a disc stays a disc. */
+    function listKindOf(list) {
+      if (!list) return '';
+      if (list.classList && list.classList.contains('dc-todo')) return 'todo';
+      return list.tagName === 'OL' ? 'ol' : 'ul';
+    }
+
+    function createList(kind) {
+      var el = document.createElement(kind === 'ol' ? 'ol' : 'ul');
+      if (kind === 'todo') el.classList.add('dc-todo');
+      return el;
+    }
+
+    function listOfItem(li) {
+      var parent = li && li.parentNode;
+      if (!parent || (parent.tagName !== 'UL' && parent.tagName !== 'OL')) return null;
+      return parent;
+    }
+
+    function prevListItem(li) {
+      var n = li.previousElementSibling;
+      while (n && n.tagName !== 'LI') n = n.previousElementSibling;
+      return n && n.tagName === 'LI' ? n : null;
+    }
+
+    /** Nested list of the same kind at the end of an item, created when missing. */
+    function ensureNested(li, kind) {
+      var last = li.lastElementChild;
+      if (last && (last.tagName === 'UL' || last.tagName === 'OL') && listKindOf(last) === kind) return last;
+      var nest = createList(kind);
+      li.appendChild(nest);
+      return nest;
+    }
+
+    function keepCaret(li, move) {
+      var sel = global.getSelection();
+      var mark = null;
+      if (sel && sel.rangeCount && li.contains(sel.anchorNode)) {
+        mark = { node: sel.anchorNode, offset: sel.anchorOffset };
+      }
+      var ok = move();
+      if (ok && mark && mark.node && editor.contains(mark.node)) {
+        try {
+          var max = mark.node.nodeType === 3 ? mark.node.length : mark.node.childNodes.length;
+          var range = document.createRange();
+          range.setStart(mark.node, Math.min(mark.offset, max));
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (err) { /* caret stays where the move left it */ }
+      }
+      return ok;
+    }
+
+    /**
+     * Tab nests the item under the previous one (a subtask). Shift+Tab lifts it back.
+     * execCommand('indent') is not used: Chrome turns the marker into another bullet.
+     */
+    function indentListItem(li) {
+      var parent = listOfItem(li);
+      var prev = parent && prevListItem(li);
+      if (!prev || prev === li) return false;
+      return keepCaret(li, function () {
+        ensureNested(prev, listKindOf(parent)).appendChild(li);
+        return true;
+      });
+    }
+
+    function outdentListItem(li) {
+      var parent = listOfItem(li);
+      var owner = parent && parent.parentNode;
+      if (!owner || owner.tagName !== 'LI') return false;
+      var grand = listOfItem(owner);
+      if (!grand) return false;
+      return keepCaret(li, function () {
+        var follow = [];
+        var n = li.nextElementSibling;
+        while (n) {
+          var next = n.nextElementSibling;
+          if (n.tagName === 'LI') follow.push(n);
+          n = next;
+        }
+        grand.insertBefore(li, owner.nextSibling);
+        if (follow.length) {
+          var nest = ensureNested(li, listKindOf(parent));
+          follow.forEach(function (item) { nest.appendChild(item); });
+        }
+        pruneEmpty(parent);
+        return true;
+      });
+    }
+
     function onKeydown(e) {
       var mod = e.ctrlKey || e.metaKey;
       if (sugg && handleSuggestKey(e)) return;
@@ -1810,6 +2086,7 @@
       }
       if (mod && e.shiftKey && !e.altKey) {
         if (e.key === 'X' || e.key === 'x') { e.preventDefault(); runCommand('strike'); return; }
+        if (e.key === 'H' || e.key === 'h') { e.preventDefault(); runCommand('highlight'); return; }
         if (e.key === '7' || e.key === '&') { e.preventDefault(); runCommand('ol'); return; }
         if (e.key === '8' || e.key === '*') { e.preventDefault(); runCommand('ul'); return; }
         if (e.key === '9' || e.key === '(') { e.preventDefault(); runCommand('todo'); return; }
@@ -1821,15 +2098,48 @@
       }
       if (e.key === 'Tab') {
         var n = selNode();
-        if (n && closestIn(n, 'LI')) {
+        var tabCell = n && closestIn(n, 'TD,TH');
+        if (tabCell) {
           e.preventDefault();
-          document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+          moveTableCell(tabCell, e.shiftKey ? -1 : 1);
           onEdit();
+          return;
+        }
+        var li = n && closestIn(n, 'LI');
+        if (li) {
+          e.preventDefault();
+          if (e.shiftKey ? outdentListItem(li) : indentListItem(li)) onEdit();
         } else if (n && closestIn(n, 'PRE')) {
           e.preventDefault();
           document.execCommand('insertText', false, '  ');
         }
         return;
+      }
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey && !e.altKey && !mod) {
+        var preEdge = closestIn(selNode(), 'PRE');
+        if (preEdge && onCodeEdge(preEdge, e.key === 'ArrowDown' ? 'end' : 'start')) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            focusEdge(placeAfter(preEdge), false);
+          } else {
+            var above = blockBefore(preEdge);
+            if (above) {
+              e.preventDefault();
+              focusEdge(above, true);
+            }
+          }
+          return;
+        }
+      }
+      if (e.key === 'Enter' && !mod) {
+        var enterCell = closestIn(selNode(), 'TD,TH');
+        if (enterCell) {
+          e.preventDefault();
+          if (e.shiftKey) document.execCommand('insertHTML', false, '<br>');
+          else focusCell(cellBelow(enterCell));
+          onEdit();
+          return;
+        }
       }
       if (e.key === 'Enter' && !e.shiftKey && !mod) {
         var before = textBeforeCaret();
@@ -2018,15 +2328,75 @@
         onToast: function (m, kind, action) { toast(m, kind === 'error' ? 'error' : '', action); },
         onGone: function () { if (pop === el) closePop(); },
       });
-      // The panel grows once the card is loaded (and when a field is set): keep it on screen.
+      // The panel grows once the card is loaded: keep it on screen until the user resizes or zooms it.
       if (global.ResizeObserver) {
         var ro = new global.ResizeObserver(function () {
           if (pop !== el) { ro.disconnect(); return; }
+          if (el._userSized) return;
           placePop(el, rect);
         });
         ro.observe(el);
         el._ro = ro;
       }
+      wireTaskPopSize(el);
+    }
+
+    /** Drag any corner to grow the task preview; the wheel zooms it around the cursor. */
+    function wireTaskPopSize(el) {
+      var CQ = global.CardQuick;
+      if (!CQ || typeof CQ.resizeRect !== 'function' || typeof CQ.zoomAt !== 'function') return;
+      var minW = 260;
+      var minH = 160;
+      ['nw', 'ne', 'sw', 'se'].forEach(function (corner) {
+        var handle = h('div', { class: 'dc-pop-corner dc-pop-corner--' + corner });
+        handle.addEventListener('pointerdown', function (e) {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          previewPinned = true;
+          el._userSized = true;
+          var scale = el._scale || 1;
+          var startX = e.clientX;
+          var startY = e.clientY;
+          var start = el.getBoundingClientRect();
+          try { handle.setPointerCapture(e.pointerId); } catch (err) { /* listeners still follow */ }
+          function move(ev) {
+            var box = CQ.resizeRect(start, corner, ev.clientX - startX, ev.clientY - startY, minW * scale, minH * scale);
+            el.classList.add('is-sized');
+            el.style.maxWidth = 'none';
+            el.style.width = (box.width / scale) + 'px';
+            el.style.height = (box.height / scale) + 'px';
+            el.style.left = box.left + 'px';
+            el.style.top = box.top + 'px';
+          }
+          function up() {
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', up);
+            handle.removeEventListener('pointercancel', up);
+          }
+          handle.addEventListener('pointermove', move);
+          handle.addEventListener('pointerup', up);
+          handle.addEventListener('pointercancel', up);
+        });
+        el.appendChild(handle);
+      });
+      el.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        var prev = el._scale || 1;
+        var dy = e.deltaY;
+        if (e.deltaMode === 1) dy *= 16;
+        else if (e.deltaMode === 2) dy *= 400;
+        var next = Math.max(0.7, Math.min(2.5, prev * Math.exp(-dy * 0.0015)));
+        if (Math.abs(next - prev) < 0.001) return;
+        var vis = el.getBoundingClientRect();
+        var at = CQ.zoomAt(vis, e.clientX, e.clientY, prev, next);
+        el._scale = at.scale;
+        el._userSized = true;
+        el.style.transformOrigin = '0 0';
+        el.style.transform = at.scale === 1 ? '' : 'scale(' + at.scale + ')';
+        el.style.left = at.left + 'px';
+        el.style.top = at.top + 'px';
+      }, { passive: false });
     }
 
     function scheduleClosePreview() {
@@ -2149,6 +2519,13 @@
       if (!editor) return;
       opts = opts || {};
       restoreSel();
+      if (docsRich() && docsRich().run(cmd)) {
+        if (cmd !== 'highlight' && !opts.silent) {
+          onEdit();
+          paintToolbarState();
+        }
+        return;
+      }
       switch (cmd) {
         case 'undo': document.execCommand('undo'); break;
         case 'redo': document.execCommand('redo'); break;
@@ -2186,6 +2563,13 @@
         case 'indent': document.execCommand('indent'); break;
         case 'outdent': document.execCommand('outdent'); break;
         case 'link': openLinkPopover(); return;
+        case 'table': insertTable(); break;
+        case 'callout-note': setCallout('note'); break;
+        case 'callout-tip': setCallout('tip'); break;
+        case 'callout-warning': setCallout('warning'); break;
+        case 'align-left': setAlign('left'); break;
+        case 'align-center': setAlign('center'); break;
+        case 'align-right': setAlign('right'); break;
         case 'mention-person': document.execCommand('insertText', false, '@'); break;
         case 'mention-task': document.execCommand('insertText', false, '@@'); break;
         case 'mention-doc': document.execCommand('insertText', false, '@@@'); break;
@@ -2204,7 +2588,7 @@
     }
 
     function isEmptyBlock(el) {
-      if (!el || isImageBlock(el) || el.tagName === 'HR' || el.tagName === 'PRE') return false;
+      if (!el || isImageBlock(el) || el.tagName === 'HR' || el.tagName === 'PRE' || el.tagName === 'TABLE') return false;
       return !/\S/.test(el.textContent || '');
     }
 
@@ -2229,11 +2613,63 @@
       return n ? rowOf(n) : null;
     }
 
+    /* Vertical center of the block's first line, so a heading, a padded code block and a quote all match. */
+    function firstLineCenter(block) {
+      if (block.tagName === 'HR') {
+        var hr = block.getBoundingClientRect();
+        return hr.top + hr.height / 2;
+      }
+      if (isImageBlock(block)) {
+        var img = block.querySelector('img') || block;
+        var ir = img.getBoundingClientRect();
+        if (ir.height) return ir.top + Math.min(ir.height, 24) / 2;
+      }
+      var range = document.createRange();
+      var text = null;
+      var blank = null;
+      var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
+      var n;
+      while ((n = walker.nextNode())) {
+        if (/\S/.test(n.data)) { text = n; break; }
+        if (!blank && n.data) blank = n;
+      }
+      try {
+        if (text) {
+          range.setStart(text, 0);
+          range.setEnd(text, 1);
+        } else if (blank) {
+          range.setStart(blank, 0);
+          range.setEnd(blank, Math.min(1, blank.data.length));
+        } else {
+          var br = block.querySelector('br');
+          if (br) {
+            range.setStartBefore(br);
+            range.setEndAfter(br);
+          } else {
+            range.selectNodeContents(block);
+          }
+        }
+        var rects = range.getClientRects();
+        var i;
+        for (i = 0; i < rects.length; i++) {
+          if (rects[i].height >= 1) return rects[i].top + rects[i].height / 2;
+        }
+      } catch (err) { /* empty or detached: use the line box */ }
+      var box = block.getBoundingClientRect();
+      var cs = global.getComputedStyle(block);
+      var lead = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.paddingTop) || 0);
+      var lh = parseFloat(cs.lineHeight);
+      if (!(lh > 0)) lh = (parseFloat(cs.fontSize) || 15) * 1.7;
+      return box.top + lead + Math.min(box.height - lead, lh) / 2;
+    }
+
     function showBlockUi(block) {
       if (!block || !editor || !editor.contains(block) || !els.blockUi) return;
       blockHover = block;
-      var top = block.getBoundingClientRect().top - els.page.getBoundingClientRect().top - els.page.clientTop;
-      els.blockUi.style.top = Math.max(0, top) + 'px';
+      var pageRect = els.page.getBoundingClientRect();
+      var center = firstLineCenter(block);
+      var uiH = els.blockUi.offsetHeight || 22;
+      els.blockUi.style.top = (center - pageRect.top - els.page.clientTop - uiH / 2) + 'px';
       els.blockUi.hidden = false;
     }
 
@@ -2277,11 +2713,135 @@
     function ensureTail() {
       if (!editor) return;
       var last = editor.lastElementChild;
-      if (last && (last.tagName === 'HR' || isImageBlock(last))) {
+      if (last && (last.tagName === 'HR' || last.tagName === 'PRE' || isImageBlock(last))) {
         var p = document.createElement('p');
         p.appendChild(document.createElement('br'));
         editor.appendChild(p);
       }
+    }
+
+    /** Text on one side of a collapsed caret inside a code block. */
+    function preSideText(pre, edge) {
+      var sel = global.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.rangeCount || !pre.contains(sel.anchorNode)) return null;
+      var range = sel.getRangeAt(0);
+      var slice = document.createRange();
+      try {
+        slice.selectNodeContents(pre);
+        if (edge === 'end') slice.setStart(range.endContainer, range.endOffset);
+        else slice.setEnd(range.startContainer, range.startOffset);
+      } catch (err) {
+        return null;
+      }
+      return slice.toString().replace(/[\u200b\ufeff]/g, '');
+    }
+
+    /** True on the first or last line. A trailing break from <br> still counts as the last line. */
+    function onCodeEdge(pre, edge) {
+      var text = preSideText(pre, edge);
+      if (text === null) return false;
+      if (edge === 'end') return text.replace(/\n$/, '').indexOf('\n') < 0;
+      return text.replace(/^\n/, '').indexOf('\n') < 0;
+    }
+
+    function nextEditable(el) {
+      while (el && (el.tagName === 'HR' || isImageBlock(el))) el = el.nextElementSibling;
+      return el || null;
+    }
+
+    function prevEditable(el) {
+      while (el && (el.tagName === 'HR' || isImageBlock(el))) el = el.previousElementSibling;
+      return el || null;
+    }
+
+    function insertParagraphAfter(el) {
+      var p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      el.parentNode.insertBefore(p, el.nextSibling);
+      return p;
+    }
+
+    /** The block a Down arrow from a code block should land in. Creates a paragraph when nothing follows. */
+    function placeAfter(pre) {
+      var next = nextEditable(pre.nextElementSibling);
+      if (next) return next;
+      var li = pre.parentNode && pre.parentNode.tagName === 'LI' ? pre.parentNode : null;
+      if (li) {
+        var more = nextEditable(li.nextElementSibling);
+        if (more) return more;
+        var list = li.parentNode;
+        if (list && (list.tagName === 'UL' || list.tagName === 'OL')) {
+          var afterList = nextEditable(list.nextElementSibling);
+          if (afterList) return afterList;
+          return insertParagraphAfter(list);
+        }
+      }
+      return insertParagraphAfter(pre);
+    }
+
+    function blockBefore(pre) {
+      var prev = prevEditable(pre.previousElementSibling);
+      if (prev) return prev;
+      var li = pre.parentNode && pre.parentNode.tagName === 'LI' ? pre.parentNode : null;
+      if (!li) return null;
+      var prevLi = prevEditable(li.previousElementSibling);
+      if (prevLi) return prevLi;
+      var list = li.parentNode;
+      return list ? prevEditable(list.previousElementSibling) : null;
+    }
+
+    function focusEdge(el, atEnd) {
+      if (!el || !editor) return;
+      if (el.tagName === 'UL' || el.tagName === 'OL') {
+        var lis = el.querySelectorAll('li');
+        var li = atEnd ? lis[lis.length - 1] : lis[0];
+        if (li) el = li;
+      }
+      if (!atEnd) {
+        focusInside(el);
+        return;
+      }
+      editor.focus();
+      var sel = global.getSelection();
+      var r = document.createRange();
+      if (!el.firstChild || el.tagName === 'HR' || isImageBlock(el)) {
+        r.setStart(el, el.childNodes.length);
+        r.collapse(true);
+      } else {
+        r.selectNodeContents(el);
+        r.collapse(false);
+      }
+      sel.removeAllRanges();
+      sel.addRange(r);
+      saveSel();
+    }
+
+    /**
+     * A click in the editor padding just under a code block (or under the empty paragraph that follows it).
+     * Clicks that land on a later block are left alone.
+     */
+    function preBelowClick(y) {
+      if (!editor) return null;
+      var pres = editor.querySelectorAll('pre');
+      var best = null;
+      var bestBottom = -1;
+      for (var i = 0; i < pres.length; i++) {
+        var bottom = pres[i].getBoundingClientRect().bottom;
+        if (y >= bottom - 2 && bottom >= bestBottom) {
+          best = pres[i];
+          bestBottom = bottom;
+        }
+      }
+      if (!best) return null;
+      var next = nextEditable(best.nextElementSibling);
+      if (!next && best.parentNode && best.parentNode.tagName === 'LI') {
+        next = nextEditable(best.parentNode.nextElementSibling);
+        if (!next && best.parentNode.parentNode) next = nextEditable(best.parentNode.parentNode.nextElementSibling);
+      }
+      if (!next) return best;
+      if (y < next.getBoundingClientRect().top - 2) return best;
+      if (next.tagName === 'P' && !/\S/.test(next.textContent || '')) return best;
+      return null;
     }
 
     function ensureEditor() {
@@ -2569,7 +3129,12 @@
       var tag = block.tagName;
       if (tag === 'HR') return 'hr';
       if (tag === 'PRE') return 'codeblock';
-      if (tag === 'BLOCKQUOTE') return 'quote';
+      if (tag === 'TABLE') return 'table';
+      if (tag === 'BLOCKQUOTE') {
+        var callout = block.getAttribute('data-callout');
+        if (callout === 'note' || callout === 'tip' || callout === 'warning') return 'callout-' + callout;
+        return 'quote';
+      }
       if (tag === 'LI') {
         var list = block.parentNode;
         if (list.classList && list.classList.contains('dc-todo')) return 'todo';
@@ -2581,7 +3146,7 @@
 
     function blockCommands() {
       return COMMANDS.filter(function (c) {
-        return c.id !== 'mention-person' && c.id !== 'mention-task' && c.id !== 'mention-doc';
+        return !c.slashOnly && c.id !== 'mention-person' && c.id !== 'mention-task' && c.id !== 'mention-doc';
       });
     }
 
@@ -2896,6 +3461,26 @@
           if (state.current) openDocMenu(more, state.current.id);
         },
       }, [icon('dots')]);
+      function toolBtn(name, iconName, title, open) {
+        var b = h('button', {
+          class: 'dc-tb',
+          type: 'button',
+          title: title,
+          'aria-label': title,
+          'data-cmd': name,
+          onmousedown: function (e) { e.preventDefault(); },
+          onclick: function () { open(b); },
+        }, [icon(iconName)]);
+        return b;
+      }
+      var colorBtn = toolBtn('color', 'palette', 'Couleur', openColorPop);
+      var calloutBtn = toolBtn('callout', 'note', 'Encadré', openCalloutMenu);
+      var tableBtn = toolBtn('table', 'table', 'Tableau', function (b) {
+        restoreSel();
+        if (closestIn(selNode(), 'TABLE')) openTableMenu(b);
+        else runCommand('table');
+      });
+      var alignBtn = toolBtn('align', 'align-center', 'Alignement', openAlignMenu);
       [side, icon('file-text', 'dc-head-icon'), els.headTitle, h('span', { class: 'dc-spacer' }), els.status, HP.button(shell), more].forEach(function (c) {
         els.head.appendChild(c);
       });
@@ -2911,13 +3496,18 @@
         btn('strike', 'strikethrough', 'Barré (Ctrl+Maj+X)'),
         btn('code', 'code', 'Code (Ctrl+E)'),
         btn('link', 'link', 'Lien (Ctrl+K)'),
+        btn('highlight', 'highlight', 'Surligner (Ctrl+Maj+H)'),
+        colorBtn,
         sep(),
         btn('ul', 'list', 'Liste à puces (Ctrl+Maj+8)'),
         btn('ol', 'list-numbers', 'Liste numérotée (Ctrl+Maj+7)'),
         btn('todo', 'list-check', 'Liste de tâches (Ctrl+Maj+9)'),
         btn('quote', 'quote', 'Citation'),
+        calloutBtn,
         btn('codeblock', 'file-code', 'Bloc de code'),
         btn('hr', 'separator-horizontal', 'Séparateur'),
+        tableBtn,
+        alignBtn,
         sep(),
         mentionBtn('mention-person', 'user', 'Mentionner une personne', '@'),
         mentionBtn('mention-task', 'checkbox', 'Lier une tâche', '@@'),
@@ -3219,7 +3809,7 @@
       );
     }
 
-    /* ── 6b. Selection -> task ───────────────────────────────────── */
+    /* ── 6b. Selection bar (format + create a task) ──────────────── */
 
     function hideSelBar() {
       if (selBar && selBar.parentNode) selBar.parentNode.removeChild(selBar);
@@ -3279,7 +3869,7 @@
       if (!selBar) return;
       var rect = selectionClientRect();
       if (!rect) {
-        hideSelBar();
+        if (!(pop && pop.classList.contains('dc-sel-pop'))) hideSelBar();
         return;
       }
       selBar.style.left = '0px';
@@ -3294,43 +3884,100 @@
     }
 
     function updateSelBar() {
-      if (!selectedDraft() || !state.current || sugg) {
+      if (!state.current || sugg) {
+        hideSelBar();
+        return;
+      }
+      if (!editorSelection()) {
+        if (selBar && pop && pop.classList.contains('dc-sel-pop')) return;
         hideSelBar();
         return;
       }
       var lists = taskListPool();
-      var more = lists.length > 1 ? '1' : '0';
-      if (selBar && selBar.parentNode && selBar.getAttribute('data-more') === more) {
+      var shape = (selectedDraft() ? '1' : '0') + (lists.length > 1 ? '1' : '0');
+      if (selBar && selBar.parentNode && selBar.getAttribute('data-shape') === shape) {
+        paintSelBarState();
         placeSelBar();
         return;
       }
-      var buttons = [
+      function keep(e) {
+        e.preventDefault();
+        holdSelection();
+      }
+      function ibtn(cmd, iconName, title) {
+        return h('button', {
+          class: 'dc-selbar-icon',
+          type: 'button',
+          title: title,
+          'aria-label': title,
+          'data-cmd': cmd,
+          onmousedown: keep,
+          onclick: function () {
+            closePop();
+            runCommand(cmd);
+          },
+        }, [icon(iconName)]);
+      }
+      function sep() { return h('span', { class: 'dc-selbar-sep', role: 'separator' }); }
+      var parts = [
         h('button', {
+          class: 'dc-selbar-style',
+          type: 'button',
+          title: 'Style',
+          'aria-label': 'Style',
+          onmousedown: keep,
+          onclick: function (e) { openStyleMenu(e.currentTarget); },
+        }, [h('span', { class: 'dc-selbar-style-label', text: 'Texte' }), icon('chevron-down')]),
+        sep(),
+        h('button', {
+          class: 'dc-selbar-icon dc-selbar-color',
+          type: 'button',
+          title: 'Couleur',
+          'aria-label': 'Couleur',
+          onmousedown: keep,
+          onclick: function (e) { openInkPopover(e.currentTarget); },
+        }, [h('span', { class: 'dc-selbar-a', text: 'A' }), h('span', { class: 'dc-selbar-a-bar' })]),
+        sep(),
+        ibtn('bold', 'bold', 'Gras'),
+        ibtn('italic', 'italic', 'Italique'),
+        ibtn('underline', 'underline', 'Souligné'),
+        ibtn('strike', 'strikethrough', 'Barré'),
+        sep(),
+        ibtn('link', 'link', 'Lien'),
+        ibtn('ul', 'list', 'Liste à puces'),
+        ibtn('ol', 'list-numbers', 'Liste numérotée'),
+        h('button', {
+          class: 'dc-selbar-icon',
+          type: 'button',
+          title: 'Plus',
+          'aria-label': 'Plus',
+          onmousedown: keep,
+          onclick: function (e) { openSelMore(e.currentTarget); },
+        }, [icon('dots')]),
+      ];
+      if (selectedDraft()) {
+        parts.push(sep());
+        parts.push(h('button', {
           class: 'dc-selbar-btn',
           type: 'button',
-          onmousedown: function (e) {
-            e.preventDefault();
-            holdSelection();
-          },
+          onmousedown: keep,
           onclick: function () { createTaskFromSelection(); },
-        }, [icon('plus'), h('span', { text: 'Créer une tâche' })]),
-      ];
-      if (lists.length > 1) {
-        buttons.push(h('button', {
-          class: 'dc-selbar-btn dc-selbar-btn--more',
-          type: 'button',
-          title: 'Choisir la liste',
-          'aria-label': 'Choisir la liste',
-          onmousedown: function (e) {
-            e.preventDefault();
-            holdSelection();
-          },
-          onclick: function (e) { openTaskListMenu(e.currentTarget); },
-        }, [icon('chevron-down')]));
+        }, [icon('plus'), h('span', { text: 'Créer une tâche' })]));
+        if (lists.length > 1) {
+          parts.push(h('button', {
+            class: 'dc-selbar-btn dc-selbar-btn--more',
+            type: 'button',
+            title: 'Choisir la liste',
+            'aria-label': 'Choisir la liste',
+            onmousedown: keep,
+            onclick: function (e) { openTaskListMenu(e.currentTarget); },
+          }, [icon('chevron-down')]));
+        }
       }
       hideSelBar();
-      selBar = h('div', { class: 'dc-selbar', role: 'toolbar', 'aria-label': 'Sélection', 'data-more': more }, buttons);
+      selBar = h('div', { class: 'dc-selbar', role: 'toolbar', 'aria-label': 'Sélection', 'data-shape': shape }, parts);
       shell.appendChild(selBar);
+      paintSelBarState();
       placeSelBar();
     }
 
@@ -3364,6 +4011,290 @@
         lastRange = live.cloneRange();
       }
       return heldRange;
+    }
+
+    var SEL_INKS = [
+      { id: 'gray', label: 'Gris', fg: '#626f86', bg: '#dfe1e6' },
+      { id: 'brown', label: 'Brun', fg: '#8f6b4f', bg: '#f3e2d4' },
+      { id: 'orange', label: 'Orange', fg: '#e56910', bg: '#ffe2bd' },
+      { id: 'yellow', label: 'Jaune', fg: '#b38600', bg: '#f8e6a0' },
+      { id: 'green', label: 'Vert', fg: '#1f845a', bg: '#d3f1a7' },
+      { id: 'blue', label: 'Bleu', fg: '#0c66e4', bg: '#cce0ff' },
+      { id: 'purple', label: 'Violet', fg: '#6e5dc6', bg: '#dfd8fd' },
+      { id: 'pink', label: 'Rose', fg: '#cd519d', bg: '#fdd0ec' },
+      { id: 'red', label: 'Rouge', fg: '#c9372c', bg: '#ffd2d2' },
+    ];
+    var STYLE_LABEL = { p: 'Texte', h1: 'Titre 1', h2: 'Titre 2', h3: 'Titre 3' };
+
+    function editorSelection() {
+      var range = liveSelectionRange();
+      if (!range || rangeInOneMention(range)) return null;
+      if (!String(range.toString()).replace(/[\s\u200b\ufeff]/g, '')) return null;
+      return range;
+    }
+
+    function inkHost(node, kind) {
+      var el = node && node.nodeType === 3 ? node.parentNode : node;
+      while (el && el !== editor) {
+        if (el.nodeType === 1) {
+          if (kind === 'h' && el.tagName === 'MARK') return el;
+          if (kind === 'c' && el.classList && el.classList.contains('dc-ink')) return el;
+        }
+        el = el.parentNode;
+      }
+      return null;
+    }
+
+    function inkHere() {
+      var n = selNode();
+      var colorEl = inkHost(n, 'c');
+      var hiEl = inkHost(n, 'h');
+      return {
+        color: colorEl ? colorEl.getAttribute('data-c') || '' : '',
+        hi: hiEl ? (hiEl.getAttribute('data-c') || 'yellow') : '',
+      };
+    }
+
+    function slicesInRange(range) {
+      var root = range.commonAncestorContainer;
+      var rootEl = root.nodeType === 1 ? root : root.parentNode;
+      if (!rootEl) return [];
+      var walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null);
+      var out = [];
+      var node;
+      while ((node = walker.nextNode())) {
+        if (!node.nodeValue || !editor.contains(node) || closestIn(node, '.dc-mention')) continue;
+        var hit = false;
+        try { hit = range.intersectsNode(node); } catch (err) { hit = false; }
+        if (!hit) continue;
+        var start = node === range.startContainer ? range.startOffset : 0;
+        var end = node === range.endContainer ? range.endOffset : node.nodeValue.length;
+        if (start > end) { var swap = start; start = end; end = swap; }
+        if (end > start) out.push({ node: node, start: start, end: end });
+      }
+      return out;
+    }
+
+    function isolateText(node, start, end) {
+      var text = node;
+      if (start > 0) text = text.splitText(start);
+      if (text.nodeValue && end - start < text.nodeValue.length) text.splitText(end - start);
+      return text;
+    }
+
+    function unwrapEl(el) {
+      var parent = el.parentNode;
+      if (!parent) return;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+    }
+
+    function pullOut(text, stop) {
+      var node = text;
+      while (node.parentNode && node.parentNode !== stop) {
+        var parent = node.parentNode;
+        var right = parent.cloneNode(false);
+        while (node.nextSibling) right.appendChild(node.nextSibling);
+        var mid = parent.cloneNode(false);
+        mid.appendChild(node);
+        parent.parentNode.insertBefore(mid, parent.nextSibling);
+        if (right.childNodes.length) parent.parentNode.insertBefore(right, mid.nextSibling);
+        if (!parent.childNodes.length) parent.parentNode.removeChild(parent);
+        node = mid;
+      }
+      if (node.parentNode === stop) {
+        var after = stop.cloneNode(false);
+        while (node.nextSibling) after.appendChild(node.nextSibling);
+        stop.parentNode.insertBefore(node, stop.nextSibling);
+        if (after.childNodes.length) stop.parentNode.insertBefore(after, node.nextSibling);
+        if (!stop.childNodes.length) stop.parentNode.removeChild(stop);
+      }
+      while (node && node.nodeType !== 3) node = node.firstChild;
+      return node || text;
+    }
+
+    function paintSlice(node, start, end, kind, name) {
+      var text = isolateText(node, start, end);
+      var host = inkHost(text, kind);
+      if (!name) {
+        if (!host) return text;
+        if (host.textContent === text.nodeValue) {
+          unwrapEl(host);
+          return text;
+        }
+        return pullOut(text, host);
+      }
+      if (host && host.textContent === text.nodeValue) {
+        host.setAttribute('data-c', name);
+        if (kind === 'c') host.classList.add('dc-ink');
+        return text;
+      }
+      var el = document.createElement(kind === 'h' ? 'mark' : 'span');
+      if (kind === 'c') el.className = 'dc-ink';
+      el.setAttribute('data-c', name);
+      text.parentNode.insertBefore(el, text);
+      el.appendChild(text);
+      return text;
+    }
+
+    function applyInk(kind, name) {
+      if (!editor) return;
+      var range = liveSelectionRange();
+      if (!range && lastRange && editor.contains(lastRange.startContainer)) {
+        var sel0 = global.getSelection();
+        sel0.removeAllRanges();
+        try { sel0.addRange(lastRange); } catch (e0) { return; }
+        range = liveSelectionRange();
+      }
+      if (!range) return;
+      var now = kind === 'h' ? inkHere().hi : inkHere().color;
+      var next = name && now === name ? '' : (name || '');
+      var slices = slicesInRange(range);
+      if (!slices.length) return;
+      var first = null;
+      var last = null;
+      var i;
+      for (i = slices.length - 1; i >= 0; i--) {
+        var piece = paintSlice(slices[i].node, slices[i].start, slices[i].end, kind, next);
+        if (piece && piece.nodeType === 3) {
+          if (!last) last = piece;
+          first = piece;
+        }
+      }
+      if (first && last && last.nodeValue != null) {
+        var sel = global.getSelection();
+        var r = document.createRange();
+        try {
+          r.setStart(first, 0);
+          r.setEnd(last, last.nodeValue.length);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        } catch (e1) { /* the nodes moved */ }
+        saveSel();
+      }
+      onEdit();
+      paintToolbarState();
+    }
+
+    function paintSelBarState() {
+      if (!selBar) return;
+      var n = selNode();
+      var inEditor = !!n;
+      function q(cmd) {
+        try { return inEditor && document.queryCommandState(cmd); } catch (e) { return false; }
+      }
+      var li = inEditor && closestIn(n, 'LI');
+      var list = li && li.parentNode;
+      var states = {
+        bold: q('bold'),
+        italic: q('italic'),
+        underline: q('underline'),
+        strike: q('strikeThrough'),
+        code: inEditor && !!closestIn(n, 'CODE'),
+        link: inEditor && !!closestIn(n, 'A'),
+        ul: !!list && list.tagName === 'UL' && !list.classList.contains('dc-todo'),
+        ol: !!list && list.tagName === 'OL',
+      };
+      Array.prototype.forEach.call(selBar.querySelectorAll('[data-cmd]'), function (b) {
+        var cmd = b.getAttribute('data-cmd');
+        if (!Object.prototype.hasOwnProperty.call(states, cmd)) return;
+        var on = !!states[cmd];
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      var label = selBar.querySelector('.dc-selbar-style-label');
+      if (label) label.textContent = STYLE_LABEL[blockType()] || 'Texte';
+      var ink = inkHere();
+      var sw = null;
+      SEL_INKS.forEach(function (c) { if (c.id === ink.color) sw = c; });
+      var stripe = selBar.querySelector('.dc-selbar-a-bar');
+      if (stripe) stripe.style.background = sw ? sw.fg : 'currentColor';
+    }
+
+    function openStyleMenu(anchor) {
+      if (pop && pop.classList.contains('dc-style-pop')) {
+        closePop();
+        return;
+      }
+      holdSelection();
+      closePop();
+      var cur = blockType();
+      if (cur === 'codeblock') cur = 'p';
+      var rows = [['p', 'Texte', 'pilcrow'], ['h1', 'Titre 1', 'h-1'], ['h2', 'Titre 2', 'h-2'], ['h3', 'Titre 3', 'h-3']];
+      pop = h('div', { class: 'dc-pop dc-menu dc-sel-pop dc-style-pop', role: 'menu' }, rows.map(function (row) {
+        return h('button', {
+          class: 'dc-menu-item' + (cur === row[0] ? ' is-on' : ''),
+          type: 'button',
+          onmousedown: function (e) { e.preventDefault(); holdSelection(); },
+          onclick: function () {
+            closePop();
+            runCommand(row[0], { force: true });
+          },
+        }, [icon(row[2]), h('span', { text: row[1] })]);
+      }));
+      placePop(pop, anchor.getBoundingClientRect());
+    }
+
+    function openSelMore(anchor) {
+      if (pop && pop.classList.contains('dc-more-pop')) {
+        closePop();
+        return;
+      }
+      holdSelection();
+      closePop();
+      var rows = [['code', 'code', 'Code'], ['quote', 'quote', 'Citation'], ['todo', 'list-check', 'Liste de tâches']];
+      pop = h('div', { class: 'dc-pop dc-menu dc-sel-pop dc-more-pop', role: 'menu' }, rows.map(function (row) {
+        return h('button', {
+          class: 'dc-menu-item',
+          type: 'button',
+          onmousedown: function (e) { e.preventDefault(); holdSelection(); },
+          onclick: function () {
+            closePop();
+            runCommand(row[0]);
+          },
+        }, [icon(row[1]), h('span', { text: row[2] })]);
+      }));
+      placePop(pop, anchor.getBoundingClientRect());
+    }
+
+    function inkSwatch(kind, id, bg, label, current) {
+      return h('button', {
+        class: 'dc-swatch' + (!id ? ' dc-swatch--none' : '') + (current && current === id ? ' is-on' : ''),
+        type: 'button',
+        title: label,
+        'aria-label': label,
+        'data-ink': id || 'none',
+        style: bg ? 'background:' + bg : '',
+        onmousedown: function (e) { e.preventDefault(); holdSelection(); },
+        onclick: function () {
+          applyInk(kind, id);
+          closePop();
+        },
+      });
+    }
+
+    function openInkPopover(anchor) {
+      if (pop && pop.classList.contains('dc-ink-pop')) {
+        closePop();
+        return;
+      }
+      holdSelection();
+      closePop();
+      var ink = inkHere();
+      function row(kind, current) {
+        var buttons = [inkSwatch(kind, '', '', 'Aucune', current)];
+        SEL_INKS.forEach(function (c) {
+          buttons.push(inkSwatch(kind, c.id, kind === 'h' ? c.bg : c.fg, c.label, current));
+        });
+        return h('div', { class: 'dc-ink-row' }, buttons);
+      }
+      pop = h('div', { class: 'dc-pop dc-ink-pop dc-sel-pop' }, [
+        h('div', { class: 'dc-ink-label', text: 'Texte' }),
+        row('c', ink.color),
+        h('div', { class: 'dc-ink-label', text: 'Surlignage' }),
+        row('h', ink.hi),
+      ]);
+      placePop(pop, anchor.getBoundingClientRect());
     }
 
     function createTaskFromSelection(listId) {
@@ -3554,6 +4485,11 @@
         item('folder-share', 'Déplacer vers un dossier…', function () {
           openFolderPicker(anchor, 'Déplacer le document vers', state.idx.docs[docId] || '', '', function (to) { moveDocToFolder(docId, to); });
         }),
+        state.driveUrl
+          ? item('brand-google-drive', 'Afficher dans Google Drive', function () {
+            window.open(state.driveUrl, '_blank', 'noopener');
+          })
+          : null,
         h('div', { class: 'dc-menu-sep' }),
         state.idx.archived && state.idx.archived[docId]
           ? item('archive-off', 'Restaurer', function () { restoreDoc(docId); })
@@ -4650,19 +5586,30 @@
       if (state.saveState === 'dirty') saveNow();
     });
 
+    var selPaint = 0;
     document.addEventListener('selectionchange', function () {
       if (!editor) return;
       saveSel();
-      paintToolbarState();
-      if (editor === document.activeElement || (sugg && editor.contains(global.getSelection().anchorNode))) updateSuggest();
-      updateSelBar();
+      if (selPaint) return;
+      selPaint = requestAnimationFrame(function () {
+        selPaint = 0;
+        if (!editor) return;
+        paintToolbarState();
+        var sel = global.getSelection();
+        if (editor === document.activeElement || (sugg && sel && editor.contains(sel.anchorNode))) updateSuggest();
+        updateSelBar();
+      });
     });
     document.addEventListener('mousedown', function (e) {
-      if (pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.cf-pop, .tp-context-menu'))) closePop();
+      var inSel = e.target.closest && e.target.closest('.dc-selbar');
+      if (pop && !pop.contains(e.target) && !inSel && !(e.target.closest && e.target.closest('.cf-pop, .tp-context-menu'))) closePop();
       if (sugg && !els.suggest.contains(e.target) && !(editor && editor.contains(e.target))) closeSuggest();
     });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closePop();
+      if (e.key === 'Escape') {
+        closePop();
+        if (!editorSelection()) hideSelBar();
+      }
     });
     global.addEventListener('resize', function () {
       if (sugg) placeSuggest();
@@ -4707,6 +5654,40 @@
       return want;
     }
 
+    /* Opens the Drive folder once the Sheet worker has one, and pulls Drive edits before the next cron. */
+    function loadDrive() {
+      var ST = global.SheetsTrello;
+      if (!ST || !t || !ST.getSettings) return;
+      var settings = null;
+      ST.getSettings(t).then(function (s) {
+        settings = s;
+        if (!ST.isConnected(settings)) return null;
+        return ST.info(settings);
+      }).then(function (res) {
+        if (!res || !res.ok) return null;
+        var docs = res.data && res.data.documents;
+        if (!docs || !docs.enabled || !docs.folderUrl) return null;
+        state.driveUrl = docs.folderUrl;
+        if (els.head && !els.driveBtn) {
+          els.driveBtn = h('button', {
+            class: 'dc-tb',
+            type: 'button',
+            title: 'Afficher dans Google Drive',
+            'aria-label': 'Afficher dans Google Drive',
+            onclick: function () { window.open(state.driveUrl, '_blank', 'noopener'); },
+          }, [icon('brand-google-drive')]);
+          var more = els.head.querySelector('[aria-label="Actions du document"]');
+          if (more && more.parentNode) more.parentNode.insertBefore(els.driveBtn, more);
+          else els.head.appendChild(els.driveBtn);
+        }
+        return ST.syncDocuments(settings);
+      }).then(function (res) {
+        if (!res || !res.ok || !res.data) return;
+        var d = res.data;
+        if ((d.pulled || 0) + (d.imported || 0) > 0) return refreshRemote(true);
+      }).catch(function () { /* Drive is optional */ });
+    }
+
     function boot() {
       DT().isAuthorized(t).then(function (ok) {
         state.authOk = ok;
@@ -4730,6 +5711,7 @@
             state.docsLoaded = true;
             paintList();
             rebuildIndex();
+            loadDrive();
             var want = takeWantedSubject();
             if (want) {
               var existing = DM().docForSubject(docs, want.k, want.id);

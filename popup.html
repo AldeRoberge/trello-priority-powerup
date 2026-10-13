@@ -47,6 +47,7 @@
   <script src="./components/statut/statut-trello.js?v=encours-progress-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
   <script src="./components/completion/completion-tree.js?v=tree-1"></script>
+  <script src="./components/shared/insert-gap.js"></script>
   <script
     src="./components/completion/completion-ui.js?v=tree-1"
     onerror="console.error('Priority popup: failed to load completion-ui.js', this.src)"
@@ -3188,9 +3189,28 @@
           : Array.isArray(reasons)
             ? reasons.filter(Boolean)
             : [];
-      if (!list.length) return;
-
-      if (completionUi && typeof completionUi.setMasterBlockedReasons === 'function') {
+      if (!list.length) {
+        if (completionUi && typeof completionUi.setMasterBlocked === 'function') {
+          latestCompletion = withProgressEnabledFlag(
+            completionUi.setMasterBlocked(true, { origin: 'user' })
+          );
+        } else if (window.CompletionTrello && typeof CompletionTrello.setMasterBlocked === 'function') {
+          var liveEmpty =
+            (completionUi && typeof completionUi.getData === 'function'
+              ? completionUi.getData()
+              : null) ||
+            latestCompletion ||
+            { items: [] };
+          var nextEmpty = withProgressEnabledFlag(
+            CompletionTrello.setMasterBlocked(liveEmpty, true, { origin: 'user' })
+          );
+          latestCompletion = nextEmpty;
+          if (completionUi && typeof completionUi.setData === 'function') {
+            completionUi.setData(nextEmpty);
+          }
+          saveCompletion(nextEmpty);
+        }
+      } else if (completionUi && typeof completionUi.setMasterBlockedReasons === 'function') {
         latestCompletion = withProgressEnabledFlag(
           completionUi.setMasterBlockedReasons(list, { origin: 'user' })
         );

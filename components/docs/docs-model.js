@@ -587,6 +587,114 @@
     };
   }
 
+  var RICH_INKS = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'];
+
+  function isInk(name) {
+    return RICH_INKS.indexOf(name) >= 0;
+  }
+
+  /** `{c:red}…{/c}` text color or `{h:green}…{/h}` highlight. Null when it is not a closed, known color. */
+  function parseColorSpan(s, i) {
+    var m = /^\{(c|h):([a-z]+)\}/.exec(s.slice(i));
+    if (!m || !isInk(m[2])) return null;
+    var close = '{/' + m[1] + '}';
+    var k = i + m[0].length;
+    while (k < s.length) {
+      if (s.charAt(k) === '\\') {
+        k += 2;
+        continue;
+      }
+      if (s.charAt(k) === '`') {
+        var after = skipCode(s, k);
+        k = after > 0 ? after : k + 1;
+        continue;
+      }
+      if (s.substr(k, close.length) === close) {
+        return { kind: m[1], color: m[2], inner: s.slice(i + m[0].length, k), end: k + close.length };
+      }
+      k++;
+    }
+    return null;
+  }
+
+  function parseCssColor(raw) {
+    var s = String(raw || '').trim().toLowerCase();
+    if (!s || /^(inherit|transparent|currentcolor|initial|unset|auto)$/.test(s)) return null;
+    var hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(s);
+    if (hex) {
+      var h = hex[1];
+      if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    var rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(s);
+    if (rgb) return [+rgb[1], +rgb[2], +rgb[3]];
+    var named = {
+      black: [0, 0, 0], white: [255, 255, 255], gray: [128, 128, 128], grey: [128, 128, 128],
+      silver: [192, 192, 192], red: [220, 50, 47], orange: [230, 126, 34], yellow: [240, 200, 40],
+      green: [40, 160, 70], blue: [30, 100, 220], purple: [140, 60, 180], pink: [220, 80, 140], brown: [140, 90, 50],
+    };
+    return named[s] || null;
+  }
+
+  /** Nearest palette name for a pasted CSS color, or '' when it is just body text / paper. */
+  function nearestInk(rgb, kind) {
+    if (!rgb) return '';
+    var r = rgb[0];
+    var g = rgb[1];
+    var b = rgb[2];
+    var max = Math.max(r, g, b);
+    var min = Math.min(r, g, b);
+    var l = (max + min) / 2 / 255;
+    var d = max - min;
+    var sat = max === 0 ? 0 : d / max;
+    if (kind === 'hi') {
+      if (l > 0.94 && sat < 0.18) return '';
+      if (sat < 0.14) return 'gray';
+    } else if (l < 0.22 || (l > 0.92 && sat < 0.25)) return '';
+    else if (sat < 0.22) return l > 0.28 && l < 0.82 ? 'gray' : '';
+    var hue = 0;
+    if (d) {
+      if (max === r) hue = ((g - b) / d) % 6;
+      else if (max === g) hue = (b - r) / d + 2;
+      else hue = (r - g) / d + 4;
+      hue *= 60;
+      if (hue < 0) hue += 360;
+    }
+    if (hue >= 12 && hue <= 48 && l < 0.55 && sat < 0.85) return 'brown';
+    var stops = [
+      { id: 'red', h: 0 }, { id: 'orange', h: 28 }, { id: 'yellow', h: 54 }, { id: 'green', h: 140 },
+      { id: 'blue', h: 220 }, { id: 'purple', h: 275 }, { id: 'pink', h: 330 }, { id: 'red', h: 360 },
+    ];
+    var best = 'red';
+    var bestD = 999;
+    stops.forEach(function (stop) {
+      var dist = Math.abs(hue - stop.h);
+      if (dist < bestD) {
+        bestD = dist;
+        best = stop.id;
+      }
+    });
+    return best;
+  }
+
+  function alignAttr(a) {
+    return a === 'center' || a === 'right' ? ' data-align="' + a + '"' : '';
+  }
+
+  function isAlignLine(line) {
+    return /^<!--align:(center|right)-->$/.test(String(line).trim());
+  }
+
+  function alignName(line) {
+    var m = /^<!--align:(center|right)-->$/.exec(String(line).trim());
+    return m ? m[1] : '';
+  }
+
+  function alignSuffix(node) {
+    var a = attr(node, 'data-align');
+    return a === 'center' || a === 'right' ? '\n<!--align:' + a + '-->' : '';
+  }
+
   /** Inline Markdown -> sanitized HTML (every character is escaped; only whitelisted tags are emitted). */
   function inlineToHtml(src) {
     var s = String(src == null ? '' : src);
@@ -631,6 +739,31 @@
           i = link.end;
           continue;
         }
+      }
+      if (c === '{') {
+        var span = parseColorSpan(s, i);
+        if (span) {
+          var painted = inlineToHtml(span.inner);
+          out += span.kind === 'h'
+            ? '<mark data-c="' + span.color + '">' + painted + '</mark>'
+            : '<span class="dc-ink" data-c="' + span.color + '">' + painted + '</span>';
+          i = span.end;
+          continue;
+        }
+      }
+      if (c === '=') {
+        var eq = runLength(s, i, '=');
+        if (eq === 2 && s.charAt(i + 2) && !/\s/.test(s.charAt(i + 2))) {
+          var hl = findCloser(s, i + 2, '==');
+          if (hl > 0) {
+            out += '<mark>' + inlineToHtml(s.slice(i + 2, hl)) + '</mark>';
+            i = hl + 2;
+            continue;
+          }
+        }
+        out += esc(s.substr(i, eq));
+        i += eq;
+        continue;
       }
       var two = s.substr(i, 2);
       if ((two === '**' || two === '~~' || two === '++') && s.charAt(i + 2) && !/\s/.test(s.charAt(i + 2))) {
@@ -730,6 +863,74 @@
     return ws.replace(/\t/g, '    ').length;
   }
 
+  function isTableRow(line) {
+    var s = String(line).replace(/^ {0,3}/, '');
+    if (s.charAt(0) !== '|') return false;
+    var pipes = 0;
+    for (var i = 0; i < s.length; i++) {
+      if (s.charAt(i) === '\\') i++;
+      else if (s.charAt(i) === '|') pipes++;
+    }
+    return pipes >= 2;
+  }
+
+  function splitCells(line) {
+    var s = String(line).trim();
+    if (s.charAt(0) === '|') s = s.slice(1);
+    if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+    var cells = [];
+    var cur = '';
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (c === '\\' && s.charAt(i + 1) === '|') {
+        cur += '|';
+        i++;
+        continue;
+      }
+      if (c === '|') {
+        cells.push(cur.trim());
+        cur = '';
+        continue;
+      }
+      cur += c;
+    }
+    cells.push(cur.trim());
+    return cells;
+  }
+
+  function isSepRow(line) {
+    if (!isTableRow(line)) return false;
+    var cells = splitCells(line);
+    return cells.length > 0 && cells.every(function (p) { return /^:?-{3,}:?$/.test(p.trim()); });
+  }
+
+  function alignOfSep(cell) {
+    var s = String(cell || '').trim();
+    var left = s.charAt(0) === ':';
+    var right = s.charAt(s.length - 1) === ':';
+    if (left && right) return 'center';
+    if (right) return 'right';
+    return '';
+  }
+
+  function tableHtml(header, aligns, body) {
+    var width = header.length;
+    body.forEach(function (row) { if (row.length > width) width = row.length; });
+    function cell(tag, text, align) {
+      var inner = inlineToHtml(text || '');
+      if (!inner) inner = '<br>';
+      return '<' + tag + alignAttr(align) + '>' + inner + '</' + tag + '>';
+    }
+    function rowHtml(tag, row) {
+      var cells = '';
+      for (var i = 0; i < width; i++) cells += cell(tag, row[i] || '', aligns[i] || '');
+      return '<tr>' + cells + '</tr>';
+    }
+    var bodyRows = body.length ? body : [[]];
+    return '<table class="dc-table"><thead>' + rowHtml('th', header) + '</thead><tbody>' +
+      bodyRows.map(function (row) { return rowHtml('td', row); }).join('') + '</tbody></table>';
+  }
+
   function startsBlock(line) {
     return (
       RE_FENCE.test(line) ||
@@ -737,6 +938,7 @@
       RE_HEADING.test(line) ||
       RE_QUOTE.test(line) ||
       RE_LIST.test(line) ||
+      isTableRow(line) ||
       line.trim() === BLANK_MARK ||
       !!parseImageLine(line)
     );
@@ -816,8 +1018,18 @@
       if (hm) {
         var lvl = Math.min(3, hm[1].length);
         var htext = inlineToHtml((hm[2] || '').trim());
-        out += '<h' + lvl + '>' + (htext || '<br>') + '</h' + lvl + '>';
         i++;
+        var hAlign = i < lines.length && isAlignLine(lines[i]) ? alignName(lines[i++]) : '';
+        out += '<h' + lvl + alignAttr(hAlign) + '>' + (htext || '<br>') + '</h' + lvl + '>';
+        continue;
+      }
+      if (isTableRow(line) && i + 1 < lines.length && isSepRow(lines[i + 1])) {
+        var header = splitCells(line);
+        var aligns = splitCells(lines[i + 1]).map(alignOfSep);
+        i += 2;
+        var body = [];
+        while (i < lines.length && isTableRow(lines[i]) && !isSepRow(lines[i])) body.push(splitCells(lines[i++]));
+        out += tableHtml(header, aligns, body);
         continue;
       }
       if (RE_QUOTE.test(line)) {
@@ -826,7 +1038,10 @@
           q.push(lines[i].replace(/^ {0,3}> ?/, ''));
           i++;
         }
-        out += '<blockquote>' + (blocksToHtml(q) || '<p><br></p>') + '</blockquote>';
+        var callout = /^\[!(note|tip|warning)\]$/.exec((q[0] || '').trim());
+        if (callout) q.shift();
+        var qAttr = callout ? ' class="dc-callout" data-callout="' + callout[1] + '"' : '';
+        out += '<blockquote' + qAttr + '>' + (blocksToHtml(q) || '<p><br></p>') + '</blockquote>';
         continue;
       }
       if (RE_LIST.test(line)) {
@@ -855,7 +1070,9 @@
       var para = [line];
       i++;
       while (i < lines.length && !/^\s*$/.test(lines[i]) && !startsBlock(lines[i])) para.push(lines[i++]);
-      out += '<p>' + para.map(function (l) { return inlineToHtml(l.trim()); }).join('<br>') + '</p>';
+      var pAlign = '';
+      if (para.length > 1 && isAlignLine(para[para.length - 1])) pAlign = alignName(para.pop());
+      out += '<p' + alignAttr(pAlign) + '>' + para.map(function (l) { return inlineToHtml(l.trim()); }).join('<br>') + '</p>';
     }
     return out;
   }
@@ -941,12 +1158,22 @@
     });
   }
 
+  function styleColor(style, prop) {
+    var re = prop === 'bg' ? /(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/ : /(?:^|;)\s*color\s*:\s*([^;]+)/;
+    var m = re.exec(style);
+    return m ? m[1].trim() : '';
+  }
+
   function marksOf(node, tag) {
     var style = (attr(node, 'style') || '').toLowerCase();
     var bold = tag === 'B' || tag === 'STRONG';
     var italic = tag === 'I' || tag === 'EM';
     var underline = tag === 'U';
     var strike = tag === 'S' || tag === 'STRIKE' || tag === 'DEL';
+    var hi = '';
+    var ink = '';
+    if (tag === 'MARK') hi = isInk(attr(node, 'data-c')) ? attr(node, 'data-c') : 'yellow';
+    if (hasClass(node, 'dc-ink') && isInk(attr(node, 'data-c'))) ink = attr(node, 'data-c');
     if (style) {
       if (/font-weight\s*:\s*(bold|bolder|[6-9]00)/.test(style)) bold = true;
       else if (/font-weight\s*:\s*(normal|lighter|[1-5]00)/.test(style)) bold = false;
@@ -954,8 +1181,17 @@
       else if (/font-style\s*:\s*normal/.test(style)) italic = false;
       if (tag !== 'A' && /text-decoration[^;]*underline/.test(style)) underline = true;
       if (/text-decoration[^;]*line-through/.test(style)) strike = true;
+      if (!hi) hi = nearestInk(parseCssColor(styleColor(style, 'bg')), 'hi');
+      if (!ink) ink = nearestInk(parseCssColor(styleColor(style, 'fg')), 'ink');
     }
-    return { bold: bold, italic: italic, underline: underline, strike: strike };
+    if (tag === 'FONT' && !ink) ink = nearestInk(parseCssColor(attr(node, 'color')), 'ink');
+    return { bold: bold, italic: italic, underline: underline, strike: strike, hi: hi, ink: ink };
+  }
+
+  function wrapSpan(inner, kind, color) {
+    var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(inner);
+    if (!m[2]) return inner;
+    return m[1] + '{' + kind + ':' + color + '}' + m[2] + '{/' + kind + '}' + m[3];
   }
 
   function joinInline(parts) {
@@ -1003,6 +1239,8 @@
     if (marks.strike) inner = wrapMark(inner, '~~');
     if (marks.italic) inner = wrapMark(inner, '*');
     if (marks.bold) inner = wrapMark(inner, '**');
+    if (marks.hi) inner = marks.hi === 'yellow' ? wrapMark(inner, '==') : wrapSpan(inner, 'h', marks.hi);
+    if (marks.ink) inner = wrapSpan(inner, 'c', marks.ink);
     return inner;
   }
 
@@ -1088,12 +1326,60 @@
     });
   }
 
+  function alignSuffix(node) {
+    var a = attr(node, 'data-align');
+    return a === 'center' || a === 'right' ? '\n<!--align:' + a + '-->' : '';
+  }
+
+  function cellText(cell) {
+    var text = inlineMd(kids(cell)).replace(/\s*\n\s*/g, ' ').trim();
+    if (text === BLANK_MARK) text = '';
+    return text.replace(/\|/g, '\\|');
+  }
+
+  function tableMd(node, out) {
+    var rows = [];
+    function walk(n) {
+      kids(n).forEach(function (k) {
+        var t = tagOf(k);
+        if (t === 'TR') {
+          var cells = [];
+          var aligns = [];
+          kids(k).forEach(function (c) {
+            if (tagOf(c) !== 'TD' && tagOf(c) !== 'TH') return;
+            cells.push(cellText(c));
+            var a = attr(c, 'data-align');
+            aligns.push(a === 'center' || a === 'right' ? a : '');
+          });
+          if (cells.length) rows.push({ cells: cells, aligns: aligns });
+        } else if (t === 'THEAD' || t === 'TBODY' || t === 'TFOOT') walk(k);
+      });
+    }
+    walk(node);
+    if (!rows.length) return;
+    var width = 0;
+    rows.forEach(function (r) { if (r.cells.length > width) width = r.cells.length; });
+    function line(cells) {
+      var c = cells.slice();
+      while (c.length < width) c.push('');
+      return '| ' + c.join(' | ') + ' |';
+    }
+    var parts = [];
+    for (var i = 0; i < width; i++) {
+      var a = rows[0].aligns[i];
+      parts.push(a === 'center' ? ':---:' : a === 'right' ? '---:' : '---');
+    }
+    var lines = [line(rows[0].cells), '| ' + parts.join(' | ') + ' |'];
+    for (var r = 1; r < rows.length; r++) lines.push(line(rows[r].cells));
+    out.push(lines.join('\n'));
+  }
+
   function blockMd(node, out) {
     var tag = tagOf(node);
     if (/^H[1-6]$/.test(tag)) {
       var level = Math.min(3, parseInt(tag.charAt(1), 10));
       var text = inlineMd(kids(node)).replace(/\s*\n\s*/g, ' ').trim();
-      out.push(new Array(level + 1).join('#') + (text ? ' ' + text : ''));
+      out.push(new Array(level + 1).join('#') + (text ? ' ' + text : '') + alignSuffix(node));
       return;
     }
     if (tag === 'UL' || tag === 'OL') {
@@ -1106,11 +1392,10 @@
       var inner = [];
       blocksOf(node, inner);
       var md = inner.join('\n\n');
-      out.push(
-        md
-          ? md.split('\n').map(function (l) { return l ? '> ' + l : '>'; }).join('\n')
-          : '>'
-      );
+      var quoted = md ? md.split('\n').map(function (l) { return l ? '> ' + l : '>'; }) : ['>'];
+      var kind = attr(node, 'data-callout');
+      if (kind === 'note' || kind === 'tip' || kind === 'warning') quoted.unshift('> [!' + kind + ']');
+      out.push(quoted.join('\n'));
       return;
     }
     if (tag === 'PRE') {
@@ -1132,6 +1417,10 @@
       if (figSrc) out.push(imageMd(attr(node, 'data-alt') || '', figSrc));
       return;
     }
+    if (tag === 'TABLE') {
+      tableMd(node, out);
+      return;
+    }
     if ((tag === 'P' || tag === 'DIV' || tag === 'LI' || tag === 'TD' || tag === 'TH' || tag === 'DT' || tag === 'DD') && !hasBlockChild(node)) {
       var imgs = [];
       var rest = [];
@@ -1140,7 +1429,7 @@
         else rest.push(k);
       });
       var para = paragraphMd(rest);
-      if (para !== null) out.push(para);
+      if (para !== null) out.push(para + ((tag === 'P' || tag === 'DIV') && para !== BLANK_MARK ? alignSuffix(node) : ''));
       else if (tag === 'P' && !imgs.length) out.push(BLANK_MARK);
       imgs.forEach(function (img) {
         var isrc = imageSrc(attr(img, 'src'));
@@ -1463,11 +1752,13 @@
 
   /* ── Folders ─────────────────────────────────────────────────────────
    * The tree lives in one hidden archived card ("📁 Dossiers"), as JSON:
-   *   { v:1, folders:[{id,name,parent|null}], docs:{ <docCardId>: <folderId> } }
-   * A doc absent from `docs` (or pointing to a missing folder) sits at the root. */
+   *   { v:1, folders:[{id,name,parent|null,doc?}], docs:{ <docCardId>: <folderId> } }
+   * `doc` is the document card the folder itself is (opened and edited like any other).
+   * A doc absent from `docs` (or pointing to a missing folder) sits at the root.
+   * A card id used as some folder's `doc` is that folder, not a separate row. */
 
   var FOLDER_INDEX_NAME = '📁 Dossiers';
-  var MAX_FOLDER_NAME = 60;
+  var MAX_FOLDER_NAME = MAX_TITLE;
 
   function isFolderIndexName(name) {
     return typeof name === 'string' && name.indexOf('📁') === 0;
@@ -1498,6 +1789,7 @@
       if (!name) return;
       seen[f.id] = true;
       var nf = { id: f.id, name: name, parent: typeof f.parent === 'string' && f.parent ? f.parent : null };
+      if (typeof f.doc === 'string' && f.doc && f.doc !== f.id) nf.doc = f.doc;
       if (f.archived === true) nf.archived = true;
       idx.folders.push(nf);
     });
@@ -1516,6 +1808,14 @@
           return;
         }
       }
+    });
+    var takenDoc = {};
+    idx.folders.forEach(function (f) {
+      if (!f.doc || takenDoc[f.doc]) {
+        delete f.doc;
+        return;
+      }
+      takenDoc[f.doc] = true;
     });
     var docs = raw.docs && typeof raw.docs === 'object' ? raw.docs : {};
     Object.keys(docs).forEach(function (k) {
@@ -1540,6 +1840,12 @@
 
   function folderById(idx, id) {
     return idx.folders.filter(function (f) { return f.id === id; })[0] || null;
+  }
+
+  /** The folder whose own document is `docId`, or null. */
+  function folderByDoc(idx, docId) {
+    if (!docId) return null;
+    return idx.folders.filter(function (f) { return f.doc === docId; })[0] || null;
   }
 
   /** True when `target` is `id` itself or one of its descendants (moving `id` there would loop). */
@@ -1570,6 +1876,7 @@
     var f = folderById(idx, id);
     if (!f) return idx;
     var up = f.parent || null;
+    var upDoc = up && (folderById(idx, up) || {}).doc;
     idx.folders = idx.folders.filter(function (x) { return x.id !== id; });
     idx.folders.forEach(function (x) { if (x.parent === id) x.parent = up; });
     Object.keys(idx.docs).forEach(function (k) {
@@ -1577,7 +1884,20 @@
       if (up) idx.docs[k] = up;
       else delete idx.docs[k];
     });
+    if (f.doc) reparentAwayFrom(idx, f.doc, up, upDoc);
     return idx;
+  }
+
+  /** Documents nested under `docId` move under the parent folder (`upDoc` or `up`). */
+  function reparentAwayFrom(idx, docId, up, upDoc) {
+    Object.keys(idx.parents || {}).forEach(function (k) {
+      if (idx.parents[k] !== docId) return;
+      if (upDoc) idx.parents[k] = upDoc;
+      else {
+        delete idx.parents[k];
+        if (up) idx.docs[k] = up;
+      }
+    });
   }
 
   var SORTS = ['date', 'date-asc', 'name', 'name-desc', 'size', 'size-asc'];
@@ -1606,7 +1926,8 @@
 
   /**
    * Flat list of sidebar rows, depth-first, folders before documents (A→Z), documents keeping their order.
-   * With a query only matching documents show, inside their (force-opened) ancestor folders.
+   * With a query only matching folders and documents show, inside their (force-opened) ancestor folders.
+   * A folder's own document is the folder row, never a second row beside it.
    * @param {Set|Object} open map/set of expanded folder ids
    * @param {string} [sort] one of SORTS (default 'date'); folders follow the name order, A→Z unless 'name-desc'
    * @returns {{type:'folder'|'doc', depth:number, folder?:object, doc?:object, count?:number, open?:boolean}[]}
@@ -1637,13 +1958,21 @@
     return idx.folders.filter(function (f) { return isInsideFolder(idx, id, f.id); }).map(function (f) { return f.id; });
   }
 
-  /** Documents (ids) filed in the given folders, with the documents nested under them. */
+  /** Documents (ids) filed in the given folders, or nested under a folder's own document. */
   function docsInFolders(idx, folderIds) {
     var set = {};
-    folderIds.forEach(function (f) { set[f] = true; });
+    var docSet = {};
+    folderIds.forEach(function (fid) {
+      set[fid] = true;
+      var f = folderById(idx, fid);
+      if (f && f.doc) docSet[f.doc] = true;
+    });
     var out = [];
     Object.keys(idx.docs).forEach(function (k) {
       if (set[idx.docs[k]]) docWithKids(idx, k).forEach(function (x) { out.push(x); });
+    });
+    Object.keys(idx.parents || {}).forEach(function (k) {
+      if (docSet[idx.parents[k]]) docWithKids(idx, k).forEach(function (x) { out.push(x); });
     });
     return out;
   }
@@ -1672,16 +2001,23 @@
     if (withContent) {
       var ids = folderWithSubs(idx, id);
       docsInFolders(idx, ids).forEach(function (k) { idx.archived[k] = true; });
-      idx.folders.forEach(function (x) { if (ids.indexOf(x.id) >= 0) x.archived = true; });
+      idx.folders.forEach(function (x) {
+        if (ids.indexOf(x.id) < 0) return;
+        x.archived = true;
+        if (x.doc) idx.archived[x.doc] = true;
+      });
       return idx;
     }
     var up = f.parent || null;
+    var upDoc = up && (folderById(idx, up) || {}).doc;
     idx.folders.forEach(function (x) { if (x.parent === id) x.parent = up; });
     Object.keys(idx.docs).forEach(function (k) {
       if (idx.docs[k] !== id) return;
       if (up) idx.docs[k] = up;
       else delete idx.docs[k];
     });
+    if (f.doc) reparentAwayFrom(idx, f.doc, up, upDoc);
+    if (f.doc) idx.archived[f.doc] = true;
     f.archived = true;
     return idx;
   }
@@ -1690,7 +2026,11 @@
   function restoreFolderIn(idx, id) {
     var ids = folderWithSubs(idx, id);
     docsInFolders(idx, ids).forEach(function (k) { delete (idx.archived || {})[k]; });
-    idx.folders.forEach(function (x) { if (ids.indexOf(x.id) >= 0) delete x.archived; });
+    idx.folders.forEach(function (x) {
+      if (ids.indexOf(x.id) < 0) return;
+      delete x.archived;
+      if (x.doc) delete (idx.archived || {})[x.doc];
+    });
     return idx;
   }
 
@@ -1702,20 +2042,29 @@
     var parents = idx.parents || {};
     var byId = {};
     (docs || []).forEach(function (d) { byId[d.id] = d; });
-    // a document nests under its parent only when that parent exists and the chain does not loop back
+    var folderDoc = {};
+    idx.folders.forEach(function (f) { if (f.doc) folderDoc[f.doc] = f.id; });
+    // a document nests under its parent only when that parent exists, is not itself a folder, and the chain does not loop
     function parentOf(d) {
       var p = parents[d.id];
-      return p && byId[p] && !isDocInside(idx, d.id, p) ? p : '';
+      return p && byId[p] && !folderDoc[p] && !isDocInside(idx, d.id, p) ? p : '';
+    }
+    function homeFolder(d) {
+      var p = parents[d.id];
+      if (p && folderDoc[p] && !isDocInside(idx, d.id, p)) return folderDoc[p];
+      var fid = idx.docs[d.id];
+      return fid && folderById(idx, fid) ? fid : '';
     }
     var kids = {};
     var byFolder = {};
     (docs || []).forEach(function (d) {
+      if (folderDoc[d.id]) return;
       var p = parentOf(d);
       if (p) {
         (kids[p] = kids[p] || []).push(d);
         return;
       }
-      var fid = idx.docs[d.id] && folderById(idx, idx.docs[d.id]) ? idx.docs[d.id] : '';
+      var fid = homeFolder(d);
       (byFolder[fid] = byFolder[fid] || []).push(d);
     });
     function docCount(d) {
@@ -1729,9 +2078,18 @@
       idx.folders.forEach(function (f) { if (f.parent === fid && (showArchived || !f.archived)) n += countIn(f.id); });
       return n;
     }
+    function titleOf(f) {
+      var linked = f.doc && byId[f.doc];
+      return linked ? linked.title : f.name;
+    }
+    function nameHit(f) {
+      return fold(titleOf(f)).indexOf(q) >= 0;
+    }
     function matchesIn(fid) {
       if ((byFolder[fid] || []).some(docMatches)) return true;
-      return idx.folders.some(function (f) { return f.parent === fid && matchesIn(f.id); });
+      return idx.folders.some(function (f) {
+        return (f.parent || '') === fid && (showArchived || !f.archived) && (nameHit(f) || matchesIn(f.id));
+      });
     }
     var cmp = docComparator(sort);
     var dir = sort === 'name-desc' ? -1 : 1;
@@ -1745,11 +2103,16 @@
     function walk(fid, depth) {
       idx.folders
         .filter(function (f) { return (f.parent || '') === fid && (showArchived || !f.archived); })
-        .sort(function (a, b) { return dir * (fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0); })
+        .sort(function (a, b) {
+          var x = fold(titleOf(a));
+          var y = fold(titleOf(b));
+          return dir * (x < y ? -1 : x > y ? 1 : 0);
+        })
         .forEach(function (f) {
-          if (q && !matchesIn(f.id)) return;
+          if (q && !nameHit(f) && !matchesIn(f.id)) return;
           var o = isOpen(f.id);
-          rows.push({ type: 'folder', depth: depth, folder: f, count: countIn(f.id), open: o, archived: !!f.archived });
+          var linked = f.doc && byId[f.doc] ? byId[f.doc] : null;
+          rows.push({ type: 'folder', depth: depth, folder: f, doc: linked, count: countIn(f.id), open: o, archived: !!f.archived });
           if (o) walk(f.id, depth + 1);
         });
       (byFolder[fid] || []).slice().sort(cmp).forEach(function (d) {
@@ -1788,6 +2151,7 @@
     packFolderIndex: packFolderIndex,
     newFolderId: newFolderId,
     folderById: folderById,
+    folderByDoc: folderByDoc,
     isInsideFolder: isInsideFolder,
     folderPath: folderPath,
     removeFolderFrom: removeFolderFrom,
@@ -1835,6 +2199,7 @@
     randomCover: randomCover,
     cleanId: cleanId,
     safeHref: safeHref,
+    RICH_INKS: RICH_INKS,
     imageSrc: imageSrc,
     mdToHtml: mdToHtml,
     inlineToHtml: inlineToHtml,

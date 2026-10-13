@@ -57,6 +57,7 @@
       <div class="gs-card">
         <dl>
           <dt>Google Sheet</dt><dd><a id="sheetLink" href="#" target="_blank" rel="noopener"></a></dd>
+          <dt>Google Drive</dt><dd><a id="driveLink" target="_blank" rel="noopener">—</a></dd>
           <dt>Worker</dt><dd id="workerUrl"></dd>
           <dt>Dernière synchronisation</dt><dd id="lastSync">—</dd>
           <dt>Colonnes</dt><dd id="columns">—</dd>
@@ -138,6 +139,15 @@
           var labels = {};
           (d.available || []).forEach(function (c) { labels[c.key] = c.header; });
           $('columns').textContent = (d.columns || []).map(function (k) { return labels[k] || k; }).join(', ');
+          var drive = d.documents || {};
+          var driveLink = $('driveLink');
+          if (drive.enabled && drive.folderUrl) {
+            driveLink.href = drive.folderUrl;
+            driveLink.textContent = 'Ouvrir le dossier';
+          } else {
+            driveLink.removeAttribute('href');
+            driveLink.textContent = '—';
+          }
           size();
         });
       }

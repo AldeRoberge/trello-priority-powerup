@@ -416,6 +416,57 @@
     eq(md(), '## ligne');
   });
 
+  test('down arrow and a click below leave a code block', async function () {
+    function inPre() {
+      var n = getSelection().anchorNode;
+      var pre = ed().querySelector('pre');
+      return !!(n && pre && (n === pre || pre.contains(n)));
+    }
+    await freshDoc('Code', 'avant\n\n```\nligne une\nligne deux\n```\naprès');
+    var pre = ed().querySelector('pre');
+    var tn = pre.firstChild;
+    var nl = tn.nodeValue.indexOf('\n');
+    assert(nl > 0, 'two lines in the block');
+    ed().focus();
+    var r = document.createRange();
+    r.setStart(tn, 0);
+    r.collapse(true);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    assert(!press('ArrowDown'), 'down from the first line stays in the block');
+    assert(inPre(), 'caret still in the code block');
+
+    caretIn(pre, true);
+    assert(press('ArrowDown'), 'down from the last line leaves');
+    assert(!inPre(), 'caret is below the code block');
+    var after = pre.nextElementSibling;
+    assert(after && after.textContent.indexOf('après') >= 0, 'landed on the next paragraph');
+    assert(after === getSelection().anchorNode || after.contains(getSelection().anchorNode), 'caret in that paragraph');
+
+    caretIn(pre, false);
+    assert(press('ArrowUp'), 'up from the first line leaves');
+    assert(!inPre(), 'caret is above the code block');
+
+    await freshDoc('Code fin', '```\nseul\n```');
+    pre = ed().querySelector('pre');
+    caretIn(pre, true);
+    assert(press('ArrowDown', { shiftKey: true }) === false, 'shift+down is not stolen');
+    assert(press('ArrowDown'), 'down at the end of the document leaves');
+    var tail = pre.nextElementSibling;
+    assert(tail && tail.tagName === 'P', 'a paragraph follows the code block');
+    assert(tail === getSelection().anchorNode || tail.contains(getSelection().anchorNode), 'caret in the paragraph below');
+    eq(md(), '```\nseul\n```', 'the empty line under the block is not saved');
+
+    var rect = pre.getBoundingClientRect();
+    var click = new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0,
+      clientX: rect.left + 16, clientY: rect.bottom + 80,
+    });
+    ed().dispatchEvent(click);
+    assert(click.defaultPrevented, 'click below the block is handled');
+    assert(tail === getSelection().anchorNode || tail.contains(getSelection().anchorNode), 'click places the caret below');
+  });
+
   test('a checklist box toggles on click, and Enter starts an unchecked item', async function () {
     await freshDoc('Cases', '- [x] fait\n- [ ] a faire');
     var items = $$('.dc-editor .dc-todo > li');
@@ -440,9 +491,38 @@
     press('Tab');
     await sleep(30);
     eq(md(), '- a\n  - b');
+    assert(ed().querySelector('li > ul > li'), 'nested under the previous item');
+    assert(!ed().querySelector('ul > ul'), 'not a sibling list');
+    var nestedUl = ed().querySelector('li > ul');
+    eq(getComputedStyle(nestedUl).listStyleType, 'disc');
     press('Tab', { shiftKey: true });
     await sleep(30);
     eq(md(), '- a\n- b');
+  });
+
+  test('Tab on a checklist nests a subtask and keeps the checkbox', async function () {
+    await freshDoc('Sous-taches', '- [ ] Lord jesus\n- [x] Said be good\n- [ ] ');
+    caretIn($$('.dc-editor li')[0], true);
+    press('Tab');
+    await sleep(20);
+    eq(md(), '- [ ] Lord jesus\n- [x] Said be good\n- [ ]');
+    caretIn($$('.dc-editor li')[1], true);
+    press('Tab');
+    await sleep(30);
+    eq(md(), '- [ ] Lord jesus\n  - [x] Said be good\n- [ ]');
+    var nested = ed().querySelector('ul.dc-todo > li > ul.dc-todo > li');
+    assert(nested, 'subtask stays a checkbox: ' + ed().innerHTML);
+    eq(nested.getAttribute('data-checked'), 'true');
+    assert(!ed().querySelector('ul:not(.dc-todo)'), 'no plain bullets');
+    press('Tab', { shiftKey: true });
+    await sleep(30);
+    eq(md(), '- [ ] Lord jesus\n- [x] Said be good\n- [ ]');
+    // outdenting the middle item keeps the items below it as its subtasks
+    ed().innerHTML = DocsModel.mdToHtml('- [ ] a\n  - [ ] b\n  - [ ] c');
+    caretIn($$('.dc-editor li')[1], true);
+    press('Tab', { shiftKey: true });
+    await sleep(30);
+    eq(md(), '- [ ] a\n- [ ] b\n  - [ ] c');
   });
 
   test('inline link via the popover; Ctrl+K opens it; invalid addresses are refused', async function () {
@@ -821,6 +901,28 @@
     eq(card.name, 'Appeler le client');
     eq(card.idList, 'l1');
     assert(md().indexOf('(task:' + card.id + ')') >= 0, 'the document links the new task');
+  });
+
+  test('selection bar sets bold and a text color', async function () {
+    await freshDoc('Barre', 'Un mot important');
+    assert(selectInEditor('important'), 'word selected');
+    var bar = await waitFor(function () { return $('.dc-selbar'); }, 'selection bar');
+    assert(bar.querySelector('[data-cmd="bold"]') && bar.querySelector('.dc-selbar-color'), 'format controls');
+    function press(el) {
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    }
+    press(bar.querySelector('[data-cmd="bold"]'));
+    await sleep(40);
+    assert(/\*\*important\*\*/.test(md()), 'bold from the bar: ' + md());
+    assert(selectInEditor('important'), 'reselected');
+    document.dispatchEvent(new Event('selectionchange'));
+    bar = await waitFor(function () { return $('.dc-selbar'); }, 'bar again');
+    press(bar.querySelector('.dc-selbar-color'));
+    var swatch = await waitFor(function () { return document.querySelector('.dc-ink-pop [data-ink="red"]'); }, 'red swatch');
+    press(swatch);
+    await sleep(40);
+    assert(/\{c:red\}/.test(md()), 'color saved: ' + md());
   });
 
   test('document cards never show among the open cards of the board', async function () {
