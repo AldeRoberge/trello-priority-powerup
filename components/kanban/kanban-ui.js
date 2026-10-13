@@ -601,15 +601,15 @@
       }
       var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Titre de la carte… (ex. « Appeler Paul demain »)' });
       var busy = false;
-      function submit() {
+      function submit(fromBlur) {
         var name = input.value.trim();
         if (!name || busy) return;
         busy = true;
         input.disabled = true;
         createIn(list, name).then(function () {
-          state.composer = list.id;
+          state.composer = fromBlur === true ? null : list.id;
           renderBoard();
-          var next = els.board.querySelector('.kb-add-input');
+          var next = fromBlur === true ? null : els.board.querySelector('.kb-add-input');
           if (next) next.focus({ preventScroll: true });
         }, function (err) {
           busy = false;
@@ -624,7 +624,7 @@
       return h('div', { class: 'kb-composer' }, [
         input,
         h('div', { class: 'kb-composer-actions' }, [
-          h('button', { class: 'kb-btn kb-btn--primary', onclick: submit }, [h('span', { text: 'Ajouter' })]),
+          h('button', { class: 'kb-btn kb-btn--primary', onclick: function () { submit(); } }, [h('span', { text: 'Ajouter' })]),
           h('button', { class: 'kb-btn kb-btn--icon', title: 'Annuler', onclick: function () { state.composer = null; renderBoard(); } }, [icon('x')]),
         ]),
       ]);
@@ -670,6 +670,12 @@
       var list = listById(listId);
       if (!moved || !list) return renderBoard();
       var siblings = KM().siblingsFor(state.rows, listId, id);
+      // Clicking away keeps what was typed: the card is created (the composer's own buttons handle themselves).
+      input.addEventListener('blur', function (e) {
+        var to = e.relatedTarget;
+        if (to && to.closest && to.closest('.kb-composer')) return;
+        submit(true);
+      });
       var at = index == null ? siblings.length : index;
       // `index` counts the *visible* tiles; map it onto the full list so hidden cards keep their place.
       var visible = siblings.filter(function (r) { return columns().some(function (c) { return c.list.id === listId && c.cards.indexOf(r) !== -1; }); });

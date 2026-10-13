@@ -1299,7 +1299,12 @@
           if (name) createTaskAt(src, side, p, name);
         }
       });
-      input.addEventListener('blur', function () { if (!done) close(); });
+      input.addEventListener('blur', function () {
+        if (done) return;
+        var name = input.value.trim();
+        close();
+        if (name) createTaskAt(src, side, p, name); // clicking away keeps what was typed
+      });
       els.canvas.appendChild(list);
       els.canvas.appendChild(input);
       input.focus();
