@@ -5140,10 +5140,6 @@
           });
         },
         openDue: function (row, anchor) { openCardField('due', { cardId: row.id, name: row.name }, anchor); },
-      });
-    }
-
-    if (global.AssistantDock) {
         newCard: openNewCard,
       });
     }
@@ -5163,6 +5159,10 @@
           setStatus('Carte créée dans « ' + c.list.name + ' »');
           refreshBoardQuiet();
         },
+      });
+    }
+
+    if (global.AssistantDock) {
       global.AssistantDock.mount({ t: t, after: mount, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return state.miniPopover || !!document.querySelector('.gantt-card-overlay'); } });
     }
 
