@@ -307,6 +307,7 @@
   }
 
   global.TableModel = {
+    urgencyLabel: function (id) { return URGENCY_LABELS[id] || ''; },
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,
     plainMarkdown: plainMarkdown,

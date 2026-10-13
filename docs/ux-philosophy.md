@@ -40,7 +40,7 @@ Entités et Documents n'ont ni statut ni urgence : l'absence de S/P/D y est une 
 
 | # | Problème | Vues concernées | Priorité | Complexité | Validation |
 |---|---|---|---|---|---|
-| 1 | Urgence préselectionnée « Aucune » dans le sélecteur : la ligne n'expose pas l'urgence (Gantt, Mindmap, Dashboard) | Gantt, Mindmap, Dashboard | P3 | Faible : passer le libellé d'urgence dans `row` | Ouvrir P sur une carte urgente et vérifier la coche |
+| 1 | Urgence préselectionnée « Aucune » dans le sélecteur : la ligne n'expose pas l'urgence (Mindmap, Dashboard). Gantt corrigé : `row` expose l'urgence via `TableModel.urgencyLabel` | Mindmap, Dashboard | P3 | Faible : passer le libellé d'urgence dans `row` | Ouvrir P sur une carte urgente et vérifier la coche |
 | 2 | Filtre « masquer terminés » absent des vues sans statut | Entités, Documents | P3 | Décision produit | — |
 | 3 | Indicateur de sauvegarde non uniforme | Gantt, Tableau, Kanban, Entités | P2 | Moyenne | À mesurer dans le navigateur |
 | 4 | Recherche et filtres non partagés entre vues | Toutes | P3 | Élevée : décision produit (état partagé ou par vue ?) | Décision à prendre avant tout code |

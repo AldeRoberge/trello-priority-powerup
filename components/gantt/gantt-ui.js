@@ -5092,14 +5092,37 @@
         idOf: function (el) { return el.getAttribute('data-card-id'); },
         row: function (id) {
           var n = model.flattenVisible(state.tree, state.expanded).filter(function (x) { return x.cardId === id; })[0];
-          return n ? { id: id, cardId: id, name: n.name, listId: n.listId } : null;
+          if (!n) return null;
+          var rec = state.cardsById[id] || {};
+          var TM = global.TableModel;
+          var empressement = rec.inputs && rec.inputs.empressement;
+          return {
+            id: id,
+            cardId: id,
+            name: n.name,
+            listId: n.listId,
+            blocked: !!rec.blocked,
+            urgency: TM && TM.urgencyLabel && empressement ? TM.urgencyLabel(empressement) : '',
+          };
         },
         lists: function () { return state.boardLists || []; },
         isBusy: function () { return !!state.miniPopover || !!document.querySelector('.gantt-card-overlay'); },
         setStatus: function (row, list) {
           setStatus('Enregistrement…');
+          var before = { listId: row.listId, blocked: !!row.blocked };
+          var after = { listId: list.id, blocked: !!row.blocked };
           global.PriorityTrello.restPutCard(t, row.id, { idList: String(list.id), pos: 'bottom' }).then(function (r) {
             if (r && r.ok === false) throw new Error('Déplacement impossible');
+            record({
+              type: 'move',
+              targetId: row.id,
+              title: row.name,
+              key: 'statut',
+              before: row.listName || '',
+              after: list.name || '',
+              beforeVal: before,
+              afterVal: after,
+            });
             setStatus('Statut modifié');
             refreshBoardQuiet();
           }).catch(function (err) {
