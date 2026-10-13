@@ -5,6 +5,7 @@
  *
  * Contents
  *   1. Constants + card naming / description packing
+ *   1b. Covers (color, gradient, Unsplash, link, upload)
  *   2. Markdown -> editor HTML   (mdToHtml, inlineToHtml)
  *   3. Editor DOM -> Markdown    (domToMd)
  *   4. @ mentions: trigger detection, index, search
@@ -24,7 +25,7 @@
 
   var NAME_PREFIX = '📄 ';
   var MAX_DESC = 16384; // Trello card description limit
-  var META_RESERVE = 120;
+  var META_RESERVE = 480; // rev + cover line (MAX_COVER_JSON)
   var MAX_BODY = MAX_DESC - META_RESERVE;
   var MAX_TITLE = 120;
   var UNTITLED = 'Sans titre';
@@ -53,19 +54,20 @@
     return NAME_PREFIX + (cleanTitle(title) || UNTITLED);
   }
 
-  /** Description text of a document card: the body, then a hidden `type: document` + `rev: N` block. */
+  /** Description text of a document card: the body, then a hidden `type: document` + `rev: N` (+ `cover: {...}`) block. */
   function packDesc(body, meta) {
     var m = meta || {};
     var rev = Math.max(1, parseInt(m.rev, 10) || 1);
     var text = String(body == null ? '' : body).replace(/\s+$/, '');
-    var block = '<!--cerveau-meta\ntype: document\nrev: ' + rev + '\n-->';
+    var cover = packCover(m.cover);
+    var block = '<!--cerveau-meta\ntype: document\nrev: ' + rev + '\n' + (cover ? 'cover: ' + cover + '\n' : '') + '-->';
     return text ? text + '\n\n' + block : block;
   }
 
   /**
    * The meta block is always the very last thing in the description, so only the last
    * `<!--cerveau-meta ... -->` that runs to the end counts: text typed in the body can never forge it.
-   * @returns {{body:string, rev:number, isDoc:boolean}} (does not trim: code blocks stay intact)
+   * @returns {{body:string, rev:number, isDoc:boolean, cover:object|null}} (does not trim: code blocks stay intact)
    */
   function unpackDesc(desc) {
     var full = String(desc == null ? '' : desc).replace(/\r\n?/g, '\n');
@@ -89,7 +91,211 @@
       body: body.replace(/\s+$/, ''),
       rev: Math.max(1, parseInt(meta.rev, 10) || 1),
       isDoc: meta.type === 'document',
+      cover: parseCover(meta.cover),
     };
+  }
+
+  /* ── 1b. Covers (banner above the title) ─────────────────────────── */
+  /*
+   * A cover is one JSON line of the meta block. Kinds (short keys keep the description small):
+   *   {k:'color', v:'#rrggbb'}            {k:'gradient', v:<COVER_GRADIENTS id>}
+   *   {k:'unsplash', v:'photo-…', x?:ixid, by?:author, u?:username}
+   *   {k:'image', v:'https://…'}          {k:'upload', c:cardId, a:attachmentId, n:fileName}
+   * plus y: vertical position of an image (0 = top, 100 = bottom, default 50).
+   * Every field is whitelisted, so the line can never contain "-->" or break out of the block.
+   */
+
+  var MAX_COVER_JSON = 400;
+
+  var COVER_COLORS = [
+    { id: 'gris', label: 'Gris', v: '#8590a2' },
+    { id: 'ardoise', label: 'Ardoise', v: '#44546f' },
+    { id: 'brun', label: 'Brun', v: '#8f6b4f' },
+    { id: 'orange', label: 'Orange', v: '#e56910' },
+    { id: 'jaune', label: 'Jaune', v: '#e2b203' },
+    { id: 'vert', label: 'Vert', v: '#1f845a' },
+    { id: 'sarcelle', label: 'Sarcelle', v: '#1d9aaa' },
+    { id: 'bleu', label: 'Bleu', v: '#0c66e4' },
+    { id: 'violet', label: 'Violet', v: '#6e5dc6' },
+    { id: 'rose', label: 'Rose', v: '#cd519d' },
+    { id: 'rouge', label: 'Rouge', v: '#c9372c' },
+    { id: 'nuit', label: 'Nuit', v: '#1d2125' },
+  ];
+
+  var COVER_GRADIENTS = [
+    { id: 'aurore', label: 'Aurore', css: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+    { id: 'aube', label: 'Aube', css: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' },
+    { id: 'ocean', label: 'Océan', css: 'linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%)' },
+    { id: 'foret', label: 'Forêt', css: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)' },
+    { id: 'peche', label: 'Pêche', css: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' },
+    { id: 'minuit', label: 'Minuit', css: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)' },
+    { id: 'lavande', label: 'Lavande', css: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
+    { id: 'braise', label: 'Braise', css: 'linear-gradient(135deg, #f12711 0%, #f5af19 100%)' },
+    { id: 'menthe', label: 'Menthe', css: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' },
+    { id: 'ciel', label: 'Ciel', css: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' },
+    { id: 'framboise', label: 'Framboise', css: 'linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)' },
+    { id: 'graphite', label: 'Graphite', css: 'linear-gradient(135deg, #232526 0%, #414345 100%)' },
+  ];
+
+  /** Curated Unsplash photos (no API key needed to show them). `tags` feed the local search. */
+  var COVER_GALLERY = [
+    { v: 'photo-1465056836041-7f43ac27dcb5', by: 'Tobias Keller', u: 'tokeller', tags: 'montagne paysage neige' },
+    { v: 'photo-1500964757637-c85e8a162699', by: 'simon', u: 'simon_berger', tags: 'montagne paysage colline' },
+    { v: 'photo-1518837695005-2083093ee35b', by: 'Matt Hardy', u: 'matthardy', tags: 'ocean mer vague eau' },
+    { v: 'photo-1559827260-dc66d52bef19', by: 'Silas Baisch', u: 'silasbaisch', tags: 'ocean mer vague eau bleu' },
+    { v: 'photo-1448375240586-882707db888b', by: 'Sebastian Unrau', u: 'sebastian_unrau', tags: 'foret arbre nature vert' },
+    { v: 'photo-1425913397330-cf8af2ff40a1', by: 'Steven Kamenar', u: 'skamenar', tags: 'foret arbre nature' },
+    { v: 'photo-1542401886-65d6c61db217', by: 'Wolfgang Hasselmann', u: 'wolfgang_hasselmann', tags: 'desert dune sable' },
+    { v: 'photo-1488197047962-b48492212cda', by: 'Keith Hardy', u: 'keithhardy2001', tags: 'desert dune sable' },
+    { v: 'photo-1483347756197-71ef80e95f73', by: 'Vincent Guth', u: 'vingtcent', tags: 'aurore boreale nuit ciel' },
+    { v: 'photo-1531366936337-7c912a4589a7', by: 'Lightscape', u: 'lightscape', tags: 'aurore boreale nuit ciel' },
+    { v: 'photo-1669295384050-a1d4357bd1d7', by: 'Pawel Czerwinski', u: 'pawel_czerwinski', tags: 'abstrait texture couleur' },
+    { v: 'photo-1568733873715-f9d497a47ea0', by: 'Hulki Okan Tabak', u: 'hulkiokantabak', tags: 'abstrait texture' },
+    { v: 'photo-1513061379709-ef0cd1695189', by: 'Yiran Ding', u: 'yiranding', tags: 'ville nuit lumiere urbain' },
+    { v: 'photo-1444723121867-7a241cacace9', by: 'Henning Witzel', u: 'henning', tags: 'ville nuit urbain' },
+    { v: 'photo-1557316655-8715fdecd2d1', by: 'Neil Thomas', u: 'neilthomas', tags: 'lac calme eau montagne' },
+    { v: 'photo-1533757879476-8f4a3cb1ae4b', by: 'Emma Harper', u: 'emarieharp015', tags: 'lac calme eau' },
+    { v: 'photo-1464802686167-b939a6910659', by: 'Jeremy Thomas', u: 'jeremythomasphoto', tags: 'espace galaxie etoile nuit' },
+    { v: 'photo-1538370965046-79c0d6907d47', by: 'Graham Holtshausen', u: 'freedomstudios', tags: 'espace galaxie etoile' },
+    { v: 'photo-1508796079212-a4b83cbf734d', by: 'César Couto', u: 'xcrap', tags: 'pastel minimal doux' },
+    { v: 'photo-1554757388-29a2a86ef02f', by: 'Ashley West Edwards', u: 'ashleywedwards', tags: 'pastel minimal doux' },
+  ];
+
+  function coverText(s, max) {
+    return String(s == null ? '' : s).replace(/[\u0000-\u001f<>"\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+
+  var UNSPLASH_ID = /^photo-[A-Za-z0-9-]{6,80}$/;
+  var SAFE_URL = /^https:\/\/[A-Za-z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~\/%!$&*+,;=:@?#-]*)?$/;
+
+  /** A valid cover object or null. Unknown kinds / bad values are dropped. */
+  function normalizeCover(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var k = raw.k;
+    var out = null;
+    if (k === 'color') {
+      var c = String(raw.v || '').toLowerCase();
+      if (/^#[0-9a-f]{6}$/.test(c)) out = { k: k, v: c };
+    } else if (k === 'gradient') {
+      if (COVER_GRADIENTS.some(function (g) { return g.id === raw.v; })) out = { k: k, v: raw.v };
+    } else if (k === 'unsplash') {
+      var id = String(raw.v || '');
+      if (UNSPLASH_ID.test(id)) {
+        out = { k: k, v: id };
+        var x = String(raw.x || '');
+        if (/^[A-Za-z0-9_-]{1,80}$/.test(x)) out.x = x;
+        var by = coverText(raw.by, 60);
+        if (by) out.by = by;
+        var u = String(raw.u || '');
+        if (/^[A-Za-z0-9_.-]{1,60}$/.test(u)) out.u = u;
+      }
+    } else if (k === 'image') {
+      var url = String(raw.v || '').trim();
+      if (url.length <= 300 && SAFE_URL.test(url)) out = { k: k, v: url };
+    } else if (k === 'upload') {
+      var cid = cleanId(raw.c);
+      var aid = cleanId(raw.a);
+      var n = coverText(raw.n, 80).replace(/[\/?#%&]/g, '_');
+      if (cid && aid) out = { k: k, c: cid, a: aid, n: n || 'image' };
+    }
+    if (!out) return null;
+    if (out.k !== 'color' && out.k !== 'gradient' && raw.y != null) {
+      var y = Math.round(Number(raw.y));
+      if (isFinite(y) && y !== 50) out.y = Math.max(0, Math.min(100, y));
+    }
+    return out;
+  }
+
+  /** One-line JSON for the meta block ('' = no cover). */
+  function packCover(cover) {
+    var c = normalizeCover(cover);
+    if (!c) return '';
+    var s = JSON.stringify(c);
+    return s.length <= MAX_COVER_JSON ? s : '';
+  }
+
+  function parseCover(line) {
+    if (!line) return null;
+    try {
+      return normalizeCover(JSON.parse(line));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function sameCover(a, b) {
+    return packCover(a) === packCover(b);
+  }
+
+  /** CSS background of a color / gradient cover ('' for images). */
+  function coverBackground(cover) {
+    var c = normalizeCover(cover);
+    if (!c) return '';
+    if (c.k === 'color') return c.v;
+    if (c.k === 'gradient') {
+      var g = COVER_GRADIENTS.filter(function (x) { return x.id === c.v; })[0];
+      return g ? g.css : '';
+    }
+    return '';
+  }
+
+  /** Image URL of an Unsplash id at a given width (hotlinked from images.unsplash.com, as Unsplash requires). */
+  function unsplashUrl(id, width, ixid) {
+    return 'https://images.unsplash.com/' + id + '?' + (ixid ? 'ixid=' + ixid + '&' : '') + 'auto=format&fit=crop&q=80&w=' + (width || 1600);
+  }
+
+  /** Displayable URL of an unsplash / image cover ('' for colors, gradients and uploads, which need auth). */
+  function coverImageUrl(cover, width) {
+    var c = normalizeCover(cover);
+    if (!c) return '';
+    if (c.k === 'unsplash') return unsplashUrl(c.v, width, c.x);
+    if (c.k === 'image') return c.v;
+    return '';
+  }
+
+  /** Profile link for the "Photo : Name / Unsplash" credit (with the referral params Unsplash asks for). */
+  function unsplashCredit(cover) {
+    var c = normalizeCover(cover);
+    if (!c || c.k !== 'unsplash' || !c.by) return null;
+    var utm = '?utm_source=cerveau&utm_medium=referral';
+    return {
+      name: c.by,
+      profile: c.u ? 'https://unsplash.com/@' + c.u + utm : 'https://unsplash.com/' + utm,
+      site: 'https://unsplash.com/' + utm,
+    };
+  }
+
+  /**
+   * A pasted link as a cover: images.unsplash.com links keep their photo id, any other https URL is
+   * used as is. null when the text is not a usable https URL.
+   */
+  function coverFromLink(text) {
+    var s = String(text == null ? '' : text).trim();
+    var m = /^https:\/\/images\.unsplash\.com\/(photo-[A-Za-z0-9-]{6,80})(?:\?(.*))?$/.exec(s);
+    if (m) {
+      var ix = /(?:^|&)ixid=([A-Za-z0-9_-]{1,80})/.exec(m[2] || '');
+      return normalizeCover({ k: 'unsplash', v: m[1], x: ix ? ix[1] : '' });
+    }
+    return normalizeCover({ k: 'image', v: s });
+  }
+
+  /** Curated gallery entries matching a query (accent-insensitive, on tags and author). */
+  function searchGallery(query) {
+    var q = fold(query).trim();
+    var all = COVER_GALLERY.map(function (g) { return { k: 'unsplash', v: g.v, by: g.by, u: g.u }; });
+    if (!q) return all;
+    var words = q.split(/\s+/);
+    return COVER_GALLERY.filter(function (g) {
+      var hay = fold(g.tags + ' ' + g.by);
+      return words.every(function (w) { return hay.indexOf(w) >= 0; });
+    }).map(function (g) { return { k: 'unsplash', v: g.v, by: g.by, u: g.u }; });
+  }
+
+  /** The cover given by "Ajouter une couverture": a gallery photo picked by `rand` (0..1). */
+  function randomCover(rand) {
+    var r = typeof rand === 'number' ? rand : Math.random();
+    var g = COVER_GALLERY[Math.min(COVER_GALLERY.length - 1, Math.floor(r * COVER_GALLERY.length))];
+    return { k: 'unsplash', v: g.v, by: g.by, u: g.u };
   }
 
   function cleanId(id) {
@@ -1342,6 +1548,20 @@
     cleanTitle: cleanTitle,
     packDesc: packDesc,
     unpackDesc: unpackDesc,
+    COVER_COLORS: COVER_COLORS,
+    COVER_GRADIENTS: COVER_GRADIENTS,
+    COVER_GALLERY: COVER_GALLERY,
+    normalizeCover: normalizeCover,
+    packCover: packCover,
+    parseCover: parseCover,
+    sameCover: sameCover,
+    coverBackground: coverBackground,
+    coverImageUrl: coverImageUrl,
+    unsplashUrl: unsplashUrl,
+    unsplashCredit: unsplashCredit,
+    coverFromLink: coverFromLink,
+    searchGallery: searchGallery,
+    randomCover: randomCover,
     cleanId: cleanId,
     safeHref: safeHref,
     mdToHtml: mdToHtml,

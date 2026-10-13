@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy",
-    "secret:search": "wrangler secret put SEARCH_API_KEY"
+    "secret:search": "wrangler secret put SEARCH_API_KEY",
+    "secret:unsplash": "wrangler secret put UNSPLASH_ACCESS_KEY"
   },
   "devDependencies": {
     "wrangler": "^4.34.0"

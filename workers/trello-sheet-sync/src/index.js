@@ -9,6 +9,7 @@
 //   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
 //   POST /alerts/ack             acknowledge CRITICAL alerts
 //   POST /documents/sync         mirror the Documents view into the Drive folder now
+//   GET  /unsplash?q=            Unsplash photos for document covers (secret UNSPLASH_ACCESS_KEY)
 //   POST /webhook/register       (re)register the Trello webhook
 // Everything except the webhook and /health needs the header x-sync-secret.
 
@@ -32,6 +33,7 @@ import {
 import { describeAction, isDocumentAction, isEntityAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
 import { searchWeb } from './search.js';
+import { searchUnsplash } from './unsplash.js';
 import { driveEnabled, syncDocumentCard, syncAllDocuments, docSyncStatus } from './drive.js';
 
 function corsHeaders(request, env) {
@@ -142,6 +144,9 @@ export default {
       }
       if (url.pathname === '/search' && request.method === 'GET') {
         return json(request, env, await searchWeb(env, url.searchParams.get('q')));
+      }
+      if (url.pathname === '/unsplash' && request.method === 'GET') {
+        return json(request, env, await searchUnsplash(env, url.searchParams.get('q')));
       }
       if (url.pathname === '/webhook/register' && request.method === 'POST') {
         const callback = `${url.origin}/webhook/${env.SYNC_SECRET}`;

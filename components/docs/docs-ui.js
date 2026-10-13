@@ -9,7 +9,8 @@
  * Contents
  *   1. helpers          2. mount: state + skeleton       3. documents list (sidebar)
  *   4. editor surface   5. commands + toolbar            6. suggestions (@ and /)
- *   7. popovers/dialogs 8. saving + remote refresh       9. boot
+ *   7. popovers/dialogs (+ cover: color, gradient, Unsplash, upload)
+ *   8. saving + remote refresh       9. boot
  */
 (function (global) {
   'use strict';
@@ -178,6 +179,8 @@
       conflict: h('div', { class: 'dc-conflict', hidden: true, role: 'alert' }),
       scroll: h('div', { class: 'dc-scroll' }),
       page: h('article', { class: 'dc-page' }),
+      cover: h('div', { class: 'dc-cover', hidden: true }),
+      coverAdd: h('div', { class: 'dc-cover-add' }),
       title: h('input', { class: 'dc-title', type: 'text', placeholder: 'Sans titre', maxlength: String(DM().MAX_TITLE), 'aria-label': 'Titre du document', spellcheck: 'true' }),
       meta: h('div', { class: 'dc-meta' }),
       empty: h('div', { class: 'dc-empty', hidden: true }),
@@ -200,6 +203,8 @@
     els.main.appendChild(els.scroll);
     els.main.appendChild(els.empty);
     els.scroll.appendChild(els.page);
+    els.page.appendChild(els.cover);
+    els.page.appendChild(els.coverAdd);
     els.page.appendChild(els.title);
     els.page.appendChild(els.meta);
 
@@ -1106,6 +1111,8 @@
       if (old) els.page.replaceChild(ed, old);
       else els.page.appendChild(ed);
       editor = ed;
+      doc.savedCover = doc.cover || null;
+      paintCover();
       attachEditor(ed);
       lastRange = null;
       lastMd = DM().domToMd(ed); // baseline = the normalized form, so opening never rewrites a document
@@ -2047,6 +2054,12 @@
       }
       pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, [
         item('copy', 'Dupliquer', function () { duplicateDoc(docId); }),
+        state.current && state.current.id === docId
+          ? item('photo', state.current.cover ? 'Changer la couverture' : 'Ajouter une couverture', function () {
+            if (!state.current.cover) addCover();
+            else openCoverPicker(anchor.getBoundingClientRect());
+          })
+          : null,
         item('download', 'Télécharger (.md)', function () { exportDoc(docId, 'download'); }),
         item('clipboard', 'Copier en Markdown', function () { exportDoc(docId, 'copy'); }),
         item('file-plus', 'Nouveau sous-document', function () { newDoc(null, null, null, docId); }),
@@ -2062,6 +2075,456 @@
           : item('archive', 'Archiver', function () { confirmDelete(docId); }, true),
       ]);
       placePop(pop, anchor.getBoundingClientRect());
+    }
+
+    /* ── Cover (banner above the title) ──────────────────────────── */
+
+    var COVER_TAB_KEY = 'cerveau.docs.coverTab';
+    var COVER_TABS = [['color', 'Couleur'], ['gradient', 'Dégradé'], ['unsplash', 'Unsplash'], ['upload', 'Importer']];
+    var coverTimer = null;
+    var coverCur = null;
+    var repositioning = false;
+    var unsplashRemote = true; // false once the Worker said it cannot search: the curated gallery is used
+
+    function coverLabel(c) {
+      if (!c) return 'Aucune';
+      if (c.k === 'color') {
+        var col = DM().COVER_COLORS.filter(function (x) { return x.v === c.v; })[0];
+        return 'Couleur' + (col ? ' ' + col.label.toLowerCase() : '');
+      }
+      if (c.k === 'gradient') {
+        var g = DM().COVER_GRADIENTS.filter(function (x) { return x.id === c.v; })[0];
+        return 'Dégradé' + (g ? ' ' + g.label.toLowerCase() : '');
+      }
+      if (c.k === 'unsplash') return 'Photo Unsplash' + (c.by ? ' (' + c.by + ')' : '');
+      if (c.k === 'upload') return 'Image importée';
+      return 'Image (lien)';
+    }
+
+    function coverBtn(iconName, label, run) {
+      return h('button', { class: 'dc-cover-btn', type: 'button', onclick: function (e) { e.stopPropagation(); run(e.currentTarget); } }, [icon(iconName), h('span', { text: label })]);
+    }
+
+    function paintCover() {
+      var box = els.cover;
+      var cur = state.current;
+      var c = cur && cur.cover;
+      repositioning = false;
+      box.onpointerdown = null;
+      box.textContent = '';
+      box.className = 'dc-cover';
+      box.style.background = '';
+      box.hidden = !c;
+      els.page.classList.toggle('has-cover', !!c);
+      els.coverAdd.textContent = '';
+      if (!cur) return;
+      if (!c) {
+        els.coverAdd.appendChild(
+          h('button', { class: 'dc-cover-ghost', type: 'button', onclick: addCover }, [icon('photo'), h('span', { text: 'Ajouter une couverture' })])
+        );
+        return;
+      }
+      var bg = DM().coverBackground(c);
+      var isImage = !bg;
+      if (bg) box.style.background = bg;
+      else {
+        var img = h('img', { class: 'dc-cover-img', alt: '', draggable: 'false' });
+        img.style.objectPosition = '50% ' + (c.y == null ? 50 : c.y) + '%';
+        img.addEventListener('error', function () { box.classList.add('is-broken'); });
+        var url = DM().coverImageUrl(c, (global.devicePixelRatio || 1) > 1.5 ? 2400 : 1600);
+        if (url) img.src = url;
+        else {
+          box.classList.add('is-loading');
+          DT().coverBlobUrl(t, c).then(
+            function (u) {
+              box.classList.remove('is-loading');
+              if (state.current === cur && cur.cover === c) img.src = u;
+            },
+            function () {
+              box.classList.remove('is-loading');
+              box.classList.add('is-broken');
+            }
+          );
+        }
+        box.appendChild(img);
+        box.appendChild(icon('photo-off', 'dc-cover-broken'));
+        var credit = DM().unsplashCredit(c);
+        if (credit) {
+          box.appendChild(
+            h('div', { class: 'dc-cover-credit' }, [
+              'Photo : ',
+              h('a', { href: credit.profile, target: '_blank', rel: 'noopener noreferrer', text: credit.name }),
+              ' / ',
+              h('a', { href: credit.site, target: '_blank', rel: 'noopener noreferrer', text: 'Unsplash' }),
+            ])
+          );
+        }
+      }
+      box.appendChild(
+        h('div', { class: 'dc-cover-actions' }, [
+          coverBtn('photo', 'Changer', function (btn) { openCoverPicker(btn.getBoundingClientRect()); }),
+          isImage ? coverBtn('arrows-move-vertical', 'Repositionner', startReposition) : null,
+          coverBtn('trash', 'Retirer', function () { setCover(null); }),
+        ])
+      );
+    }
+
+    /** Shows the new cover right away; the write is debounced so trying several swatches costs one save. */
+    function setCover(next) {
+      var cur = state.current;
+      if (!cur) return;
+      cur.cover = DM().normalizeCover(next);
+      paintCover();
+      if (pop && pop.classList.contains('dc-cover-pop') && pop._paint) pop._paint();
+      clearTimeout(coverTimer);
+      coverCur = cur;
+      coverTimer = setTimeout(function () { persistCover(cur); }, 450);
+    }
+
+    function flushCover() {
+      if (!coverTimer) return;
+      clearTimeout(coverTimer);
+      persistCover(coverCur);
+    }
+
+    function persistCover(cur) {
+      coverTimer = null;
+      if (!cur) return;
+      if (saving) {
+        coverTimer = setTimeout(function () { persistCover(cur); }, 200);
+        return;
+      }
+      var pre = state.current === cur ? saveNow() : Promise.resolve(true);
+      pre.then(function (ok) {
+        if (!ok) return; // conflict / error banner already shown; "Écraser" saves the cover with the text
+        if (saving) {
+          coverTimer = setTimeout(function () { persistCover(cur); }, 200);
+          return;
+        }
+        var want = cur.cover || null;
+        var before = cur.savedCover || null;
+        if (DM().sameCover(before, want)) return;
+        saving = true;
+        if (state.current === cur) setSave('saving');
+        DT().setCover(t, cur, want).then(
+          function (res) {
+            saving = false;
+            cur.rev = res.rev;
+            cur.updatedAt = res.updatedAt;
+            cur.savedCover = res.cover;
+            touchListItem(cur.id, { updatedAt: res.updatedAt });
+            record({
+              type: 'edit', key: 'cover', label: 'Couverture', targetId: cur.id,
+              title: DM().cleanTitle(cur.title) || DM().UNTITLED,
+              before: coverLabel(before), after: coverLabel(res.cover),
+              beforeVal: DM().packCover(before), afterVal: DM().packCover(res.cover),
+            });
+            if (state.current !== cur) return;
+            var dirty = editor && (DM().domToMd(editor) !== lastMd || (DM().cleanTitle(els.title.value) || DM().UNTITLED) !== savedTitle);
+            setSave(dirty ? 'dirty' : 'saved');
+            if (dirty) scheduleSave(300);
+            paintMeta();
+          },
+          function (err) {
+            saving = false;
+            if (state.current !== cur) return failure(err);
+            if (err && err.reason === 'conflict') {
+              state.conflict = err.remote;
+              setSave('conflict', 'Modifié ailleurs');
+              paintConflict();
+            } else {
+              if (isAuthReason(err)) {
+                state.authOk = false;
+                paintBanner();
+              }
+              setSave('error', reasonText(err));
+            }
+          }
+        );
+      });
+    }
+
+    /** Like Notion: a gallery photo right away, with the picker open to change it. */
+    function addCover() {
+      setCover(DM().randomCover());
+      var btn = els.cover.querySelector('.dc-cover-actions .dc-cover-btn');
+      openCoverPicker((btn || els.cover).getBoundingClientRect());
+    }
+
+    function startReposition() {
+      var cur = state.current;
+      var c = cur && cur.cover;
+      var box = els.cover;
+      var img = box.querySelector('.dc-cover-img');
+      if (!c || !img) return;
+      closePop();
+      repositioning = true;
+      var y = c.y == null ? 50 : c.y;
+      box.classList.add('is-repositioning');
+      var actions = box.querySelector('.dc-cover-actions');
+      actions.textContent = '';
+      function end(save) {
+        document.removeEventListener('keydown', onKey, true);
+        repositioning = false;
+        if (save && state.current === cur && Math.round(y) !== (c.y == null ? 50 : c.y)) setCover(Object.assign({}, c, { y: Math.round(y) }));
+        else paintCover();
+      }
+      function onKey(e) {
+        if (e.key === 'Escape') { e.stopPropagation(); end(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); end(true); }
+      }
+      document.addEventListener('keydown', onKey, true);
+      actions.appendChild(coverBtn('check', 'Enregistrer', function () { end(true); }));
+      actions.appendChild(coverBtn('x', 'Annuler', function () { end(false); }));
+      box.onpointerdown = function (e) {
+        if (!repositioning || e.button !== 0 || (e.target.closest && e.target.closest('.dc-cover-actions'))) return;
+        e.preventDefault();
+        var startY = e.clientY;
+        var startPos = y;
+        var bw = box.clientWidth;
+        var bh = box.clientHeight;
+        var rendered = img.naturalWidth ? Math.max(bh, bw * (img.naturalHeight / img.naturalWidth)) : bh;
+        var overflow = rendered - bh;
+        if (overflow <= 1) return;
+        try {
+          box.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* pointer already gone: the drag just ends at the cover edge */
+        }
+        box.onpointermove = function (ev) {
+          y = Math.max(0, Math.min(100, startPos - ((ev.clientY - startY) / overflow) * 100));
+          img.style.objectPosition = '50% ' + y + '%';
+        };
+        box.onpointerup = box.onpointercancel = function () {
+          box.onpointermove = box.onpointerup = box.onpointercancel = null;
+        };
+      };
+    }
+
+    /** Large photos are scaled down before upload (Trello attachments are capped, and covers are wide). */
+    function prepareCoverImage(file) {
+      return new Promise(function (resolve, reject) {
+        var type = String((file && file.type) || '');
+        var ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[type];
+        if (!ext) return reject(new Error('Format non pris en charge (JPG, PNG, WebP ou GIF).'));
+        if (ext === 'gif') {
+          return file.size <= 10 * 1024 * 1024 ? resolve({ blob: file, ext: ext }) : reject(new Error('Image trop lourde (10 Mo au maximum).'));
+        }
+        var url = URL.createObjectURL(file);
+        var im = new Image();
+        im.onload = function () {
+          URL.revokeObjectURL(url);
+          var max = 2400;
+          if (im.naturalWidth <= max && file.size <= 2 * 1024 * 1024) return resolve({ blob: file, ext: ext });
+          var scale = Math.min(1, max / im.naturalWidth);
+          var cv = document.createElement('canvas');
+          cv.width = Math.round(im.naturalWidth * scale);
+          cv.height = Math.round(im.naturalHeight * scale);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          cv.toBlob(function (b) {
+            if (!b) return reject(new Error('Image illisible.'));
+            resolve({ blob: b, ext: b.type === 'image/webp' ? 'webp' : 'jpg' });
+          }, 'image/webp', 0.85);
+        };
+        im.onerror = function () {
+          URL.revokeObjectURL(url);
+          reject(new Error('Image illisible.'));
+        };
+        im.src = url;
+      });
+    }
+
+    function openCoverPicker(rect) {
+      closePop();
+      if (!state.current) return;
+      var tab = recall(COVER_TAB_KEY);
+      if (!COVER_TABS.some(function (x) { return x[0] === tab; })) tab = 'color';
+      var tabBar = h('div', { class: 'dc-cover-tabs', role: 'tablist' });
+      var body = h('div', { class: 'dc-cover-body' });
+      var query = '';
+      var searchTimer = null;
+      var searchToken = 0;
+
+      function current() {
+        return state.current && state.current.cover;
+      }
+
+      function swatch(cover, style, label) {
+        var on = DM().sameCover(current(), cover);
+        var b = h('button', {
+          class: 'dc-swatch' + (on ? ' is-on' : ''),
+          type: 'button',
+          title: label,
+          'aria-label': label,
+          'aria-pressed': on ? 'true' : 'false',
+          onclick: function () { setCover(cover); },
+        });
+        b.style.background = style;
+        return b;
+      }
+
+      function paintTabs() {
+        tabBar.textContent = '';
+        COVER_TABS.forEach(function (x) {
+          tabBar.appendChild(
+            h('button', {
+              class: 'dc-cover-tab' + (x[0] === tab ? ' is-on' : ''),
+              type: 'button',
+              role: 'tab',
+              'aria-selected': x[0] === tab ? 'true' : 'false',
+              onclick: function () {
+                tab = x[0];
+                remember(COVER_TAB_KEY, tab);
+                paint();
+              },
+            }, [x[1]])
+          );
+        });
+      }
+
+      function photoGrid(list, box) {
+        box.textContent = '';
+        if (!list.length) {
+          box.appendChild(h('p', { class: 'dc-cover-none', text: 'Aucune photo.' }));
+          return;
+        }
+        var cur = current();
+        list.forEach(function (p) {
+          var on = cur && cur.k === 'unsplash' && cur.v === p.v;
+          var img = h('img', { alt: '', loading: 'lazy', src: DM().unsplashUrl(p.v, 400, p.x) });
+          box.appendChild(
+            h('button', {
+              class: 'dc-cover-thumb' + (on ? ' is-on' : ''),
+              type: 'button',
+              title: p.by ? 'Photo : ' + p.by : 'Photo Unsplash',
+              onclick: function () { setCover(p); },
+            }, [img])
+          );
+        });
+      }
+
+      function runSearch(grid) {
+        var token = ++searchToken;
+        var local = DM().searchGallery(query);
+        if (!query.trim() || !unsplashRemote) return photoGrid(local, grid);
+        grid.classList.add('is-loading');
+        DT().searchUnsplash(t, query).then(
+          function (res) {
+            if (token !== searchToken) return;
+            grid.classList.remove('is-loading');
+            if (res === null) unsplashRemote = false;
+            photoGrid(res === null ? local : res, grid);
+          },
+          function () {
+            if (token !== searchToken) return;
+            grid.classList.remove('is-loading');
+            photoGrid(local, grid);
+          }
+        );
+      }
+
+      function paintUpload() {
+        var file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true });
+        var err = h('div', { class: 'dc-pop-err', hidden: true });
+        var label = h('span', { text: 'Choisir une image' });
+        var drop = h('button', { class: 'dc-cover-drop', type: 'button', onclick: function () { file.click(); } }, [icon('upload'), label]);
+        function showErr(msg) {
+          err.hidden = !msg;
+          err.textContent = msg || '';
+        }
+        function upload(f) {
+          if (!f || !state.current) return;
+          var cur = state.current;
+          showErr('');
+          drop.disabled = true;
+          drop.classList.add('is-busy');
+          label.textContent = 'Envoi…';
+          prepareCoverImage(f)
+            .then(function (p) { return DT().uploadCover(t, cur.id, p.blob, p.ext); })
+            .then(
+              function (cover) {
+                drop.disabled = false;
+                drop.classList.remove('is-busy');
+                label.textContent = 'Choisir une image';
+                if (state.current === cur) setCover(cover);
+              },
+              function (e) {
+                drop.disabled = false;
+                drop.classList.remove('is-busy');
+                label.textContent = 'Choisir une image';
+                showErr(e && e.reason ? reasonText(e) : (e && e.message) || 'Envoi impossible.');
+              }
+            );
+        }
+        file.addEventListener('change', function () { upload(file.files && file.files[0]); });
+        drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('is-over'); });
+        drop.addEventListener('dragleave', function () { drop.classList.remove('is-over'); });
+        drop.addEventListener('drop', function (e) {
+          e.preventDefault();
+          drop.classList.remove('is-over');
+          upload(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+        });
+        var link = h('input', { class: 'dc-input dc-cover-link', type: 'url', placeholder: 'Coller un lien d’image…', 'aria-label': 'Lien d’une image', spellcheck: 'false' });
+        function applyLink() {
+          var c = DM().coverFromLink(link.value);
+          if (!c) return showErr('Lien non valide (https).');
+          showErr('');
+          setCover(c);
+        }
+        link.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
+        });
+        link.addEventListener('paste', function () { setTimeout(applyLink, 0); });
+        body.appendChild(drop);
+        body.appendChild(file);
+        body.appendChild(h('div', { class: 'dc-cover-or', text: 'ou' }));
+        body.appendChild(link);
+        body.appendChild(err);
+      }
+
+      function paint() {
+        paintTabs();
+        body.textContent = '';
+        body.className = 'dc-cover-body is-' + tab;
+        if (tab === 'color') {
+          var grid = h('div', { class: 'dc-cover-grid' });
+          DM().COVER_COLORS.forEach(function (c) { grid.appendChild(swatch({ k: 'color', v: c.v }, c.v, c.label)); });
+          body.appendChild(grid);
+        } else if (tab === 'gradient') {
+          var grid2 = h('div', { class: 'dc-cover-grid' });
+          DM().COVER_GRADIENTS.forEach(function (g) { grid2.appendChild(swatch({ k: 'gradient', v: g.id }, g.css, g.label)); });
+          body.appendChild(grid2);
+        } else if (tab === 'unsplash') {
+          var input = h('input', { class: 'dc-input dc-cover-search', type: 'search', placeholder: 'Rechercher des photos…', 'aria-label': 'Rechercher sur Unsplash', value: query });
+          var photos = h('div', { class: 'dc-cover-photos' });
+          input.addEventListener('input', function () {
+            query = input.value;
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () { runSearch(photos); }, 350);
+          });
+          body.appendChild(input);
+          body.appendChild(photos);
+          runSearch(photos);
+          setTimeout(function () { input.focus(); }, 0);
+        } else {
+          paintUpload();
+        }
+      }
+
+      pop = h('div', { class: 'dc-pop dc-cover-pop', role: 'dialog', 'aria-label': 'Couverture' }, [tabBar, body]);
+      pop._paint = function () {
+        // keep the search results and the upload field: only the selection marks change
+        if (tab === 'color' || tab === 'gradient') paint();
+        else if (tab === 'unsplash') {
+          var cur = current();
+          Array.prototype.forEach.call(pop.querySelectorAll('.dc-cover-thumb'), function (b) {
+            var img = b.querySelector('img');
+            b.classList.toggle('is-on', !!(cur && cur.k === 'unsplash' && img && img.src.indexOf('/' + cur.v + '?') >= 0));
+          });
+        }
+      };
+      paint();
+      placePop(pop, rect);
     }
 
     function dialog(opts) {
@@ -2177,6 +2640,7 @@
       paintHead();
       if (!has) {
         editor = null;
+        paintCover();
         els.outline.textContent = '';
         els.outline.classList.add('is-empty');
         els.conflict.hidden = true;
@@ -2270,12 +2734,12 @@
       }
     }
 
-    function newDoc(title, body, folderId, parentDocId) {
+    function newDoc(title, body, folderId, parentDocId, cover) {
       if (state.busy) return;
       var go = state.current ? saveNow() : Promise.resolve(true);
       go.then(function () {
         setBusy('Création du document…');
-        DT().createDoc(t, title || DM().UNTITLED, body || '').then(
+        DT().createDoc(t, title || DM().UNTITLED, body || '', { cover: cover }).then(
           function (doc) {
             setBusy('');
             toast('');
@@ -2302,10 +2766,10 @@
 
     function duplicateDoc(docId) {
       var src = state.current && state.current.id === docId
-        ? Promise.resolve({ title: els.title.value || state.current.title, body: lastDomMd() })
+        ? Promise.resolve({ title: els.title.value || state.current.title, body: lastDomMd(), cover: state.current.cover })
         : DT().loadDoc(t, docId);
       src.then(function (doc) {
-        newDoc(DM().cleanTitle((doc.title || DM().UNTITLED) + ' (copie)'), doc.body);
+        newDoc(DM().cleanTitle((doc.title || DM().UNTITLED) + ' (copie)'), doc.body, null, null, doc.cover);
       }, failure);
     }
 
@@ -2355,10 +2819,12 @@
       }
       if (bodyChanged || opts.force) {
         chain = chain.then(function () {
-          return DT().saveDoc(t, { id: cur.id, body: md, rev: cur.rev }, { force: !!opts.force }).then(function (res) {
+          var coverAt = cur.cover || null;
+          return DT().saveDoc(t, { id: cur.id, body: md, rev: cur.rev, cover: coverAt }, { force: !!opts.force }).then(function (res) {
             cur.rev = res.rev;
             cur.updatedAt = res.updatedAt;
             cur.body = md;
+            cur.savedCover = coverAt;
             lastMd = md;
             histBodySaved();
             touchListItem(cur.id, { updatedAt: res.updatedAt, size: md.length });
@@ -2440,7 +2906,7 @@
           toast('Ce document a été supprimé par quelqu’un d’autre.', 'error');
           return;
         }
-        if (state.saveState !== 'saved' || !editor || DM().domToMd(editor) !== lastMd) return;
+        if (state.saveState !== 'saved' || !editor || DM().domToMd(editor) !== lastMd || coverTimer || repositioning) return;
         return DT().loadDoc(t, openId).then(function (doc) {
           if (!state.current || state.current.id !== openId || saving || DM().domToMd(editor) !== lastMd) return;
           if (doc.rev === state.current.rev) return;
@@ -2574,10 +3040,24 @@
       if (e.type === 'edit' && e.key === 'body') {
         var pre = isCur ? saveNow().then(function () { histFlush(); }) : Promise.resolve();
         return pre.then(function () { return DT().loadDoc(t, id); }).then(function (doc) {
-          return DT().saveDoc(t, { id: id, body: val, rev: doc.rev }, { force: true });
+          return DT().saveDoc(t, { id: id, body: val, rev: doc.rev, cover: doc.cover }, { force: true });
         }).then(function (res) {
           touchListItem(id, { updatedAt: res.updatedAt, size: String(val || '').length });
           if (isCur) return openDoc(id, { reload: true, skipSave: true });
+        });
+      }
+      if (e.type === 'edit' && e.key === 'cover') {
+        var pre2 = isCur ? saveNow() : Promise.resolve();
+        return pre2.then(function () { return DT().loadDoc(t, id); }).then(function (doc) {
+          return DT().setCover(t, doc, DM().parseCover(val));
+        }).then(function (res) {
+          touchListItem(id, { updatedAt: res.updatedAt });
+          if (state.current && state.current.id === id) {
+            state.current.rev = res.rev;
+            state.current.cover = res.cover;
+            state.current.savedCover = res.cover;
+            paintCover();
+          }
         });
       }
       return Promise.reject(new Error('Cette modification ne peut pas être annulée'));
@@ -2587,6 +3067,7 @@
       if (e.type === 'create') return 'créé';
       if (e.type === 'delete') return 'supprimé';
       if (e.key === 'name') return 'renommé';
+      if (e.key === 'cover') return 'couverture modifiée';
       return 'contenu modifié';
     }
 
@@ -2658,6 +3139,7 @@
     });
     global.addEventListener('pagehide', function () {
       histFlush();
+      flushCover();
       saveNow();
     });
 

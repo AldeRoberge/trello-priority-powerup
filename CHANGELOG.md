@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Documents : couverture en haut de chaque document (couleur, dégradé, photo Unsplash, lien ou image importée), repositionnable et annulable.
 - Annulation : le message « Action annulée » ouvre l'historique, pour annuler ou rétablir d'autres modifications (Kanban, Gantt, Mindmap, Documents).
 - Gantt : survoler la ligne rouge d'aujourd'hui affiche l'heure actuelle.
 - Cartes : choix du statut et de l'urgence avec recherche, touches S, P et D (style Linear).

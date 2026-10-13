@@ -57,6 +57,93 @@ describe('DocsModel', () => {
     });
   });
 
+  describe('covers', () => {
+    it('round-trips a cover through the meta block without touching the body', () => {
+      const cover = { k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', x: 'abc_1', by: 'Neil Thomas', u: 'neilthomas', y: 30 };
+      const desc = DM.packDesc('# Titre', { rev: 3, cover });
+      assert.match(desc, /\nrev: 3\ncover: \{.*\}\n-->$/);
+      const back = DM.unpackDesc(desc);
+      assert.equal(back.body, '# Titre');
+      assert.equal(back.rev, 3);
+      assert.deepEqual(back.cover, cover);
+      assert.equal(DM.unpackDesc(DM.packDesc('x', { rev: 1 })).cover, null);
+    });
+
+    it('whitelists every kind and field, so the line cannot break out of the block', () => {
+      assert.deepEqual(DM.normalizeCover({ k: 'color', v: '#ABCDEF', y: 10 }), { k: 'color', v: '#abcdef' }, 'no position for a color');
+      assert.equal(DM.normalizeCover({ k: 'color', v: 'red' }), null);
+      assert.deepEqual(DM.normalizeCover({ k: 'gradient', v: 'aurore' }), { k: 'gradient', v: 'aurore' });
+      assert.equal(DM.normalizeCover({ k: 'gradient', v: 'url(x)' }), null);
+      assert.equal(DM.normalizeCover({ k: 'unsplash', v: 'premium_photo-123456789' }), null, 'Unsplash+ photos need a license');
+      assert.equal(DM.normalizeCover({ k: 'image', v: 'http://a.com/x.png' }), null, 'https only');
+      assert.equal(DM.normalizeCover({ k: 'image', v: 'https://a.com/x.png"-->' }), null);
+      assert.equal(DM.normalizeCover({ k: 'script', v: 'x' }), null);
+      const u = DM.normalizeCover({ k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', by: 'Évil --> <b>"x"</b>', y: 250 });
+      assert.equal(u.by, 'Évil -- bx/b', 'markup characters are stripped');
+      assert.equal(u.y, 100, 'position clamped');
+      const desc = DM.packDesc('corps', { rev: 1, cover: u });
+      assert.equal(desc.indexOf('-->'), desc.length - 3, 'the only --> is the one closing the block');
+      assert.deepEqual(DM.normalizeCover({ k: 'upload', c: 'card1', a: 'att1', n: 'a/b?.png' }), { k: 'upload', c: 'card1', a: 'att1', n: 'a_b_.png' });
+      assert.equal(DM.normalizeCover({ k: 'upload', c: 'bad id!', a: 'att1' }), null);
+    });
+
+    it('text typed in the body cannot forge a cover', () => {
+      const body = 'avant\n<!--cerveau-meta\ncover: {"k":"color","v":"#000000"}\n-->\naprès';
+      const back = DM.unpackDesc(DM.packDesc(body, { rev: 2 }));
+      assert.equal(back.cover, null);
+      assert.equal(back.body, body);
+    });
+
+    it('gives a CSS background to colors and gradients, a URL to photos and links', () => {
+      assert.equal(DM.coverBackground({ k: 'color', v: '#0c66e4' }), '#0c66e4');
+      assert.match(DM.coverBackground({ k: 'gradient', v: 'ocean' }), /^linear-gradient\(/);
+      assert.equal(DM.coverBackground({ k: 'image', v: 'https://a.com/x.png' }), '');
+      assert.equal(
+        DM.coverImageUrl({ k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', x: 'ix1' }, 800),
+        'https://images.unsplash.com/photo-1557316655-8715fdecd2d1?ixid=ix1&auto=format&fit=crop&q=80&w=800'
+      );
+      assert.equal(DM.coverImageUrl({ k: 'image', v: 'https://a.com/x.png' }), 'https://a.com/x.png');
+      assert.equal(DM.coverImageUrl({ k: 'upload', c: 'c1', a: 'a1', n: 'x.jpg' }), '', 'uploads need the Trello token');
+      assert.equal(DM.unsplashCredit({ k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', by: 'Neil', u: 'neilthomas' }).profile, 'https://unsplash.com/@neilthomas?utm_source=cerveau&utm_medium=referral');
+      assert.equal(DM.unsplashCredit({ k: 'color', v: '#000000' }), null);
+    });
+
+    it('turns a pasted link into a cover', () => {
+      assert.deepEqual(DM.coverFromLink(' https://images.unsplash.com/photo-1557316655-8715fdecd2d1?ixid=M3x&w=400 '), { k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', x: 'M3x' });
+      assert.deepEqual(DM.coverFromLink('https://exemple.com/banniere.jpg'), { k: 'image', v: 'https://exemple.com/banniere.jpg' });
+      assert.equal(DM.coverFromLink('pas un lien'), null);
+      assert.equal(DM.coverFromLink('javascript:alert(1)'), null);
+    });
+
+    it('searches the curated gallery without accents and picks a random photo from it', () => {
+      assert.equal(DM.searchGallery('').length, DM.COVER_GALLERY.length);
+      const forest = DM.searchGallery('Forêt');
+      assert.ok(forest.length >= 1 && forest.every((c) => c.k === 'unsplash'));
+      assert.deepEqual(DM.searchGallery('zzz'), []);
+      DM.COVER_GALLERY.forEach((g) => assert.ok(DM.normalizeCover({ k: 'unsplash', v: g.v }), g.v));
+      assert.equal(DM.randomCover(0).v, DM.COVER_GALLERY[0].v);
+      assert.equal(DM.randomCover(0.9999).v, DM.COVER_GALLERY[DM.COVER_GALLERY.length - 1].v);
+    });
+  });
+
+  describe('Unsplash search shaping (worker)', () => {
+    it('keeps the photo id, ixid and credit, and drops Unsplash+ photos', async () => {
+      const path = require('node:path');
+      const { pathToFileURL } = require('node:url');
+      const mod = await import(pathToFileURL(path.join(__dirname, '..', 'workers', 'trello-sheet-sync', 'src', 'unsplash.js')).href);
+      const out = mod.shapePhotos({
+        results: [
+          { urls: { raw: 'https://images.unsplash.com/photo-1557316655-8715fdecd2d1?ixid=M3x1&ixlib=rb' }, user: { name: 'Neil Thomas', username: 'neilthomas' } },
+          { premium: true, urls: { raw: 'https://plus.unsplash.com/premium_photo-1234567890-abcdef' }, user: { name: 'X' } },
+          { urls: { raw: 'https://evil.com/photo-1234567890' } },
+        ],
+      });
+      assert.deepEqual(out, [{ k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', x: 'M3x1', by: 'Neil Thomas', u: 'neilthomas' }]);
+      assert.ok(out.every((c) => DM.normalizeCover(c)));
+      assert.deepEqual(await mod.searchUnsplash({}, 'lac'), { enabled: false, results: [] });
+    });
+  });
+
   describe('safeHref', () => {
     it('keeps http(s) and mailto, adds https to bare domains, drops the rest', () => {
       assert.equal(DM.safeHref('https://a.com/x?y=1'), 'https://a.com/x?y=1');

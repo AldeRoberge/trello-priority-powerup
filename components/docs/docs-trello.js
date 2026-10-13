@@ -151,13 +151,15 @@
       title: DM().titleFromName(card.name),
       body: u.body,
       rev: u.rev,
+      cover: u.cover,
       updatedAt: card.dateLastActivity || '',
     };
   }
 
   /** Creates the card (hidden-meta description) then archives it, with the body in the same call. */
-  async function createDoc(t, title, body) {
+  async function createDoc(t, title, body, opts) {
     var text = String(body == null ? '' : body);
+    var cover = DM().normalizeCover(opts && opts.cover);
     if (DM().sizeInfo(text).over) throw fail('too-long');
     var listId = await homeListId(t);
     var name = DM().nameFromTitle(title);
@@ -170,7 +172,7 @@
     );
     if (!created || !created.id) throw fail('no-card');
     try {
-      need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true, desc: DM().packDesc(text, { rev: 1 }) }));
+      need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true, desc: DM().packDesc(text, { rev: 1, cover: cover }) }));
     } catch (err) {
       // never leave a visible document card on the board
       await ST().trelloRest(t, '/cards/' + enc(created.id), 'DELETE').catch(function () {});
@@ -181,6 +183,7 @@
       title: DM().titleFromName(name),
       body: text,
       rev: 1,
+      cover: cover,
       updatedAt: created.dateLastActivity || new Date().toISOString(),
     };
   }
@@ -200,14 +203,14 @@
   }
 
   /**
-   * Saves the body. Refuses ({reason:'conflict', remote}) when someone saved a newer revision since
-   * `doc.rev` was loaded, unless opts.force.
+   * Saves the body (and `doc.cover`, which is rewritten with it). Refuses ({reason:'conflict', remote})
+   * when someone saved a newer revision since `doc.rev` was loaded, unless opts.force.
    * @returns {Promise<{rev:number, updatedAt:string}>}
    */
   async function saveDoc(t, doc, opts) {
     opts = opts || {};
     var nextRev = (doc.rev || 1) + 1;
-    var desc = DM().packDesc(doc.body, { rev: nextRev });
+    var desc = DM().packDesc(doc.body, { rev: nextRev, cover: doc.cover });
     if (desc.length > DM().MAX_DESC) throw fail('too-long');
     if (!opts.force) {
       var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
@@ -216,6 +219,86 @@
     }
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
     return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString() };
+  }
+
+  /**
+   * Changes only the cover (null removes it): the remote body is kept and the revision bumped, so other
+   * members pick it up. Same conflict rule as saveDoc.
+   * @returns {Promise<{rev:number, updatedAt:string, cover:object|null}>}
+   */
+  async function setCover(t, doc, cover) {
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
+    var remote = DM().unpackDesc(cur && cur.desc);
+    if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
+    var next = DM().normalizeCover(cover);
+    var nextRev = remote.rev + 1;
+    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: next });
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
+    return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString(), cover: next };
+  }
+
+  async function restCreds(t) {
+    var cfg = global.PriorityRestConfig;
+    if (!cfg || !cfg.appKey) throw fail('no-app-key');
+    var api = await t.getRestApi();
+    var token = (await api.isAuthorized()) ? await api.getToken() : null;
+    if (!token) throw fail('not-authorized');
+    return { key: cfg.appKey, token: token };
+  }
+
+  /**
+   * Uploads an image (File / Blob) as an attachment of the document card and returns the cover pointing
+   * to it. The file name is ours (no characters that would break the download URL).
+   */
+  async function uploadCover(t, docId, blob, ext) {
+    var c = await restCreds(t);
+    var name = 'couverture-' + Date.now() + '.' + (/^(jpg|png|webp|gif)$/.test(ext) ? ext : 'jpg');
+    var form = new FormData();
+    form.append('file', blob, name);
+    form.append('name', name);
+    form.append('setCover', 'false');
+    var res = await fetch(
+      'https://api.trello.com/1/cards/' + enc(docId) + '/attachments?key=' + enc(c.key) + '&token=' + enc(c.token),
+      { method: 'POST', body: form }
+    );
+    if (!res.ok) throw fail('http-' + res.status);
+    var att = await res.json();
+    var cover = DM().normalizeCover({ k: 'upload', c: docId, a: att && att.id, n: name });
+    if (!cover) throw fail('upload-failed');
+    if (typeof URL !== 'undefined' && URL.createObjectURL) blobCache[cover.a] = URL.createObjectURL(blob);
+    return cover;
+  }
+
+  /* Uploaded covers are Trello attachments, which need the token to be read: fetched once as blob URLs. */
+  var blobCache = {};
+
+  async function coverBlobUrl(t, cover) {
+    var c = DM().normalizeCover(cover);
+    if (!c || c.k !== 'upload') return '';
+    if (blobCache[c.a]) return blobCache[c.a];
+    var creds = await restCreds(t);
+    var res = await fetch('https://api.trello.com/1/cards/' + enc(c.c) + '/attachments/' + enc(c.a) + '/download/' + enc(c.n), {
+      headers: { Authorization: 'OAuth oauth_consumer_key="' + creds.key + '", oauth_token="' + creds.token + '"' },
+    });
+    if (!res.ok) throw fail('http-' + res.status);
+    var url = URL.createObjectURL(await res.blob());
+    blobCache[c.a] = url;
+    return url;
+  }
+
+  /**
+   * Unsplash search through the board's Worker (it holds the API key). Resolves null when the Worker is
+   * not connected or has no key, so the caller falls back to the curated gallery.
+   */
+  async function searchUnsplash(t, query) {
+    var st = ST();
+    if (!st || typeof st.getSettings !== 'function') return null;
+    var settings = await st.getSettings(t).catch(function () { return null; });
+    if (!settings || !st.isConnected(settings)) return null;
+    var r = await st.workerCall(settings, 'GET', '/unsplash?q=' + enc(String(query || '').slice(0, 100)));
+    if (!r.ok || !r.data || !r.data.enabled || !Array.isArray(r.data.results)) return null;
+    return r.data.results.map(DM().normalizeCover).filter(Boolean);
   }
 
   async function renameDoc(t, docId, title) {
@@ -270,6 +353,10 @@
     createDoc: createDoc,
     ensureDefaultDoc: ensureDefaultDoc,
     saveDoc: saveDoc,
+    setCover: setCover,
+    uploadCover: uploadCover,
+    coverBlobUrl: coverBlobUrl,
+    searchUnsplash: searchUnsplash,
     renameDoc: renameDoc,
     deleteDoc: deleteDoc,
     loadMentionSources: loadMentionSources,

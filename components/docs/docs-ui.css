@@ -468,6 +468,8 @@ html[data-color-mode="dark"] .dc-root {
   display: none;
 }
 .dc-page {
+  --dc-pad-top: 44px;
+  --dc-pad-x: 64px;
   max-width: 820px;
   margin: 0 auto;
   padding: 44px 64px 72px;
@@ -479,6 +481,275 @@ html[data-color-mode="dark"] .dc-root {
 }
 .dc-page.is-loading {
   opacity: 0.45;
+}
+
+/* ── Cover (banner above the title) ───────────────────────────────── */
+.dc-cover {
+  position: relative;
+  height: 200px;
+  margin: calc(-1 * var(--dc-pad-top)) calc(-1 * var(--dc-pad-x)) 0;
+  border-radius: 7px 7px 0 0;
+  overflow: hidden;
+  background: var(--tp-surface-hover);
+  user-select: none;
+}
+.dc-cover[hidden] {
+  display: none;
+}
+.dc-cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dc-cover.is-loading {
+  background: linear-gradient(90deg, var(--tp-surface-hover), var(--tp-surface-active), var(--tp-surface-hover));
+  background-size: 200% 100%;
+  animation: dc-shimmer 1.2s linear infinite;
+}
+.dc-cover.is-loading .dc-cover-img:not([src]) {
+  visibility: hidden;
+}
+.dc-cover-broken {
+  display: none;
+}
+.dc-cover.is-broken .dc-cover-img {
+  display: none;
+}
+.dc-cover.is-broken .dc-cover-broken {
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+}
+.dc-cover-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.dc-cover:hover .dc-cover-actions,
+.dc-cover:focus-within .dc-cover-actions,
+.dc-cover.is-repositioning .dc-cover-actions {
+  opacity: 1;
+}
+.dc-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #172b4d;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.2);
+}
+.dc-cover-btn:hover {
+  background: #fff;
+}
+.dc-cover-btn .ti {
+  font-size: 14px;
+}
+html[data-color-mode="dark"] .dc-cover-btn {
+  background: rgba(29, 33, 37, 0.88);
+  color: #dee4ea;
+}
+html[data-color-mode="dark"] .dc-cover-btn:hover {
+  background: #22272b;
+}
+.dc-cover-credit {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.dc-cover:hover .dc-cover-credit {
+  opacity: 0.85;
+}
+.dc-cover-credit a {
+  color: inherit;
+}
+.dc-cover.is-repositioning {
+  cursor: ns-resize;
+}
+.dc-cover.is-repositioning .dc-cover-credit {
+  display: none;
+}
+.dc-cover-add {
+  min-height: 8px;
+  margin: -14px 0 6px;
+}
+.dc-page.has-cover .dc-cover-add {
+  margin: 0 0 20px;
+}
+.dc-cover-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.dc-page:hover .dc-cover-ghost,
+.dc-cover-ghost:focus-visible {
+  opacity: 0.55;
+}
+.dc-cover-ghost:hover {
+  opacity: 1 !important;
+  background: var(--tp-surface-hover);
+}
+.dc-cover-pop {
+  width: 440px;
+  max-width: calc(100vw - 16px);
+  padding: 0;
+  gap: 0;
+}
+.dc-cover-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px 0;
+  border-bottom: 1px solid var(--tp-border);
+}
+.dc-cover-tab {
+  padding: 8px 8px 7px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--tp-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.dc-cover-tab:hover {
+  color: var(--tp-text);
+}
+.dc-cover-tab.is-on {
+  color: var(--tp-text);
+  font-weight: 600;
+  border-bottom-color: var(--tp-primary);
+}
+.dc-cover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  height: 236px;
+  overflow: auto;
+}
+.dc-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.dc-swatch {
+  height: 52px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(9, 30, 66, 0.12);
+}
+.dc-swatch:hover {
+  filter: brightness(1.06);
+}
+.dc-swatch.is-on,
+.dc-cover-thumb.is-on {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 2px;
+}
+.dc-cover-search {
+  width: 100%;
+  flex: none;
+}
+.dc-cover-photos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  transition: opacity 0.12s;
+}
+.dc-cover-photos.is-loading {
+  opacity: 0.5;
+}
+.dc-cover-thumb {
+  height: 64px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--tp-surface-hover);
+}
+.dc-cover-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dc-cover-thumb:hover img {
+  filter: brightness(1.08);
+}
+.dc-cover-none,
+.dc-cover-or {
+  margin: 0;
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+  text-align: center;
+  font-size: 12px;
+}
+.dc-cover-none {
+  grid-column: 1 / -1;
+  padding: 24px 0;
+}
+.dc-cover-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 110px;
+  border: 1.5px dashed var(--tp-border-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--tp-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.dc-cover-drop .ti {
+  font-size: 22px;
+}
+.dc-cover-drop:hover,
+.dc-cover-drop.is-over {
+  border-color: var(--tp-primary);
+  color: var(--tp-text);
+  background: var(--tp-surface-subtle);
+}
+.dc-cover-drop.is-busy {
+  cursor: progress;
+  opacity: 0.7;
+}
+.dc-cover-link {
+  width: 100%;
 }
 .dc-title {
   display: block;
@@ -754,7 +1025,15 @@ html[data-color-mode="dark"] .dc-root {
     width: 200px;
   }
   .dc-page {
+    --dc-pad-top: 28px;
+    --dc-pad-x: 24px;
     padding: 28px 24px 56px;
+  }
+  .dc-cover {
+    height: 140px;
+  }
+  .dc-cover-btn span {
+    display: none;
   }
   .dc-scroll {
     padding: 12px 12px 60px;

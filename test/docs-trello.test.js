@@ -107,6 +107,55 @@ describe('DocsTrello (against an in-memory Trello)', () => {
     assert.equal((await DT.loadDoc(fake.t, created.id)).body, 'texte');
   });
 
+  it('keeps the cover through creation, body saves and cover-only changes', async () => {
+    const cover = { k: 'gradient', v: 'aurore' };
+    const created = await DT.createDoc(fake.t, 'Avec couverture', 'texte', { cover });
+    assert.deepEqual(created.cover, cover);
+    let doc = await DT.loadDoc(fake.t, created.id);
+    assert.deepEqual(doc.cover, cover);
+
+    const saved = await DT.saveDoc(fake.t, { id: doc.id, body: 'texte 2', rev: doc.rev, cover: doc.cover });
+    doc = await DT.loadDoc(fake.t, created.id);
+    assert.equal(doc.rev, saved.rev);
+    assert.deepEqual(doc.cover, cover, 'saving the text does not drop the cover');
+
+    const res = await DT.setCover(fake.t, doc, { k: 'color', v: '#0C66E4' });
+    assert.equal(res.rev, doc.rev + 1, 'other members see a new revision');
+    const after = await DT.loadDoc(fake.t, created.id);
+    assert.deepEqual(after.cover, { k: 'color', v: '#0c66e4' });
+    assert.equal(after.body, 'texte 2', 'the text is untouched');
+
+    await DT.setCover(fake.t, after, null);
+    assert.equal((await DT.loadDoc(fake.t, created.id)).cover, null);
+  });
+
+  it('refuses a cover change over a newer revision', async () => {
+    const created = await DT.createDoc(fake.t, 'Partagé', 'v1');
+    const stale = await DT.loadDoc(fake.t, created.id);
+    await DT.saveDoc(fake.t, { id: stale.id, body: 'v2', rev: stale.rev });
+    await assert.rejects(() => DT.setCover(fake.t, stale, { k: 'color', v: '#1f845a' }), (err) => err.reason === 'conflict' && err.remote.body === 'v2');
+    assert.equal((await DT.loadDoc(fake.t, created.id)).cover, null);
+  });
+
+  it('falls back to the curated gallery when no Worker can search Unsplash', async () => {
+    global.SheetsTrello = Object.assign({}, global.SheetsTrello, {
+      getSettings: async () => ({ workerUrl: '', secret: '' }),
+      isConnected: () => false,
+    });
+    assert.equal(await DT.searchUnsplash(fake.t, 'lac'), null);
+    global.SheetsTrello = Object.assign({}, global.SheetsTrello, {
+      getSettings: async () => ({ workerUrl: 'https://w', secret: 's' }),
+      isConnected: () => true,
+      workerCall: async (s, m, p) => {
+        assert.equal(p, '/unsplash?q=lac');
+        return { ok: true, data: { enabled: true, results: [{ k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', by: 'Neil' }, { k: 'unsplash', v: 'bad id' }] } };
+      },
+    });
+    assert.deepEqual(await DT.searchUnsplash(fake.t, 'lac'), [{ k: 'unsplash', v: 'photo-1557316655-8715fdecd2d1', by: 'Neil' }]);
+    global.SheetsTrello.workerCall = async () => ({ ok: true, data: { enabled: false, results: [] } });
+    assert.equal(await DT.searchUnsplash(fake.t, 'lac'), null, 'no API key on the Worker');
+  });
+
   it('deletes a document for good', async () => {
     const created = await DT.createDoc(fake.t, 'Éphémère', '');
     await DT.deleteDoc(fake.t, created.id);
