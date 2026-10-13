@@ -604,11 +604,6 @@
 
     var charTitle = el('h4', 'agent-settings-title', { text: 'Caract\u00e8re' });
     settingsPanel.appendChild(charTitle);
-    var charHint = el('p', 'agent-settings-hint', {
-      text:
-        'Nom, visage, couleur et personnalit\u00e9 de l\'assistant. Par d\u00e9faut, un nom al\u00e9atoire inspir\u00e9 de sa couleur.'
-    });
-    settingsPanel.appendChild(charHint);
 
     var agentAvatarPreview = el('div', 'agent-avatar-preview', {
       'aria-label': 'Aper\u00e7u de l\'avatar'
@@ -704,12 +699,6 @@
     providerDetails.appendChild(providerSummary);
 
     var providerBody = el('div', 'agent-settings-fold-body');
-    providerBody.appendChild(
-      el('p', 'agent-settings-hint', {
-        text:
-          'Cl\u00e9 OpenAI ou endpoint compatible (OpenRouter, proxy CORS\u2026). Stock\u00e9e en priv\u00e9 sur votre compte Trello.'
-      })
-    );
 
     var presetRow = el('div', 'agent-preset-row', { role: 'group', 'aria-label': 'Pr\u00e9r\u00e9glages' });
     var presetButtons = {};
@@ -889,12 +878,6 @@
     memoryDetails.appendChild(memorySummary);
 
     var memoryBody = el('div', 'agent-settings-fold-body');
-    memoryBody.appendChild(
-      el('p', 'agent-settings-hint', {
-        text:
-          'Faits durables et notes de tableau partag\u00e9s entre toutes les fen\u00eatres Assistant. Alignement guid\u00e9 ou conversation libre.'
-      })
-    );
     var memoryActions = el('div', 'agent-settings-actions agent-memory-actions');
     var memoryAlignBtn = el('button', 'tp-button agent-btn agent-btn--secondary', {
       type: 'button',
@@ -1026,12 +1009,6 @@
     statsDetails.appendChild(statsSummary);
 
     var statsBody = el('div', 'agent-settings-fold-body');
-    statsBody.appendChild(
-      el('p', 'agent-settings-hint', {
-        text:
-          'Historique d\u2019usage de l\u2019IA sur votre compte\u00a0: co\u00fbts estim\u00e9s, tokens et messages.'
-      })
-    );
     var statsMountEl = el('div', 'agent-settings-stats-mount');
     statsBody.appendChild(statsMountEl);
     statsDetails.appendChild(statsBody);
@@ -3000,12 +2977,23 @@
       }
     }
 
+    function audioGestureOk() {
+      try {
+        var ua = global.navigator && global.navigator.userActivation;
+        if (ua && typeof ua.hasBeenActive === 'boolean') return ua.hasBeenActive;
+      } catch (e) {
+        /* ignore */
+      }
+      return true;
+    }
+
     function ensureAudioCtx() {
       var Ctx = global.AudioContext || global.webkitAudioContext;
-      if (!Ctx) return null;
+      if (!Ctx || !audioGestureOk()) return null;
       if (!audioCtx) audioCtx = new Ctx();
       if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
-        audioCtx.resume();
+        var resume = audioCtx.resume();
+        if (resume && typeof resume.catch === 'function') resume.catch(function () {});
       }
       return audioCtx;
     }

@@ -134,7 +134,15 @@
         return c && c.id && DM().isDocName(c.name);
       })
       .map(function (c) {
-        return { id: String(c.id), title: DM().titleFromName(c.name), updatedAt: c.dateLastActivity || '', size: DM().unpackDesc(c.desc).body.length };
+        var u = DM().unpackDesc(c.desc);
+        return {
+          id: String(c.id),
+          title: DM().titleFromName(c.name),
+          updatedAt: c.dateLastActivity || '',
+          size: u.body.length,
+          subject: u.subject,
+          props: u.props,
+        };
       })
       .sort(function (a, b) {
         return a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0;
@@ -152,6 +160,8 @@
       body: u.body,
       rev: u.rev,
       cover: u.cover,
+      subject: u.subject,
+      props: u.props,
       updatedAt: card.dateLastActivity || '',
     };
   }
@@ -160,6 +170,8 @@
   async function createDoc(t, title, body, opts) {
     var text = String(body == null ? '' : body);
     var cover = DM().normalizeCover(opts && opts.cover);
+    var subject = DM().normalizeSubject(opts && opts.subject);
+    var props = DM().normalizeProps(opts && opts.props);
     if (DM().sizeInfo(text).over) throw fail('too-long');
     var listId = await homeListId(t);
     var name = DM().nameFromTitle(title);
@@ -172,7 +184,7 @@
     );
     if (!created || !created.id) throw fail('no-card');
     try {
-      need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true, desc: DM().packDesc(text, { rev: 1, cover: cover }) }));
+      need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true, desc: DM().packDesc(text, { rev: 1, cover: cover, subject: subject, props: props }) }));
     } catch (err) {
       // never leave a visible document card on the board
       await ST().trelloRest(t, '/cards/' + enc(created.id), 'DELETE').catch(function () {});
@@ -184,6 +196,8 @@
       body: text,
       rev: 1,
       cover: cover,
+      subject: subject,
+      props: props,
       updatedAt: created.dateLastActivity || new Date().toISOString(),
     };
   }
@@ -210,13 +224,20 @@
   async function saveDoc(t, doc, opts) {
     opts = opts || {};
     var nextRev = (doc.rev || 1) + 1;
-    var desc = DM().packDesc(doc.body, { rev: nextRev, cover: doc.cover });
-    if (desc.length > DM().MAX_DESC) throw fail('too-long');
-    if (!opts.force) {
+    var cover = doc.cover;
+    var subject = doc.subject;
+    var props = doc.props;
+    // A body save that omits cover / subject / props keeps whatever is already stored.
+    if (!opts.force || cover === undefined || subject === undefined || props === undefined) {
       var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
       var remote = DM().unpackDesc(cur && cur.desc);
-      if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
+      if (!opts.force && remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
+      if (cover === undefined) cover = remote.cover;
+      if (subject === undefined) subject = remote.subject;
+      if (props === undefined) props = remote.props;
     }
+    var desc = DM().packDesc(doc.body, { rev: nextRev, cover: cover, subject: subject, props: props });
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
     return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString() };
   }
@@ -232,7 +253,7 @@
     if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
     var next = DM().normalizeCover(cover);
     var nextRev = remote.rev + 1;
-    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: next });
+    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: next, subject: remote.subject, props: remote.props });
     if (desc.length > DM().MAX_DESC) throw fail('too-long');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
     return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString(), cover: next };
@@ -343,6 +364,179 @@
     };
   }
 
+  function visibleOf(full) {
+    var meta = global.DescMeta;
+    if (meta && typeof meta.splitDesc === 'function') return meta.splitDesc(full).visible || '';
+    return String(full || '');
+  }
+
+  function joinVisible(full, visible) {
+    var meta = global.DescMeta;
+    if (meta && typeof meta.splitDesc === 'function' && typeof meta.joinDesc === 'function') {
+      return meta.joinDesc(visible, meta.splitDesc(full).meta);
+    }
+    return String(visible || '');
+  }
+
+  /** Live fields of a task card: name, visible description, due, members, labels. */
+  async function loadCardFace(t, cardId) {
+    var card = need(
+      await ST().trelloRest(
+        t,
+        '/cards/' + enc(cardId) + '?fields=name,desc,due,dueComplete,closed,url&members=true&member_fields=fullName,username&labels=true'
+      )
+    );
+    if (!card) throw fail('http-404');
+    return {
+      id: String(card.id || cardId),
+      name: card.name || '',
+      desc: visibleOf(card.desc),
+      due: card.due || '',
+      dueComplete: !!card.dueComplete,
+      closed: !!card.closed,
+      url: card.url || '',
+      members: (card.members || []).map(function (m) {
+        return { id: String(m.id), name: m.fullName || m.username || '' };
+      }),
+      labels: (card.labels || []).map(function (l) {
+        return { id: String(l.id), name: l.name || '', color: l.color || '' };
+      }),
+    };
+  }
+
+  /** Writes the visible description and keeps the hidden Cerveau block on the task card. */
+  async function saveCardDesc(t, cardId, visible) {
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=desc'));
+    var next = joinVisible(card && card.desc, visible);
+    if (next.length > 16384) throw fail('too-long');
+    need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { desc: next }));
+    return { desc: visibleOf(next) };
+  }
+
+  async function setCardMembers(t, cardId, ids) {
+    var list = (ids || []).map(function (id) { return DM().cleanId(id); }).filter(Boolean);
+    need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { idMembers: list.join(',') }));
+  }
+
+  async function setCardLabels(t, cardId, ids) {
+    var list = (ids || []).map(function (id) { return DM().cleanId(id); }).filter(Boolean);
+    need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { idLabels: list.join(',') }));
+  }
+
+  var ENTITY_MARK = '🧩';
+  var ENTITY_BLOCK = /<!--cerveau-entity\n([\s\S]*?)\n-->\s*$/;
+
+  function parseEntityBlob(desc) {
+    var m = ENTITY_BLOCK.exec(String(desc || '').replace(/\r\n?/g, '\n'));
+    if (!m) return null;
+    try {
+      var obj = JSON.parse(m[1]);
+      return obj && typeof obj === 'object' ? obj : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Name and aliases of an entity card. Types stay on the entity page (they are ids here). */
+  async function loadEntityFace(t, entityId) {
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(entityId) + '?fields=name,desc'));
+    if (!card || String(card.name || '').indexOf(ENTITY_MARK) !== 0) throw fail('not-an-entity');
+    var obj = parseEntityBlob(card.desc) || {};
+    var aliases = Array.isArray(obj.aliases)
+      ? obj.aliases.filter(function (a) { return typeof a === 'string' && a.trim(); }).slice(0, 12)
+      : [];
+    return {
+      id: String(card.id || entityId),
+      name: String(obj.name || card.name).replace(/^🧩\s?/, '').trim() || 'Sans titre',
+      aliases: aliases,
+    };
+  }
+
+  /** Entities the page can be linked to (archived 🧩 cards, schema excluded). */
+  async function listEntityChoices(t) {
+    var id = await boardId(t);
+    var cards = need(await ST().trelloRest(t, '/boards/' + enc(id) + '/cards/closed?fields=name')) || [];
+    return cards
+      .filter(function (c) {
+        return c && c.id && typeof c.name === 'string' && c.name.indexOf(ENTITY_MARK) === 0 && c.name.indexOf('Schéma des entités') < 0;
+      })
+      .map(function (c) {
+        return { id: String(c.id), name: String(c.name).replace(/^🧩\s?/, '').trim() || 'Sans titre' };
+      });
+  }
+
+  /**
+   * The one document bound to this task or entity. Creates it (titled with the subject's name) when missing.
+   * @returns {Promise<{doc:object, created:boolean, docs:object[]}>}
+   */
+  async function ensureSubjectDoc(t, kind, id) {
+    var subject = DM().normalizeSubject({ k: kind, id: id });
+    if (!subject) throw fail('bad-subject');
+    var docs = await listDocs(t);
+    var found = DM().docForSubject(docs, subject.k, subject.id);
+    if (found) return { doc: await loadDoc(t, found.id), created: false, docs: docs };
+    var title = DM().UNTITLED;
+    try {
+      title = subject.k === 'task' ? (await loadCardFace(t, subject.id)).name : (await loadEntityFace(t, subject.id)).name;
+    } catch (e) {
+      title = DM().UNTITLED;
+    }
+    var doc = await createDoc(t, title || DM().UNTITLED, '', { subject: subject });
+    docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt, size: 0, subject: doc.subject, props: doc.props });
+    return { doc: doc, created: true, docs: docs };
+  }
+
+  /**
+   * Rewrites subject and/or props. Omitted keys are kept. `null` clears that key.
+   * The body and the cover stay as stored. Same conflict rule as setCover.
+   */
+  async function patchMeta(t, doc, patch) {
+    patch = patch || {};
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
+    var remote = DM().unpackDesc(cur && cur.desc);
+    if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
+    var nextRev = remote.rev + 1;
+    var subject = patch.subject !== undefined ? DM().normalizeSubject(patch.subject) : remote.subject;
+    var props = patch.props !== undefined ? DM().normalizeProps(patch.props) : remote.props;
+    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: remote.cover, subject: subject, props: props });
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
+    return {
+      rev: nextRev,
+      updatedAt: (card && card.dateLastActivity) || new Date().toISOString(),
+      subject: subject,
+      props: props,
+    };
+  }
+
+  /**
+   * A real board card (not archived, unlike a document) whose name is the selected text.
+   * `listId` empty means the board's first list.
+   */
+  async function createTask(t, name, listId, desc) {
+    name = String(name || '').replace(/\s+/g, ' ').trim();
+    if (!name) throw fail('no-name');
+    var idList = listId ? String(listId) : await homeListId(t);
+    var created = need(
+      await ST().trelloRest(t, '/cards?idList=' + enc(idList) + '&name=' + enc(name) + '&pos=bottom', 'POST')
+    );
+    if (!created || !created.id) throw fail('no-card');
+    var body = String(desc || '').trim();
+    if (body) {
+      if (body.length > DM().MAX_DESC) body = body.slice(0, DM().MAX_DESC);
+      try {
+        need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { desc: body }));
+      } catch (e) {
+        /* the card exists; the description can be added by hand */
+      }
+    }
+    return {
+      id: String(created.id),
+      name: (created.name && String(created.name)) || name,
+      idList: String(created.idList || idList),
+    };
+  }
+
   global.DocsTrello = {
     isAuthorized: isAuthorized,
     authorize: authorize,
@@ -359,6 +553,15 @@
     searchUnsplash: searchUnsplash,
     renameDoc: renameDoc,
     deleteDoc: deleteDoc,
+    createTask: createTask,
     loadMentionSources: loadMentionSources,
+    loadCardFace: loadCardFace,
+    saveCardDesc: saveCardDesc,
+    setCardMembers: setCardMembers,
+    setCardLabels: setCardLabels,
+    loadEntityFace: loadEntityFace,
+    listEntityChoices: listEntityChoices,
+    ensureSubjectDoc: ensureSubjectDoc,
+    patchMeta: patchMeta,
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -199,6 +199,15 @@ describe('DocsModel', () => {
       assert.match(chip, /^<span class="dc-mention dc-mention--person" data-m="person" data-id="abc123" data-label="Marie Tremblay" contenteditable="false">/);
       assert.match(chip, /Marie Tremblay<\/span>$/);
       assert.match(DM.inlineToHtml('[@Tâche](task:t1)'), /dc-mention--task/);
+      const short = DM.inlineToHtml('[@Aldé Roberge](person:abc:short)');
+      assert.match(short, /data-label="Aldé Roberge"/);
+      assert.match(short, /data-short="1"/);
+      assert.match(short, /<\/i>Aldé<\/span>$/);
+      assert.equal(roundTrip('voir [@Aldé](person:abc:short) ici'), 'voir [@Aldé](person:abc:short) ici');
+      assert.equal(roundTrip('[@Aldé Roberge](person:abc:short)'), '[@Aldé](person:abc:short)');
+      assert.equal(DM.mentionsToPlain('voir [@Aldé](person:abc:short)'), 'voir @Aldé');
+      assert.equal(DM.firstName('Jean-Pierre Tremblay'), 'Jean-Pierre');
+      assert.equal(DM.firstName('Marie'), 'Marie');
       assert.match(DM.inlineToHtml('[@Doc](doc:d1)'), /dc-mention--doc/);
       // a mention with a hostile label / id stays inert
       assert.equal(DM.inlineToHtml('[@x](person:bad id)'), '@x');

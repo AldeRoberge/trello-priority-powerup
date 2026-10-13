@@ -71,11 +71,29 @@
       } else if ((m = /^\/cards\/([^/]+)$/.exec(u.path))) {
         var found = cards.filter(function (c) { return c.id === m[1]; })[0];
         if (!found) res = { ok: false, reason: 'http-404', detail: 'card not found' };
-        else if (method === 'GET') res = { ok: true, data: pick(found, u.query.fields) };
+        else if (method === 'GET') {
+          var data = pick(found, u.query.fields);
+          if (u.query.members === 'true') data.members = found.members || [];
+          if (u.query.labels === 'true') data.labels = found.labels || [];
+          res = { ok: true, data: data };
+        }
         else if (method === 'PUT') {
           ['name', 'desc', 'closed', 'idList'].forEach(function (k) {
             if (body && k in body) found[k] = body[k];
           });
+          if (body && 'idMembers' in body) {
+            found.members = String(body.idMembers || '').split(',').filter(Boolean).map(function (id) {
+              var known = members.filter(function (mb) { return mb.id === id; })[0];
+              return known
+                ? { id: known.id, fullName: known.fullName || '', username: known.username || '' }
+                : { id: id, fullName: id };
+            });
+          }
+          if (body && 'idLabels' in body) {
+            found.labels = String(body.idLabels || '').split(',').filter(Boolean).map(function (id) {
+              return { id: id, name: id, color: '' };
+            });
+          }
           if (body && body.desc != null && body.desc.length > 16384) {
             res = { ok: false, reason: 'http-400', detail: 'invalid value for desc' };
           } else {

@@ -169,7 +169,6 @@
     }
 
     var foot = el('div', 'nc-foot');
-    foot.appendChild(el('span', 'nc-hint', 'Entrée pour créer · Échap pour fermer'));
     var go = el('button', 'nc-btn', 'Créer la carte');
     go.type = 'button';
     foot.appendChild(go);

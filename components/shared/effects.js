@@ -215,12 +215,23 @@
     return meta ? meta.label : id;
   }
 
+  function audioGestureOk() {
+    try {
+      var ua = global.navigator && global.navigator.userActivation;
+      if (ua && typeof ua.hasBeenActive === 'boolean') return ua.hasBeenActive;
+    } catch (e) {
+      /* ignore */
+    }
+    return true;
+  }
+
   function ensureAudioCtx() {
     var Ctx = global.AudioContext || global.webkitAudioContext;
-    if (!Ctx) return null;
+    if (!Ctx || !audioGestureOk()) return null;
     if (!audioCtx) audioCtx = new Ctx();
     if (audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
-      audioCtx.resume();
+      var resume = audioCtx.resume();
+      if (resume && typeof resume.catch === 'function') resume.catch(function () {});
     }
     return audioCtx;
   }

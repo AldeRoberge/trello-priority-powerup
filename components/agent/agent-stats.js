@@ -12,6 +12,8 @@
   var MAX_MODELS = 5;
   var MAX_SERIALIZED = 1800;
   var SAVE_DEBOUNCE_MS = 700;
+  // member/private is one 4096 budget shared with profile, people, places, provider, token.
+  var PLUGIN_BUDGET = 3800;
 
   function emptyLife() {
     return { turns: 0, pt: 0, ct: 0, tt: 0, cost: 0, sent: 0, recv: 0 };
@@ -19,6 +21,11 @@
 
   function emptyStore() {
     return { v: 1, life: emptyLife(), days: [], models: {} };
+  }
+
+  function roundCost(raw) {
+    var n = toNonNegNumber(raw);
+    return Math.round(n * 1e6) / 1e6;
   }
 
   function toNonNegNumber(raw, fallback) {
@@ -35,7 +42,7 @@
       pt: Math.round(toNonNegNumber(src.pt)),
       ct: Math.round(toNonNegNumber(src.ct)),
       tt: Math.round(toNonNegNumber(src.tt)),
-      cost: toNonNegNumber(src.cost),
+      cost: roundCost(src.cost),
       sent: Math.round(toNonNegNumber(src.sent)),
       recv: Math.round(toNonNegNumber(src.recv))
     };
@@ -51,7 +58,7 @@
       pt: Math.round(toNonNegNumber(raw.pt)),
       ct: Math.round(toNonNegNumber(raw.ct)),
       tt: Math.round(toNonNegNumber(raw.tt)),
-      cost: toNonNegNumber(raw.cost),
+      cost: roundCost(raw.cost),
       sent: Math.round(toNonNegNumber(raw.sent)),
       recv: Math.round(toNonNegNumber(raw.recv))
     };
@@ -67,7 +74,7 @@
       if (!m || typeof m !== 'object') return;
       out[id] = {
         turns: Math.round(toNonNegNumber(m.turns)),
-        cost: toNonNegNumber(m.cost),
+        cost: roundCost(m.cost),
         tt: Math.round(toNonNegNumber(m.tt))
       };
     });
@@ -141,6 +148,69 @@
     } catch (e) {
       return MAX_SERIALIZED + 1;
     }
+  }
+
+  function isLengthError(err) {
+    var msg = String((err && (err.message || err)) || '');
+    return /4096|PluginData length/i.test(msg);
+  }
+
+  function isConflictError(err) {
+    var msg = String((err && (err.message || err.name || err)) || '');
+    return /\b409\b|Conflict/i.test(msg);
+  }
+
+  function lifeOnly(store) {
+    var next = normalize(store);
+    next.days = [];
+    next.models = {};
+    return next;
+  }
+
+  function othersSize(bag) {
+    var total = 0;
+    if (!bag || typeof bag !== 'object') return 0;
+    Object.keys(bag).forEach(function (key) {
+      if (key === STORAGE_KEY) return;
+      try {
+        total += key.length + JSON.stringify(bag[key]).length + 8;
+      } catch (e) {
+        total += 256;
+      }
+    });
+    return total;
+  }
+
+  /**
+   * Drop days, then models, until the payload fits `room` characters.
+   * Lifetime totals stay.
+   */
+  function fitStore(store, room) {
+    var next = trimStore(store);
+    var cap = typeof room === 'number' && isFinite(room) ? room : MAX_SERIALIZED;
+    if (cap < 0) cap = 0;
+    while (serializedSize(next) > cap && next.days.length) {
+      next.days.pop();
+    }
+    while (serializedSize(next) > cap && Object.keys(next.models).length) {
+      var ids = Object.keys(next.models);
+      delete next.models[ids[ids.length - 1]];
+    }
+    if (serializedSize(next) > cap) {
+      next = lifeOnly(next);
+    }
+    return next;
+  }
+
+  async function readMemberPrivate(t) {
+    if (!t || typeof t.get !== 'function') return null;
+    try {
+      var all = await t.get('member', 'private');
+      if (all && typeof all === 'object' && !Array.isArray(all)) return all;
+    } catch (e) {
+      /* older clients only accept a key */
+    }
+    return null;
   }
 
   function trimStore(store) {
@@ -247,9 +317,35 @@
     if (!t || typeof t.set !== 'function') {
       throw new Error('AgentStats.save: t.set required');
     }
-    var next = trimStore(store);
-    await t.set('member', 'private', STORAGE_KEY, next);
-    return next;
+    // Memory keeps the full ledger. Only the pluginData payload is shrunk.
+    var full = trimStore(store);
+    var bag = await readMemberPrivate(t);
+    var room =
+      bag == null
+        ? MAX_SERIALIZED
+        : PLUGIN_BUDGET - othersSize(bag) - STORAGE_KEY.length - 16;
+    var payload = fitStore(full, Math.min(MAX_SERIALIZED, room));
+    if (serializedSize(payload) > room) {
+      // Other member/private keys already fill the shared 4096.
+      return full;
+    }
+
+    function write(value) {
+      return t.set('member', 'private', STORAGE_KEY, value);
+    }
+
+    try {
+      await write(payload);
+    } catch (err) {
+      if (!isLengthError(err) && !isConflictError(err)) throw err;
+      payload = lifeOnly(full);
+      try {
+        await write(payload);
+      } catch (retryErr) {
+        if (!isLengthError(retryErr) && !isConflictError(retryErr)) throw retryErr;
+      }
+    }
+    return full;
   }
 
   async function reset(t) {

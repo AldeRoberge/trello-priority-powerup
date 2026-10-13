@@ -114,6 +114,51 @@ describe('PowerUpCapabilities', () => {
     assert.equal(setCount, 2);
   });
 
+  it('markSeen merges concurrent capabilities into one write', async () => {
+    const Caps = load();
+    const store = {};
+    let setCount = 0;
+    const t = {
+      get() {
+        return Promise.resolve(store[Caps.STORAGE_KEY] || null);
+      },
+      set(scope, visibility, key, value) {
+        setCount += 1;
+        store[key] = value;
+        return Promise.resolve();
+      },
+    };
+
+    await Promise.all([
+      Caps.markSeen(t, 'card-badges'),
+      Caps.markSeen(t, 'card-detail-badges'),
+    ]);
+    assert.equal(setCount, 1);
+    assert.ok(store[Caps.STORAGE_KEY]['card-badges']);
+    assert.ok(store[Caps.STORAGE_KEY]['card-detail-badges']);
+  });
+
+  it('markSeen retries a 409 and still records the capability', async () => {
+    const Caps = load();
+    const store = {};
+    let setCount = 0;
+    const t = {
+      get() {
+        return Promise.resolve(store[Caps.STORAGE_KEY] || null);
+      },
+      set(scope, visibility, key, value) {
+        setCount += 1;
+        if (setCount === 1) return Promise.reject(new Error('409 Conflict'));
+        store[key] = value;
+        return Promise.resolve();
+      },
+    };
+
+    await Caps.markSeen(t, 'board-buttons');
+    assert.equal(setCount, 2);
+    assert.ok(store[Caps.STORAGE_KEY]['board-buttons'].at);
+  });
+
   it('normalizeProbe drops invalid rows', () => {
     const Caps = load();
     assert.deepEqual(

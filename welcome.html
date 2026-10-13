@@ -18,38 +18,6 @@
     <img id="brandLogo" class="tp-welcome-logo" src="./assets/icon.png" alt="" width="48" height="48" />
     <h1 class="tp-title" id="brandTitle">Trello Cerveau</h1>
   </div>
-  <p class="tp-subtitle" id="brandSubtitle">Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier.</p>
-
-  <div class="tp-steps">
-    <div class="tp-step">
-      <div class="tp-step-num">1</div>
-      <div class="tp-step-body">
-        <strong>Noter une carte</strong>
-        <p id="welcomeStep1Body">Ouvrez une carte — <strong>Trello Cerveau</strong> s’ouvre automatiquement. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.</p>
-      </div>
-    </div>
-    <div class="tp-step">
-      <div class="tp-step-num">2</div>
-      <div class="tp-step-body">
-        <strong>Voir sur le tableau</strong>
-        <p>Le score, le libellé (ex. « Critique », « Urgente ») et le progrès s'affichent ensemble en badge sur la carte.</p>
-      </div>
-    </div>
-    <div class="tp-step">
-      <div class="tp-step-num">3</div>
-      <div class="tp-step-body">
-        <strong>Infos et guide</strong>
-        <p>Utilisez <strong>Paramètres du Cerveau</strong> dans le menu du tableau pour consulter la version déployée, rouvrir ce guide, et accéder à <strong>Mon profil</strong> (préférences personnelles et sections de l’éditeur).</p>
-      </div>
-    </div>
-    <div class="tp-step">
-      <div class="tp-step-num">4</div>
-      <div class="tp-step-body">
-        <strong>Assistant &amp; mémoire</strong>
-        <p>Alignez l’assistant (questions conversationnelles), puis rouvrez <strong>Assistant (mémoire)</strong> en bas du tableau pour mettre à jour les faits.</p>
-      </div>
-    </div>
-  </div>
 
   <button class="tp-btn tp-btn--primary" type="button" id="startBtn" style="width:100%">Commencer</button>
 
@@ -69,15 +37,6 @@
       if (logoEl) {
         logoEl.alt = name;
         if (brand && brand.iconPng) logoEl.src = brand.iconPng;
-      }
-      var subtitleEl = document.getElementById('brandSubtitle');
-      if (subtitleEl && brand && brand.subtitle) subtitleEl.textContent = brand.subtitle;
-      var stepBody = document.getElementById('welcomeStep1Body');
-      if (stepBody) {
-        stepBody.innerHTML =
-          'Ouvrez une carte — <strong>' +
-          name.replace(/</g, '&lt;') +
-          '</strong> s’ouvre automatiquement. Ajustez les trois curseurs ou touchez un palier sur la barre de chaleur.';
       }
     })();
 

@@ -4,7 +4,16 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Mindmap : zoom arrière replie un groupe (vision, projet, type ou groupe à la main) ; zoom avant ouvre la tâche en nœuds (progrès, priorité, statut).
+- Saisie : l'IA propose la suite du texte (Tab pour garder) dans les documents, les noms de tâches, de documents et de personnes, et les étiquettes.
+- Interface : les phrases d'explication sous les titres et les champs sont retirées (nouvelle entité, réglages, documents, assistant, Gantt).
+- Mindmap : un lien se lit depuis la carte cliquée. Tâche planifiée : « Sera fait par Aldé » ; en cours : « Est en train d’être fait par Aldé » ; terminée : « Complété par Aldé ». Depuis la personne : « Va faire », « Est en train de faire » ou « A complété ».
+- Menu clic droit : le fond suit le mode sombre (Entités, Mindmap, Réglages).
 - Documents : couverture en haut de chaque document (couleur, dégradé, photo Unsplash, lien ou image importée), repositionnable et annulable.
+- Orchestrateur : la colonne « À planifier » s’aligne sur les jours, la semaine tient sur une ligne, et les petits boutons n’ont plus de contour blanc.
+- Vues : changer d'onglet (Kanban, Tableau, Gantt) ne fait plus un flash blanc.
+- Documents : Retour arrière juste après une personne ne garde que le prénom, la mention reste.
+- Documents : « Nouveau sous-document » est en tête du menu, avec une icône +.
 - Annulation : le message « Action annulée » ouvre l'historique, pour annuler ou rétablir d'autres modifications (Kanban, Gantt, Mindmap, Documents).
 - Gantt : survoler la ligne rouge d'aujourd'hui affiche l'heure actuelle.
 - Cartes : choix du statut et de l'urgence avec recherche, touches S, P et D (style Linear).

@@ -16,6 +16,7 @@ const coverage = args.includes('--coverage');
 const unitOnly = args.includes('--unit');
 
 const UNIT_FILES = [
+  'ai-complete.test.js',
   'version.test.js',
   'linear-pick.test.js',
   'shortcut-wiring.test.js',

@@ -140,21 +140,15 @@
     containerEl.classList.add('memory-ui');
     if (embedded) containerEl.classList.add('memory-ui--embedded');
 
-    var header = el('div', 'memory-ui-header');
     if (!embedded) {
-      var title = el('h2', 'memory-ui-title', {
-        text: mode === 'onboarding' ? 'Aligner l\'assistant' : 'M\u00e9moire de l\'assistant'
-      });
-      header.appendChild(title);
+      var header = el('div', 'memory-ui-header');
+      header.appendChild(
+        el('h2', 'memory-ui-title', {
+          text: mode === 'onboarding' ? 'Aligner l\'assistant' : 'M\u00e9moire de l\'assistant'
+        })
+      );
+      containerEl.appendChild(header);
     }
-    var subtitle = el('p', 'memory-ui-subtitle', {
-      text:
-        mode === 'onboarding'
-          ? 'Quelques questions pour mieux cadrer tes cartes et suggestions.'
-          : 'Ajoute ou corrige les faits importants (bas du tableau).'
-    });
-    header.appendChild(subtitle);
-    containerEl.appendChild(header);
 
     var progressEl = el('div', 'memory-ui-progress', {
       role: 'progressbar',

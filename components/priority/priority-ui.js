@@ -8701,8 +8701,7 @@
       }
       if (reason === 'not-authorized') {
         return (
-          'Impossible de déplacer la carte : Trello n’a pas encore l’autorisation d’écriture. ' +
-          'Cliquez sur le bouton ci-dessous (une fois par membre).'
+          'Impossible de déplacer la carte : Trello n’a pas encore l’autorisation d’écriture.'
         );
       }
       return '';
@@ -15962,7 +15961,7 @@
       tgPending = next;
       tgHost.classList.toggle('is-linking', !!next);
       tgHint.textContent = next
-        ? 'Clique sur la personne à relier (Échap pour annuler)'
+        ? ''
         : tgDefaultHint();
       tgStage.querySelectorAll('.tg-node').forEach(function (n) {
         n.classList.toggle(
@@ -16743,7 +16742,7 @@
         }
       }
       tgHint.textContent = tgPending
-        ? 'Clique sur la personne à relier (Échap pour annuler)'
+        ? ''
         : tgDefaultHint();
       tgHint.hidden = !tgHint.textContent;
     }
@@ -17843,13 +17842,9 @@
       var q = String(query || '').trim();
       labelsCreateBtn.hidden = false;
       if (!q) {
-        labelsCreateBtn.disabled = !!labelsBusy;
-        labelsCreateBtn.innerHTML =
-          '<i class="ti ti-plus" aria-hidden="true"></i>' +
-          '<span>Tapez le nom souhait\u00e9</span>';
-        labelsCreateBtn.title = labelsBusy
-          ? 'Cr\u00e9ation en cours\u2026'
-          : 'Tapez le nom de la nouvelle \u00e9tiquette';
+        labelsCreateBtn.hidden = true;
+        labelsCreateBtn.disabled = true;
+        labelsCreateBtn.textContent = '';
         return;
       }
       if (boardHasLabelName(q) || labelsBusy) {

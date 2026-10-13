@@ -10,9 +10,6 @@
     appAuthor: 'AldeRoberge',
     /** Short line under the name on the landing page. */
     tagline: 'Power-Up Trello',
-    /** Welcome / marketing subtitle. */
-    subtitle:
-      "Évaluez chaque carte selon l'urgence, l'impact et la facilité pour obtenir un score et un libellé de palier.",
     /** Relative paths from site root (Power-Up admin + landing). */
     iconSvg: './assets/icon.svg',
     iconPng: './assets/icon.png',

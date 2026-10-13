@@ -10,6 +10,8 @@
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/agent/agent.js"></script>
+  <script src="./components/shared/ai-complete.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <script src="./components/people/people.js"></script>
   <script src="./components/places/places.js"></script>
@@ -18,16 +20,10 @@
   <script src="./components/shared/context-menu.js?v=ctx-menu-6"></script>
 </head>
 <body class="tp-page tp-page--settings tp-page--profile">
-  <p class="tp-profile-intro">
-    Préférences personnelles enregistrées sur votre compte Trello.
-    Elles personnalisent l’éditeur de carte et l’assistant.
-  </p>
-
   <details class="tp-settings-section" id="identitySection" open>
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-user"></i></span>
       <span class="tp-settings-summary-title">Identité</span>
-      <span class="tp-settings-summary-hint">Comment l’assistant s’adresse à vous</span>
     </summary>
     <div class="tp-settings-body">
       <label class="tp-profile-field">
@@ -49,7 +45,6 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-message-chatbot"></i></span>
       <span class="tp-settings-summary-title">Assistant</span>
-      <span class="tp-settings-summary-hint">Identité et ton</span>
     </summary>
     <div class="tp-settings-body">
       <label class="tp-profile-field">
@@ -93,11 +88,9 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-users"></i></span>
       <span class="tp-settings-summary-title">Personnes</span>
-      <span class="tp-settings-summary-hint">Boss, collègues, contacts — pour l’assistant</span>
     </summary>
     <div class="tp-settings-body">
       <div class="tp-people-toolbar">
-        <p class="tp-people-hint">L’assistant résout «&nbsp;ma boss&nbsp;» vers le vrai nom dans les causes de blocage.</p>
         <button type="button" class="tp-button tp-button--secondary" id="peopleAddBtn">Ajouter</button>
       </div>
       <div class="tp-people-list" id="peopleList" role="list" aria-label="Annuaire de personnes"></div>
@@ -108,11 +101,9 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-map-pin"></i></span>
       <span class="tp-settings-summary-title">Lieux</span>
-      <span class="tp-settings-summary-hint">Maison, bureau, chalet — pour l’assistant</span>
     </summary>
     <div class="tp-settings-body">
       <div class="tp-people-toolbar">
-        <p class="tp-people-hint">L’assistant résout «&nbsp;chez moi&nbsp;» vers le vrai lieu sur De / Vers / Où.</p>
         <button type="button" class="tp-button tp-button--secondary" id="placesAddBtn">Ajouter</button>
       </div>
       <div class="tp-people-list" id="placesList" role="list" aria-label="Annuaire de lieux"></div>
@@ -123,10 +114,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-navbar"></i></span>
       <span class="tp-settings-summary-title">Fonctionnalités</span>
-      <span class="tp-settings-summary-hint">Sections visibles dans l’éditeur de carte</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Décochez ce que vous n’utilisez pas pour alléger l’éditeur. Au moins une section clé (priorité, progrès, échéance ou bloqué) reste active.</p>
       <div class="tp-profile-features" id="profileFeatures" role="group" aria-label="Fonctionnalités de l’éditeur"></div>
     </div>
   </details>

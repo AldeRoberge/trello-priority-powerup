@@ -2,13 +2,16 @@
  * Role: UI of the Document view, a Google-Docs-like editor for the board's documents.
  *  - left: the board's documents (search, new, duplicate, export, delete); right: outline of the headings
  *  - toolbar + keyboard shortcuts + Markdown shortcuts ("# ", "- ", "1. ", "[] ", "> ") + "/" command menu
+ *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
  *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
+ *    Backspace right after a person keeps the first name; another Backspace removes the mention
+ *  - selecting text shows "Créer une tâche": the selection becomes a board card, linked in place
  *  - autosave (debounced) with revision check, so two people editing the same document are warned
  * Data + writes: DocsTrello; pure helpers (Markdown <-> HTML, mention search): DocsModel. Icons: Tabler webfont.
  *
  * Contents
  *   1. helpers          2. mount: state + skeleton       3. documents list (sidebar)
- *   4. editor surface   5. commands + toolbar            6. suggestions (@ and /)
+ *   4. editor surface   5. commands + toolbar (+ block handles)   6. suggestions (@ and /)
  *   7. popovers/dialogs (+ cover: color, gradient, Unsplash, upload)
  *   8. saving + remote refresh       9. boot
  */
@@ -105,6 +108,7 @@
     if (r === 'http-404') return 'Ce document n’existe plus.';
     if (r === 'too-long') return 'Le document dépasse la taille maximale d’une description Trello (16 384 caractères).';
     if (r === 'no-list') return 'Le tableau n’a aucune liste : créez-en une pour pouvoir ajouter des documents.';
+    if (r === 'no-name') return 'Sélectionnez du texte pour créer une tâche.';
     if (r === 'no-app-key') return 'Clé API Trello absente (components/shared/rest-config.js).';
     if (r === 'conflict') return 'Ce document a été modifié par quelqu’un d’autre.';
     return 'Échec : ' + (r || 'erreur inconnue');
@@ -128,6 +132,7 @@
     { id: 'quote', label: 'Citation', icon: 'quote', kw: 'citation quote' },
     { id: 'codeblock', label: 'Bloc de code', icon: 'file-code', kw: 'code' },
     { id: 'hr', label: 'Séparateur', icon: 'separator-horizontal', kw: 'ligne separateur' },
+    { id: 'image', label: 'Image', icon: 'photo', kw: 'image photo picture illustration fichier' },
     { id: 'mention-person', label: 'Mentionner une personne', icon: 'user', hint: '@', kw: 'personne mention arobase' },
     { id: 'mention-task', label: 'Lier une tâche', icon: 'checkbox', hint: '@@', kw: 'tache carte lien' },
     { id: 'mention-doc', label: 'Lier un document', icon: 'file-text', hint: '@@@', kw: 'document page lien' },
@@ -152,6 +157,8 @@
       conflict: null,
       busy: '',
       sideCollapsed: false,
+      face: null,
+      labelCatalog: null,
     };
     var editor = null;
     var saving = false;
@@ -161,10 +168,18 @@
     var lastRange = null;
     var sugg = null; // {kind:'mention'|'slash', trig, entries, active}
     var pop = null; // open popover element
+    var selBar = null; // floating "Créer une tâche" bar for the current text selection
+    var blockHover = null;
+    var dragBlock = null;
+    var dropAt = null;
+    var gripDragged = false;
+    var blockHideTimer = null;
+    var freshTypeOff = null;
     var metaTimer = null;
     var lastRefreshAt = Date.now();
     var toastTimer = null;
     var loadToken = 0;
+    var faceToken = 0;
 
     root.innerHTML = '';
     var els = {
@@ -182,6 +197,8 @@
       cover: h('div', { class: 'dc-cover', hidden: true }),
       coverAdd: h('div', { class: 'dc-cover-add' }),
       title: h('input', { class: 'dc-title', type: 'text', placeholder: 'Sans titre', maxlength: String(DM().MAX_TITLE), 'aria-label': 'Titre du document', spellcheck: 'true' }),
+      parent: h('button', { class: 'dc-parent', type: 'button', hidden: true }),
+      props: h('div', { class: 'dc-props' }),
       meta: h('div', { class: 'dc-meta' }),
       empty: h('div', { class: 'dc-empty', hidden: true }),
       outline: h('aside', { class: 'dc-outline', 'aria-label': 'Plan du document' }),
@@ -205,8 +222,17 @@
     els.scroll.appendChild(els.page);
     els.page.appendChild(els.cover);
     els.page.appendChild(els.coverAdd);
+    els.page.appendChild(els.parent);
     els.page.appendChild(els.title);
+    els.page.appendChild(els.props);
     els.page.appendChild(els.meta);
+    els.blockUi = h('div', { class: 'dc-block-ui', hidden: true }, [
+      h('button', { class: 'dc-block-add', type: 'button', 'aria-label': 'Ajouter un bloc', title: 'Ajouter' }, [icon('plus')]),
+      h('button', { class: 'dc-block-grip', type: 'button', draggable: 'true', 'aria-label': 'Déplacer ou transformer', title: 'Glisser ou transformer' }, [icon('grip-vertical')]),
+    ]);
+    els.dropLine = h('div', { class: 'dc-drop-line', hidden: true });
+    els.page.appendChild(els.blockUi);
+    els.page.appendChild(els.dropLine);
 
     try {
       document.execCommand('defaultParagraphSeparator', false, 'p');
@@ -375,7 +401,7 @@
         }, [icon(checked ? 'check' : iconName), h('span', { text: label })]);
       }
       if (!sortOnly) {
-        items.push(item('file-plus', 'Nouveau document', function () { newDoc(); }));
+        items.push(item('plus', 'Nouveau document', function () { newDoc(); }));
         items.push(item('folder-plus', 'Nouveau dossier', function () { newFolder(''); }));
         items.push(h('div', { class: 'dc-menu-sep' }));
       }
@@ -449,7 +475,7 @@
           },
         }, [
           docChev(r),
-          icon('file-text', 'dc-item-icon'),
+          icon(d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text', 'dc-item-icon'),
           h('span', { class: 'dc-item-main' }, [
             h('span', { class: 'dc-item-title', text: d.title }),
             h('span', { class: 'dc-item-time', text: DM().relativeTime(d.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(d.size) : '') }),
@@ -859,7 +885,7 @@
       var f = DM().folderById(state.idx, folderId);
       if (!f) return;
       pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, [
-        item('file-plus', 'Nouveau document ici', function () { newDoc(null, null, folderId); }),
+        item('plus', 'Nouveau document ici', function () { newDoc(null, null, folderId); }),
         item('folder-plus', 'Nouveau sous-dossier', function () { newFolder(folderId); }),
         item('pencil', 'Renommer…', function () { renameFolder(folderId); }),
         item('folder-share', 'Déplacer vers…', function () {
@@ -938,7 +964,7 @@
       Array.prototype.slice.call(editor.childNodes).forEach(function (n) {
         var inline = n.nodeType === 3
           ? /[^\s]|\u00a0/.test(n.nodeValue)
-          : n.nodeType === 1 && !/^(P|DIV|H[1-6]|UL|OL|BLOCKQUOTE|PRE|HR|TABLE)$/.test(n.nodeName);
+          : n.nodeType === 1 && !/^(P|DIV|H[1-6]|UL|OL|BLOCKQUOTE|PRE|HR|TABLE|FIGURE)$/.test(n.nodeName);
         if (inline) run.push(n);
         else flush();
       });
@@ -989,7 +1015,7 @@
     }
 
     function isEmptyDoc() {
-      return !editor.querySelector('.dc-mention, hr, li, pre, blockquote, h1, h2, h3') && !/\S/.test(editor.textContent.replace(/\u200b/g, ''));
+      return !editor.querySelector('.dc-mention, hr, li, pre, blockquote, h1, h2, h3, figure') && !/\S/.test(editor.textContent.replace(/\u200b/g, ''));
     }
 
     function paintEmptyClass() {
@@ -1038,6 +1064,7 @@
 
     function onEdit() {
       normalizeRoot();
+      fixImages();
       fixChips();
       paintEmptyClass();
       if (state.saveState !== 'conflict') setSave('dirty');
@@ -1067,6 +1094,391 @@
           })
         );
       }
+    }
+
+    /* Page fields: subject (task or entity), its metadata, tags, child documents. */
+    var LABEL_BG = {
+      green: '#216e4e', yellow: '#7f5f01', orange: '#a54800', red: '#ae2e24',
+      purple: '#5e4db2', blue: '#0055cc', sky: '#206a83', lime: '#4c6b1f',
+      pink: '#943d73', black: '#44546f',
+    };
+    var DUE_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+    function dueLabel(iso) {
+      var ms = Date.parse(iso);
+      if (!isFinite(ms)) return '';
+      var d = new Date(ms);
+      return d.getDate() + ' ' + DUE_MONTHS[d.getMonth()];
+    }
+
+    function pageProps() {
+      var p = state.current && state.current.props;
+      return { tags: p && p.tags ? p.tags.slice() : [], people: p && p.people ? p.people.slice() : [] };
+    }
+
+    function memberName(id) {
+      var src = (state.sources && state.sources.members) || [];
+      var m = src.filter(function (x) { return x.id === id; })[0];
+      if (m) return m.fullName || m.name || m.username || id;
+      var fm = state.face && (state.face.members || []).filter(function (x) { return x.id === id; })[0];
+      return (fm && fm.name) || id;
+    }
+
+    function isTaskPage() {
+      return !!(state.current && state.current.subject && state.current.subject.k === 'task' && state.face && !state.face.missing);
+    }
+
+    function propRow(iconName, label, fill, extra) {
+      var value = h('div', { class: 'dc-prop-value' });
+      fill(value);
+      return h('div', { class: 'dc-prop' }, [
+        h('div', { class: 'dc-prop-label' }, [icon(iconName), h('span', { text: label }), extra || null]),
+        value,
+      ]);
+    }
+
+    function emptyBtn(text, run) {
+      return h('button', { class: 'dc-prop-empty', type: 'button', onclick: run }, [text]);
+    }
+
+    function chip(label, opts) {
+      opts = opts || {};
+      var box = h('span', { class: 'dc-chip' + (opts.dim ? ' is-dim' : '') });
+      if (opts.color && LABEL_BG[opts.color]) {
+        box.style.background = LABEL_BG[opts.color];
+        box.style.color = '#fff';
+      }
+      box.appendChild(h('button', { class: 'dc-chip-main', type: 'button', title: opts.title || label, onclick: opts.onClick || null }, [label]));
+      if (opts.onRemove) {
+        box.appendChild(h('button', {
+          class: 'dc-chip-x', type: 'button', 'aria-label': 'Retirer',
+          onclick: function (e) { e.stopPropagation(); opts.onRemove(); },
+        }, ['×']));
+      }
+      return box;
+    }
+
+    function openPicker(anchor, rows) {
+      closePop();
+      var box = h('div', { class: 'dc-pop dc-picker' });
+      var search = h('input', { class: 'dc-picker-search', type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher' });
+      var list = h('div', { class: 'dc-picker-list' });
+      function paint(q) {
+        list.textContent = '';
+        var query = DM().fold(q || '');
+        var shown = 0;
+        rows.forEach(function (r) {
+          if (query && DM().fold(r.label).indexOf(query) < 0) return;
+          if (shown >= 40) return;
+          shown += 1;
+          list.appendChild(h('button', {
+            class: 'dc-menu-item' + (r.on ? ' is-on' : ''),
+            type: 'button',
+            onclick: function () { r.run(); },
+          }, [icon(r.on ? 'check' : (r.icon || 'point')), h('span', { text: r.label })]));
+        });
+        if (!shown) list.appendChild(h('div', { class: 'dc-pop-sub', text: 'Aucun résultat' }));
+      }
+      search.addEventListener('input', function () { paint(search.value); });
+      box.appendChild(search);
+      box.appendChild(list);
+      pop = box;
+      placePop(pop, anchor.getBoundingClientRect());
+      paint('');
+      search.focus();
+    }
+
+    function patchPage(patch) {
+      var cur = state.current;
+      if (!cur) return Promise.resolve();
+      return DT().patchMeta(t, { id: cur.id, rev: cur.rev }, patch).then(function (res) {
+        cur.rev = res.rev;
+        cur.updatedAt = res.updatedAt;
+        if (patch.subject !== undefined) cur.subject = res.subject;
+        if (patch.props !== undefined) cur.props = res.props;
+        touchListItem(cur.id, { subject: cur.subject, props: cur.props, updatedAt: res.updatedAt });
+        return res;
+      }, failure);
+    }
+
+    function bindSubject(kind, id, title) {
+      var cur = state.current;
+      if (!cur) return;
+      var other = DM().docForSubject(state.docs, kind, id);
+      if (other && other.id !== cur.id) {
+        toast(kind === 'entity' ? 'Cette entité a déjà une page.' : 'Cette tâche a déjà une page.');
+        openDoc(other.id);
+        return;
+      }
+      patchPage({ subject: { k: kind, id: id } }).then(function (res) {
+        if (!res) return;
+        if ((!els.title.value.trim() || cur.title === DM().UNTITLED) && title) {
+          els.title.value = DM().cleanTitle(title);
+          scheduleSave(10);
+        }
+        loadFace();
+      });
+    }
+
+    function openLinkPicker(anchor) {
+      var cards = ((state.sources && state.sources.cards) || []).filter(function (c) {
+        return c && c.id && !DM().isDocName(c.name) && String(c.name || '').indexOf('🧩') !== 0;
+      });
+      function rowsFor(ents) {
+        var rows = cards.map(function (c) {
+          return { label: c.name || 'Sans titre', icon: 'checkbox', run: function () { closePop(); bindSubject('task', c.id, c.name); } };
+        });
+        (ents || []).forEach(function (ent) {
+          rows.push({ label: ent.name, icon: 'stack-2', run: function () { closePop(); bindSubject('entity', ent.id, ent.name); } });
+        });
+        return rows;
+      }
+      DT().listEntityChoices(t).then(
+        function (ents) { openPicker(anchor, rowsFor(ents)); },
+        function () { openPicker(anchor, rowsFor([])); }
+      );
+    }
+
+    function togglePerson(id) {
+      if (isTaskPage()) {
+        var ids = (state.face.members || []).map(function (m) { return m.id; });
+        var at = ids.indexOf(id);
+        if (at >= 0) ids.splice(at, 1);
+        else ids.push(id);
+        DT().setCardMembers(t, state.current.subject.id, ids).then(function () { loadFace(); }, failure);
+        return;
+      }
+      var props = pageProps();
+      var j = props.people.indexOf(id);
+      if (j >= 0) props.people.splice(j, 1);
+      else props.people.push(id);
+      patchPage({ props: props }).then(function () { paintProps(); });
+    }
+
+    function openPeoplePicker(anchor) {
+      var members = (state.sources && state.sources.members) || [];
+      var on = isTaskPage() ? (state.face.members || []).map(function (m) { return m.id; }) : pageProps().people;
+      openPicker(anchor, members.map(function (m) {
+        return {
+          label: m.fullName || m.name || m.username || m.id,
+          icon: 'user',
+          on: on.indexOf(m.id) >= 0,
+          run: function () { closePop(); togglePerson(m.id); },
+        };
+      }));
+    }
+
+    function openLabelPicker(anchor) {
+      var load = state.labelCatalog
+        ? Promise.resolve(state.labelCatalog)
+        : t.board('labels').then(function (b) {
+          state.labelCatalog = ((b && b.labels) || []).map(function (l) {
+            return { id: String(l.id), name: l.name || '', color: l.color || '' };
+          });
+          return state.labelCatalog;
+        }, function () { return []; });
+      load.then(function (labels) {
+        var on = ((state.face && state.face.labels) || []).map(function (l) { return l.id; });
+        openPicker(anchor, labels.map(function (l) {
+          return {
+            label: l.name || 'Étiquette',
+            icon: 'tag',
+            on: on.indexOf(l.id) >= 0,
+            run: function () {
+              closePop();
+              var ids = on.slice();
+              var i = ids.indexOf(l.id);
+              if (i >= 0) ids.splice(i, 1);
+              else ids.push(l.id);
+              DT().setCardLabels(t, state.current.subject.id, ids).then(function () { loadFace(); }, failure);
+            },
+          };
+        }));
+      }, failure);
+    }
+
+    function editDue(anchor) {
+      if (!global.CardFields || !isTaskPage()) return;
+      global.CardFields.open('due', {
+        t: t, cardId: state.current.subject.id, cardName: state.face.name, anchor: anchor,
+        onSaved: function () { loadFace(); },
+      });
+    }
+
+    function editDesc(anchor) {
+      if (!global.CardFields || !isTaskPage()) return;
+      global.CardFields.open('desc', {
+        t: t, cardId: state.current.subject.id, anchor: anchor, value: state.face.desc || '',
+        save: function (text) { return DT().saveCardDesc(t, state.current.subject.id, text); },
+        onSaved: function () { loadFace(); },
+      });
+    }
+
+    function commitTag(input) {
+      var raw = input.value;
+      if (!raw || !String(raw).trim()) return;
+      var props = pageProps();
+      props.tags = props.tags.concat([raw]);
+      input.value = '';
+      patchPage({ props: props }).then(function () { paintProps(); });
+    }
+
+    function childDocs() {
+      var id = state.current && state.current.id;
+      var parents = (state.idx && state.idx.parents) || {};
+      return state.docs.filter(function (d) { return parents[d.id] === id; });
+    }
+
+    function paintParent() {
+      var cur = state.current;
+      var pid = cur && state.idx && state.idx.parents && state.idx.parents[cur.id];
+      var parent = pid && state.docs.filter(function (d) { return d.id === pid; })[0];
+      els.parent.hidden = !parent;
+      els.parent.textContent = '';
+      if (!parent) return;
+      els.parent.appendChild(icon('corner-down-right'));
+      els.parent.appendChild(document.createTextNode(parent.title));
+      els.parent.onclick = function () { openDoc(parent.id); };
+    }
+
+    function loadFace() {
+      var cur = state.current;
+      var sub = cur && cur.subject;
+      var token = ++faceToken;
+      state.face = null;
+      paintProps();
+      if (!sub) return;
+      var req = sub.k === 'task' ? DT().loadCardFace(t, sub.id) : DT().loadEntityFace(t, sub.id);
+      req.then(function (face) {
+        if (token !== faceToken || !state.current || !state.current.subject || state.current.subject.id !== sub.id) return;
+        state.face = face;
+        paintProps();
+      }, function () {
+        if (token !== faceToken) return;
+        state.face = { missing: true, id: sub.id };
+        paintProps();
+      });
+    }
+
+    function paintProps() {
+      var active = document.activeElement;
+      if (active && els.props.contains(active) && active.tagName === 'INPUT') return;
+      els.props.textContent = '';
+      paintParent();
+      var cur = state.current;
+      if (!cur) return;
+      var sub = cur.subject;
+      if (!sub) {
+        els.props.appendChild(propRow('link', 'Lié à', function (v) {
+          v.appendChild(emptyBtn('Cliquer pour lier…', function (e) { openLinkPicker(e.currentTarget); }));
+        }));
+      } else {
+        var face = state.face;
+        var missing = !!(face && face.missing);
+        var name = (face && face.name) || (sub.k === 'entity' ? 'Entité' : 'Tâche');
+        els.props.appendChild(propRow(sub.k === 'entity' ? 'stack-2' : 'checkbox', sub.k === 'entity' ? 'Entité' : 'Tâche', function (v) {
+          v.appendChild(chip(missing ? 'Introuvable' : name, {
+            dim: missing,
+            onClick: function () {
+              if (missing) return;
+              if (sub.k === 'task' && t && typeof t.showCard === 'function') t.showCard(sub.id);
+              else if (sub.k === 'entity' && global.ViewTabs) global.location.assign(global.ViewTabs.hrefForSubject('./entities.html', global.location, 'entity', sub.id));
+            },
+            onRemove: function () { patchPage({ subject: null }).then(function () { loadFace(); }); },
+          }));
+        }));
+      }
+      if (isTaskPage()) {
+        els.props.appendChild(propRow('users', 'Personnes', function (v) {
+          var members = state.face.members || [];
+          if (!members.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openPeoplePicker(e.currentTarget); }));
+          members.forEach(function (m) {
+            v.appendChild(chip(m.name || memberName(m.id), {
+              onClick: function (e) { openPeoplePicker(e.currentTarget); },
+              onRemove: function () { togglePerson(m.id); },
+            }));
+          });
+        }));
+        els.props.appendChild(propRow('tags', 'Étiquettes', function (v) {
+          var labels = state.face.labels || [];
+          if (!labels.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openLabelPicker(e.currentTarget); }));
+          labels.forEach(function (l) {
+            v.appendChild(chip(l.name || 'Étiquette', {
+              color: l.color,
+              onClick: function (e) { openLabelPicker(e.currentTarget); },
+              onRemove: function () {
+                DT().setCardLabels(t, cur.subject.id, labels.map(function (x) { return x.id; }).filter(function (id) { return id !== l.id; }))
+                  .then(function () { loadFace(); }, failure);
+              },
+            }));
+          });
+        }));
+        els.props.appendChild(propRow('calendar-event', 'Échéance', function (v) {
+          var due = dueLabel(state.face.due);
+          v.appendChild(due
+            ? h('button', { class: 'dc-prop-text', type: 'button', onclick: function (e) { editDue(e.currentTarget); } }, [due])
+            : emptyBtn('Cliquer pour ajouter…', function (e) { editDue(e.currentTarget); }));
+        }));
+        els.props.appendChild(propRow('align-left', 'Description', function (v) {
+          var shown = String(state.face.desc || '').replace(/\s+/g, ' ').trim();
+          if (shown.length > 90) shown = shown.slice(0, 90) + '…';
+          v.appendChild(shown
+            ? h('button', { class: 'dc-prop-text', type: 'button', onclick: function (e) { editDesc(e.currentTarget); } }, [shown])
+            : emptyBtn('Cliquer pour ajouter…', function (e) { editDesc(e.currentTarget); }));
+        }));
+      } else if (!sub || sub.k === 'entity') {
+        if (sub && state.face && state.face.aliases && state.face.aliases.length) {
+          els.props.appendChild(propRow('quote', 'Alias', function (v) {
+            state.face.aliases.forEach(function (a) { v.appendChild(h('span', { class: 'dc-chip is-quiet', text: a })); });
+          }));
+        }
+        els.props.appendChild(propRow('users', 'Personnes', function (v) {
+          var people = pageProps().people;
+          if (!people.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openPeoplePicker(e.currentTarget); }));
+          people.forEach(function (id) {
+            v.appendChild(chip(memberName(id), {
+              onClick: function (e) { openPeoplePicker(e.currentTarget); },
+              onRemove: function () { togglePerson(id); },
+            }));
+          });
+        }));
+      }
+      var tags = pageProps().tags;
+      els.props.appendChild(propRow('tag', 'Mots-clés', function (v) {
+        tags.forEach(function (tag) {
+          v.appendChild(chip(tag, {
+            onRemove: function () {
+              var props = pageProps();
+              props.tags = props.tags.filter(function (x) { return x.toLowerCase() !== tag.toLowerCase(); });
+              patchPage({ props: props }).then(function () { paintProps(); });
+            },
+          }));
+        });
+        v.appendChild(h('input', {
+          class: 'dc-tag-input' + (tags.length ? '' : ' is-empty'),
+          type: 'text',
+          placeholder: tags.length ? '' : 'Cliquer pour ajouter…',
+          'aria-label': 'Mot-clé',
+          maxlength: '20',
+          onkeydown: function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); commitTag(e.target); }
+            else if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+          },
+          onblur: function (e) { commitTag(e.target); },
+        }));
+      }));
+      var addDoc = h('button', {
+        class: 'dc-prop-add', type: 'button', title: 'Nouveau sous-document', 'aria-label': 'Nouveau sous-document',
+        onclick: function (e) { e.stopPropagation(); newDoc(null, null, null, cur.id); },
+      }, [icon('plus')]);
+      els.props.appendChild(propRow('files', 'Documents', function (v) {
+        childDocs().forEach(function (d) {
+          v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', onclick: function () { openDoc(d.id); } }, [
+            icon(d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text'),
+            h('span', { text: d.title }),
+          ]));
+        });
+      }, addDoc));
     }
 
     function lastDomMd() {
@@ -1217,9 +1629,62 @@
       runCommand(cmd, { silent: true });
     }
 
+    /** Skips empty and zero-width text nodes sitting between the caret and a chip. */
+    function skipBlankText(node) {
+      var prev = node;
+      while (prev && prev.nodeType === 3 && !String(prev.nodeValue || '').replace(/[\u200b\ufeff]/g, '')) prev = prev.previousSibling;
+      return prev;
+    }
+
+    /**
+     * Person chip a plain Backspace should shorten to its first name.
+     * The caret is either flush against the chip, or just after the single space that follows it
+     * (the space inserted with the mention). A second Backspace, once the name is already short, deletes it.
+     */
+    function personMentionToShorten() {
+      var sel = global.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.rangeCount || !editor || !editor.contains(sel.anchorNode)) return null;
+      var node = sel.anchorNode;
+      var offset = sel.anchorOffset;
+      var chip = null;
+      if (node.nodeType === 3) {
+        var head = String(node.nodeValue || '').slice(0, offset).replace(/[\u200b\ufeff]/g, '');
+        if (head === '' || (head.length === 1 && /^[\u00a0 ]$/.test(head))) chip = skipBlankText(node.previousSibling);
+      } else if (node.nodeType === 1 && offset > 0) {
+        var prev = skipBlankText(node.childNodes[offset - 1]);
+        if (prev && prev.nodeType === 3) {
+          var gap = String(prev.nodeValue || '').replace(/[\u200b\ufeff]/g, '');
+          if (gap.length === 1 && /^[\u00a0 ]$/.test(gap)) chip = skipBlankText(prev.previousSibling);
+        } else chip = prev;
+      }
+      if (!chip || chip.nodeType !== 1 || !chip.classList || !chip.classList.contains('dc-mention')) return null;
+      if (chip.getAttribute('data-m') !== 'person' || chip.getAttribute('data-short') === '1') return null;
+      var full = String(chip.getAttribute('data-label') || '').replace(/\s+/g, ' ').trim();
+      var first = DM().firstName(full);
+      if (!first || first === full) return null;
+      return chip;
+    }
+
+    function shortenPersonChip(chip) {
+      var first = DM().firstName(chip.getAttribute('data-label') || '');
+      chip.setAttribute('data-short', '1');
+      var last = chip.lastChild;
+      if (last && last.nodeType === 3) last.nodeValue = first;
+      else chip.appendChild(document.createTextNode(first));
+    }
+
     function onKeydown(e) {
       var mod = e.ctrlKey || e.metaKey;
       if (sugg && handleSuggestKey(e)) return;
+      if (e.key === 'Backspace' && !mod && !e.shiftKey && !e.altKey) {
+        var person = personMentionToShorten();
+        if (person) {
+          e.preventDefault();
+          shortenPersonChip(person);
+          onEdit();
+          return;
+        }
+      }
       if (mod && !e.shiftKey && !e.altKey) {
         var k = e.key.toLowerCase();
         if (k === 's') { e.preventDefault(); saveNow({ retry: true }); return; }
@@ -1318,11 +1783,11 @@
         var item = DM().resolveMention(state.index, type, id);
         var missing = false;
         if (item) {
-          if (chip.getAttribute('data-label') !== item.label) {
-            chip.setAttribute('data-label', item.label);
-            var last = chip.lastChild;
-            if (last && last.nodeType === 3) last.nodeValue = item.label;
-          }
+          var short = type === 'person' && chip.getAttribute('data-short') === '1';
+          var shown = short ? (DM().firstName(item.label) || item.label) : item.label;
+          if (chip.getAttribute('data-label') !== item.label) chip.setAttribute('data-label', item.label);
+          var last = chip.lastChild;
+          if (last && last.nodeType === 3 && last.nodeValue !== shown) last.nodeValue = shown;
           chip.title = item.sub ? item.sub : '';
         } else if (type === 'task') missing = !!state.sources && failed.indexOf('cards') < 0;
         else if (type === 'doc') missing = state.docsLoaded;
@@ -1742,10 +2207,7 @@
       var title =
         s.kind === 'slash' ? 'Commandes' : s.trig.scope === 'task' ? 'Lier une tâche' : s.trig.scope === 'doc' ? 'Lier un document' : 'Mentionner';
       box.appendChild(
-        h('div', { class: 'dc-sg-head' }, [
-          h('span', { text: title }),
-          s.kind === 'mention' ? h('span', { class: 'dc-sg-hint', text: '@ tout · @@ tâches · @@@ documents' }) : null,
-        ])
+        h('div', { class: 'dc-sg-head' }, [h('span', { text: title })])
       );
       if (!s.entries.length) {
         box.appendChild(h('div', { class: 'dc-sg-none', text: 'Aucun résultat' }));
@@ -1770,7 +2232,7 @@
           ]);
         } else if (en.kind === 'create') {
           row = h('div', { class: 'dc-sg-row dc-sg-row--create' }, [
-            icon('file-plus', 'dc-sg-icon dc-sg-icon--doc'),
+            icon('plus', 'dc-sg-icon dc-sg-icon--doc'),
             h('span', { class: 'dc-sg-label', text: 'Créer le document « ' + en.title + ' »' }),
           ]);
         } else {
@@ -2023,7 +2485,7 @@
       closePop();
       var id = chip.getAttribute('data-id');
       var item = DM().resolveMention(state.index, 'person', id);
-      var label = chip.getAttribute('data-label') || 'Personne';
+      var label = (item && item.label) || chip.getAttribute('data-label') || 'Personne';
       var rows = [h('div', { class: 'dc-pop-name', text: label })];
       if (item && item.sub) rows.push(h('div', { class: 'dc-pop-sub', text: item.sub }));
       if (item && item.email) rows.push(h('a', { class: 'dc-pop-line', href: 'mailto:' + item.email }, [icon('mail'), item.email]));
@@ -2053,6 +2515,7 @@
         }, [icon(iconName), h('span', { text: label })]);
       }
       pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, [
+        item('plus', 'Nouveau sous-document', function () { newDoc(null, null, null, docId); }),
         item('copy', 'Dupliquer', function () { duplicateDoc(docId); }),
         state.current && state.current.id === docId
           ? item('photo', state.current.cover ? 'Changer la couverture' : 'Ajouter une couverture', function () {
@@ -2062,7 +2525,6 @@
           : null,
         item('download', 'Télécharger (.md)', function () { exportDoc(docId, 'download'); }),
         item('clipboard', 'Copier en Markdown', function () { exportDoc(docId, 'copy'); }),
-        item('file-plus', 'Nouveau sous-document', function () { newDoc(null, null, null, docId); }),
         state.idx.parents && state.idx.parents[docId] && state.docs.some(function (x) { return x.id === state.idx.parents[docId]; })
           ? item('arrow-bar-up', 'Sortir du document parent', function () { unnestDoc(docId); })
           : null,
@@ -2655,22 +3117,12 @@
       if (!state.authOk) {
         e.appendChild(icon('lock', 'dc-empty-icon'));
         e.appendChild(h('h2', { text: 'Autorisation Trello requise' }));
-        e.appendChild(h('p', { text: 'Les documents sont enregistrés dans votre tableau Trello. Autorisez le Power-Up une seule fois pour les lire et les modifier.' }));
         e.appendChild(authButton());
         return;
       }
       e.appendChild(icon('file-text', 'dc-empty-icon'));
-      e.appendChild(h('h2', { text: state.docs.length ? 'Choisissez un document' : 'Aucun document pour l’instant' }));
-      e.appendChild(h('p', { text: 'Rédigez des notes, des comptes rendus ou des spécifications, et reliez-les à vos tâches, aux personnes et aux autres documents.' }));
+      e.appendChild(h('h2', { text: state.docs.length ? 'Aucun document sélectionné' : 'Aucun document' }));
       e.appendChild(h('button', { class: 'dc-btn dc-btn--primary', onclick: function () { newDoc(); } }, [icon('plus'), 'Nouveau document']));
-      e.appendChild(
-        h('ul', { class: 'dc-tips' }, [
-          h('li', {}, [h('kbd', { text: '@' }), ' une personne (ou tout chercher)']),
-          h('li', {}, [h('kbd', { text: '@@' }), ' une tâche du tableau']),
-          h('li', {}, [h('kbd', { text: '@@@' }), ' un autre document']),
-          h('li', {}, [h('kbd', { text: '/' }), ' titres, listes, citations, code…']),
-        ])
-      );
     }
 
     function openDoc(id, opts) {

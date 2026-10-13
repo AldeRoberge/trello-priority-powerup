@@ -505,25 +505,8 @@
   }
 
   /** @returns {{text:string, hint:string}} how a field is asked */
-  function questionFor(comp, field, draft) {
-    var who = draft && draft.name ? '« ' + draft.name + ' »' : 'cette entité';
-    var label = field.label;
-    switch (field.kind) {
-      case 'number':
-        return { text: label + ' ?', hint: 'Un nombre. Laissez vide si vous ne savez pas.' };
-      case 'date':
-        return { text: label + ' ?', hint: 'Choisissez une date, ou un raccourci.' };
-      case 'bool':
-        return { text: label + ' ?', hint: 'Oui ou non pour ' + who + '.' };
-      case 'choice':
-        return { text: label + ' ?', hint: 'Une seule valeur.' };
-      case 'ref':
-        return { text: label + ' ?', hint: 'Choisissez une entité existante, ou créez-la ici.' };
-      case 'refs':
-        return { text: label + ' ?', hint: 'Une ou plusieurs entités, existantes ou à créer ici.' };
-      default:
-        return { text: label + ' ?', hint: 'Texte libre.' };
-    }
+  function questionFor(comp, field) {
+    return { text: field.label + ' ?', hint: '' };
   }
 
   // ---------------------------------------------------------------- 6 suggestions

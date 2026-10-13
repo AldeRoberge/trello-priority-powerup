@@ -212,7 +212,7 @@
             },
           }, [icon('x')]);
       var card = h('details', { class: 'cp-ccard', open: n || st.openComps.aliases ? true : null }, [
-        h('summary', { class: 'cp-ccard-head' }, [icon('chevron-right'), h('strong', { text: 'Autres noms' }), h('span', { class: 'cp-hint', text: n ? String(n) : 'alias, traductions' }), removeX]),
+        h('summary', { class: 'cp-ccard-head' }, [icon('chevron-right'), h('strong', { text: 'Autres noms' }), n ? h('span', { class: 'cp-hint', text: String(n) }) : null, removeX]),
         h('div', { class: 'cp-fields' }, [h('div', { class: 'cp-field cp-field--wide' }, [h('label', { class: 'cp-field-label', text: 'Alias' }), aliasEditor])]),
       ]);
       card.addEventListener('toggle', function () {
@@ -593,19 +593,18 @@
         h('h3', { class: 'cp-sub', text: 'Nouvel archétype' }),
         h('label', { class: 'cp-label', text: 'Nom' }),
         nameIn,
-        h('label', { class: 'cp-label', text: 'Nature : qu’est-ce que c’est, au fond ?' }),
+        h('label', { class: 'cp-label', text: 'Nature' }),
         natureSel,
-        st.schema.types.length ? h('label', { class: 'cp-label', text: 'Est une sorte de… (reprend ses composants et ses valeurs par défaut)' }) : null,
+        st.schema.types.length ? h('label', { class: 'cp-label', text: 'Est une sorte de' }) : null,
         st.schema.types.length ? parentBox : null,
-        h('label', { class: 'cp-check' }, [roleIn, 'C’est un rôle : une entité l’est dans un contexte (Travailleur, Client), pas par nature']),
-        h('label', { class: 'cp-label', text: 'Alias (séparés par des virgules)' }),
+        h('label', { class: 'cp-check' }, [roleIn, 'Rôle']),
+        h('label', { class: 'cp-label', text: 'Alias' }),
         aliasIn,
         st.schema.components.length ? h('label', { class: 'cp-label', text: 'Réutiliser des composants' }) : null,
         st.schema.components.length ? comps : null,
-        h('label', { class: 'cp-label', text: 'Nouveaux champs (nom (genre: détail), …)' }),
+        h('label', { class: 'cp-label', text: 'Champs' }),
         fieldsIn,
         preview,
-        h('p', { class: 'cp-hint', text: 'Genres : texte, texte-long, nombre (ex. nombre: kg), date, oui-non, choix: a/b/c, choix-multiple: a/b, geo, url, lien: Type, liens: Type.' }),
         errBox,
         h('div', { class: 'cp-row' }, [
           h(
@@ -805,7 +804,6 @@
         nameIn,
         fieldsIn,
         preview,
-        h('p', { class: 'cp-hint', text: 'Genres : texte, texte-long, nombre (ex. nombre: kg), date, oui-non, choix: a/b/c, choix-multiple: a/b, geo, url, lien: Archétype, liens: Archétype.' }),
         err,
         h('div', { class: 'cp-row' }, [
           h(
@@ -968,10 +966,7 @@
           );
         });
       }
-      if (quick.childNodes.length) {
-        if (f.kind !== 'date') quick.insertBefore(h('span', { class: 'cp-hint', text: 'Souvent :' }), quick.firstChild);
-        wrap.appendChild(quick);
-      }
+      if (quick.childNodes.length) wrap.appendChild(quick);
       return wrap;
     }
 
@@ -1093,8 +1088,6 @@
           options.appendChild(
             h('button', { class: 'cp-pick cp-pick--new', type: 'button', onclick: function () { create(q); } }, [icon('plus'), 'Créer « ' + q + ' »'])
           );
-        } else if (!q && !list.length && !chosen.length) {
-          options.appendChild(h('span', { class: 'cp-hint', text: 'Aucune entité à proposer : tapez un nom pour la créer.' }));
         }
       }
       paintPicked();

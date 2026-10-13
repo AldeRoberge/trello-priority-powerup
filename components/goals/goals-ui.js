@@ -97,7 +97,7 @@
       title: 'Projets',
       icon: 'ti-folder',
       placeholder: 'Nouveau projet\u2026',
-      emptyHint: 'Choisissez un objectif.',
+      emptyHint: 'Aucun projet.',
     });
 
     stack.appendChild(objectifPanel.root);
@@ -582,13 +582,9 @@
       });
       var projectReady = !!state.selectedObjectifId;
       setPanelEnabled(projectPanel, projectReady);
-      if (!projectReady) {
-        projectPanel.listEl.appendChild(
-          el('p', 'tp-goals-empty', { text: 'Choisissez un objectif.' })
-        );
-      } else if (!projects.length) {
+      if (projectReady && !projects.length) {
         projectPanel.listEl.appendChild(el('p', 'tp-goals-empty', { text: 'Aucun projet.' }));
-      } else {
+      } else if (projectReady) {
         projects.forEach(function (p) {
           projectPanel.listEl.appendChild(
             entityRow(

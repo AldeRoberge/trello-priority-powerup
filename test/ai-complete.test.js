@@ -1,0 +1,120 @@
+'use strict';
+
+const { describe, it, before } = require('node:test');
+const assert = require('node:assert/strict');
+const { loadComponent } = require('./helpers/load');
+
+function el(opts) {
+  opts = opts || {};
+  const classes = opts.classes || [];
+  const attrs = opts.attrs || {};
+  return {
+    classList: { contains: (name) => classes.indexOf(name) >= 0 },
+    getAttribute: (name) => (attrs[name] != null ? attrs[name] : null),
+    closest: (sel) => (opts.closest && opts.closest[sel] ? opts.closest[sel] : null),
+    type: opts.type || '',
+    disabled: !!opts.disabled,
+    readOnly: !!opts.readOnly,
+    isContentEditable: !!opts.editable,
+  };
+}
+
+describe('AiComplete', () => {
+  let AI;
+  before(() => {
+    loadComponent('shared/ai-complete.js');
+    AI = global.AiComplete;
+    assert.ok(AI);
+  });
+
+  describe('classifyField', () => {
+    it('recognizes documents, names and labels', () => {
+      assert.equal(AI.classifyField(el({ classes: ['dc-editor'], editable: true })), 'document');
+      assert.equal(AI.classifyField(el({ classes: ['dc-title'] })), 'doc-name');
+      assert.equal(AI.classifyField(el({ classes: ['nc-title'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ classes: ['info-title-input'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ classes: ['gantt-rename-input'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ classes: ['cq-title-input'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ classes: ['db-capture'], editable: true })), 'task-name');
+      assert.equal(
+        AI.classifyField(el({ classes: ['tb-input'], closest: { 'td[data-key="name"]': {} } })),
+        'task-name'
+      );
+      assert.equal(AI.classifyField(el({ classes: ['tb-input'] })), '');
+      assert.equal(AI.classifyField(el({ attrs: { id: 'peopleEditName' } })), 'person-name');
+      assert.equal(AI.classifyField(el({ classes: ['tg-editor-label'] })), 'person-name');
+      assert.equal(AI.classifyField(el({ classes: ['dc-people-input'] })), 'person-name');
+      assert.equal(AI.classifyField(el({ classes: ['info-labels-search'], type: 'search' })), 'tag');
+      assert.equal(AI.classifyField(el({ classes: ['info-labels-color-picker-name-input'] })), 'tag');
+      assert.equal(AI.classifyField(el({ classes: ['dc-tag-input'] })), 'tag');
+      assert.equal(
+        AI.classifyField(el({ closest: { '.dc-tags, [data-dc-field="tags"]': {} } })),
+        'tag'
+      );
+      assert.equal(AI.classifyField(el({ attrs: { 'data-ai-kind': 'document' } })), 'document');
+      assert.equal(AI.classifyField(el({ classes: ['en-name'] })), 'name');
+    });
+
+    it('leaves search, passwords and the assistant composer alone', () => {
+      assert.equal(AI.classifyField(el({ classes: ['dc-search-input'], type: 'search' })), '');
+      assert.equal(AI.classifyField(el({ type: 'password' })), '');
+      assert.equal(AI.classifyField(el({ classes: ['agent-composer-input'] })), '');
+      assert.equal(AI.classifyField(el({ classes: ['dc-title'], attrs: { 'data-ai': 'off' } })), '');
+      assert.equal(AI.classifyField(el({ classes: ['dc-title'], disabled: true })), '');
+    });
+  });
+
+  describe('shouldRequest', () => {
+    it('waits for a real start and stays out of mentions', () => {
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bon', lineAfter: '' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour ', lineAfter: 'suite' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Voir @Mar', lineAfter: '' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour', lineAfter: '', menuOpen: true }), false);
+      assert.equal(AI.shouldRequest({ kind: 'task-name', lineBefore: 'P', lineAfter: '' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'task-name', lineBefore: 'Pré', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest({ kind: 'tag', lineBefore: 'Ur', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest(null), false);
+    });
+  });
+
+  describe('parseCompletion', () => {
+    it('keeps a leading space when the word is finished', () => {
+      assert.equal(AI.parseCompletion(' de la semaine', 'Préparer', 'task-name'), ' de la semaine');
+      assert.equal(AI.parseCompletion('  de la semaine', 'Préparer ', 'task-name'), 'de la semaine');
+    });
+
+    it('joins a word that is not finished', () => {
+      assert.equal(AI.parseCompletion('rer la réunion', 'Prépa', 'task-name'), 'rer la réunion');
+    });
+
+    it('drops an echoed prefix, quotes and empty answers', () => {
+      assert.equal(AI.parseCompletion('Préparer la réunion', 'Préparer', 'task-name'), ' la réunion');
+      assert.equal(AI.parseCompletion('"la suite"', 'Bonjour ', 'document'), 'la suite');
+      assert.equal(AI.parseCompletion('.', 'Bonjour ', 'document'), '');
+      assert.equal(AI.parseCompletion('Aucun', 'Bonjour ', 'document'), '');
+      assert.equal(AI.parseCompletion('{"text":" demain"}', 'Réunion', 'doc-name'), ' demain');
+      assert.equal(AI.parseCompletion('Voici une idée', 'Bonjour ', 'document'), '');
+    });
+
+    it('caps a long label', () => {
+      const raw = 'un deux trois quatre cinq';
+      assert.equal(AI.parseCompletion(raw, 'x ', 'tag'), 'un deux trois');
+    });
+  });
+
+  describe('buildMessages', () => {
+    it('puts the caret text and the board names in the prompt', () => {
+      const messages = AI.buildMessages(
+        { kind: 'document', prefix: 'La réunion de', lineAfter: '' },
+        { tasks: ['Préparer la réunion'], people: ['Marie Tremblay'], docs: [], tags: ['Urgent'] }
+      );
+      assert.equal(messages[0].role, 'system');
+      assert.match(messages[1].content, /La réunion de/);
+      assert.match(messages[1].content, /Marie Tremblay/);
+      assert.match(messages[1].content, /Préparer la réunion/);
+      assert.match(messages[1].content, /Urgent/);
+      assert.equal(messages[0].content.indexOf('\u2014'), -1);
+    });
+  });
+});

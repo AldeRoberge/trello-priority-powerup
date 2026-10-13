@@ -150,6 +150,30 @@
     assert(md() === 'Voir [@Marie Tremblay](person:m1)', 'markdown: ' + md());
   });
 
+  test('Backspace after a person keeps only the first name', async function () {
+    await freshDoc('Prénom', '');
+    caretIn(ed().firstChild);
+    type('@mar');
+    await waitFor(function () { return suggest().open; }, 'popup');
+    press('Enter');
+    await waitFor(function () { return ed().querySelector('.dc-mention'); }, 'chip');
+    assert(press('Backspace'), 'Backspace shortens instead of deleting');
+    var chip = ed().querySelector('.dc-mention');
+    eq(chip.textContent, 'Marie');
+    eq(chip.getAttribute('data-short'), '1');
+    eq(chip.getAttribute('data-label'), 'Marie Tremblay');
+    eq(chip.getAttribute('data-id'), 'm1');
+    eq(md(), '[@Marie](person:m1:short)');
+    var r = document.createRange();
+    r.setStartAfter(chip);
+    r.collapse(true);
+    var s = getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+    assert(!press('Backspace'), 'a second Backspace removes the mention');
+    assert(!ed().querySelector('.dc-mention'), 'chip gone');
+  });
+
   test('typing a space right after a chip does not double it', async function () {
     await freshDoc('Espaces', '');
     caretIn(ed().firstChild);
@@ -244,8 +268,10 @@
     await waitFor(function () { return suggest().open; }, 'popup');
     press('Enter');
     await waitFor(function () { return ed().querySelector('.dc-mention'); }, 'chip');
+    press('Backspace'); // first name only (the space stays)
+    eq(ed().querySelector('.dc-mention').textContent, 'Éric');
     press('Backspace'); // the trailing space
-    press('Backspace'); // the chip
+    press('Backspace'); // the chip, whole, not letter by letter
     eq(ed().querySelectorAll('.dc-mention').length, 0, 'chip gone');
     assert(ed().textContent.indexOf('Éric') < 0, 'no half-deleted label');
   });
@@ -683,7 +709,7 @@
     await waitFor(function () { return card().closed === true; }, 'archived');
     assert(!$('.dc-pop--task'), 'panel closed');
     $('.dc-toast .dc-link').click();
-    await waitFor(function () { return card().closed === false; }, 'archive undone');
+    await waitFor(function () { return card().closed === false; }, 'archive undone');
     // leave the shared mock board as found for the tests that follow
     card().name = 'Refonte du tableau de bord';
     card().desc = '';

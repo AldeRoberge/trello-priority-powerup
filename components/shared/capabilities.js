@@ -74,6 +74,8 @@
   var probeCache = null;
   var probeLoad = null;
   var persistTimers = Object.create(null);
+  var persistChain = Promise.resolve();
+  var persistScheduled = false;
 
   function dbg() {
     return global.TpDebug || null;
@@ -138,21 +140,47 @@
     return probeLoad;
   }
 
-  function persistProbe(t, probe) {
-    if (!t || typeof t.set !== 'function') return Promise.resolve(probe);
-    probeCache = normalizeProbe(probe);
+  function isConflict(err) {
+    var msg = String((err && (err.message || err.name || err)) || '');
+    return /\b409\b|Conflict/i.test(msg);
+  }
+
+  function writeProbe(t, snapshot) {
     return Promise.resolve()
       .then(function () {
-        return t.set('member', 'private', STORAGE_KEY, probeCache);
-      })
-      .then(function () {
-        return probeCache;
+        return t.set('member', 'private', STORAGE_KEY, snapshot);
       })
       .catch(function (err) {
-        var d = dbg();
-        if (d && d.error) d.error('capabilities', 'probe.persist', err);
-        return probeCache;
+        if (!isConflict(err)) throw err;
+        // Another iframe wrote member/private first. Retry once with the merged cache.
+        return t.set('member', 'private', STORAGE_KEY, probeCache);
       });
+  }
+
+  /**
+   * One in-flight write for every capability. Concurrent markSeen calls merge
+   * into probeCache and share that write, so they do not 409 each other.
+   */
+  function persistProbe(t, probe) {
+    if (!t || typeof t.set !== 'function') return Promise.resolve(probe);
+    probeCache = Object.assign({}, probeCache || {}, normalizeProbe(probe));
+    if (!persistScheduled) {
+      persistScheduled = true;
+      persistChain = persistChain
+        .then(function () {
+          persistScheduled = false;
+          var snapshot = probeCache;
+          return writeProbe(t, snapshot);
+        })
+        .catch(function (err) {
+          var d = dbg();
+          if (d && d.error) d.error('capabilities', 'probe.persist', err);
+          return probeCache;
+        });
+    }
+    return persistChain.then(function () {
+      return probeCache;
+    });
   }
 
   /**
@@ -313,6 +341,8 @@
     probeCache = null;
     probeLoad = null;
     persistTimers = Object.create(null);
+    persistChain = Promise.resolve();
+    persistScheduled = false;
   }
 
   global.PowerUpCapabilities = {

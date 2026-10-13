@@ -3,6 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    (function () {
+      try {
+        var m = localStorage.getItem('trello-priority-powerup/color-mode');
+        if (m !== 'dark' && m !== 'light') return;
+        var root = document.documentElement;
+        root.setAttribute('data-color-mode', m);
+        root.style.colorScheme = m;
+        if (m === 'dark') root.style.backgroundColor = '#1d2125';
+        var meta = document.createElement('meta');
+        meta.name = 'color-scheme';
+        meta.content = m;
+        document.head.appendChild(meta);
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    html[data-color-mode="dark"] { background: #1d2125; color-scheme: dark; }
+    html[data-color-mode="light"] { color-scheme: light; }
+  </style>
   <title>Mindmap</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
@@ -20,7 +40,7 @@
   <link rel="stylesheet" href="./components/agent/memory-ui.css" />
   <link rel="stylesheet" href="./components/agent/agent-stats.css?v=stats-1" />
   <link rel="stylesheet" href="./components/shared/assistant-dock.css?v=dock-1" />
-  <link rel="stylesheet" href="./components/mindmap/mindmap-ui.css?v=goals-3" />
+  <link rel="stylesheet" href="./components/mindmap/mindmap-ui.css?v=groups-1" />
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/context-menu.js?v=ctx-menu-6"></script>
   <script src="./components/shared/hide-done.js"></script>
@@ -49,6 +69,7 @@
   <script src="./components/table/table-menu.js"></script>
   <script src="./components/shared/tab-autocomplete.js"></script>
   <script src="./components/agent/agent.js"></script>
+  <script src="./components/shared/ai-complete.js"></script>
   <script src="./components/shared/markdown-dom.js?v=md-1"></script>
   <script src="./components/agent/agent-blocks.js?v=blocks-flush-1"></script>
   <script src="./components/agent/agent-memory.js"></script>
@@ -64,9 +85,9 @@
   <script src="./components/shared/assistant-dock.js?v=dock-1"></script>
   <script src="./components/shared/history-panel.js"></script>
   <script src="./components/shared/view-tabs.js"></script>
-  <script src="./components/mindmap/mindmap-model.js?v=goals-1"></script>
+  <script src="./components/mindmap/mindmap-model.js?v=groups-1"></script>
   <script src="./components/mindmap/mindmap-goals-trello.js?v=goals-1"></script>
-  <script src="./components/mindmap/mindmap-ui.js?v=goals-3"></script>
+  <script src="./components/mindmap/mindmap-ui.js?v=groups-1"></script>
 </head>
 <body class="tp-page tp-page--mindmap">
   <div id="viewTabs"></div>

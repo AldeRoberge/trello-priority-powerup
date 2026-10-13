@@ -5770,6 +5770,20 @@ html[data-color-mode="dark"] .tp-people-role-chip {
   opacity: 0.5;
 }
 
+/* Inline continuation while typing. Tab accepts it. */
+.ai-complete-ghost {
+  position: fixed;
+  z-index: 30;
+  margin: 0;
+  pointer-events: none;
+  user-select: none;
+  color: var(--tp-text-muted, #626f86);
+  opacity: 0.55;
+  white-space: pre;
+  overflow: hidden;
+  max-width: 46vw;
+}
+
 .tp-tab-complete-field {
   position: relative;
   z-index: 1;

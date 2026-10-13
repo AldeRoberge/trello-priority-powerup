@@ -11,11 +11,11 @@
   overflow: auto;
   padding: 6px;
   margin: 0;
-  border: 1px solid var(--border, color-mix(in srgb, var(--text-primary, #172b4d) 14%, transparent));
+  border: 1px solid var(--border, var(--tp-border, color-mix(in srgb, var(--text-primary, var(--tp-text, #172b4d)) 14%, transparent)));
   border-radius: 10px;
-  background: var(--surface-2, #fff);
+  background: var(--surface-2, var(--tp-elev-3, var(--tp-surface, #fff)));
   box-shadow: 0 8px 20px color-mix(in srgb, #000 12%, transparent);
-  color: var(--text-primary, #172b4d);
+  color: var(--text-primary, var(--tp-text, #172b4d));
   list-style: none;
 }
 
@@ -39,7 +39,7 @@
 .tp-context-menu-item:hover,
 .tp-context-menu-item:focus {
   outline: none;
-  background: color-mix(in srgb, var(--text-primary, #172b4d) 8%, transparent);
+  background: var(--tp-surface-hover, color-mix(in srgb, var(--text-primary, var(--tp-text, #172b4d)) 8%, transparent));
 }
 
 .tp-context-menu-item:disabled,
@@ -56,7 +56,7 @@
 }
 
 .tp-context-menu-item.is-danger {
-  color: var(--danger, #c9372c);
+  color: var(--tp-danger-text, #c9372c);
 }
 
 .tp-context-menu-item-label {
@@ -85,7 +85,7 @@
   height: 1px;
   margin: 4px 6px;
   border: 0;
-  background: color-mix(in srgb, var(--text-primary, #172b4d) 12%, transparent);
+  background: var(--border, var(--tp-border, color-mix(in srgb, var(--text-primary, var(--tp-text, #172b4d)) 12%, transparent)));
 }
 
 .tp-context-menu-list {
@@ -103,7 +103,7 @@
   gap: 6px;
   margin: 0 0 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary, #172b4d) 12%, transparent);
+  border-bottom: 1px solid var(--border, var(--tp-border, color-mix(in srgb, var(--text-primary, var(--tp-text, #172b4d)) 12%, transparent)));
 }
 
 .tp-context-menu-search-icon {
@@ -121,6 +121,11 @@
   color: inherit;
   font: inherit;
   font-size: 13px;
+}
+
+.tp-context-menu-search-input::placeholder {
+  color: var(--text-muted, var(--tp-text-muted, #626f86));
+  opacity: 1;
 }
 
 .tp-context-menu-group {
@@ -150,7 +155,7 @@
 
 .tp-context-menu-item.is-active,
 .tp-context-menu-item.is-open {
-  background: color-mix(in srgb, var(--text-primary, #172b4d) 8%, transparent);
+  background: var(--tp-surface-hover, color-mix(in srgb, var(--text-primary, var(--tp-text, #172b4d)) 8%, transparent));
 }
 
 .tp-context-menu-hint {
@@ -176,4 +181,42 @@
 
 .tp-context-submenu {
   z-index: 10001;
+}
+
+/* Pages that never load priority-ui.css (Entités, Mindmap, Réglages…) leave
+   --surface-2 / --text-primary unset, so the menu fell back to white. Dark mode
+   tokens live on html as --tp-*. Pin the menu to those so it matches the page. */
+html[data-color-mode='dark'] .tp-context-menu {
+  color-scheme: dark;
+  background: var(--tp-elev-3, #2c333a);
+  color: var(--tp-text, #f7f8f9);
+  border-color: var(--tp-border, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+html[data-color-mode='dark'] .tp-context-menu-item:hover,
+html[data-color-mode='dark'] .tp-context-menu-item:focus,
+html[data-color-mode='dark'] .tp-context-menu-item.is-active,
+html[data-color-mode='dark'] .tp-context-menu-item.is-open {
+  background: var(--tp-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+html[data-color-mode='dark'] .tp-context-menu-sep,
+html[data-color-mode='dark'] .tp-context-menu-search {
+  border-color: var(--tp-border, rgba(255, 255, 255, 0.12));
+}
+
+html[data-color-mode='dark'] .tp-context-menu-sep {
+  background: var(--tp-border, rgba(255, 255, 255, 0.12));
+}
+
+html[data-color-mode='dark'] .tp-context-menu-item.is-danger {
+  color: var(--tp-danger-text, #fd9891);
+}
+
+html[data-color-mode='dark'] .tp-context-menu-item:disabled:hover,
+html[data-color-mode='dark'] .tp-context-menu-item[aria-disabled='true']:hover,
+html[data-color-mode='dark'] .tp-context-menu-item:disabled:focus,
+html[data-color-mode='dark'] .tp-context-menu-item[aria-disabled='true']:focus {
+  background: transparent;
 }

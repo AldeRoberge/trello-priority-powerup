@@ -137,6 +137,7 @@ describe('AgentStats', () => {
       get: async (scope, vis, key) => {
         assert.equal(scope, 'member');
         assert.equal(vis, 'private');
+        if (key == null) return Object.assign({}, bag);
         assert.equal(key, 'agentUsageStats');
         return bag[key] || null;
       },
@@ -160,6 +161,87 @@ describe('AgentStats', () => {
     assert.equal(blank.life.turns, 0);
     const after = await AgentStats.load(t);
     assert.equal(after.life.turns, 0);
+  });
+
+  it('save keeps lifetime totals when member/private is almost full', async () => {
+    const bag = { userProfile: { notes: 'x'.repeat(3600) } };
+    let writes = 0;
+    const t = {
+      get: async (scope, vis, key) => {
+        if (key == null) return Object.assign({}, bag);
+        return bag[key] || null;
+      },
+      set: async (scope, vis, key, value) => {
+        writes += 1;
+        bag[key] = value;
+      }
+    };
+    let store = AgentStats.emptyStore();
+    for (let i = 0; i < 12; i++) {
+      store = AgentStats.recordTurn(
+        store,
+        { promptTokens: 10, completionTokens: 5, totalTokens: 15, costUsd: 0.01, model: 'm' },
+        { date: '2026-07-' + String(i + 1).padStart(2, '0') }
+      );
+    }
+    const kept = await AgentStats.save(t, store);
+    assert.equal(writes, 1);
+    assert.equal(kept.life.turns, 12);
+    assert.equal(kept.days.length, 12);
+    assert.equal(bag.agentUsageStats.life.turns, 12);
+    assert.ok(bag.agentUsageStats.days.length < 12);
+    assert.ok(AgentStats.serializedSize(bag.agentUsageStats) < 400);
+  });
+
+  it('save retries a lifetime-only payload when Trello rejects the length', async () => {
+    const bag = {};
+    let writes = 0;
+    const t = {
+      get: async () => Object.assign({}, bag),
+      set: async (scope, vis, key, value) => {
+        writes += 1;
+        if (writes === 1) {
+          throw new Error(
+            'PluginData length of 4096 characters exceeded. See: https://developers.trello.com/v1.0/reference#section-size-limit'
+          );
+        }
+        bag[key] = value;
+      }
+    };
+    const store = AgentStats.recordTurn(AgentStats.emptyStore(), {
+      promptTokens: 20,
+      completionTokens: 10,
+      totalTokens: 30,
+      costUsd: 0.001,
+      model: 'gpt-4o-mini'
+    });
+    const kept = await AgentStats.save(t, store);
+    assert.equal(writes, 2);
+    assert.equal(kept.days.length, 1);
+    assert.equal(bag.agentUsageStats.life.turns, 1);
+    assert.deepEqual(bag.agentUsageStats.days, []);
+    assert.deepEqual(bag.agentUsageStats.models, {});
+  });
+
+  it('save does not throw when member/private has no room left', async () => {
+    const bag = { outlookSync: 'x'.repeat(4200) };
+    let writes = 0;
+    const t = {
+      get: async () => Object.assign({}, bag),
+      set: async () => {
+        writes += 1;
+      }
+    };
+    const store = AgentStats.recordTurn(AgentStats.emptyStore(), {
+      promptTokens: 1,
+      completionTokens: 1,
+      totalTokens: 2,
+      costUsd: 0,
+      model: 'x'
+    });
+    const kept = await AgentStats.save(t, store);
+    assert.equal(writes, 0);
+    assert.equal(kept.life.turns, 1);
   });
 
   it('hasAnyActivity reflects lifetime usage', () => {

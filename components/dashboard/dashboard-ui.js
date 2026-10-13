@@ -2,7 +2,7 @@
  * Role: UI of the Dashboard view, a Linear-style workspace in four steps:
  *   Ingest        type tasks (one per line) → cards land in the triage list; optional "Demander à l'IA"
  *   Triage        inbox, one card at a time: define priority / estimate / date, then accept, backlog or cancel
- *   Orchestrateur plan the week: drag tasks onto days (capacity bar per day) or "Planifier auto"
+ *   Orchestrateur plan the week: one row of days, backlog column aligned with them, drag onto a day or "Planifier auto"
  *   Aujourd'hui   focus list + hour-by-hour timeline of the day
  * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel (pure).
  * Keys: 1-4 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
@@ -76,6 +76,11 @@
     if (iso === DM().addDays(today, 1)) return 'Demain';
     var d = new Date(iso + 'T00:00:00');
     return DAYS_FR[d.getDay()] + ' ' + TM().formatDay(iso);
+  }
+
+  function isWeekend(iso) {
+    var d = new Date(iso + 'T00:00:00').getDay();
+    return d === 0 || d === 6;
   }
 
   function mount(root, t) {
@@ -244,7 +249,7 @@
       var has = typeof row.priority === 'number';
       if (!has && askIfEmpty !== true) return null;
       var badge = h('button', {
-        class: has ? 'db-prio db-prio--btn db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)) : 'db-chip db-chip--btn',
+        class: has ? 'db-prio db-prio--btn db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)) : 'db-chip db-chip--btn is-empty',
         type: 'button',
         title: (has ? (row.tier || 'Priorité') + ' · ' : '') + 'Cliquer pour changer la priorité',
         onclick: function (e) {
@@ -272,8 +277,9 @@
 
     /** Clickable estimate chip: opens a duration menu (same menu everywhere in the app). */
     function estChip(row) {
+      var empty = !row.estimate;
       var chip = h('button', {
-        class: 'db-chip db-chip--btn',
+        class: 'db-chip db-chip--btn' + (empty ? ' is-empty' : ''),
         type: 'button',
         title: 'Cliquer pour changer l’estimation',
         onclick: function (e) {
@@ -292,19 +298,27 @@
           });
           CM.show({ clientX: r.left, clientY: r.bottom + 4 }, items);
         },
-      }, [icon('clock'), document.createTextNode(row.estimate ? DM().formatMinutes(row.estimate) : 'Estimer…')]);
+      }, [icon('clock'), document.createTextNode(empty ? 'Estimer…' : DM().formatMinutes(row.estimate))]);
       return chip;
     }
 
     /** Chip that opens a menu next to itself (shared ContextMenu). */
     function menuChip(cls, title, iconName, text, buildItems) {
-      var chip = h('button', { class: 'db-chip db-chip--btn ' + cls, type: 'button', title: title, onclick: function (e) {
-        e.stopPropagation();
-        var CM = global.ContextMenu;
-        if (!CM || typeof CM.show !== 'function') return;
-        var r = chip.getBoundingClientRect();
-        CM.show({ clientX: r.left, clientY: r.bottom + 4 }, buildItems());
-      } }, [icon(iconName), document.createTextNode(text)]);
+      var kids = [];
+      if (iconName) kids.push(icon(iconName));
+      kids.push(document.createTextNode(text));
+      var chip = h('button', {
+        class: 'db-chip db-chip--btn' + (cls ? ' ' + cls : ''),
+        type: 'button',
+        title: title,
+        onclick: function (e) {
+          e.stopPropagation();
+          var CM = global.ContextMenu;
+          if (!CM || typeof CM.show !== 'function') return;
+          var r = chip.getBoundingClientRect();
+          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, buildItems());
+        },
+      }, kids);
       return chip;
     }
 
@@ -312,7 +326,8 @@
     function dueChip(row) {
       var late = !!row.due && row.due < today && DM().isOpen(row);
       var label = !row.due ? 'Planifier…' : row.due === today ? 'Aujourd’hui' : dayLabel(row.due, today);
-      return menuChip(late ? 'is-late' : '', 'Cliquer pour changer le jour', row.due ? dayIconName(row.due, today) : 'calendar-plus', label, function () {
+      var cls = (late ? 'is-late' : '') + (!row.due ? ' is-empty' : '');
+      return menuChip(cls.trim(), 'Cliquer pour changer le jour', row.due ? dayIconName(row.due, today) : 'calendar-plus', label, function () {
         var items = [];
         for (var n = 0; n <= 7; n++) {
           (function (iso) {
@@ -331,7 +346,9 @@
 
     /** Clickable "used / capacity" chip: sets the daily capacity. */
     function capChip(used) {
-      return menuChip('', 'Cliquer pour changer la capacité par jour', 'gauge', DM().formatMinutes(used) + ' / ' + DM().formatMinutes(state.capacity), function () {
+      var over = used > state.capacity;
+      var label = (used ? DM().formatMinutes(used) : '0') + ' / ' + DM().formatMinutes(state.capacity);
+      return menuChip(over ? 'is-late' : '', 'Cliquer pour changer la capacité par jour', '', label, function () {
         return [3, 4, 5, 6, 7, 8].map(function (hrs) {
           return {
             id: 'cap:' + hrs,
@@ -703,7 +720,8 @@
     }
 
     function taskCard(row, showDue) {
-      var el = h('div', { class: 'db-task', draggable: 'true', title: row.name }, [
+      var late = !!(DM().plannedDay(row) && DM().plannedDay(row) < today);
+      var el = h('div', { class: 'db-task' + (late ? ' is-late' : ''), draggable: 'true', title: row.name }, [
         h('div', { class: 'db-task-name', text: row.name }),
         h('div', { class: 'db-task-meta' }, [prioBadge(row, true), estChip(row), showDue === true ? dueChip(row) : null]),
       ]);
@@ -718,11 +736,11 @@
     }
 
     function dropZone(el, iso) {
-      el.addEventListener('dragover', function (e) { e.preventDefault(); el.classList.add('is-over'); });
-      el.addEventListener('dragleave', function () { el.classList.remove('is-over'); });
+      el.addEventListener('dragover', function (e) { e.preventDefault(); el.classList.add('is-drop'); });
+      el.addEventListener('dragleave', function () { el.classList.remove('is-drop'); });
       el.addEventListener('drop', function (e) {
         e.preventDefault();
-        el.classList.remove('is-over');
+        el.classList.remove('is-drop');
         var id = e.dataTransfer.getData('text/plain');
         var row = state.rows.filter(function (r) { return r.id === id; })[0];
         if (row && (row.start || row.due || '') !== iso) plan(row, iso);
@@ -743,23 +761,61 @@
         render();
         write(moves.reduce(function (p, m) { return p.then(function () { return DT().planDay(t, m.id, m.date); }); }, Promise.resolve()), moves.length + (moves.length > 1 ? ' tâches planifiées' : ' tâche planifiée'));
       } }, [icon('wand'), document.createTextNode('Planifier auto')]);
-      var poolEl = dropZone(h('div', { class: 'db-pool' }, pool.length ? pool.map(function (r) { return taskCard(r, true); }) : [h('div', { class: 'db-muted db-pad', text: 'Tout est planifié.' })]), '');
-      var days = week.map(function (d) {
-        var pct = Math.min(100, Math.round((d.used / d.capacity) * 100));
-        return dropZone(h('section', { class: 'db-day' + (d.date === today ? ' is-today' : '') }, [
-          h('header', { class: 'db-day-head' }, [
-            h('span', { class: 'db-day-name' }, [icon(dayIconName(d.date, today), 'db-day-icon'), document.createTextNode(' ' + dayLabel(d.date, today))]),
-            capChip(d.used),
+      function capacityMenu(anchor) {
+        var CM = global.ContextMenu;
+        if (!CM || typeof CM.show !== 'function') return;
+        var r = anchor.getBoundingClientRect();
+        CM.show({ clientX: r.left, clientY: r.bottom + 4 }, [3, 4, 5, 6, 7, 8].map(function (hrs) {
+          return {
+            id: 'cap:' + hrs,
+            label: hrs + ' h par jour',
+            icon: 'clock-hour-' + Math.min(hrs, 12),
+            checked: state.capacity === hrs * 60,
+            action: function () { state.capacity = hrs * 60; DT().setCapacity(state.capacity); render(); },
+          };
+        }));
+      }
+      function dayBar(d) {
+        var pct = d.capacity > 0 ? Math.min(100, Math.round((d.used / d.capacity) * 100)) : 0;
+        var bar = h('button', {
+          class: 'db-meter-hit',
+          type: 'button',
+          title: (d.used ? DM().formatMinutes(d.used) : '0') + ' / ' + DM().formatMinutes(d.capacity),
+          onclick: function (e) { e.stopPropagation(); capacityMenu(bar); },
+        }, [
+          h('span', { class: 'db-meter' + (d.over ? ' is-over' : ''), 'aria-hidden': 'true' }, [
+            h('span', { class: 'db-meter-fill', style: 'width:' + pct + '%' }),
           ]),
-          h('div', { class: 'db-meter' + (d.over ? ' is-over' : '') }, [h('div', { class: 'db-meter-fill', style: 'width:' + pct + '%' })]),
-          h('div', { class: 'db-day-body' }, d.tasks.map(taskCard)),
-        ]), d.date);
+        ]);
+        return bar;
+      }
+      function column(extra, head, bar, body, iso) {
+        return dropZone(h('section', { class: 'db-col-card' + (extra ? ' ' + extra : '') }, [
+          h('header', { class: 'db-col-head' }, head),
+          bar,
+          h('div', { class: 'db-col-body' }, body),
+        ]), iso);
+      }
+      var poolCol = column('db-col-card--pool', [
+        h('span', { class: 'db-col-name', text: 'À planifier' }),
+        h('span', { class: 'db-col-count', text: String(pool.length) }),
+      ], h('div', { class: 'db-meter-hit db-meter-hit--spacer', 'aria-hidden': 'true' }, [
+        h('span', { class: 'db-meter' }),
+      ]), pool.length
+        ? pool.map(function (r) { return taskCard(r, true); })
+        : [h('div', { class: 'db-col-empty', text: 'Tout est planifié.' })], '');
+      var days = week.map(function (d) {
+        var extra = (d.date === today ? 'is-today' : '') + (isWeekend(d.date) ? ' is-weekend' : '');
+        return column(extra.trim(), [
+          h('span', { class: 'db-col-name' }, [icon(dayIconName(d.date, today), 'db-day-icon'), document.createTextNode(dayLabel(d.date, today))]),
+          d.used ? h('span', { class: 'db-cap-n' + (d.over ? ' is-over' : ''), text: DM().formatMinutes(d.used) }) : null,
+        ], dayBar(d), d.tasks.map(taskCard), d.date);
       });
-      els.main.appendChild(h('div', { class: 'db-page db-page--wide' }, [
+      els.main.appendChild(h('div', { class: 'db-page db-page--board' }, [
         pageHead('Orchestrateur', null, autoBtn),
-        h('div', { class: 'db-orch' }, [
-          h('aside', { class: 'db-orch-pool' }, [h('div', { class: 'db-section-title', text: 'À planifier (' + pool.length + ')' }), poolEl]),
-          h('div', { class: 'db-week' }, days),
+        h('div', { class: 'db-board' }, [
+          poolCol,
+          h('div', { class: 'db-board-days', style: 'grid-template-columns:repeat(' + days.length + ',minmax(168px,1fr))' }, days),
         ]),
       ]));
     }

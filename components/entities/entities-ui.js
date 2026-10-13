@@ -1972,13 +1972,13 @@
         var rows = comp.fields.map(function (f) {
           return propRow(e, comp, f);
         });
-        if (!rows.length) rows = [h('p', { class: 'en-set-empty', text: 'Aucun champ : ajoutez-en dans « Types et composants ».' })];
+        if (!rows.length) rows = [h('p', { class: 'en-set-empty', text: 'Aucun champ.' })];
         var late = anyFilled && !isFilled(comp);
         var block = section(comp.name, h('div', { class: 'en-set' }, rows), removeBtn, null, sectionIcon(comp.id), late);
         if (late) emptyBlocks.push(block);
         else page.appendChild(block);
       });
-      if (!comps.length) page.appendChild(h('p', { class: 'en-hint en-hint--lead', text: 'Pas encore de champs : choisissez un type pour en obtenir (ex. Plante : arrosage, santé), ou ajoutez-en.' }));
+      if (!comps.length) page.appendChild(h('p', { class: 'en-hint en-hint--lead', text: 'Aucun champ.' }));
       var addFields = addFieldsRow(e, !comps.length);
       if (addFields) page.appendChild(addFields);
       var people = peopleSection(e);
@@ -2241,7 +2241,7 @@
       if (others.length) {
         rows.push(state.linkOpen ? linkForm(e, others) : h('button', { class: 'en-set-add', type: 'button', onclick: function () { state.linkOpen = true; state.refocus = '.en-link-type'; paintMain(); } }, [icon('plus'), 'Ajouter un lien']));
       } else if (!rows.length) {
-        rows.push(h('p', { class: 'en-set-empty', text: 'Créez une autre entité pour pouvoir les relier.' }));
+        rows.push(h('p', { class: 'en-set-empty', text: 'Aucun lien.' }));
       }
       return section('Liens', h('div', { class: 'en-set' }, rows), null, null, sectionIcon('liens'));
     }
@@ -2344,14 +2344,6 @@
           ])
         );
       }
-      rows.push(
-        h('p', {
-          class: 'en-set-note',
-          text: base
-            ? 'Les valeurs que vous ne modifiez pas suivent « ' + base.name + ' » ; ce que vous changez ici n’affecte jamais « ' + base.name + ' » ni ses autres variantes.'
-            : 'Hérite des valeurs du modèle et ne garde que ses différences. Raccourci : « Créer une variante » dans le menu •••.',
-        })
-      );
       box.appendChild(h('div', { class: 'en-set' }, rows));
       return box;
     }
@@ -2361,20 +2353,14 @@
       var has = state.entities.length > 0;
       var box = h('div', { class: 'en-empty' }, [
         h('span', { class: 'en-empty-ic' }, [icon('stack-2')]),
-        h('h2', { class: 'en-empty-title', text: has ? 'Aucune entité sélectionnée' : 'Décrivez votre première entité' }),
-        h('p', {
-          class: 'en-empty-text',
-          text: has
-            ? 'Choisissez une entité dans la liste, ou composez-en une nouvelle.'
-            : 'Une entité est une chose nommée — « Monstera », « Hôtel de Ville » — avec un type, des propriétés et des liens. L’assistant s’en sert pour comprendre « arroser mes plantes au travail ».',
-        }),
+        h('h2', { class: 'en-empty-title', text: has ? 'Aucune entité sélectionnée' : 'Aucune entité' }),
         h('button', { class: 'en-btn en-btn--primary', type: 'button', onclick: function () { openComposer(); } }, [icon('wand'), 'Composer une entité']),
       ]);
       var hasPlant = state.schema.types.some(function (ty) {
         return ty.id === 'plante';
       });
       if (!hasPlant && !has) {
-        box.appendChild(h('button', { class: 'en-link', type: 'button', onclick: addPlantExample }, [icon('plant'), 'Essayer avec un exemple : le type « Plante »']));
+        box.appendChild(h('button', { class: 'en-link', type: 'button', onclick: addPlantExample }, [icon('plant'), 'Exemple : Plante']));
       }
       return box;
     }
@@ -2423,10 +2409,6 @@
             [icon('chevron-left'), 'Entités']
           ),
           h('h2', { class: 'en-page-title', text: 'Types et composants' }),
-          h('p', {
-            class: 'en-lead',
-            text: 'Un composant est un groupe de champs (ex. Entretien : fréquence, dernier arrosage). Un type regroupe des composants (ex. Plante = Lieu + Entretien) ; une entité a un ou plusieurs types.',
-          }),
         ])
       );
       if (global.EntitiesLibrary) main.appendChild(libraryCard());
@@ -2573,13 +2555,7 @@
 
     /** The relation vocabulary: built-in ones (read-only) and the user's own (name, inverse, category, containment). */
     function relationsCard() {
-      var card = h('div', { class: 'en-card' }, [
-        h('h3', { class: 'en-h', text: 'Relations' }),
-        h('p', {
-          class: 'en-hint',
-          text: 'Un lien dont le nom est reconnu a un sens : son inverse (« situé dans » / « abrite »), et « situé dans » ou « fait partie de » forment la hiérarchie de contenance. Ajoutez les vôtres ; un nom inconnu reste un lien libre.',
-        }),
-      ]);
+      var card = h('div', { class: 'en-card' }, [h('h3', { class: 'en-h', text: 'Relations' })]);
       var builtin = h('div', { class: 'en-chips' });
       EM().RELATIONS.forEach(function (d) {
         if (d.custom) return;
@@ -2642,13 +2618,7 @@
     /** Ready-made types by group (matter, living, people, places, time, ideas): one click installs a type with its parents and components. */
     function libraryCard() {
       var EL = global.EntitiesLibrary;
-      var card = h('div', { class: 'en-card' }, [
-        h('h3', { class: 'en-h', text: 'Bibliothèque d’ontologie' }),
-        h('p', {
-          class: 'en-hint',
-          text: 'Des types prêts à l’emploi, rangés par nature : crème pour les mains (produit), région du monde, pays, ville, bâtiment, personne, travailleur, organisation, événement, concept… Un clic ajoute le type avec ses parents et ses composants.',
-        }),
-      ]);
+      var card = h('div', { class: 'en-card' }, [h('h3', { class: 'en-h', text: 'Bibliothèque' })]);
       EL.GROUPS.forEach(function (g) {
         var items = EL.listFor(state.schema, { group: g.id });
         if (!items.length) return;
@@ -2734,7 +2704,7 @@
           box.appendChild(h('div', { class: 'en-field-row' }, [h('label', { text: comp.name + ' : ' + fd.label + (fd.unit ? ' (' + fd.unit + ')' : '') }), ctl]));
         });
       });
-      if (!any) box.appendChild(h('p', { class: 'en-hint', text: 'Cet archétype n’a pas de composant propre avec des champs à préremplir.' }));
+      if (!any) box.appendChild(h('p', { class: 'en-hint', text: 'Aucun champ.' }));
       return box;
     }
 
@@ -2824,9 +2794,9 @@
         h('div', { class: 'en-field' }, [h('label', { text: 'Alias' }), aliases]),
         h('div', { class: 'en-field' }, [h('label', { text: 'Description' }), desc]),
         h('div', { class: 'en-field' }, [h('label', { text: 'Nature' }), nature]),
-        h('div', { class: 'en-field' }, [h('label', { class: 'en-check' }, [role, 'Rôle (une entité l’est dans un contexte, pas par nature)'])]),
+        h('div', { class: 'en-field' }, [h('label', { class: 'en-check' }, [role, 'Rôle'])]),
         ty.parents.length || state.schema.types.length > 1 ? h('div', { class: 'en-field' }, [h('label', { text: 'Inclut aussi les composants de' }), parentBox]) : null,
-        h('div', { class: 'en-field' }, [h('label', { text: 'Composants de ce type (un type n’est qu’une liste de composants; une entité peut en avoir plusieurs)' }), checks]),
+        h('div', { class: 'en-field' }, [h('label', { text: 'Composants' }), checks]),
         defaultsEditor(ty),
         h(
           'button',
@@ -2852,7 +2822,7 @@
         return foldCard(
           'comp:' + c.id,
           [h('span', { class: 'en-fold-name', text: c.name }), h('span', { class: 'en-fold-meta', text: 'intégré' })],
-          [h('p', { class: 'en-hint', text: 'Composant intégré : les autres noms d’une entité (« travail », « work »). Ajoutez-le à un archétype ou à une entité comme n’importe quel composant.' })]
+          []
         );
       }
       var name =h('input', { class: 'en-input', value: c.name, 'aria-label': 'Nom du composant' });

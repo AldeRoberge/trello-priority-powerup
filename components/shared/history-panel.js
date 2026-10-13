@@ -272,8 +272,7 @@
       if (!items.length) {
         listEl.appendChild(h('li', { class: 'hp-empty' }, [
           icon('history'),
-          h('div', { text: state.items.length ? 'Aucune entrée ne correspond à ce filtre.' : 'Rien dans l’historique pour le moment.' }),
-          state.items.length ? null : h('small', { text: 'Archivages, modifications, déplacements et créations faits depuis cette vue apparaîtront ici, avec un bouton pour les annuler.' }),
+          h('div', { text: state.items.length ? 'Aucune entrée ne correspond à ce filtre.' : 'Rien dans l’historique.' }),
         ]));
         return;
       }

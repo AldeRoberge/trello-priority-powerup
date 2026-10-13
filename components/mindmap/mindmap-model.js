@@ -9,8 +9,16 @@
  *               at       task → place   "Est fait à"       (inputs.places.at)
  *               from / via / to         the stops of a trip (inputs.places.from / via[] / to)
  *
+ * relationPhrase() reads an edge from the focused node and, for assignment and place links, from the
+ * task's phase: planned ("Sera fait par"), in progress ("Est en train d'être fait par"), done ("Complété par").
+ *
  * An edge always points from the task to the thing it needs. Dependencies on unknown (deleted or filtered
  * out) cards are dropped; cycles are kept but reported by findCycles().
+ *
+ * Groups are loose boundaries, not boxes. buildGroups() gathers nodes that share a vision, mission,
+ * goal, objective, project, label / entity type, or a manual set. scene() decides what the current zoom
+ * shows: far away a group is one chip, closer its members appear, and up close a task breaks into facet
+ * nodes (progress, priority, status, pause, due). The lens is which of those meanings the flat map uses.
  */
 (function (global) {
   'use strict';
@@ -31,6 +39,116 @@
     parts: 'Est composée de',
   };
   var PLACE_EDGES =['at', 'from', 'via', 'to'];
+
+  // Assignment and place verbs, [from the task, from the other end], by task phase.
+  // The task-side "by" phrase gains the person's first name in relationPhrase().
+  var PHASE_VERBS = {
+    by: {
+      will: ['Sera fait par', 'Va faire'],
+      doing: ['Est en train d\u2019\u00eatre fait par', 'Est en train de faire'],
+      done: ['Compl\u00e9t\u00e9 par', 'A compl\u00e9t\u00e9'],
+      canceled: ['Ne sera pas fait par', 'Ne fera pas'],
+    },
+    at: {
+      will: ['Sera fait \u00e0', 'Accueillera'],
+      doing: ['Est en train d\u2019\u00eatre fait \u00e0', 'Accueille'],
+      done: ['Compl\u00e9t\u00e9 \u00e0', 'A accueilli'],
+      canceled: ['Ne sera pas fait \u00e0', 'N\u2019accueillera pas'],
+    },
+    from: {
+      will: ['Partira de', 'Sera le d\u00e9part'],
+      doing: ['Part de', 'Est le d\u00e9part'],
+      done: ['Est parti de', 'A \u00e9t\u00e9 le d\u00e9part'],
+      canceled: ['Ne partira pas de', 'Ne sera pas le d\u00e9part'],
+    },
+    via: {
+      will: ['Passera par', 'Sera une \u00e9tape'],
+      doing: ['Passe par', 'Est une \u00e9tape'],
+      done: ['Est pass\u00e9 par', 'A \u00e9t\u00e9 une \u00e9tape'],
+      canceled: ['Ne passera pas par', 'Ne sera pas une \u00e9tape'],
+    },
+    to: {
+      will: ['Arrivera \u00e0', 'Sera l\u2019arriv\u00e9e'],
+      doing: ['Arrive \u00e0', 'Est l\u2019arriv\u00e9e'],
+      done: ['Est arriv\u00e9 \u00e0', 'A \u00e9t\u00e9 l\u2019arriv\u00e9e'],
+      canceled: ['N\u2019arrivera pas \u00e0', 'Ne sera pas l\u2019arriv\u00e9e'],
+    },
+  };
+  var DEP_INVERSE = {
+    depends: 'Est n\u00e9cessaire \u00e0',
+    needs: 'Est requis par',
+    after: 'Pr\u00e9c\u00e8de',
+    parts: 'Fait partie de',
+  };
+
+  /** First word of a person name, so an edge can say "Complété par Aldé". */
+  function shortName(label) {
+    var s = String(label || '').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    return s.split(' ')[0];
+  }
+
+  /**
+   * will: planned or paused, not being done right now.
+   * doing: list "En cours", or some progress, and not blocked.
+   * done: completed (category, dueComplete, or 100%).
+   * canceled: dropped.
+   */
+  function taskPhase(rec) {
+    rec = rec && typeof rec === 'object' ? rec : {};
+    if (rec.category === 'canceled') return 'canceled';
+    if (rec.category === 'completed' || rec.dueComplete || rec.done) return 'done';
+    if (typeof rec.progress === 'number' && rec.progress >= 100) return 'done';
+    if (rec.blocked || rec.category === 'blocked') return 'will';
+    if (rec.category === 'started') return 'doing';
+    if (typeof rec.progress === 'number' && rec.progress > 0) return 'doing';
+    return 'will';
+  }
+
+  /**
+   * How to read `edge` when `focusId` is the node the user clicked (or null).
+   * Returns { text, verb, phase, from, to }. `from` → `to` is the reading direction
+   * (arrow leaves the focused end). `text` is the edge label; `verb` is the same
+   * without the person's first name. getNode(id) → node ({ label, rec }).
+   */
+  function relationPhrase(edge, focusId, getNode) {
+    var e = edge || {};
+    var get = typeof getNode === 'function' ? getNode : function (id) {
+      return getNode && getNode[id];
+    };
+    var fromN = get(e.from);
+    var toN = get(e.to);
+    var towardOther = !!(focusId && focusId === e.to && focusId !== e.from);
+    var phase = null;
+    var verb;
+    var pair = PHASE_VERBS[e.kind];
+    if (pair) {
+      phase = taskPhase(fromN && fromN.rec);
+      var sides = pair[phase] || pair.will;
+      verb = towardOther ? sides[1] : sides[0];
+    } else if (e.kind === 'depends') {
+      var key = DEP_LABELS[e.dep] ? e.dep : 'depends';
+      verb = towardOther ? DEP_INVERSE[key] : DEP_LABELS[key];
+    } else if (e.kind === 'serves') {
+      verb = towardOther ? 'Reçoit' : EDGE_LABELS.serves;
+    } else if (e.kind === 'sub') {
+      verb = towardOther ? 'Sous-tâche de' : EDGE_LABELS.sub;
+    } else {
+      verb = EDGE_LABELS[e.kind] || e.kind || '';
+    }
+    var text = verb;
+    if (e.kind === 'by' && !towardOther) {
+      var who = shortName(toN && toN.label);
+      if (who) text = verb + ' ' + who;
+    }
+    return {
+      text: text,
+      verb: verb,
+      phase: phase,
+      from: towardOther ? e.to : e.from,
+      to: towardOther ? e.from : e.to,
+    };
+  }
 
   // Goal hierarchy, highest to smallest. A task is the last level. "serves" edges point from the
   // smaller thing to the bigger one it contributes to (task → project → objective → goal → mission → vision).
@@ -546,6 +664,439 @@
     return nodes;
   }
 
+  var LENSES = [
+    { id: 'hierarchy', label: 'Hiérarchie' },
+    { id: 'vision', label: 'Vision' },
+    { id: 'mission', label: 'Mission' },
+    { id: 'goal', label: 'But' },
+    { id: 'objective', label: 'Objectif' },
+    { id: 'project', label: 'Projet' },
+    { id: 'type', label: 'Type' },
+    { id: 'manual', label: 'Manuel' },
+  ];
+
+  function lensById(id) {
+    for (var i = 0; i < LENSES.length; i++) if (LENSES[i].id === id) return LENSES[i];
+    return null;
+  }
+
+  /** overview (chips) → structure (levels) → work (cards) → detail (a task opens into nodes). */
+  function zoomBand(k) {
+    k = typeof k === 'number' && isFinite(k) ? k : 1;
+    if (k < 0.45) return 'overview';
+    if (k < 0.8) return 'structure';
+    if (k < 1.55) return 'work';
+    return 'detail';
+  }
+
+  function hueOfText(text) {
+    var hsh = 0;
+    String(text || '').split('').forEach(function (c) { hsh = (hsh * 31 + c.charCodeAt(0)) % 360; });
+    return hsh;
+  }
+
+  /** Stored manual groups: unique ids, trimmed names, unique member ids. Empty groups are dropped. */
+  function normalizeManual(raw) {
+    var list = Array.isArray(raw) ? raw : [];
+    var out = [];
+    var ids = Object.create(null);
+    list.forEach(function (g) {
+      if (!g || g.id == null) return;
+      var id = String(g.id).slice(0, 40);
+      if (!id || ids[id]) return;
+      var name = g.name != null ? String(g.name).replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+      if (!name) name = 'Groupe';
+      var members = [];
+      var seen = Object.create(null);
+      (Array.isArray(g.members) ? g.members : []).forEach(function (m) {
+        var mid = m == null ? '' : String(m).slice(0, 80);
+        if (!mid || seen[mid]) return;
+        seen[mid] = true;
+        members.push(mid);
+      });
+      if (!members.length) return;
+      ids[id] = true;
+      out.push({ id: id, name: name, members: members });
+    });
+    return out;
+  }
+
+  function servesIndex(edges) {
+    var kids = Object.create(null);
+    var parent = Object.create(null);
+    (edges || []).forEach(function (e) {
+      if (!e || e.kind !== 'serves') return;
+      if (!parent[e.from]) parent[e.from] = e.to;
+      (kids[e.to] = kids[e.to] || []).push(e.from);
+    });
+    return { kids: kids, parent: parent };
+  }
+
+  function collectDesc(id, kids, into, guard) {
+    if (guard > 16) return;
+    (kids[id] || []).forEach(function (c) {
+      if (into[c]) return;
+      into[c] = true;
+      collectDesc(c, kids, into, guard + 1);
+    });
+  }
+
+  function makeGroup(spec) {
+    return {
+      id: spec.id,
+      label: spec.label,
+      level: spec.level || '',
+      lens: spec.lens,
+      hue: spec.hue,
+      anchorId: spec.anchorId || null,
+      members: spec.members,
+      parentId: spec.parentId || null,
+      taskCount: 0,
+    };
+  }
+
+  function countTasks(g, byAnchor, byId, seen) {
+    var n = 0;
+    g.members.forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = true;
+      var node = byId[id];
+      if (node && node.kind === 'task') n++;
+      else if (byAnchor[id]) n += countTasks(byAnchor[id], byAnchor, byId, seen);
+    });
+    return n;
+  }
+
+  function finishGroups(groups, byId) {
+    var byAnchor = Object.create(null);
+    groups.forEach(function (g) { if (g.anchorId) byAnchor[g.anchorId] = g; });
+    groups.forEach(function (g) { g.taskCount = countTasks(g, byAnchor, byId, Object.create(null)); });
+    return groups;
+  }
+
+  function looseLabel(lens) {
+    if (lens === 'vision') return 'Sans vision';
+    if (lens === 'mission') return 'Sans mission';
+    if (lens === 'goal') return 'Sans but';
+    if (lens === 'objective') return 'Sans objectif';
+    return 'Sans projet';
+  }
+
+  /**
+   * Groups for one lens. hierarchy nests every goal level; a named level flattens to that level;
+   * type uses opts.buckets, else entityType / typeName, else the first label; manual uses opts.manual.
+   * Tasks with no group of that lens land in one loose group (except type and manual).
+   */
+  function buildGroups(graph, opts) {
+    opts = opts || {};
+    var lens = lensById(opts.lens) ? opts.lens : 'hierarchy';
+    var nodes = (graph && graph.nodes) || [];
+    var edges = (graph && graph.edges) || [];
+    var byId = Object.create(null);
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    var groups = [];
+
+    if (lens === 'manual') {
+      normalizeManual(opts.manual).forEach(function (g) {
+        var members = g.members.filter(function (id) { return byId[id]; });
+        if (!members.length) return;
+        groups.push(makeGroup({
+          id: g.id, label: g.name, level: 'manual', lens: 'manual',
+          hue: hueOfText(g.name), members: members,
+        }));
+      });
+      return finishGroups(groups, byId);
+    }
+
+    if (lens === 'type') {
+      if (Array.isArray(opts.buckets) && opts.buckets.length) {
+        opts.buckets.forEach(function (b, i) {
+          if (!b) return;
+          var members = [];
+          var seen = Object.create(null);
+          (Array.isArray(b.members) ? b.members : []).forEach(function (m) {
+            var id = byId[m] ? String(m) : byId['t:' + m] ? 't:' + m : '';
+            if (!id || seen[id]) return;
+            seen[id] = true;
+            members.push(id);
+          });
+          if (!members.length) return;
+          var name = String(b.name || 'Type').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Type';
+          groups.push(makeGroup({
+            id: 'grp:type:' + String(b.id || i),
+            label: name, level: 'type', lens: 'type',
+            hue: typeof b.hue === 'number' ? b.hue : hueOfText(name),
+            members: members,
+          }));
+        });
+      } else {
+        var buckets = Object.create(null);
+        var order = [];
+        nodes.forEach(function (n) {
+          if (n.kind !== 'task') return;
+          var rec = n.rec || {};
+          var typeName = rec.entityType || rec.typeName || '';
+          var lab = !typeName && Array.isArray(rec.labels) ? rec.labels.filter(function (l) { return l && (l.name || l.id); })[0] : null;
+          var key = typeName ? 'e:' + typeName : lab ? 'l:' + (lab.id || lab.name) : 'none';
+          var name = typeName || (lab && lab.name) || 'Sans type';
+          if (!buckets[key]) {
+            buckets[key] = { name: name, members: [] };
+            order.push(key);
+          }
+          buckets[key].members.push(n.id);
+        });
+        order.forEach(function (key) {
+          var b = buckets[key];
+          groups.push(makeGroup({
+            id: 'grp:type:' + key, label: b.name, level: 'type', lens: 'type',
+            hue: hueOfText(b.name), members: b.members,
+          }));
+        });
+      }
+      return finishGroups(groups, byId);
+    }
+
+    var idx = servesIndex(edges);
+    var levelFilter = lens === 'hierarchy' ? null : lens;
+    nodes.forEach(function (n) {
+      if (n.kind !== 'goal') return;
+      if (levelFilter && n.level !== levelFilter) return;
+      var memberMap = Object.create(null);
+      if (lens === 'hierarchy') (idx.kids[n.id] || []).forEach(function (c) { if (byId[c]) memberMap[c] = true; });
+      else collectDesc(n.id, idx.kids, memberMap, 0);
+      var members = Object.keys(memberMap);
+      if (!members.length) return;
+      var lv = levelById(n.level);
+      var parentNode = lens === 'hierarchy' ? idx.parent[n.id] : null;
+      var parentId = parentNode && byId[parentNode] && byId[parentNode].kind === 'goal' ? 'grp:' + parentNode : null;
+      groups.push(makeGroup({
+        id: 'grp:' + n.id,
+        label: n.label,
+        level: n.level,
+        lens: lens,
+        hue: lv ? lv.hue : hueOfText(n.label),
+        anchorId: n.id,
+        members: members,
+        parentId: parentId,
+      }));
+    });
+
+    var taken = Object.create(null);
+    groups.forEach(function (g) {
+      if (g.anchorId) taken[g.anchorId] = true;
+      g.members.forEach(function (id) { taken[id] = true; });
+    });
+    var loose = [];
+    nodes.forEach(function (n) {
+      if (n.kind === 'task' && !taken[n.id]) loose.push(n.id);
+    });
+    if (loose.length) {
+      groups.push(makeGroup({
+        id: 'grp:loose', label: looseLabel(lens), level: 'loose', lens: lens,
+        hue: 210, members: loose,
+      }));
+    }
+    return finishGroups(groups, byId);
+  }
+
+  function autoOpen(g, lens, band) {
+    if (band === 'work' || band === 'detail') return true;
+    if (band === 'overview') return false;
+    if (lens === 'hierarchy') {
+      var r = levelRank(g.level);
+      return r >= 0 && r < levelRank('project');
+    }
+    return true;
+  }
+
+  /** The nodes a task is made of, once you are close enough to read them. People and places stay real nodes. */
+  function facetsOf(node) {
+    if (!node || node.kind !== 'task') return [];
+    var rec = node.rec || {};
+    var out = [];
+    var prog = typeof rec.progress === 'number' ? Math.round(Math.max(0, Math.min(100, rec.progress))) : 0;
+    out.push({ id: 'f:' + node.id + ':progress', kind: 'facet', facet: 'progress', parentId: node.id, label: prog + ' %', value: prog });
+    if (rec.priorityLabel) out.push({ id: 'f:' + node.id + ':priority', kind: 'facet', facet: 'priority', parentId: node.id, label: String(rec.priorityLabel) });
+    if (rec.listName) out.push({ id: 'f:' + node.id + ':status', kind: 'facet', facet: 'status', parentId: node.id, label: String(rec.listName) });
+    if (rec.blocked) out.push({ id: 'f:' + node.id + ':blocked', kind: 'facet', facet: 'blocked', parentId: node.id, label: 'En pause' });
+    var due = rec.dueCountdown || (rec.due ? String(rec.due).slice(0, 10) : '');
+    if (due) out.push({ id: 'f:' + node.id + ':due', kind: 'facet', facet: 'due', parentId: node.id, label: String(due) });
+    return out;
+  }
+
+  /**
+   * What the map shows at this zoom. opts: { lens, zoom, manual, buckets, force:{groupId:'open'|'closed'},
+   * focusId, openTasks:{nodeId:true} }. A closed group hides its members. People, places and subtasks
+   * follow their tasks. Facets appear at the detail band (the focused task, or every task if none is focused).
+   */
+  function scene(graph, opts) {
+    opts = opts || {};
+    var lens = lensById(opts.lens) ? opts.lens : 'hierarchy';
+    var band = zoomBand(opts.zoom);
+    var nodes = (graph && graph.nodes) || [];
+    var edges = (graph && graph.edges) || [];
+    var byNode = Object.create(null);
+    nodes.forEach(function (n) { byNode[n.id] = n; });
+    var groups = buildGroups(graph, opts);
+    var byGroup = Object.create(null);
+    var force = opts.force || {};
+    groups.forEach(function (g) {
+      var f = force[g.id];
+      g.open = f === 'open' ? true : f === 'closed' ? false : autoOpen(g, lens, band);
+      g.hidden = false;
+      byGroup[g.id] = g;
+    });
+    function ancestorClosed(g) {
+      var p = g.parentId && byGroup[g.parentId];
+      var guard = 0;
+      while (p && guard++ < 16) {
+        if (!p.open || p.hidden) return true;
+        p = p.parentId && byGroup[p.parentId];
+      }
+      return false;
+    }
+    groups.forEach(function (g) {
+      if (ancestorClosed(g)) { g.hidden = true; g.open = false; }
+    });
+    var memberOf = Object.create(null);
+    groups.forEach(function (g) {
+      g.members.forEach(function (id) { (memberOf[id] = memberOf[id] || []).push(g.id); });
+    });
+    var hidden = Object.create(null);
+    Object.keys(memberOf).forEach(function (id) {
+      var open = memberOf[id].some(function (gid) {
+        var g = byGroup[gid];
+        return g && g.open && !g.hidden;
+      });
+      if (!open) hidden[id] = true;
+    });
+    var showSat = Object.create(null);
+    edges.forEach(function (e) {
+      [e.from, e.to].forEach(function (id, i, ends) {
+        var other = ends[1 - i];
+        var node = byNode[id];
+        var host = byNode[other];
+        if (!node || !host || host.kind !== 'task' || hidden[host.id]) return;
+        if (node.kind === 'person' || node.kind === 'place' || node.kind === 'subtask') showSat[id] = true;
+      });
+    });
+    nodes.forEach(function (n) {
+      if ((n.kind === 'person' || n.kind === 'place' || n.kind === 'subtask') && !showSat[n.id]) hidden[n.id] = true;
+    });
+    var facets = [];
+    nodes.forEach(function (n) {
+      if (n.kind !== 'task' || hidden[n.id]) return;
+      var focused = opts.focusId && opts.focusId === n.id;
+      var explode = (band === 'detail' && (!opts.focusId || focused)) || (opts.openTasks && opts.openTasks[n.id]);
+      if (!explode) return;
+      facetsOf(n).forEach(function (f) { facets.push(f); });
+    });
+    return { band: band, lens: lens, groups: groups, hidden: hidden, facets: facets };
+  }
+
+  function ellipsePath(cx, cy, rx, ry) {
+    rx = Math.max(8, rx);
+    ry = Math.max(8, ry);
+    var x0 = (cx - rx).toFixed(1);
+    var x1 = (cx + rx).toFixed(1);
+    var y = cy.toFixed(1);
+    return 'M' + x0 + ',' + y + 'A' + rx.toFixed(1) + ',' + ry.toFixed(1) + ' 0 1 0 ' + x1 + ',' + y +
+      'A' + rx.toFixed(1) + ',' + ry.toFixed(1) + ' 0 1 0 ' + x0 + ',' + y + 'Z';
+  }
+
+  function convexHull(points) {
+    var pts = points.slice().sort(function (a, b) { return a.x === b.x ? a.y - b.y : a.x - b.x; });
+    var uniq = [];
+    pts.forEach(function (p) {
+      var last = uniq[uniq.length - 1];
+      if (last && last.x === p.x && last.y === p.y) return;
+      uniq.push(p);
+    });
+    if (uniq.length <= 2) return uniq;
+    function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+    var lower = [];
+    uniq.forEach(function (p) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    });
+    var upper = [];
+    for (var i = uniq.length - 1; i >= 0; i--) {
+      var p = uniq[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    upper.pop();
+    lower.pop();
+    return lower.concat(upper);
+  }
+
+  function smoothClosed(pts) {
+    var n = pts.length;
+    if (!n) return '';
+    function mid(i) {
+      var a = pts[i];
+      var b = pts[(i + 1) % n];
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+    var m0 = mid(n - 1);
+    var d = ['M' + m0.x.toFixed(1) + ',' + m0.y.toFixed(1)];
+    for (var i = 0; i < n; i++) {
+      var m = mid(i);
+      d.push('Q' + pts[i].x.toFixed(1) + ',' + pts[i].y.toFixed(1) + ' ' + m.x.toFixed(1) + ',' + m.y.toFixed(1));
+    }
+    d.push('Z');
+    return d.join(' ');
+  }
+
+  /**
+   * Soft boundary around node centres ({x, y, w?, h?}). One point is an ellipse; several are a rounded hull.
+   * Conceptual edge, not a box.
+   */
+  function looseHull(points, pad) {
+    pad = typeof pad === 'number' ? pad : 36;
+    var pts = (points || []).filter(function (p) { return p && isFinite(p.x) && isFinite(p.y); });
+    if (!pts.length) return '';
+    if (pts.length === 1) {
+      var only = pts[0];
+      return ellipsePath(only.x, only.y, (only.w || 160) / 2 + pad, (only.h || 48) / 2 + pad);
+    }
+    var hull = convexHull(pts);
+    if (hull.length < 2) {
+      var one = hull[0] || pts[0];
+      return ellipsePath(one.x, one.y, (one.w || 160) / 2 + pad, (one.h || 48) / 2 + pad);
+    }
+    if (hull.length === 2) {
+      var a = hull[0];
+      var b = hull[1];
+      var dx = b.x - a.x;
+      var dy = b.y - a.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var px = -dy / len;
+      var py = dx / len;
+      var rad = pad + 24;
+      hull = [
+        { x: a.x + px * rad, y: a.y + py * rad },
+        { x: b.x + px * rad, y: b.y + py * rad },
+        { x: b.x - px * rad, y: b.y - py * rad },
+        { x: a.x - px * rad, y: a.y - py * rad },
+      ];
+    } else {
+      var cx = 0;
+      var cy = 0;
+      hull.forEach(function (p) { cx += p.x; cy += p.y; });
+      cx /= hull.length;
+      cy /= hull.length;
+      hull = hull.map(function (p) {
+        var ox = p.x - cx;
+        var oy = p.y - cy;
+        var dist = Math.sqrt(ox * ox + oy * oy) || 1;
+        var reach = Math.sqrt(Math.pow((p.w || 160) / 2, 2) + Math.pow((p.h || 48) / 2, 2)) * 0.65 + pad;
+        return { x: cx + (ox / dist) * (dist + reach), y: cy + (oy / dist) * (dist + reach) };
+      });
+    }
+    return smoothClosed(hull);
+  }
+
   global.MindmapModel = {
     LEVELS: LEVELS,
     TASK_RANK: TASK_RANK,
@@ -559,11 +1110,21 @@
     EDGE_LABELS: EDGE_LABELS,
     DEP_LABELS: DEP_LABELS,
     PLACE_EDGES: PLACE_EDGES,
+    taskPhase: taskPhase,
+    relationPhrase: relationPhrase,
     buildGraph: buildGraph,
     isClosed: isClosed,
     findCycles: findCycles,
     wouldCycle: wouldCycle,
     neighbours: neighbours,
     layout: layout,
+    LENSES: LENSES,
+    lensById: lensById,
+    zoomBand: zoomBand,
+    normalizeManual: normalizeManual,
+    buildGroups: buildGroups,
+    scene: scene,
+    facetsOf: facetsOf,
+    looseHull: looseHull,
   };
 })(typeof window !== 'undefined' ? window : this);

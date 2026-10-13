@@ -8,9 +8,13 @@
  * places are edited in the card.
  *  - drag the background (or hold the middle button anywhere) to pan, wheel to zoom, drag a node to move it
  *  - drag from a pin (card side) onto another node to link it (task → task: dependency; otherwise "Contribue à")
- *  - click a node to focus it: its neighbours stay lit and the side panel lists its links
+ *  - click a node to focus it: its neighbours stay lit, each link is read from that node
+ *    (a task "Sera fait par Aldé", the person "Va faire"), and the side panel lists its links
  *  - click a link to select it: delete, reverse or re-target it from the panel (Suppr also deletes it)
  *  - "Ajouter" creates a vision / mission / goal / objective / project; "Hiérarchie" lays the graph out from the center
+ *  - "Groupes" picks the lens (hiérarchie, vision, mission, but, objectif, projet, type, manuel). A group is a soft
+ *    boundary. Zooming out hides what is inside; zooming in shows it, and up close a task opens into nodes
+ *    (progrès, priorité, statut, pause, échéance). Click a group name to open or close it. Grouper (menu) is manual.
  *  - "Dépend de…" / "Contribue à…" (panel) or the Relier button: click another node to add / remove the link
  * Icons: Tabler webfont.
  */
@@ -135,6 +139,18 @@
       confirmDelete: null, // goal node id waiting for a second click
       linkFrom: null, // node id waiting for a target
       view: { x: 0, y: 0, k: 1 },
+      lens: (function () {
+        try {
+          var v = localStorage.getItem('tp-mindmap-lens') || 'hierarchy';
+          return MM().lensById(v) ? v : 'hierarchy';
+        } catch (e) { return 'hierarchy'; }
+      })(),
+      groupsOn: (function () { try { return localStorage.getItem('tp-mindmap-groups-on') !== '0'; } catch (e) { return true; } })(),
+      manual: [],
+      boardId: '',
+      groupForce: {},
+      scene: null,
+      lodSig: '',
       status: '',
       statusKind: '',
     };
@@ -158,15 +174,19 @@
     });
     svg.appendChild(defs);
     var gView = s('g', { class: 'mm-view' });
+    var gGroups = s('g', { class: 'mm-groups' });
     var gEdges = s('g', { class: 'mm-edges' });
     var gNodes = s('g', { class: 'mm-nodes' });
+    var gFacets = s('g', { class: 'mm-facets' });
     var gBox = s('g', { class: 'mm-selbox' }); // bounding box of the multi-selection (behind the wires and cards)
     var gTop = s('g', { class: 'mm-top' }); // rubber-band rectangle
     var gGuides = s('g', { class: 'mm-guides' }); // alignment guides shown while dragging cards
     var gHandles = s('g', { class: 'mm-handles' }); // grab handles on the two ends of the selected link
+    gView.appendChild(gGroups);
     gView.appendChild(gBox);
     gView.appendChild(gEdges);
     gView.appendChild(gNodes);
+    gView.appendChild(gFacets);
     gView.appendChild(gHandles);
     gView.appendChild(gGuides);
     gView.appendChild(gTop);
@@ -272,6 +292,11 @@
           title: 'Disposer du centre (vision, mission) vers l’extérieur (buts, objectifs, projets, tâches)',
           onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
         }, [icon('hierarchy-3'), 'Hiérarchie']),
+        h('button', {
+          class: 'mm-btn mm-lens-btn' + (state.groupsOn ? ' is-active' : ''),
+          title: 'Regrouper par vision, projet, type, ou à la main',
+          onclick: function (ev) { openLensMenu(ev.currentTarget); },
+        }, [icon('circle-dashed'), lensName()]),
         h('button', {
           class: 'mm-btn' + (state.snap ? ' is-active' : ''),
           'aria-pressed': state.snap ? 'true' : 'false',
@@ -474,14 +499,14 @@
         var title = s('title');
         title.textContent = edgeLabel(e);
         line.appendChild(title);
-        var label = s('text', { class: 'mm-edge-label', 'text-anchor': 'middle' });
+        var label = s('text', { class: 'mm-edge-label mm-edge-label--' + cls, 'text-anchor': 'middle' });
         label.textContent = edgeLabel(e);
         var wrapG = s('g', { class: 'mm-wire-group' }, [glow, line, label]);
         // wide invisible stroke so any link is easy to click (select / delete / change it)
         var hit = s('path', { class: 'mm-edge-hit', 'data-edge': e.id });
         hit.addEventListener('click', function (ev) { ev.stopPropagation(); onEdgeClick(e); });
         wrapG.appendChild(hit);
-        edgeEls[e.id] = { line: line, glow: glow, label: label, hit: hit, e: e };
+        edgeEls[e.id] = { line: line, glow: glow, label: label, title: title, hit: hit, e: e };
         gEdges.appendChild(wrapG);
       });
       graph.nodes.forEach(function (n) {
@@ -491,6 +516,7 @@
       });
       positionAll();
       applyFocus();
+      applyLod(true);
     }
 
     function buildNodeEl(n) {
@@ -636,9 +662,12 @@
     }
     function positionEdge(e) {
       var ref = edgeEls[e.id];
-      var a = nodeById(e.from);
-      var b = nodeById(e.to);
+      var read = MM().relationPhrase(e, state.selected, nodeById);
+      var a = nodeById(read.from);
+      var b = nodeById(read.to);
       if (!ref || !a || !b) return;
+      if (ref.label) ref.label.textContent = read.text;
+      if (ref.title) ref.title.textContent = read.text;
       var sides = facing(a, b);
       var p1 = anchor(a, sides[0]);
       var p2 = anchor(b, sides[1]);
@@ -647,8 +676,14 @@
       p2.x += p2.nx * PIN_GAP; p2.y += p2.ny * PIN_GAP;
       var d = wirePath(p1, p2);
       [ref.line, ref.glow, ref.hit].forEach(function (l) { if (l) l.setAttribute('d', d); });
-      ref.label.setAttribute('x', ((p1.x + p2.x) / 2).toFixed(1));
-      ref.label.setAttribute('y', ((p1.y + p2.y) / 2 - 6).toFixed(1));
+      // sit the phrase nearer the object, off the wire, so several links from one node don't share one spot
+      var dx = p2.x - p1.x;
+      var dy = p2.y - p1.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var mx = p1.x + dx * 0.62;
+      var my = p1.y + dy * 0.62;
+      ref.label.setAttribute('x', (mx - dy / len * 14).toFixed(1));
+      ref.label.setAttribute('y', (my + dx / len * 14).toFixed(1));
       ref.ends = [p1, p2];
       if (state.selectedEdge === e.id) drawHandles();
     }
@@ -746,6 +781,7 @@
         ref.line.classList.toggle('is-selected', chosen);
         ref.glow.classList.toggle('is-selected', chosen);
         ref.label.classList.toggle('is-shown', (!!focus || chosen) && lit);
+        positionEdge(e);
       });
       drawSelectionBox();
       drawHandles();
@@ -793,6 +829,7 @@
         origin.forEach(function (o) { o.n.x = o.x + dx; o.n.y = o.y + dy; positionNode(o.n); });
         state.graph.edges.forEach(function (e) { if (ids[e.from] || ids[e.to]) positionEdge(e); });
         drawSelectionBox();
+        drawHulls();
       };
     }
 
@@ -1012,6 +1049,7 @@
       state.confirmDelete = null;
       applyFocus();
       renderPanel();
+      applyLod();
     }
 
     function selectEdge(id) {
@@ -1195,29 +1233,19 @@
       });
     }
 
-    function showHint(text) {
-      els.hint.hidden = false;
-      els.hint.textContent = '';
-      els.hint.appendChild(icon('link'));
-      els.hint.appendChild(document.createTextNode(' ' + text + ' Échap pour terminer.'));
-      root.classList.add('is-linking');
-    }
-
     function startLink(nodeId) {
       state.linkFrom = nodeId;
       state.relink = null;
-      var n = nodeById(nodeId);
-      var what = n && n.kind === 'task'
-        ? 'Cliquez la tâche dont « ' + clip(n.label, 40) + ' » dépend, ou un objectif auquel elle contribue (re-cliquer un lien le retire).'
-        : 'Cliquez un élément d’un autre niveau à relier à « ' + clip(n ? n.label : '', 40) + ' » (re-cliquer un lien le retire).';
-      showHint(what);
+      els.hint.hidden = true;
+      root.classList.add('is-linking');
       renderBar();
       applyFocus();
     }
     function startRelink(edgeId) {
       state.relink = edgeId;
       state.linkFrom = null;
-      showHint('Cliquez le nouvel élément auquel ce lien doit mener.');
+      els.hint.hidden = true;
+      root.classList.add('is-linking');
       renderBar();
       applyFocus();
     }
@@ -1666,7 +1694,7 @@
     function one(k, v) { var o = {}; o[k] = v; return o; }
 
     function edgeLabel(e) {
-      return (e.kind === 'depends' && MM().DEP_LABELS[e.dep]) || MM().EDGE_LABELS[e.kind] || e.kind;
+      return MM().relationPhrase(e, state.selected, nodeById).text;
     }
 
     /** Changes what a task → task link means (stored as inputs.depTypes next to dependsOn). */
@@ -1983,6 +2011,32 @@
       ]);
     }
 
+    /** Links of `kinds` touching `n`, grouped by the phrase read from `n` (`dir` is out, in, or either). */
+    function phraseSections(n, kinds, dir) {
+      var order = { doing: 0, will: 1, done: 2, canceled: 3 };
+      var buckets = [];
+      var index = Object.create(null);
+      state.graph.edges.forEach(function (e) {
+        if (kinds.indexOf(e.kind) < 0) return;
+        if (dir === 'out' && e.from !== n.id) return;
+        if (dir === 'in' && e.to !== n.id) return;
+        if (e.from !== n.id && e.to !== n.id) return;
+        var ph = MM().relationPhrase(e, n.id, nodeById);
+        if (!index[ph.verb]) {
+          index[ph.verb] = { verb: ph.verb, phase: ph.phase || '', rows: [] };
+          buckets.push(index[ph.verb]);
+        }
+        var other = nodeById(e.from === n.id ? e.to : e.from);
+        if (other) index[ph.verb].rows.push(linkRow('', other));
+      });
+      buckets.sort(function (a, b) {
+        var oa = order[a.phase] != null ? order[a.phase] : 9;
+        var ob = order[b.phase] != null ? order[b.phase] : 9;
+        return oa - ob;
+      });
+      return buckets.map(function (b) { return section(b.verb, b.rows); });
+    }
+
     function renderPanel() {
       els.panel.textContent = '';
       var edge = state.selectedEdge && edgeById(state.selectedEdge);
@@ -2047,35 +2101,353 @@
           var dep = nodeById(e.to);
           return linkRow('', dep, function () { toggleDependency(n.id.slice(2), dep.id.slice(2)); });
         }), h('button', { class: 'mm-btn mm-btn--small', onclick: function () { startLink(n.id); } }, [icon('link'), 'Dépend de…'])));
-        sections.push(section('Bloque', pick('depends', 'in', function (e) { return linkRow('', nodeById(e.from)); })));
-        sections.push(section('Est fait par', pick('by', 'out', function (e) { return linkRow('', nodeById(e.to)); })));
-        var placeRows = [];
-        ['at', 'from', 'via', 'to'].forEach(function (k) {
-          pick(k, 'out', function (e) {
-            var li = linkRow('', nodeById(e.to));
-            if (k !== 'at') li.appendChild(h('span', { class: 'mm-tag', text: MM().EDGE_LABELS[k] }));
-            placeRows.push(li);
-          });
-        });
-        sections.push(section('Est fait à', placeRows));
+        phraseSections(n, ['depends'], 'in').forEach(function (sec) { sections.push(sec); });
+        phraseSections(n, ['by'], 'out').forEach(function (sec) { sections.push(sec); });
+        phraseSections(n, ['at', 'from', 'via', 'to'], 'out').forEach(function (sec) { sections.push(sec); });
       } else if (n.kind === 'subtask') {
         sections.push(section('Sous-tâche de', edges.filter(function (e) { return e.kind === 'sub' && e.to === n.id; }).map(function (e) { return linkRow('', nodeById(e.from)); })));
         if (typeof n.progress === 'number') els.panel.appendChild(h('div', { class: 'mm-chips' }, [h('span', { class: 'mm-chip', text: Math.round(n.progress) + ' %' })]));
       } else if (n.kind === 'person') {
-        sections.push(section('Fait', pick('by', 'in', function (e) { return linkRow('', nodeById(e.from)); })));
+        phraseSections(n, ['by'], 'in').forEach(function (sec) { sections.push(sec); });
       } else {
-        var rows = [];
-        edges.filter(function (e) { return e.to === n.id; }).forEach(function (e) {
-          var li = linkRow('', nodeById(e.from));
-          if (e.kind !== 'at') li.appendChild(h('span', { class: 'mm-tag', text: MM().EDGE_LABELS[e.kind] }));
-          rows.push(li);
-        });
-        sections.push(section('Tâches ici', rows));
+        phraseSections(n, ['at', 'from', 'via', 'to'], 'in').forEach(function (sec) { sections.push(sec); });
       }
       sections.forEach(function (sec) { if (sec) els.panel.appendChild(sec); });
       if (rec) {
         els.panel.appendChild(h('button', { class: 'mm-btn mm-btn--primary mm-open', onclick: function () { openCard(rec); } }, [icon('external-link'), 'Ouvrir la carte']));
       }
+    }
+
+    /* ── Groups: loose boundaries, and the nodes a task is made of ── */
+    var FACET_HUE = { progress: 150, priority: 25, status: 210, blocked: 0, due: 265 };
+    var lensMenuEl = null;
+
+    function lensName() {
+      if (!state.groupsOn) return 'Groupes';
+      var l = MM().lensById(state.lens);
+      return l ? l.label : 'Groupes';
+    }
+    function manualKey() { return 'tp-mindmap-groups:' + (state.boardId || 'local'); }
+    function loadManual() {
+      try { return MM().normalizeManual(JSON.parse(localStorage.getItem(manualKey()) || '[]')); }
+      catch (e) { return []; }
+    }
+    function saveManual() {
+      try { localStorage.setItem(manualKey(), JSON.stringify(state.manual)); } catch (e) { /* ignore */ }
+    }
+    function saveLens() {
+      try {
+        localStorage.setItem('tp-mindmap-lens', state.lens);
+        localStorage.setItem('tp-mindmap-groups-on', state.groupsOn ? '1' : '0');
+      } catch (e) { /* ignore */ }
+    }
+    function lodSignature() {
+      var force = state.groupForce || {};
+      var fk = Object.keys(force).sort().map(function (id) { return id + '=' + force[id]; }).join(',');
+      return [state.groupsOn ? 1 : 0, state.lens, MM().zoomBand(state.view.k), state.selected || '', fk, state.manual.length, state.graph.nodes.length, state.graph.edges.length].join('|');
+    }
+    function applyLod(forceRebuild) {
+      if (!state.graph || !gGroups) return;
+      var sig = lodSignature();
+      var scale = state.view.k;
+      if (!forceRebuild && sig === state.lodSig && state.scene && scale === state.lodScale) return;
+      var scaleOnly = !forceRebuild && sig === state.lodSig && state.scene && scale !== state.lodScale;
+      state.lodScale = scale;
+      if (!scaleOnly) {
+        state.lodSig = sig;
+        state.scene = MM().scene(state.graph, {
+          lens: state.lens,
+          zoom: state.view.k,
+          manual: state.manual,
+          force: state.groupForce,
+          focusId: state.selected,
+        });
+        var hide = state.groupsOn ? state.scene.hidden : {};
+        state.graph.nodes.forEach(function (n) {
+          var el = nodeEls[n.id];
+          if (el) el.setAttribute('display', hide[n.id] ? 'none' : '');
+        });
+        state.graph.edges.forEach(function (e) {
+          var ref = edgeEls[e.id];
+          if (!ref || !ref.line || !ref.line.parentNode) return;
+          ref.line.parentNode.setAttribute('display', state.groupsOn && (hide[e.from] || hide[e.to]) ? 'none' : '');
+        });
+      }
+      drawHulls();
+      if (!scaleOnly) drawFacets();
+    }
+    function toggleGroup(id) {
+      var g = state.scene && state.scene.groups.filter(function (x) { return x.id === id; })[0];
+      if (!g) return;
+      state.groupForce[id] = g.open ? 'closed' : 'open';
+      applyLod(true);
+    }
+    function hullLabel(g, x, y, withCount) {
+      var sc = 1 / (state.view.k || 1);
+      var text = g.label + (withCount && g.taskCount ? ' · ' + g.taskCount : '');
+      var t = s('text', {
+        class: 'mm-hull-label', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'data-group': g.id,
+        transform: 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + sc.toFixed(3) + ')',
+      });
+      t.textContent = text;
+      t.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+      t.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (ev.detail > 1) return;
+        toggleGroup(g.id);
+      });
+      t.addEventListener('dblclick', function (ev) {
+        ev.stopPropagation();
+        ev.preventDefault();
+        if (g.lens === 'manual') renameGroupInline(g);
+      });
+      return t;
+    }
+    function drawHulls() {
+      gGroups.textContent = '';
+      var scene = state.scene;
+      if (!state.groupsOn || !scene) return;
+      var byNode = Object.create(null);
+      state.graph.nodes.forEach(function (n) { byNode[n.id] = n; });
+      var k = state.view.k || 1;
+      scene.groups.forEach(function (g) {
+        if (g.hidden) return;
+        var pts = [];
+        function add(n) {
+          if (!n || !isFinite(n.x) || !isFinite(n.y)) return;
+          pts.push({ x: n.x, y: n.y, w: n.w || 160, h: n.h || 48 });
+        }
+        var hue = 'hsl(' + g.hue + ' 55% 52%)';
+        if (g.open) {
+          if (g.anchorId) add(byNode[g.anchorId]);
+          g.members.forEach(function (id) { if (!scene.hidden[id]) add(byNode[id]); });
+          if (!pts.length) return;
+          var hull = s('path', { class: 'mm-hull is-open', d: MM().looseHull(pts, 42), 'data-group': g.id });
+          hull.style.setProperty('--mm-hull', hue);
+          gGroups.appendChild(hull);
+          var top = pts[0];
+          pts.forEach(function (p) { if (p.y - p.h / 2 < top.y - top.h / 2) top = p; });
+          gGroups.appendChild(hullLabel(g, top.x, top.y - top.h / 2 - 16 / k, false));
+          return;
+        }
+        if (g.anchorId && byNode[g.anchorId] && !scene.hidden[g.anchorId]) {
+          add(byNode[g.anchorId]);
+          var halo = s('path', { class: 'mm-hull is-closed', d: MM().looseHull(pts, 18), 'data-group': g.id });
+          halo.style.setProperty('--mm-hull', hue);
+          halo.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+          halo.addEventListener('click', function (ev) { ev.stopPropagation(); toggleGroup(g.id); });
+          gGroups.appendChild(halo);
+          gGroups.appendChild(hullLabel(g, pts[0].x, pts[0].y - pts[0].h / 2 - 16 / k, true));
+          return;
+        }
+        g.members.forEach(function (id) { add(byNode[id]); });
+        if (!pts.length) return;
+        var cx = 0;
+        var cy = 0;
+        pts.forEach(function (p) { cx += p.x; cy += p.y; });
+        cx /= pts.length;
+        cy /= pts.length;
+        var sc = 1 / k;
+        var chip = s('ellipse', {
+          class: 'mm-hull is-closed', cx: cx.toFixed(1), cy: cy.toFixed(1),
+          rx: (86 * sc).toFixed(1), ry: (22 * sc).toFixed(1), 'data-group': g.id,
+        });
+        chip.style.setProperty('--mm-hull', hue);
+        chip.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+        chip.addEventListener('click', function (ev) { ev.stopPropagation(); toggleGroup(g.id); });
+        gGroups.appendChild(chip);
+        gGroups.appendChild(hullLabel(g, cx, cy, true));
+      });
+    }
+    function drawFacets() {
+      gFacets.textContent = '';
+      var scene = state.scene;
+      if (!scene || !scene.facets.length) return;
+      var byParent = Object.create(null);
+      scene.facets.forEach(function (f) { (byParent[f.parentId] = byParent[f.parentId] || []).push(f); });
+      Object.keys(byParent).forEach(function (pid) {
+        var parent = nodeById(pid);
+        if (!parent || !isFinite(parent.x)) return;
+        var list = byParent[pid];
+        list.forEach(function (f, i) {
+          var spread = (i - (list.length - 1) / 2) * Math.min(0.7, 2.2 / list.length);
+          var a = Math.PI / 2 + spread;
+          f.x = parent.x + Math.cos(a) * ((parent.w || 180) * 0.55 + 36);
+          f.y = parent.y + (parent.h || 48) / 2 + 40 + Math.abs(spread) * 8;
+          var link = s('line', {
+            class: 'mm-facet-link',
+            x1: parent.x.toFixed(1), y1: (parent.y + (parent.h || 40) / 2).toFixed(1),
+            x2: f.x.toFixed(1), y2: f.y.toFixed(1),
+          });
+          var el = buildFacetEl(f);
+          el.setAttribute('transform', 'translate(' + f.x.toFixed(1) + ',' + f.y.toFixed(1) + ')');
+          gFacets.appendChild(link);
+          gFacets.appendChild(el);
+        });
+      });
+    }
+    function buildFacetEl(f) {
+      var w = Math.max(76, Math.min(190, String(f.label || '').length * 7.2 + 28));
+      var hgt = 28;
+      var g = s('g', { class: 'mm-node mm-node--facet mm-facet--' + f.facet, 'data-facet': f.facet, 'data-parent': f.parentId });
+      g.style.setProperty('--mm-accent', 'hsl(' + (FACET_HUE[f.facet] || 210) + ' 55% 46%)');
+      g.appendChild(s('rect', { class: 'mm-shape', x: -w / 2, y: -hgt / 2, width: w, height: hgt, rx: 14 }));
+      var tx = s('text', { class: 'mm-facet-label', 'text-anchor': 'middle', x: 0, y: 4 });
+      tx.textContent = f.label;
+      g.appendChild(tx);
+      g.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+      g.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var parent = nodeById(f.parentId);
+        var rec = parent && parent.rec;
+        if (parent) select(parent.id);
+        if (!rec) return;
+        var anchor = nodeEls[parent.id];
+        if (f.facet === 'progress') openFieldEditor(rec, 'progress', anchor);
+        else if (f.facet === 'priority') openFieldEditor(rec, 'priority', anchor);
+        else if (f.facet === 'blocked') openFieldEditor(rec, 'blocked', anchor);
+        else if (f.facet === 'due') openFieldEditor(rec, 'due', anchor);
+      });
+      return g;
+    }
+    function closeLensMenu() {
+      if (lensMenuEl && lensMenuEl.parentNode) lensMenuEl.parentNode.removeChild(lensMenuEl);
+      lensMenuEl = null;
+    }
+    function openLensMenu(btn) {
+      if (lensMenuEl) { closeLensMenu(); return; }
+      var menu = h('div', { class: 'mm-menu mm-lens', role: 'menu' });
+      MM().LENSES.forEach(function (l) {
+        var on = state.groupsOn && state.lens === l.id;
+        var b = h('button', { class: 'mm-menu-item' + (on ? ' is-active' : ''), type: 'button' }, [
+          h('span', { class: 'mm-menu-label', text: l.label }),
+          h('kbd', { text: on ? '✓' : '' }),
+        ]);
+        b.addEventListener('click', function () {
+          state.lens = l.id;
+          state.groupsOn = true;
+          state.groupForce = {};
+          saveLens();
+          closeLensMenu();
+          renderBar();
+          applyLod(true);
+        });
+        menu.appendChild(b);
+      });
+      menu.appendChild(h('div', { class: 'mm-menu-sep' }));
+      var off = h('button', { class: 'mm-menu-item', type: 'button' }, [h('span', { class: 'mm-menu-label', text: 'Aucun' })]);
+      off.addEventListener('click', function () {
+        state.groupsOn = false;
+        saveLens();
+        closeLensMenu();
+        renderBar();
+        applyLod(true);
+      });
+      menu.appendChild(off);
+      var br = btn.getBoundingClientRect();
+      var rr = root.getBoundingClientRect();
+      menu.style.left = Math.max(4, br.left - rr.left) + 'px';
+      menu.style.top = (br.bottom - rr.top + 4) + 'px';
+      root.appendChild(menu);
+      lensMenuEl = menu;
+    }
+    function createManualGroup(nodes) {
+      if (!nodes || !nodes.length) return;
+      var goals = nodes.filter(function (n) { return n.kind === 'goal'; });
+      var name = goals.length === 1 ? goals[0].label : 'Groupe';
+      var seen = Object.create(null);
+      var members = [];
+      nodes.forEach(function (n) {
+        if (!n || seen[n.id]) return;
+        seen[n.id] = true;
+        members.push(n.id);
+      });
+      if (!members.length) return;
+      var g = { id: 'mg' + Math.random().toString(36).slice(2, 10), name: name, members: members };
+      state.manual = MM().normalizeManual(state.manual.concat([g]));
+      state.lens = 'manual';
+      state.groupsOn = true;
+      state.groupForce = {};
+      saveLens();
+      saveManual();
+      setStatus('Groupe « ' + name + ' »', 'ok');
+      renderBar();
+      applyLod(true);
+    }
+    function addToManual(groupId, nodes) {
+      state.manual = state.manual.map(function (g) {
+        if (g.id !== groupId) return g;
+        var members = g.members.slice();
+        nodes.forEach(function (n) { if (n && members.indexOf(n.id) < 0) members.push(n.id); });
+        return { id: g.id, name: g.name, members: members };
+      });
+      state.lens = 'manual';
+      state.groupsOn = true;
+      saveLens();
+      saveManual();
+      renderBar();
+      applyLod(true);
+    }
+    function removeFromManual(nodes) {
+      var ids = Object.create(null);
+      nodes.forEach(function (n) { if (n) ids[n.id] = true; });
+      state.manual = MM().normalizeManual(state.manual.map(function (g) {
+        return { id: g.id, name: g.name, members: g.members.filter(function (id) { return !ids[id]; }) };
+      }));
+      saveManual();
+      applyLod(true);
+    }
+    function dissolveGroup(id) {
+      state.manual = state.manual.filter(function (g) { return g.id !== id; });
+      delete state.groupForce[id];
+      saveManual();
+      applyLod(true);
+    }
+    function renameManual(id, name) {
+      name = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!name) return;
+      state.manual = state.manual.map(function (g) { return g.id === id ? { id: g.id, name: name, members: g.members } : g; });
+      saveManual();
+      applyLod(true);
+    }
+    function renameGroupInline(g) {
+      var el = gGroups.querySelector('.mm-hull-label[data-group="' + g.id + '"]');
+      if (!el || els.canvas.querySelector('.mm-title-edit')) return;
+      var r = el.getBoundingClientRect();
+      var cr = els.canvas.getBoundingClientRect();
+      var input = h('input', {
+        class: 'mm-title-edit', type: 'text', maxlength: '80', 'aria-label': 'Nom du groupe', value: g.label || g.name || '',
+        style: 'left:' + (r.left - cr.left).toFixed(1) + 'px;top:' + (r.top - cr.top).toFixed(1) + 'px;width:' + Math.max(140, r.width + 28).toFixed(1) + 'px;height:28px;font-size:13px',
+      });
+      var done = false;
+      function finish(save) {
+        if (done) return;
+        done = true;
+        var v = input.value;
+        if (input.parentNode) input.parentNode.removeChild(input);
+        if (save) renameManual(g.id, v);
+      }
+      input.addEventListener('keydown', function (ev) {
+        ev.stopPropagation();
+        if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+      ['pointerdown', 'dblclick', 'wheel'].forEach(function (type) { input.addEventListener(type, function (ev) { ev.stopPropagation(); }); });
+      els.canvas.appendChild(input);
+      input.focus();
+      input.select();
+    }
+    function bindBoard() {
+      var p = null;
+      try { if (t && typeof t.board === 'function') p = t.board('id'); } catch (e) { p = null; }
+      function use(id) {
+        state.boardId = id ? String(id) : 'local';
+        state.manual = loadManual();
+        applyLod(true);
+      }
+      if (!p || typeof p.then !== 'function') { use('local'); return; }
+      p.then(function (b) { use(b && typeof b === 'object' ? b.id : b); }, function () { use('local'); });
     }
 
     /* ── Pan / zoom ───────────────────────────────────────────────── */
@@ -2087,6 +2459,7 @@
       // the dot grid pans and zooms with the graph
       els.canvas.style.backgroundSize = (18 * v.k).toFixed(2) + 'px ' + (18 * v.k).toFixed(2) + 'px';
       els.canvas.style.backgroundPosition = v.x.toFixed(1) + 'px ' + v.y.toFixed(1) + 'px';
+      applyLod(false);
     }
 
     /** Zooms around the centre of the canvas and keeps the percentage in the toolbar current. */
@@ -2309,7 +2682,8 @@
         distH: '<path d="M3 4v16M21 4v16"/><rect x="9" y="7" width="6" height="10" rx="1"/>',
         distV: '<path d="M4 3h16M4 21h16"/><rect x="7" y="9" width="10" height="6" rx="1"/>',
         selectAll: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1"/>',
-        layout: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'
+        layout: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+        group: '<circle cx="8" cy="12" r="3"/><circle cx="16" cy="8" r="3"/><circle cx="16" cy="16" r="3"/>',
       };
       function icon(name) {
         var s = h('span', { class: 'mm-menu-ico' });
@@ -2347,6 +2721,24 @@
       items.push(['Répartir horizontalement', '', function () { distributeNodes('x'); }, count < 3, 'distH']);
       items.push(['Répartir verticalement', '', function () { distributeNodes('y'); }, count < 3, 'distV']);
       items.push(null);
+      var picked = pickedNodes();
+      if (picked.length) {
+        items.push(['Grouper', '', function () { createManualGroup(picked); }, false, 'group']);
+        state.manual.slice(0, 6).forEach(function (g) {
+          items.push(['Dans « ' + g.name + ' »', '', function () { addToManual(g.id, picked); }, false, 'group']);
+        });
+        var inGroup = picked.some(function (n) {
+          return state.manual.some(function (g) { return g.members.indexOf(n.id) >= 0; });
+        });
+        if (inGroup) items.push(['Retirer du groupe', '', function () { removeFromManual(picked); }, false, 'group']);
+      }
+      var groupHit = ev.target.closest && ev.target.closest('[data-group]');
+      var gid = groupHit && groupHit.getAttribute('data-group');
+      var manualHit = gid && state.manual.filter(function (g) { return g.id === gid; })[0];
+      if (manualHit) {
+        items.push(['Renommer le groupe', '', function () { renameGroupInline(manualHit); }, false, 'group']);
+        items.push(['Dissoudre le groupe', '', function () { dissolveGroup(manualHit.id); }, false, 'trash']);
+      }
       items.push(['Tout sélectionner', 'Ctrl+A', selectAll, false, 'selectAll']);
       items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }, false, 'layout']);
       var menu = h('div', { class: 'mm-menu', role: 'menu' }, items.map(function (it) {
@@ -2363,8 +2755,11 @@
       menuEl = menu;
     }
     svg.addEventListener('contextmenu', openMenu);
-    document.addEventListener('pointerdown', function (ev) { if (menuEl && !menuEl.contains(ev.target)) closeMenu(); }, true);
-    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeMenu(); });
+    document.addEventListener('pointerdown', function (ev) {
+      if (menuEl && !menuEl.contains(ev.target)) closeMenu();
+      if (lensMenuEl && !lensMenuEl.contains(ev.target) && !(ev.target.closest && ev.target.closest('.mm-lens-btn'))) closeLensMenu();
+    }, true);
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeMenu(); closeLensMenu(); } });
     global.addEventListener('resize', function () { if (!state.graph.nodes.length) fit(); });
 
     /* ── Loading ───────────────────────────────────────────────────── */
@@ -2429,6 +2824,7 @@
       });
     }
     renderBar();
+    bindBoard();
     if (global.AssistantDock) {
       global.AssistantDock.mount({ t: t, after: root, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return global.CardFields && global.CardFields.isOpen(); } });
     }

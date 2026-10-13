@@ -49,7 +49,6 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-hierarchy-2"></i></span>
       <span class="tp-settings-summary-title">Objectifs</span>
-      <span class="tp-settings-summary-hint">Objectifs et projets (expérimental)</span>
     </summary>
     <div class="tp-settings-body">
       <div id="goalsSettingsMount"></div>
@@ -60,7 +59,6 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout-list"></i></span>
       <span class="tp-settings-summary-title">Statut</span>
-      <span class="tp-settings-summary-hint">Catégories des listes et auto-déplacement</span>
     </summary>
     <div class="tp-settings-body">
       <div class="tp-statut-map" id="statutMapList"></div>
@@ -90,7 +88,6 @@
       </label>
 
       <div class="tp-statut-colors" id="statutStateColors">
-        <p class="tp-color-scheme-hint">Couleurs de la section Statut</p>
         <div class="tp-statut-color-grid" role="group" aria-label="Couleurs de statut">
           <label class="tp-statut-color">
             <span class="tp-statut-color-label">Gris</span>
@@ -135,10 +132,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-user-star"></i></span>
       <span class="tp-settings-summary-title">Rôles des assignés</span>
-      <span class="tp-settings-summary-hint">Catalogue partagé (montage, sous-titres…)</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Rôles proposés sur chaque carte lors de l’assignation. Les rôles ponctuels créés sur une carte restent locaux à cette carte.</p>
       <div class="tp-member-roles-list" id="memberRolesCatalogList" aria-label="Catalogue des rôles"></div>
       <div class="tp-member-roles-create">
         <input
@@ -159,7 +154,6 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-palette"></i></span>
       <span class="tp-settings-summary-title">Schéma de couleurs</span>
-      <span class="tp-settings-summary-hint">Palette des paliers de priorité</span>
     </summary>
     <div class="tp-settings-body">
       <div class="tp-color-scheme-list" id="colorSchemeList" role="radiogroup" aria-label="Schéma de couleurs"></div>
@@ -174,10 +168,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-percentage"></i></span>
       <span class="tp-settings-summary-title">Schéma de progrès</span>
-      <span class="tp-settings-summary-hint">Couleurs de la barre 0&nbsp;% → 100&nbsp;%</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Couleur de la barre de progression et des badges de progrès (0&nbsp;% → 100&nbsp;%). Choisissez un préréglage ou personnalisez le dégradé (ajoutez / glissez les points).</p>
       <div id="completionGradientEditor" class="tp-progress-gradient"></div>
     </div>
   </details>
@@ -186,7 +178,6 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-lock"></i></span>
       <span class="tp-settings-summary-title">Autorisation</span>
-      <span class="tp-settings-summary-hint">Déplacement de cartes et tri auto</span>
     </summary>
     <div class="tp-settings-body">
       <div class="tp-auto-sort">
@@ -200,10 +191,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-language"></i></span>
       <span class="tp-settings-summary-title">Langue</span>
-      <span class="tp-settings-summary-hint">Langue et dialecte de l’assistant (par membre)</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Choisissez la langue et le dialecte des réponses de l’assistant. Préférence personnelle (membre).</p>
       <label class="tp-profile-field">
         <span class="tp-profile-field-label">Langue principale</span>
         <select id="settingsLanguage" class="tp-select" aria-label="Langue principale de l’assistant"></select>
@@ -219,10 +208,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-calendar-time"></i></span>
       <span class="tp-settings-summary-title">Gantt</span>
-      <span class="tp-settings-summary-hint">Heures de travail (Agenda)</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Plage horaire mise en avant dans la vue Agenda du Gantt. Partagée sur le tableau.</p>
       <div class="tp-statut-roles">
         <label class="tp-statut-role">
           <span class="tp-statut-role-label">Début de journée</span>
@@ -241,10 +228,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-layout"></i></span>
       <span class="tp-settings-summary-title">Affichage</span>
-      <span class="tp-settings-summary-hint">Heure et ouverture de carte (par membre)</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Choisissez comment les heures s’affichent dans l’échéance et le sélecteur. Préférence personnelle (membre).</p>
       <div class="tp-time-format" id="timeFormatOptions" role="radiogroup" aria-label="Format d’heure">
         <label class="tp-statut-toggle">
           <input type="radio" name="timeFormat" value="24" id="timeFormat24" />
@@ -261,7 +246,6 @@
         <input type="checkbox" id="autoOpenCerveauToggle" />
         <span>Ouvrir automatiquement l’éditeur Cerveau</span>
       </label>
-      <p class="tp-color-scheme-hint">Si désactivé, utilisez le badge Priorité, le bouton de la section, ou « Ouvrir » sur le dos de la carte. Préférence personnelle (membre).</p>
     </div>
   </details>
 
@@ -269,22 +253,17 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-bug"></i></span>
       <span class="tp-settings-summary-title">Débogage</span>
-      <span class="tp-settings-summary-hint">Journaux et capacités admin</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Active les journaux détaillés dans la console du navigateur (DevTools). Préférence personnelle — désactivée par défaut. Aucun contenu de carte, jeton ou message d’assistant n’est journalisé.</p>
       <label class="tp-statut-toggle">
         <input type="checkbox" id="debugLoggingToggle" />
         <span>Activer les journaux de diagnostic</span>
       </label>
 
       <div class="tp-capabilities" id="capabilitiesChecklist">
-        <p class="tp-color-scheme-hint">Capacités Power-Up (admin Trello)</p>
         <p class="tp-capabilities-summary" id="capabilitiesSummary">Chargement…</p>
         <p class="tp-capabilities-note">
-          Cochez uniquement <strong>À activer</strong> dans
-          <a class="tp-link" id="capabilitiesAdminLink" href="https://trello.com/power-ups/admin" target="_blank" rel="noopener noreferrer">l’admin Trello</a>
-          (Capabilities), puis retirez et réajoutez le Power-Up. La liste se met à jour quand le connecteur est appelé.
+          <a class="tp-link" id="capabilitiesAdminLink" href="https://trello.com/power-ups/admin" target="_blank" rel="noopener noreferrer">Admin Trello</a>
         </p>
         <ul class="tp-capabilities-list" id="capabilitiesList" aria-label="Liste des capacités"></ul>
         <div class="tp-capabilities-actions">
@@ -300,10 +279,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-flask"></i></span>
       <span class="tp-settings-summary-title">Expérimental</span>
-      <span class="tp-settings-summary-hint">Fonctionnalités bêta (par membre)</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Activez les fonctionnalités et visuels bêta. Ces préférences sont personnelles (membre).</p>
       <div class="tp-profile-features" id="experimentalFlags" role="group" aria-label="Fonctionnalités expérimentales"></div>
     </div>
   </details>
@@ -312,11 +289,8 @@
     <summary class="tp-settings-summary">
       <span class="tp-settings-summary-icon" aria-hidden="true"><i class="ti ti-user"></i></span>
       <span class="tp-settings-summary-title">Mon profil</span>
-      <span class="tp-settings-summary-hint">Identité, assistant et fiche humaine</span>
     </summary>
     <div class="tp-settings-body">
-      <p class="tp-color-scheme-hint">Préférences personnelles (membre). La fiche humaine vient aussi de la mémoire tableau (faits «&nbsp;Moi —&nbsp;» / «&nbsp;État —&nbsp;»).</p>
-
       <label class="tp-profile-field">
         <span class="tp-profile-field-label">Prénom ou nom</span>
         <input type="text" class="tp-input" id="settingsProfileDisplayName" maxlength="80" placeholder="ex. Alex" autocomplete="nickname" />
@@ -343,7 +317,7 @@
 
       <div class="tp-human-sheet" id="settingsHumanSheet">
         <p class="tp-profile-field-label">Fiche humaine</p>
-        <p class="tp-human-sheet-empty" id="settingsHumanSheetEmpty">Rien encore. L’assistant remplit ça en conversation (identité, biologie, compétences, état du jour).</p>
+        <p class="tp-human-sheet-empty" id="settingsHumanSheetEmpty">Rien encore.</p>
         <ul class="tp-human-sheet-list" id="settingsHumanSheetDurable" hidden aria-label="Faits durables"></ul>
         <ul class="tp-human-sheet-list tp-human-sheet-list--state" id="settingsHumanSheetState" hidden aria-label="État du jour"></ul>
       </div>

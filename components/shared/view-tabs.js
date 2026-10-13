@@ -49,6 +49,17 @@
         if (v.key === active) return e.preventDefault();
         if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
         e.preventDefault();
+        try {
+          var mode = document.documentElement.getAttribute('data-color-mode');
+          var key =
+            (global.PriorityTrello && global.PriorityTrello.COLOR_MODE_STORAGE_KEY) ||
+            'trello-priority-powerup/color-mode';
+          if ((mode === 'dark' || mode === 'light') && global.localStorage) {
+            global.localStorage.setItem(key, mode);
+          }
+        } catch (err) {
+          /* storage unavailable */
+        }
         container.classList.add('is-leaving');
         global.location.assign(a.href);
       });
@@ -68,6 +79,33 @@
     u.search = '?' + sp.toString();
     u.hash = loc.hash || '';
     return u.href;
+  }
+
+  /**
+   * URL that opens the document page of a task (`docTask`) or an entity (`docEntity`).
+   * Pointing at Entités with kind `entity` selects that entity (`entity`) instead.
+   */
+  function hrefForSubject(page, loc, kind, id) {
+    var u = new URL(page, loc.href);
+    var sp = new URLSearchParams(loc.search || '');
+    sp.delete('docTask');
+    sp.delete('docEntity');
+    sp.delete('entity');
+    var docs = /\/docs\.html$/.test(u.pathname) || u.pathname === 'docs.html';
+    var entities = /\/entities\.html$/.test(u.pathname) || u.pathname === 'entities.html';
+    if (kind === 'entity' && entities) sp.set('entity', id);
+    else if (kind === 'entity') sp.set('docEntity', id);
+    else sp.set('docTask', id);
+    var q = sp.toString();
+    u.search = q ? '?' + q : '';
+    u.hash = loc.hash || '';
+    return u.href;
+  }
+
+  /** Leave the current view for the document page of a task or an entity. */
+  function openSubject(kind, id) {
+    if (!id || !global.location) return;
+    global.location.assign(hrefForSubject('./docs.html', global.location, kind, id));
   }
 
   /**
@@ -100,6 +138,8 @@
     mount: mount,
     hrefFor: hrefFor,
     hrefForCard: hrefForCard,
+    hrefForSubject: hrefForSubject,
+    openSubject: openSubject,
     highlightFromUrl: highlightFromUrl,
     VIEWS: VIEWS,
   };

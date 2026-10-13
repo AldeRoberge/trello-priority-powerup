@@ -316,7 +316,6 @@
       var box = h('div', { class: 'kb-ai', onclick: function (e) { e.stopPropagation(); } }, [
         icon('sparkles'),
         input,
-        h('kbd', { class: 'kb-ai-hint', text: 'Tab' }),
       ]);
       // A draggable ancestor would turn text selection in the input into a card drag.
       input.addEventListener('focus', function () {

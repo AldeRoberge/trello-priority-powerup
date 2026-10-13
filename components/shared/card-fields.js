@@ -331,11 +331,11 @@
     var saved = value;
     var tabs = el('div', 'cf-tabs');
     var bar = el('div', 'cf-toolbar');
-    var area = el('textarea', 'cf-textarea', { rows: '10', placeholder: 'Écrire en Markdown… (**gras**, _italique_, - liste, [lien](url))' });
+    var area = el('textarea', 'cf-textarea', { rows: '10', placeholder: 'Écrire…' });
     area.value = value;
     var preview = el('div', 'cf-preview agent-md');
     preview.hidden = true;
-    var status = el('span', 'cf-hint', { text: 'Ctrl+Entrée pour enregistrer' });
+    var status = el('span', 'cf-hint');
     var saveBtn = el('button', 'cf-btn cf-btn--primary', { type: 'button', text: 'Enregistrer' });
 
     function apply(tool) {

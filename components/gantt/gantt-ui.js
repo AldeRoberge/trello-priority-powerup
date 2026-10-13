@@ -1593,7 +1593,6 @@
           syncItems.push({
             icon: 'ti-alert-triangle',
             label: 'Outlook (configuration requise)',
-            hint: 'Déployez OutlookConfig.clientId (Entra SPA) pour activer la sync',
             onClick: function () {
               setStatus(
                 'Outlook non configuré : déployez clientId dans outlook-config.js (Pages), puis rechargez le Gantt.',
@@ -1605,9 +1604,6 @@
           syncItems.push({
             icon: state.outlookConnected ? 'ti-plug-connected-x' : 'ti-plug-connected',
             label: state.outlookConnected ? 'Déconnecter Outlook' : 'Connecter Outlook',
-            hint: state.outlookConnected
-              ? 'Déconnecter le compte Microsoft'
-              : 'Autoriser Outlook Calendar (Microsoft Graph)',
             onClick: function () {
               if (state.outlookConnected) {
                 setStatus('Déconnexion Outlook…');
@@ -1649,7 +1645,6 @@
             syncItems.push({
               icon: 'ti-refresh',
               label: state.outlookSyncing ? 'Sync Outlook…' : 'Synchroniser Outlook',
-              hint: 'Titres, descriptions et dates',
               disabled: !!state.outlookSyncing,
               onClick: function () {
                 runOutlookSync();
@@ -1661,13 +1656,11 @@
       syncItems.push({
         icon: 'ti-table',
         label: 'Google Sheets',
-        hint: 'Synchroniser ce tableau avec une feuille (deux sens)',
         onClick: openGoogleSheetsSync,
       });
       syncItems.push({
         icon: 'ti-bolt',
         label: 'Power Automate',
-        hint: 'Guide : Trello → Outlook automatiquement, sans hébergement',
         onClick: openPowerAutomateGuide,
       });
       menuSections.push({ title: 'Synchronisation', items: syncItems });
@@ -1678,7 +1671,6 @@
           {
             icon: 'ti-download',
             label: 'Calendrier (.ics)',
-            hint: 'Pour Outlook, sans compte Entra',
             onClick: exportIcsCalendar,
           },
         ],

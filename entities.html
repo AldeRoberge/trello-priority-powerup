@@ -3,6 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    (function () {
+      try {
+        var m = localStorage.getItem('trello-priority-powerup/color-mode');
+        if (m !== 'dark' && m !== 'light') return;
+        var root = document.documentElement;
+        root.setAttribute('data-color-mode', m);
+        root.style.colorScheme = m;
+        if (m === 'dark') root.style.backgroundColor = '#1d2125';
+        var meta = document.createElement('meta');
+        meta.name = 'color-scheme';
+        meta.content = m;
+        document.head.appendChild(meta);
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    html[data-color-mode="dark"] { background: #1d2125; color-scheme: dark; }
+    html[data-color-mode="light"] { color-scheme: light; }
+  </style>
   <title>Entités</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
@@ -40,6 +60,7 @@
   <script src="./components/entities/entities-trello.js"></script>
   <script src="./components/entities/entities-composer.js"></script>
   <script src="./components/agent/agent.js"></script>
+  <script src="./components/shared/ai-complete.js"></script>
   <script src="./components/entities/entities-composer-ai.js"></script>
   <script src="./components/entities/entities-systems-ai.js"></script>
   <script src="./components/shared/quick-parse.js"></script>

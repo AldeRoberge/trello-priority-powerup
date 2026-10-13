@@ -6585,12 +6585,6 @@
     deleteBtn.textContent = 'Supprimer le point';
     controls.appendChild(deleteBtn);
 
-    var hint = document.createElement('p');
-    hint.className = 'tp-color-scheme-hint tp-progress-gradient-hint';
-    hint.textContent =
-      'Cliquez sur le dégradé pour ajouter un point. Glissez un point pour le déplacer.';
-    editor.appendChild(hint);
-
     var preview = document.createElement('div');
     preview.className = 'tp-progress-gradient-preview';
     preview.setAttribute('aria-labelledby', 'completionGradientPreviewHeading');

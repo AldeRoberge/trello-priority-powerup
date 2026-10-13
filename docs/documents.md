@@ -17,6 +17,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Raccourcis Markdown | `# ` `## ` `### ` titres, `- ` puces, `1. ` numérotée, `[] ` cases à cocher, `> ` citation, `---` + Entrée séparateur, ```` ``` ```` + Entrée bloc de code |
 | Mise en forme | barre d'outils ; Ctrl+B / I / U, Ctrl+Maj+X barré, Ctrl+E code, Ctrl+K lien, Ctrl+Maj+7/8/9 listes, Ctrl+Alt+0…3 styles, Tab / Maj+Tab pour imbriquer une liste |
 | Ouvrir ce qui est mentionné | clic sur une tâche (ouvre la carte), un document (l'ouvre), une personne (fiche) |
+| Prénom seulement | Retour arrière juste après le nom ne garde que le prénom ; la mention reste |
 
 Les mentions affichent toujours le **nom actuel** de la carte, du document ou du membre ; une tâche terminée est barrée, une cible archivée ou supprimée est grisée et soulignée.
 Les personnes proposées sont les **membres du tableau** et vos **contacts** (Mon profil → Personnes ; privés, donc invisibles pour les autres membres).

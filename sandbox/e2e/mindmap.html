@@ -71,10 +71,12 @@
   <script src="/components/mindmap/mindmap-ui.js"></script>
   <script>
     // ---- mock Trello data (no network). window.__delay = ms Trello takes to answer card creation ----
+    var alde = { id: 'u1', name: 'Aldé Roberge', trelloId: 'u1' };
     var recs = [
-      { id: 'c1', name: 'Préparer la réunion de lancement', listId: 'l1', listName: 'À faire', progress: 0, inputs: {}, assignees: [], items: [] },
-      { id: 'c2', name: 'Refonte du tableau de bord', listId: 'l2', listName: 'En cours', progress: 45, inputs: { dependsOn: ['c1'] }, assignees: [], items: [] },
-      { id: 'c3', name: 'Publier la version 2', listId: 'l2', listName: 'En cours', progress: 20, inputs: { dependsOn: ['c2'] }, assignees: [], items: [] },
+      { id: 'c1', name: 'Préparer la réunion de lancement', listId: 'l1', listName: 'À faire', category: 'unstarted', progress: 0, inputs: {}, assignees: [alde], items: [] },
+      { id: 'c2', name: 'Refonte du tableau de bord', listId: 'l2', listName: 'En cours', category: 'started', progress: 45, priorityLabel: 'Haute', inputs: { dependsOn: ['c1'] }, assignees: [alde], items: [] },
+      { id: 'c3', name: 'Publier la version 2', listId: 'l2', listName: 'En cours', category: 'started', progress: 20, inputs: { dependsOn: ['c2'] }, assignees: [alde], items: [] },
+      { id: 'c4', name: 'Installer les bandes DEL', listId: 'l3', listName: 'Terminé', category: 'completed', progress: 100, inputs: {}, assignees: [alde], items: [] },
     ];
     var lists = [{ id: 'l1', name: 'À faire' }, { id: 'l2', name: 'En cours' }];
     var seq = 100;
@@ -96,7 +98,22 @@
       if (rec) rec.inputs = Object.assign({}, rec.inputs, inputs);
       return Promise.resolve();
     };
-    MindmapGoalsTrello.isAuthorized = function () { return Promise.resolve(false); };
+    MindmapGoalsTrello.isAuthorized = function () { return Promise.resolve(true); };
+    MindmapGoalsTrello.load = function () {
+      return Promise.resolve({
+        nodes: [
+          { id: 'g:v', level: 'vision', name: 'Produit clair' },
+          { id: 'g:p', level: 'project', name: 'Version 2' },
+        ],
+        links: [
+          { from: 'g:p', to: 'g:v' },
+          { from: 't:c2', to: 'g:p' },
+          { from: 't:c3', to: 'g:p' },
+        ],
+      });
+    };
+    MindmapGoalsTrello.save = function (t, g) { return Promise.resolve(g); };
+    MindmapGoalsTrello.newId = function () { return 'g' + (++seq); };
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'mindmap' });
     MindmapUI.mount(document.getElementById('mindmapMount'), {});
   </script>

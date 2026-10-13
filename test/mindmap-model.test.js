@@ -146,7 +146,10 @@ describe('MindmapModel', () => {
           { from: 't:a', to: 'g:p' },
         ],
       };
-      const g = MM.buildGraph(records, { goals: chain });
+      let g;
+      before(() => {
+        g = MM.buildGraph(records, { goals: chain });
+      });
 
       it('lists the ancestors from the nearest up to the vision', () => {
         assert.deepEqual(MM.ancestors(g.edges, 't:a'), ['g:p', 'g:o', 'g:g', 'g:m', 'g:v']);
@@ -196,6 +199,55 @@ describe('MindmapModel', () => {
     });
   });
 
+  it('reads a link from the clicked node, and an assignment in the task phase', () => {
+    const alde = { id: 'u', name: 'Aldé Roberge', trelloId: 'u' };
+    const recs = [
+      { id: 'plan', name: 'Planter', category: 'unstarted', assignees: [alde], inputs: { places: { at: { id: 'maison', name: 'Maison' } } } },
+      { id: 'go', name: 'Peindre', category: 'started', progress: 10, assignees: [alde], inputs: { dependsOn: ['plan'], depTypes: { plan: 'needs' } } },
+      { id: 'fin', name: 'Ranger', category: 'completed', progress: 0, assignees: [alde] },
+      { id: 'pause', name: 'Pause', category: 'started', blocked: true, progress: 40, assignees: [alde] },
+      { id: 'drop', name: 'Laisser tomber', category: 'canceled', assignees: [alde] },
+    ];
+    const g = MM.buildGraph(recs);
+    const get = (id) => g.nodes.find((n) => n.id === id);
+    const by = (task) => g.edges.find((e) => e.kind === 'by' && e.from === 't:' + task);
+    const doing = 'Est en train d\u2019\u00eatre fait par Ald\u00e9';
+
+    assert.equal(MM.taskPhase({}), 'will');
+    assert.equal(MM.taskPhase({ progress: 30 }), 'doing');
+    assert.equal(MM.taskPhase({ dueComplete: true, category: 'started' }), 'done');
+    assert.equal(MM.taskPhase({ category: 'completed', progress: 0 }), 'done');
+    assert.equal(MM.taskPhase({ category: 'started', blocked: true, progress: 40 }), 'will');
+
+    const planned = MM.relationPhrase(by('plan'), 't:plan', get);
+    assert.equal(planned.text, 'Sera fait par Ald\u00e9');
+    assert.equal(planned.verb, 'Sera fait par');
+    assert.equal(planned.from, 't:plan');
+    assert.equal(planned.to, 'p:u');
+    const plannedBack = MM.relationPhrase(by('plan'), 'p:u', get);
+    assert.equal(plannedBack.text, 'Va faire');
+    assert.equal(plannedBack.from, 'p:u');
+    assert.equal(plannedBack.to, 't:plan');
+
+    assert.equal(MM.relationPhrase(by('go'), 't:go', get).text, doing);
+    assert.equal(MM.relationPhrase(by('go'), 'p:u', get).text, 'Est en train de faire');
+    assert.equal(MM.relationPhrase(by('fin'), null, get).text, 'Compl\u00e9t\u00e9 par Ald\u00e9');
+    assert.equal(MM.relationPhrase(by('fin'), 'p:u', get).text, 'A compl\u00e9t\u00e9');
+    assert.equal(MM.relationPhrase(by('pause'), 't:pause', get).verb, 'Sera fait par');
+    assert.equal(MM.relationPhrase(by('drop'), 't:drop', get).text, 'Ne sera pas fait par Ald\u00e9');
+    assert.equal(MM.relationPhrase(by('drop'), 'p:u', get).text, 'Ne fera pas');
+
+    const at = g.edges.find((e) => e.kind === 'at');
+    assert.equal(MM.relationPhrase(at, 't:plan', get).text, 'Sera fait \u00e0');
+    assert.equal(MM.relationPhrase(at, at.to, get).text, 'Accueillera');
+    assert.equal(MM.relationPhrase(at, at.to, get).from, at.to);
+
+    const needs = g.edges.find((e) => e.kind === 'depends');
+    assert.equal(MM.relationPhrase(needs, 't:go', get).text, 'N\u00e9cessite');
+    assert.equal(MM.relationPhrase(needs, 't:plan', get).text, 'Est requis par');
+    assert.equal(MM.relationPhrase(needs, 't:plan', get).from, 't:plan');
+  });
+
   it('keeps the kind of a task link (depTypes), defaulting to depends', () => {
     const recs = [
       { id: 'a', name: 'A', category: 'started', inputs: { dependsOn: ['b', 'c'], depTypes: { b: 'needs', c: 'bogus' } } },
@@ -206,5 +258,114 @@ describe('MindmapModel', () => {
     const dep = (to) => g.edges.find((e) => e.to === 't:' + to).dep;
     assert.equal(dep('b'), 'needs');
     assert.equal(dep('c'), undefined);
+  });
+
+  describe('groups and zoom', () => {
+    const goals = {
+      nodes: [
+        { id: 'g:v', level: 'vision', name: 'Vivre bien' },
+        { id: 'g:m', level: 'mission', name: 'Rester en forme' },
+        { id: 'g:p', level: 'project', name: 'Plan' },
+      ],
+      links: [
+        { from: 'g:m', to: 'g:v' },
+        { from: 'g:p', to: 'g:m' },
+        { from: 't:a', to: 'g:p' },
+      ],
+    };
+    const rich = [
+      { id: 'a', name: 'Peindre', category: 'started', listName: 'En cours', progress: 40, priorityLabel: 'Haute', blocked: true, due: '2026-11-01', assignees: [alice], labels: [{ id: 'lb', name: 'Maison' }], inputs: { dependsOn: ['b'] } },
+      { id: 'b', name: 'Acheter', category: 'unstarted', listName: 'À faire', progress: 0, assignees: [], entityType: 'Course', inputs: {} },
+    ];
+
+    function graph() {
+      return MM.buildGraph(rich, { goals });
+    }
+
+    it('names the zoom bands from far chips to a task opened into nodes', () => {
+      assert.equal(MM.zoomBand(0.2), 'overview');
+      assert.equal(MM.zoomBand(0.5), 'structure');
+      assert.equal(MM.zoomBand(1), 'work');
+      assert.equal(MM.zoomBand(2), 'detail');
+      assert.equal(MM.zoomBand(undefined), 'work');
+    });
+
+    it('nests hierarchy groups and counts the tasks under a vision', () => {
+      const groups = MM.buildGroups(graph(), { lens: 'hierarchy' });
+      const vision = groups.find((g) => g.anchorId === 'g:v');
+      const project = groups.find((g) => g.anchorId === 'g:p');
+      assert.equal(vision.parentId, null);
+      assert.equal(project.parentId, 'grp:g:m');
+      assert.deepEqual(project.members, ['t:a']);
+      assert.equal(vision.taskCount, 1);
+      assert.ok(groups.some((g) => g.id === 'grp:loose' && g.members.includes('t:b')));
+    });
+
+    it('hides members when zoomed out and shows them when the group is opened', () => {
+      const far = MM.scene(graph(), { lens: 'hierarchy', zoom: 0.2 });
+      assert.equal(far.band, 'overview');
+      assert.equal(far.hidden['t:a'], true);
+      assert.equal(far.hidden['g:m'], true);
+      assert.ok(!far.hidden['g:v']);
+      assert.equal(far.hidden['p:m1'], true);
+      const opened = MM.scene(graph(), { lens: 'hierarchy', zoom: 0.2, force: { 'grp:g:v': 'open' } });
+      assert.ok(!opened.hidden['g:m']);
+      assert.equal(opened.hidden['t:a'], true);
+      const work = MM.scene(graph(), { lens: 'hierarchy', zoom: 1 });
+      assert.ok(!work.hidden['t:a']);
+      assert.ok(!work.hidden['p:m1']);
+      assert.equal(work.facets.length, 0);
+    });
+
+    it('keeps a project closed at the structure band and opens it by force', () => {
+      const mid = MM.scene(graph(), { lens: 'hierarchy', zoom: 0.6 });
+      assert.equal(mid.hidden['t:a'], true);
+      assert.ok(!mid.hidden['g:p']);
+      const forced = MM.scene(graph(), { lens: 'project', zoom: 0.2, force: { 'grp:g:p': 'open' } });
+      assert.ok(!forced.hidden['t:a']);
+    });
+
+    it('breaks a focused task into facet nodes only when zoomed in', () => {
+      const detail = MM.scene(graph(), { zoom: 2, focusId: 't:a' });
+      const kinds = detail.facets.map((f) => f.facet).sort();
+      assert.deepEqual(kinds, ['blocked', 'due', 'priority', 'progress', 'status']);
+      assert.equal(detail.facets.every((f) => f.parentId === 't:a'), true);
+      const other = MM.scene(graph(), { zoom: 2, focusId: 't:b' });
+      assert.deepEqual(other.facets.map((f) => f.facet), ['progress', 'status']);
+    });
+
+    it('groups by entity type, by label, or by an explicit bucket', () => {
+      const typed = MM.buildGroups(graph(), { lens: 'type' });
+      const course = typed.find((g) => g.label === 'Course');
+      const maison = typed.find((g) => g.label === 'Maison');
+      assert.deepEqual(course.members, ['t:b']);
+      assert.deepEqual(maison.members, ['t:a']);
+      const buckets = MM.buildGroups(graph(), { lens: 'type', buckets: [{ id: 'ent', name: 'Entité', members: ['a', 'b'] }] });
+      assert.deepEqual(buckets[0].members.sort(), ['t:a', 't:b']);
+    });
+
+    it('keeps manual groups editable and drops empty or duplicate ones', () => {
+      const clean = MM.normalizeManual([
+        { id: 'mg1', name: '  Équipe  ', members: ['t:a', 't:a', ''] },
+        { id: 'mg1', name: 'Doublon', members: ['t:b'] },
+        { id: 'mg2', name: '', members: [] },
+      ]);
+      assert.deepEqual(clean, [{ id: 'mg1', name: 'Équipe', members: ['t:a'] }]);
+      const g = MM.buildGroups(graph(), { lens: 'manual', manual: clean });
+      assert.equal(g.length, 1);
+      assert.equal(g[0].label, 'Équipe');
+      const closed = MM.scene(graph(), { lens: 'manual', zoom: 1, manual: clean, force: { mg1: 'closed' } });
+      assert.equal(closed.hidden['t:a'], true);
+      assert.ok(!closed.hidden['t:b']);
+    });
+
+    it('draws a closed soft boundary around one point and around several', () => {
+      const one = MM.looseHull([{ x: 0, y: 0, w: 100, h: 40 }]);
+      assert.match(one, /^M/);
+      assert.match(one, /Z$/);
+      const many = MM.looseHull([{ x: 0, y: 0 }, { x: 80, y: 10 }, { x: 40, y: 90 }]);
+      assert.match(many, /Q/);
+      assert.equal(MM.looseHull([]), '');
+    });
   });
 });

@@ -3215,10 +3215,27 @@
     return opts;
   }
 
+  // Read by the inline boot in each view page (before stylesheets) so a tab change
+  // paints dark immediately instead of the light default.
+  var COLOR_MODE_STORAGE_KEY = 'trello-priority-powerup/color-mode';
+
   function applyColorMode(theme) {
     if (typeof document === 'undefined' || !document.documentElement) return;
-    if (theme === 'light' || theme === 'dark') {
-      document.documentElement.setAttribute('data-color-mode', theme);
+    if (theme !== 'light' && theme !== 'dark') return;
+    var root = document.documentElement;
+    root.setAttribute('data-color-mode', theme);
+    try {
+      if (root.style) {
+        root.style.colorScheme = theme;
+        root.style.backgroundColor = theme === 'dark' ? '#1d2125' : '';
+      }
+    } catch (err) {
+      /* style optional */
+    }
+    try {
+      if (global.localStorage) global.localStorage.setItem(COLOR_MODE_STORAGE_KEY, theme);
+    } catch (err) {
+      /* storage unavailable */
     }
   }
 
@@ -4524,6 +4541,7 @@
     initIframePage: initIframePage,
     runWhenIframeReady: runWhenIframeReady,
     syncIframeTheme: syncIframeTheme,
+    COLOR_MODE_STORAGE_KEY: COLOR_MODE_STORAGE_KEY,
     BADGE_REFRESH_SEC: BADGE_REFRESH_SEC,
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -481,11 +481,6 @@
       var head = el('div', 'gantt-pop-head');
       head.appendChild(icon('ti-arrows-sort'));
       head.appendChild(el('span', 'gantt-pop-title', { text: 'Tri multi-niveaux' }));
-      head.appendChild(
-        el('span', 'gantt-pop-hint', {
-          text: 'Le niveau 1 prime ; les suivants départagent les égalités.',
-        })
-      );
       pop.appendChild(head);
 
       var list = el('ol', 'gantt-levels');
@@ -661,7 +656,7 @@
       lab.appendChild(el('span', 'gantt-switch-track'));
       lab.appendChild(
         el('span', 'gantt-switch-text', {
-          text: 'Regrouper par statut (En cours · À faire · Bloqué)',
+          text: 'Regrouper par statut',
         })
       );
       foot.appendChild(lab);

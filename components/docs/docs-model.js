@@ -6,6 +6,7 @@
  * Contents
  *   1. Constants + card naming / description packing
  *   1b. Covers (color, gradient, Unsplash, link, upload)
+ *   1c. Page subject (task or entity) + document fields (tags, people)
  *   2. Markdown -> editor HTML   (mdToHtml, inlineToHtml)
  *   3. Editor DOM -> Markdown    (domToMd)
  *   4. @ mentions: trigger detection, index, search
@@ -16,6 +17,8 @@
  *   # / ## / ###   **bold** *italic* ++underline++ ~~strike~~ `code`   [text](https://url)
  *   - bullets (nested by 2 spaces)   1. numbers   - [ ] / - [x] checklist   > quote   ``` fence   ---
  *   mentions: [@Label](person:ID) [@Label](task:ID) [@Label](doc:ID)
+ *   a person shown by first name only: [@Prénom](person:ID:short)
+ *   a picture on its own line: ![alt](https://…) or ![alt](upload:cardId/attId/file.jpg)
  *   <!--blank-->  an intentionally empty paragraph
  */
 (function (global) {
@@ -25,7 +28,7 @@
 
   var NAME_PREFIX = '📄 ';
   var MAX_DESC = 16384; // Trello card description limit
-  var META_RESERVE = 480; // rev + cover line (MAX_COVER_JSON)
+  var META_RESERVE = 980; // rev + cover line + subject + tags + people
   var MAX_BODY = MAX_DESC - META_RESERVE;
   var MAX_TITLE = 120;
   var UNTITLED = 'Sans titre';
@@ -54,20 +57,25 @@
     return NAME_PREFIX + (cleanTitle(title) || UNTITLED);
   }
 
-  /** Description text of a document card: the body, then a hidden `type: document` + `rev: N` (+ `cover: {...}`) block. */
+  /** Description text of a document card: the body, then a hidden `type: document` + `rev: N` block (cover, subject, tags, people). */
   function packDesc(body, meta) {
     var m = meta || {};
     var rev = Math.max(1, parseInt(m.rev, 10) || 1);
     var text = String(body == null ? '' : body).replace(/\s+$/, '');
+    var lines = ['type: document', 'rev: ' + rev];
     var cover = packCover(m.cover);
-    var block = '<!--cerveau-meta\ntype: document\nrev: ' + rev + '\n' + (cover ? 'cover: ' + cover + '\n' : '') + '-->';
+    if (cover) lines.push('cover: ' + cover);
+    var sub = subjectLine(m.subject);
+    if (sub) lines.push('subject: ' + sub);
+    propLines(m.props).forEach(function (line) { lines.push(line); });
+    var block = '<!--cerveau-meta\n' + lines.join('\n') + '\n-->';
     return text ? text + '\n\n' + block : block;
   }
 
   /**
    * The meta block is always the very last thing in the description, so only the last
    * `<!--cerveau-meta ... -->` that runs to the end counts: text typed in the body can never forge it.
-   * @returns {{body:string, rev:number, isDoc:boolean, cover:object|null}} (does not trim: code blocks stay intact)
+   * @returns {{body:string, rev:number, isDoc:boolean, cover:object|null, subject:object|null, props:object|null}}
    */
   function unpackDesc(desc) {
     var full = String(desc == null ? '' : desc).replace(/\r\n?/g, '\n');
@@ -92,7 +100,87 @@
       rev: Math.max(1, parseInt(meta.rev, 10) || 1),
       isDoc: meta.type === 'document',
       cover: parseCover(meta.cover),
+      subject: normalizeSubject(meta.subject),
+      props: normalizeProps({ tags: meta.tags, people: meta.people }),
     };
+  }
+
+  /* ── 1c. Page subject + document fields ──────────────────────────── */
+  /*
+   * A page can belong to one task or one entity (`subject: task:<id>` / `subject: entity:<id>`).
+   * The card or the entity keeps its own fields (members, labels, description). The document only
+   * stores the link, plus its own short tags and people when those are not the task's.
+   * Caps keep the hidden block small: 6 tags of 20 characters, 8 people.
+   */
+
+  var MAX_TAGS = 6;
+  var MAX_TAG = 20;
+  var MAX_PAGE_PEOPLE = 8;
+
+  function normalizeSubject(raw) {
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'string') {
+      var m = /^(task|entity):([A-Za-z0-9_-]{1,32})$/.exec(String(raw).trim());
+      return m ? { k: m[1], id: m[2] } : null;
+    }
+    if (typeof raw !== 'object') return null;
+    var k = raw.k === 'task' || raw.k === 'entity' ? raw.k : raw.kind === 'task' || raw.kind === 'entity' ? raw.kind : '';
+    var id = cleanId(raw.id);
+    if (id.length > 32) id = '';
+    return k && id ? { k: k, id: id } : null;
+  }
+
+  function subjectLine(subject) {
+    var s = normalizeSubject(subject);
+    return s ? s.k + ':' + s.id : '';
+  }
+
+  function cleanTag(s) {
+    return String(s == null ? '' : s).replace(/[|\n\r<>:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_TAG);
+  }
+
+  /** `{tags:string[], people:string[]}` or null when both are empty. */
+  function normalizeProps(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var tags = [];
+    var tagList = Array.isArray(src.tags) ? src.tags : String(src.tags || '').split('|');
+    tagList.forEach(function (t) {
+      var c = cleanTag(t);
+      if (!c) return;
+      var key = c.toLowerCase();
+      if (tags.some(function (x) { return x.toLowerCase() === key; })) return;
+      if (tags.length < MAX_TAGS) tags.push(c);
+    });
+    var people = [];
+    var ppl = Array.isArray(src.people) ? src.people : String(src.people || '').split(',');
+    ppl.forEach(function (id) {
+      var c = cleanId(id);
+      if (!c || c.length > 32 || people.indexOf(c) >= 0) return;
+      if (people.length < MAX_PAGE_PEOPLE) people.push(c);
+    });
+    if (!tags.length && !people.length) return null;
+    return { tags: tags, people: people };
+  }
+
+  function propLines(props) {
+    var p = normalizeProps(props);
+    if (!p) return [];
+    var lines = [];
+    if (p.tags.length) lines.push('tags: ' + p.tags.join('|'));
+    if (p.people.length) lines.push('people: ' + p.people.join(','));
+    return lines;
+  }
+
+  /** The document in `docs` whose subject is this task or entity, or null. */
+  function docForSubject(docs, kind, id) {
+    var want = normalizeSubject({ k: kind, id: id });
+    if (!want) return null;
+    var list = docs || [];
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i] && list[i].subject;
+      if (s && s.k === want.k && s.id === want.id) return list[i];
+    }
+    return null;
   }
 
   /* ── 1b. Covers (banner above the title) ─────────────────────────── */
@@ -387,15 +475,27 @@
     return !!ch && /[A-Za-z0-9À-￿]/.test(ch);
   }
 
-  function mentionHtml(type, id, label) {
+  /** First word of a full name ("Aldé Roberge" → "Aldé", "Jean-Pierre Tremblay" → "Jean-Pierre"). */
+  function firstName(label) {
+    var parts = String(label == null ? '' : label).trim().split(/\s+/).filter(Boolean);
+    return parts[0] || '';
+  }
+
+  /**
+   * @param {{short?:boolean}} [opts] person only: show and store the first name (`data-short`)
+   *   while `data-label` keeps the full name passed in.
+   */
+  function mentionHtml(type, id, label, opts) {
     var spec = MENTION_TYPES[type];
     var cid = cleanId(id);
     if (!spec || !cid) return esc(label || '');
     var text = String(label == null ? '' : label).replace(/\s+/g, ' ').trim() || '?';
+    var short = type === 'person' && !!(opts && opts.short);
+    var shown = short ? (firstName(text) || text) : text;
     return (
       '<span class="dc-mention dc-mention--' + type + '" data-m="' + type + '" data-id="' + cid +
-      '" data-label="' + esc(text) + '" contenteditable="false">' +
-      '<i class="ti ti-' + spec.icon + '" aria-hidden="true"></i>' + esc(text) + '</span>'
+      '" data-label="' + esc(text) + '"' + (short ? ' data-short="1"' : '') + ' contenteditable="false">' +
+      '<i class="ti ti-' + spec.icon + '" aria-hidden="true"></i>' + esc(shown) + '</span>'
     );
   }
 
@@ -443,9 +543,12 @@
     if (k >= n) return null;
     var label = s.slice(i + 1, j);
     var url = s.slice(j + 2, k).trim();
-    var m = /^(person|task|doc):([A-Za-z0-9_-]{1,64})$/.exec(url);
+    var m = /^(person|task|doc):([A-Za-z0-9_-]{1,64})(?::(short))?$/.exec(url);
     if (m && label.charAt(0) === '@') {
-      return { html: mentionHtml(m[1], m[2], label.slice(1).replace(/\\(.)/g, '$1')), end: k + 1 };
+      return {
+        html: mentionHtml(m[1], m[2], label.slice(1).replace(/\\(.)/g, '$1'), { short: m[3] === 'short' }),
+        end: k + 1,
+      };
     }
     var href = safeHref(url);
     if (!href) return { html: inlineToHtml(label), end: k + 1 };
@@ -536,6 +639,64 @@
   var RE_LIST = /^([ \t]*)([-*+]|\d+[.)])(?:[ \t]+([\s\S]*))?$/;
   var BLANK_MARK = '<!--blank-->';
 
+  /**
+   * A picture is its own line. `https` (or `http`) URLs are stored as-is; an uploaded file is a short
+   * pointer at a Trello attachment, `upload:cardId/attId/file.jpg`, so the description stays small.
+   * javascript:, data: and broken ids are not pictures.
+   */
+  function imageSrc(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (s.indexOf('upload:') === 0) {
+      var parts = s.slice(7).split('/');
+      if (parts.length !== 3 || !cleanId(parts[0]) || !cleanId(parts[1])) return '';
+      if (!/^[A-Za-z0-9._-]{1,80}$/.test(parts[2])) return '';
+      return 'upload:' + parts[0] + '/' + parts[1] + '/' + parts[2];
+    }
+    var href = safeHref(s);
+    if (!href || !/^https?:\/\//i.test(href) || /[()\s<>"]/.test(href)) return '';
+    return href;
+  }
+
+  function parseImageLine(line) {
+    var s = String(line == null ? '' : line);
+    if (/^ {4,}/.test(s)) return null;
+    s = s.replace(/^ {0,3}/, '');
+    if (s.slice(0, 2) !== '![') return null;
+    var i = 2;
+    var alt = '';
+    while (i < s.length) {
+      var c = s.charAt(i);
+      if (c === '\\') {
+        if (i + 1 >= s.length) return null;
+        alt += s.charAt(i + 1);
+        i += 2;
+        continue;
+      }
+      if (c === ']') break;
+      if (c === '\n' || c === '[') return null;
+      alt += c;
+      i++;
+    }
+    if (s.charAt(i) !== ']' || s.charAt(i + 1) !== '(') return null;
+    var end = s.indexOf(')', i + 2);
+    if (end < 0 || s.slice(end + 1).trim() !== '') return null;
+    var src = imageSrc(s.slice(i + 2, end).trim());
+    if (!src) return null;
+    return { alt: alt.replace(/\s+/g, ' ').trim().slice(0, 200), src: src };
+  }
+
+  function imageMd(alt, src) {
+    var a = String(alt || '').replace(/[\\\[\]]/g, '\\$&').replace(/\s+/g, ' ').trim().slice(0, 200);
+    return '![' + a + '](' + src + ')';
+  }
+
+  function imageHtml(img) {
+    var src = esc(img.src);
+    var alt = esc(img.alt || '');
+    var show = img.src.indexOf('upload:') === 0 ? '' : ' src="' + src + '"';
+    return '<figure class="dc-image" contenteditable="false" data-src="' + src + '" data-alt="' + alt + '"><img alt="' + alt + '" draggable="false"' + show + '></figure>';
+  }
+
   function indentOf(ws) {
     return ws.replace(/\t/g, '    ').length;
   }
@@ -547,7 +708,8 @@
       RE_HEADING.test(line) ||
       RE_QUOTE.test(line) ||
       RE_LIST.test(line) ||
-      line.trim() === BLANK_MARK
+      line.trim() === BLANK_MARK ||
+      !!parseImageLine(line)
     );
   }
 
@@ -596,6 +758,12 @@
       }
       if (line.trim() === BLANK_MARK) {
         out += '<p><br></p>';
+        i++;
+        continue;
+      }
+      var imgLine = parseImageLine(line);
+      if (imgLine) {
+        out += imageHtml(imgLine);
         i++;
         continue;
       }
@@ -784,8 +952,10 @@
     var mtype = attr(node, 'data-m');
     if (mtype && MENTION_TYPES[mtype]) {
       var id = cleanId(attr(node, 'data-id'));
-      var label = String(attr(node, 'data-label') || textOf(node)).replace(/\s+/g, ' ').trim() || '?';
-      if (id) return '[@' + label.replace(/[\\\[\]]/g, '\\$&') + '](' + mtype + ':' + id + ')';
+      var full = String(attr(node, 'data-label') || textOf(node)).replace(/\s+/g, ' ').trim() || '?';
+      var short = mtype === 'person' && attr(node, 'data-short') === '1';
+      var label = short ? (firstName(full) || full) : full;
+      if (id) return '[@' + label.replace(/[\\\[\]]/g, '\\$&') + '](' + mtype + ':' + id + (short ? ':short' : '') + ')';
       return escText(textOf(node));
     }
     var marks = marksOf(node, tag);
@@ -925,10 +1095,25 @@
       out.push('---');
       return;
     }
+    if (tag === 'FIGURE' && hasClass(node, 'dc-image')) {
+      var figSrc = imageSrc(attr(node, 'data-src'));
+      if (figSrc) out.push(imageMd(attr(node, 'data-alt') || '', figSrc));
+      return;
+    }
     if ((tag === 'P' || tag === 'DIV' || tag === 'LI' || tag === 'TD' || tag === 'TH' || tag === 'DT' || tag === 'DD') && !hasBlockChild(node)) {
-      var para = paragraphMd(kids(node));
+      var imgs = [];
+      var rest = [];
+      kids(node).forEach(function (k) {
+        if (tagOf(k) === 'IMG') imgs.push(k);
+        else rest.push(k);
+      });
+      var para = paragraphMd(rest);
       if (para !== null) out.push(para);
-      else if (tag === 'P') out.push(BLANK_MARK);
+      else if (tag === 'P' && !imgs.length) out.push(BLANK_MARK);
+      imgs.forEach(function (img) {
+        var isrc = imageSrc(attr(img, 'src'));
+        if (isrc) out.push(imageMd(attr(img, 'alt') || '', isrc));
+      });
       return;
     }
     blocksOf(node, out);
@@ -945,6 +1130,12 @@
     kids(parent).forEach(function (node) {
       if (node.nodeType === 3) {
         run.push(node);
+        return;
+      }
+      if (node.nodeType === 1 && tagOf(node) === 'IMG') {
+        flush();
+        var imgSrc = imageSrc(attr(node, 'src'));
+        if (imgSrc) out.push(imageMd(attr(node, 'alt') || '', imgSrc));
         return;
       }
       if (node.nodeType !== 1 || SKIP_TAGS[tagOf(node)]) return;
@@ -993,6 +1184,48 @@
     var m = SLASH_RE.exec(s);
     if (!m) return null;
     return { query: m[2], length: 1 + m[2].length };
+  }
+
+  var TASK_NAME_MAX = 200;
+  var CLOSED_LIST = { completed: true, canceled: true, blocked: true };
+
+  /**
+   * Selected editor text -> a task draft. The first line is the name (capped); further lines,
+   * and whatever did not fit in the name, become the description. Blank selections return null.
+   */
+  function taskFromSelection(text) {
+    var raw = String(text == null ? '' : text).replace(/\u200b/g, '').replace(/\u00a0/g, ' ');
+    var lines = raw.split(/\r?\n/).map(function (l) {
+      return l.replace(/[ \t]+/g, ' ').trim();
+    }).filter(Boolean);
+    if (!lines.length) return null;
+    var first = lines[0];
+    var name = first.slice(0, TASK_NAME_MAX).trim();
+    if (!name) return null;
+    var extra = [];
+    if (first.length > TASK_NAME_MAX) {
+      var rest = first.slice(TASK_NAME_MAX).trim();
+      if (rest) extra.push(rest);
+    }
+    lines.slice(1).forEach(function (l) { extra.push(l); });
+    var desc = extra.join('\n');
+    if (desc.length > 8000) desc = desc.slice(0, 8000);
+    return { name: name, desc: desc };
+  }
+
+  /** Lists a new task may land in: open ones, or every list when all of them are closed. */
+  function taskListsForCreate(lists) {
+    var all = (lists || []).filter(function (l) { return l && l.id; });
+    var open = all.filter(function (l) { return !CLOSED_LIST[l.category]; });
+    return open.length ? open : all;
+  }
+
+  /** Prefer an "À faire" (unstarted) list, otherwise the first open list. */
+  function defaultTaskListId(lists) {
+    var pool = taskListsForCreate(lists);
+    if (!pool.length) return '';
+    var unstarted = pool.filter(function (l) { return l.category === 'unstarted'; })[0];
+    return String((unstarted || pool[0]).id);
   }
 
   function fold(s) {
@@ -1179,7 +1412,7 @@
 
   /** Mentions become plain "@Label" so an exported file reads naturally. */
   function mentionsToPlain(md) {
-    return String(md == null ? '' : md).replace(/\[@((?:\\.|[^\]\\])*)\]\((?:person|task|doc):[A-Za-z0-9_-]+\)/g, function (_a, label) {
+    return String(md == null ? '' : md).replace(/\[@((?:\\.|[^\]\\])*)\]\((?:person|task|doc):[A-Za-z0-9_-]+(?::short)?\)/g, function (_a, label) {
       return '@' + label.replace(/\\(.)/g, '$1');
     });
   }
@@ -1548,6 +1781,9 @@
     cleanTitle: cleanTitle,
     packDesc: packDesc,
     unpackDesc: unpackDesc,
+    normalizeSubject: normalizeSubject,
+    normalizeProps: normalizeProps,
+    docForSubject: docForSubject,
     COVER_COLORS: COVER_COLORS,
     COVER_GRADIENTS: COVER_GRADIENTS,
     COVER_GALLERY: COVER_GALLERY,
@@ -1564,12 +1800,18 @@
     randomCover: randomCover,
     cleanId: cleanId,
     safeHref: safeHref,
+    imageSrc: imageSrc,
     mdToHtml: mdToHtml,
     inlineToHtml: inlineToHtml,
     mentionHtml: mentionHtml,
+    firstName: firstName,
     domToMd: domToMd,
     detectTrigger: detectTrigger,
     detectSlash: detectSlash,
+    TASK_NAME_MAX: TASK_NAME_MAX,
+    taskFromSelection: taskFromSelection,
+    taskListsForCreate: taskListsForCreate,
+    defaultTaskListId: defaultTaskListId,
     buildMentionIndex: buildMentionIndex,
     resolveMention: resolveMention,
     searchMentions: searchMentions,

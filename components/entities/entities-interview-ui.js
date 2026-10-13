@@ -268,7 +268,7 @@
           ])
         );
       });
-      if (!visible.length) box.appendChild(h('span', { class: 'cp-hint', text: 'Aucune suggestion : Entrée pour utiliser ce que vous avez tapé.' }));
+      if (!visible.length) box.appendChild(h('span', { class: 'cp-hint', text: 'Aucune suggestion.' }));
       return box;
     }
 
@@ -293,9 +293,9 @@
       }
       if (c.kind === 'done') {
         var th = EI().thread(cx());
-        box.appendChild(
-          h('p', { class: 'cp-hint', text: th.length ? th.map(function (x) { return x.label + ' : ' + x.display; }).join(' · ') : 'Vous pourrez compléter la fiche plus tard.' })
-        );
+        if (th.length) {
+          box.appendChild(h('p', { class: 'cp-hint', text: th.map(function (x) { return x.label + ' : ' + x.display; }).join(' · ') }));
+        }
         var also = allDrafts().slice(1).map(function (d) { return d.name; });
         if (also.length) box.appendChild(h('p', { class: 'cp-hint', text: 'Sera aussi créé : ' + also.join(', ') + '.' }));
       } else {
@@ -359,7 +359,6 @@
         oninput: function () { st.text = input.value; },
       });
       box.appendChild(input);
-      box.appendChild(h('p', { class: 'cp-hint', text: 'Tapez un nom, je pose ensuite les bonnes questions.' }));
       if (st.error) box.appendChild(h('p', { class: 'iv-error', role: 'alert', text: st.error }));
       return box;
     }
