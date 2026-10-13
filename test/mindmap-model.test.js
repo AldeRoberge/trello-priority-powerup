@@ -211,16 +211,18 @@ describe('MindmapModel', () => {
     const g = MM.buildGraph(recs);
     const get = (id) => g.nodes.find((n) => n.id === id);
     const by = (task) => g.edges.find((e) => e.kind === 'by' && e.from === 't:' + task);
-    const doing = 'Est en train d\u2019\u00eatre fait par Ald\u00e9';
+    const doing = 'Est en train d\u2019\u00eatre fait par';
 
     assert.equal(MM.taskPhase({}), 'will');
     assert.equal(MM.taskPhase({ progress: 30 }), 'doing');
     assert.equal(MM.taskPhase({ dueComplete: true, category: 'started' }), 'done');
     assert.equal(MM.taskPhase({ category: 'completed', progress: 0 }), 'done');
+    assert.equal(MM.taskPhase({ listName: 'Completed', progress: 0 }), 'done');
+    assert.equal(MM.taskPhase({ listName: 'En cours', progress: 0 }), 'doing');
     assert.equal(MM.taskPhase({ category: 'started', blocked: true, progress: 40 }), 'will');
 
     const planned = MM.relationPhrase(by('plan'), 't:plan', get);
-    assert.equal(planned.text, 'Sera fait par Ald\u00e9');
+    assert.equal(planned.text, 'Sera fait par');
     assert.equal(planned.verb, 'Sera fait par');
     assert.equal(planned.from, 't:plan');
     assert.equal(planned.to, 'p:u');
@@ -231,10 +233,10 @@ describe('MindmapModel', () => {
 
     assert.equal(MM.relationPhrase(by('go'), 't:go', get).text, doing);
     assert.equal(MM.relationPhrase(by('go'), 'p:u', get).text, 'Est en train de faire');
-    assert.equal(MM.relationPhrase(by('fin'), null, get).text, 'Compl\u00e9t\u00e9 par Ald\u00e9');
+    assert.equal(MM.relationPhrase(by('fin'), null, get).text, 'Compl\u00e9t\u00e9 par');
     assert.equal(MM.relationPhrase(by('fin'), 'p:u', get).text, 'A compl\u00e9t\u00e9');
     assert.equal(MM.relationPhrase(by('pause'), 't:pause', get).verb, 'Sera fait par');
-    assert.equal(MM.relationPhrase(by('drop'), 't:drop', get).text, 'Ne sera pas fait par Ald\u00e9');
+    assert.equal(MM.relationPhrase(by('drop'), 't:drop', get).text, 'Ne sera pas fait par');
     assert.equal(MM.relationPhrase(by('drop'), 'p:u', get).text, 'Ne fera pas');
 
     const at = g.edges.find((e) => e.kind === 'at');
@@ -330,6 +332,7 @@ describe('MindmapModel', () => {
       const kinds = detail.facets.map((f) => f.facet).sort();
       assert.deepEqual(kinds, ['blocked', 'due', 'priority', 'progress', 'status']);
       assert.equal(detail.facets.every((f) => f.parentId === 't:a'), true);
+      assert.equal(MM.scene(graph(), { zoom: 2 }).facets.length, 0);
       const other = MM.scene(graph(), { zoom: 2, focusId: 't:b' });
       assert.deepEqual(other.facets.map((f) => f.facet), ['progress', 'status']);
     });
@@ -366,6 +369,60 @@ describe('MindmapModel', () => {
       const many = MM.looseHull([{ x: 0, y: 0 }, { x: 80, y: 10 }, { x: 40, y: 90 }]);
       assert.match(many, /Q/);
       assert.equal(MM.looseHull([]), '');
+    });
+
+    it('renames a boundary, pulls a card in and takes one out', () => {
+      const edited = MM.scene(graph(), {
+        lens: 'project',
+        zoom: 1,
+        edits: {
+          'grp:g:p': { name: 'Chantier', extra: ['t:b'] },
+          'grp:loose': { omit: ['t:b'] },
+        },
+      });
+      const project = edited.groups.find((g) => g.id === 'grp:g:p');
+      assert.equal(project.label, 'Chantier');
+      assert.ok(project.members.includes('t:a'));
+      assert.ok(project.members.includes('t:b'));
+      assert.equal(project.taskCount, 2);
+      const loose = edited.groups.find((g) => g.id === 'grp:loose');
+      assert.ok(!loose || !loose.members.includes('t:b'));
+      const closed = MM.scene(graph(), {
+        lens: 'project',
+        zoom: 0.2,
+        edits: { 'grp:g:p': { extra: ['t:b'], omit: ['t:a'] } },
+      });
+      assert.equal(closed.hidden['t:b'], true);
+      assert.ok(!closed.hidden['t:a']);
+      const unknown = MM.applyGroupEdits(project ? [project] : [], { 'grp:g:p': { extra: ['missing'] } }, { 't:a': { id: 't:a' } });
+      assert.ok(!unknown[0].members.includes('missing'));
+    });
+
+    it('renames a boundary, pulls a card in and takes one out', () => {
+      const edited = MM.scene(graph(), {
+        lens: 'project',
+        zoom: 1,
+        edits: {
+          'grp:g:p': { name: 'Chantier', extra: ['t:b'] },
+          'grp:loose': { omit: ['t:b'] },
+        },
+      });
+      const project = edited.groups.find((g) => g.id === 'grp:g:p');
+      assert.equal(project.label, 'Chantier');
+      assert.ok(project.members.includes('t:a'));
+      assert.ok(project.members.includes('t:b'));
+      assert.equal(project.taskCount, 2);
+      const loose = edited.groups.find((g) => g.id === 'grp:loose');
+      assert.ok(!loose || !loose.members.includes('t:b'));
+      const closed = MM.scene(graph(), {
+        lens: 'project',
+        zoom: 0.2,
+        edits: { 'grp:g:p': { extra: ['t:b'], omit: ['t:a'] } },
+      });
+      assert.equal(closed.hidden['t:b'], true);
+      assert.ok(!closed.hidden['t:a']);
+      const unknown = MM.applyGroupEdits(project ? [project] : [], { 'grp:g:p': { extra: ['missing'] } }, { 't:a': { id: 't:a' } });
+      assert.ok(!unknown[0].members.includes('missing'));
     });
   });
 });

@@ -10202,6 +10202,15 @@
     if (/max_tokens/.test(text) && /max_completion_tokens/.test(text) && !opts._completionTokens) {
       return Object.assign({}, opts, { _completionTokens: true });
     }
+    if (/reasoning_effort/.test(text) && opts.reasoningEffort) {
+      var droppedReason = opts._drop || [];
+      if (droppedReason.indexOf('reasoning_effort') === -1) {
+        return Object.assign({}, opts, {
+          _drop: droppedReason.concat('reasoning_effort'),
+          reasoningEffort: null
+        });
+      }
+    }
     var match = /unsupported (?:parameter|value):?\s*'(temperature|top_p|stream_options)'/i.exec(text);
     if (match) {
       var key = match[1].toLowerCase();
@@ -10226,14 +10235,24 @@
     if (opts.jsonMode !== false) {
       body.response_format = { type: 'json_object' };
     }
+    if (opts.model) body.model = String(opts.model);
     if (opts.max_tokens != null) {
       if (opts._completionTokens || usesCompletionTokens(p)) {
         // GPT-5 / o-series reject max_tokens; reasoning also spends this budget,
-        // so keep a floor or tiny limits come back empty.
-        body.max_completion_tokens = Math.max(opts.max_tokens, 256);
+        // so keep a floor or tiny limits come back empty. A no-reasoning
+        // typeahead call can stay at the requested limit.
+        var quiet =
+          opts.reasoningEffort === 'none' ||
+          opts.reasoningEffort === 'minimal' ||
+          (opts._drop || []).indexOf('reasoning_effort') >= 0;
+        var floor = quiet ? opts.max_tokens : 256;
+        body.max_completion_tokens = Math.max(opts.max_tokens, floor);
       } else {
         body.max_tokens = opts.max_tokens;
       }
+    }
+    if (opts.reasoningEffort && (opts._drop || []).indexOf('reasoning_effort') < 0) {
+      body.reasoning_effort = opts.reasoningEffort;
     }
     (opts._drop || []).forEach(function (key) {
       delete body[key];

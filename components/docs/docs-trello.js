@@ -140,6 +140,7 @@
           title: DM().titleFromName(c.name),
           updatedAt: c.dateLastActivity || '',
           size: u.body.length,
+          body: u.body,
           subject: u.subject,
           props: u.props,
         };

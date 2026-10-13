@@ -380,6 +380,9 @@
       var kids = [];
       if (row.category) kids.push(h('div', { class: 'kb-cat', text: row.category }));
       kids.push(h('div', { class: 'kb-title', text: row.name || 'Sans titre' }));
+      var step = global.WorkOS && global.WorkOS.stepState(row);
+      if (step && step.text) kids.push(h('div', { class: 'kb-step', text: step.text }));
+      else if (step && step.missing) kids.push(h('div', { class: 'kb-step is-missing', text: 'Sans prochaine action' }));
       if (badges.length) kids.push(h('div', { class: 'kb-badges' }, badges));
       var prog = null;
       if (typeof row.progress === 'number') {
@@ -500,6 +503,8 @@
 
     function cardMenu(row, x, y) {
       if (!MENU()) return;
+      var current = null;
+      state.lists.forEach(function (l) { if (l.id === row.listId) current = l; });
       var moveItems = state.lists.map(function (l) {
         return {
           icon: l.icon,
@@ -512,12 +517,18 @@
       MENU().show({ x: x, y: y }, [
         { title: row.name || 'Carte' },
         { icon: 'external-link', label: 'Ouvrir la carte', action: function () { openCard(row); } },
+        { icon: 'file-text', label: 'Document', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id); } },
         { sep: true },
-        { title: 'Déplacer vers' },
-      ].concat(moveItems, [
+        {
+          icon: (current && current.icon) || 'progress-check',
+          color: current && current.color,
+          label: 'Statut',
+          hint: (current && current.name) || row.statut || '',
+          children: moveItems,
+        },
         { sep: true },
         { icon: 'archive', label: 'Archiver', danger: true, action: function () { archiveRow(row); } },
-      ]));
+      ]);
     }
 
     function archiveRow(row) {
@@ -635,7 +646,26 @@
         }, [
           h('span', { class: 'kb-col-icon' }, [icon(list.icon)]),
           h('span', { class: 'kb-col-name', text: list.name, title: list.name }),
-          h('span', { class: 'kb-col-count', text: String(col.total) }),
+          (function () {
+            var over = list.category === 'started' && global.WorkOS && global.WorkOS.wip(state.rows, global.WorkOS.DEFAULT_WIP);
+            if (over && over.over) {
+              return h('button', {
+                class: 'kb-col-count is-over',
+                type: 'button',
+                title: 'Ranger la moins prioritaire',
+                text: over.count + '/' + over.cap,
+                onclick: function (e) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  var park = over.park;
+                  var dest = state.lists.filter(function (l) { return l.category === 'unstarted'; })[0]
+                    || state.lists.filter(function (l) { return l.category === 'backlog'; })[0];
+                  if (park && dest) dropCard(park.id, dest.id, null);
+                },
+              });
+            }
+            return h('span', { class: 'kb-col-count', text: String(col.total) });
+          })(),
           h('button', {
             class: 'kb-iconbtn',
             title: 'Ajouter une carte',
@@ -645,6 +675,20 @@
         body,
         composer(list),
       ]);
+      if (global.InsertGap) {
+        global.InsertGap.watch(body, {
+          item: '.kb-card',
+          placeholder: 'Titre…',
+          enabled: function () {
+            return !els.board.classList.contains('is-dragging') && !els.board.classList.contains('is-dragging-list');
+          },
+          onCreate: function (title, info) {
+            var aboveId = info.above && info.above.getAttribute('data-id');
+            var belowId = info.below && info.below.getAttribute('data-id');
+            return createIn(list, title, posAt(list.id, aboveId, belowId));
+          },
+        });
+      }
       return colEl;
     }
 
@@ -757,7 +801,9 @@
       op.then(function () {
         if (listChanged) record({ type: 'move', targetId: id, title: moved.name, key: 'statut', before: from.statut, after: list.name, beforeVal: from.listId, afterVal: listId, beforePos: from.pos, afterPos: pos });
         else record({ type: 'reorder', targetId: id, title: moved.name, after: list.name, beforeVal: from.pos, afterVal: pos });
-        setStatus(listChanged ? 'Carte déplacée dans « ' + list.name + ' »' : 'Ordre enregistré', 'ok');
+        var load = list.category === 'started' && global.WorkOS ? global.WorkOS.wip(state.rows, global.WorkOS.DEFAULT_WIP) : null;
+        var note = load && load.over ? ' · En cours ' + load.count + '/' + load.cap : '';
+        setStatus((listChanged ? 'Carte déplacée dans « ' + list.name + ' »' : 'Ordre enregistré') + note, 'ok');
       }, function (err) {
         fail(err);
         reload({ quiet: true });
@@ -784,11 +830,27 @@
       });
     }
 
-    function createIn(list, typed) {
+    /** Trello `pos` so a card created under another lands between its neighbours. */
+    function posAt(listId, aboveId, belowId) {
+      var siblings = state.rows.filter(function (r) { return r.listId === listId; }).sort(function (a, b) {
+        return (a.pos || 0) - (b.pos || 0);
+      });
+      var index = siblings.length;
+      if (belowId) {
+        var bi = siblings.findIndex(function (r) { return r.id === belowId; });
+        if (bi >= 0) index = bi;
+      } else if (aboveId) {
+        var ai = siblings.findIndex(function (r) { return r.id === aboveId; });
+        if (ai >= 0) index = ai + 1;
+      }
+      return TM().dropPos ? TM().dropPos(siblings, index) : 'bottom';
+    }
+
+    function createIn(list, typed, pos) {
       var QP = global.QuickParse;
       var q = QP ? QP.parse(typed) : { name: typed, dueDate: '' };
       var name = q.name;
-      return TT().createRow(t, name, list.id).then(function (res) {
+      return TT().createRow(t, name, list.id, pos).then(function (res) {
         var cardId = res && res.cardId;
         // "… demain": the date is lifted out of the title into the card's due date.
         if (cardId && q.dueDate && global.GanttTrello) global.GanttTrello.saveCardDates(t, cardId, { dueDate: q.dueDate }).catch(function () { /* the card exists; the date can be set by hand */ });

@@ -19,10 +19,9 @@
 .iv-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px 12px;
+  gap: 12px;
+  padding: 14px 16px 10px;
   overflow-y: auto;
-  min-height: 220px;
 }
 .iv-progress {
   height: 3px;
@@ -211,15 +210,15 @@
 }
 
 /* Reality map: what the AI found around the thing (contents, maker, parent company...). */
-.iv-map--empty {
-  display: none;
-}
 .iv-map {
   display: flex;
   flex-direction: column;
   gap: 4px;
   border-top: 1px solid var(--tp-border);
   padding-top: 8px;
+}
+.iv-map.iv-map--empty {
+  display: none;
 }
 .iv-map-head {
   display: flex;

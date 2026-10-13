@@ -14,8 +14,10 @@
  *
  * Storage format. A document is an archived Trello card named "📄 Title" (see docs-trello.js) whose
  * description holds a Markdown subset + a hidden meta block:
- *   # / ## / ###   **bold** *italic* ++underline++ ~~strike~~ `code`   [text](https://url)
+ *   # / ## / ###   **bold** *italic* ++underline++ ~~strike~~ ==highlight== `code`   [text](https://url)
+ *   text color {c:red}…{/c}   colored highlight {h:green}…{/h}   (gray brown orange yellow green blue purple pink red)
  *   - bullets (nested by 2 spaces)   1. numbers   - [ ] / - [x] checklist   > quote   ``` fence   ---
+ *   callout: > [!note] | [!tip] | [!warning]     GFM table     <!--align:center--> or <!--align:right--> on the next line
  *   mentions: [@Label](person:ID) [@Label](task:ID) [@Label](doc:ID)
  *   a person shown by first name only: [@Prénom](person:ID:short)
  *   a picture on its own line: ![alt](https://…) or ![alt](upload:cardId/attId/file.jpg)
@@ -435,7 +437,7 @@
 
   /* ── 2. Markdown -> editor HTML ──────────────────────────────────── */
 
-  var ESCAPABLE = '\\`*_{}[]()#+-.!~<>|';
+  var ESCAPABLE = '\\`*_{}[]()#+-.!~<>|=';
 
   function runLength(s, i, ch) {
     var k = i;
@@ -903,7 +905,10 @@
   }
 
   function escText(s) {
-    return s.replace(/[\\`*_\[\]~<+]/g, '\\$&');
+    return s
+      .replace(/[\\`*_\[\]~<+]/g, '\\$&')
+      .replace(/==/g, '\\=\\=')
+      .replace(/\{(?:c|h):|\{\/(?:c|h)\}/g, function (m) { return '\\' + m; });
   }
 
   function escLineStart(line) {
@@ -958,7 +963,7 @@
     parts.forEach(function (p) {
       if (!p) return;
       // adjacent delimiter runs ("**a**" + "*b*") would fuse: a comment separator keeps them apart
-      if (s && /[*~+_]$/.test(s) && /^[*~+_]/.test(p)) s += '<!---->';
+      if (s && /[*~+_=]$/.test(s) && /^[*~+_=]/.test(p)) s += '<!---->';
       s += p;
     });
     return s;

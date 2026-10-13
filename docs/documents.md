@@ -11,9 +11,11 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Nouveau document | bouton **Nouveau** (ou `@@@titre` puis *Créer le document « titre »* depuis un autre document) |
 | Mentionner une personne | `@` puis quelques lettres ; ↑ ↓ pour choisir, **Entrée** ou **Tab** pour valider, **Échap** pour fermer |
 | Lier une tâche (carte) | `@@` |
+| Créer une tâche | sélectionner du texte, puis **Créer une tâche** (ou clic droit). Le texte devient une tâche du tableau, liée à la place de la sélection. La flèche choisit la liste |
 | Lier un autre document | `@@@` |
 | Tout chercher d'un coup | `@` seul liste personnes, tâches et documents (3 de chaque) |
-| Commandes | `/` puis un mot (`/titre`, `/liste`, `/carte`…) |
+| Commandes | `/` puis un mot (`/titre`, `/liste`, `/image`…) |
+| Bloc | survoler une ligne : **+** ajoute un bloc, la poignée la glisse ou ouvre le menu pour changer le type |
 | Raccourcis Markdown | `# ` `## ` `### ` titres, `- ` puces, `1. ` numérotée, `[] ` cases à cocher, `> ` citation, `---` + Entrée séparateur, ```` ``` ```` + Entrée bloc de code |
 | Mise en forme | barre d'outils ; Ctrl+B / I / U, Ctrl+Maj+X barré, Ctrl+E code, Ctrl+K lien, Ctrl+Maj+7/8/9 listes, Ctrl+Alt+0…3 styles, Tab / Maj+Tab pour imbriquer une liste |
 | Ouvrir ce qui est mentionné | clic sur une tâche (ouvre la carte), un document (l'ouvre), une personne (fiche) |
@@ -35,13 +37,13 @@ Les données de Power-Up sont limitées à 4096 caractères par portée, c'est t
 - la carte est classée dans la **première liste** du tableau (une carte archivée a besoin d'une liste) ;
 - un bloc caché `<!--cerveau-meta type: document, rev: N -->` en fin de description porte un compteur de révision : si quelqu'un d'autre enregistre entre-temps, la sauvegarde est refusée et une barre propose *Charger sa version* ou *Écraser avec la mienne*.
 
-Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `` `code` ``, `[texte](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`.
+Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `` `code` ``, `[texte](https://…)`, `![légende](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`.
 
 ## Limites
 
 - Un document ne peut pas dépasser la taille d'une description Trello (16 384 caractères, bloc caché compris). Une jauge apparaît à 80 % et l'enregistrement est refusé au-delà.
 - Pas d'édition simultanée en direct : dernier enregistrement gagne, avec détection de conflit (voir ci-dessus). Les modifications des autres sont reprises quand la fenêtre reprend le focus.
-- Pas d'images, de tableaux ni de couleurs de texte. Un contenu collé depuis Google Docs / Word est converti (gras, italique, souligné, barré, listes, titres, liens) et le reste est ignoré.
+- Les images sont des blocs (adresse https, ou un fichier joint à la carte). Pas de tableaux ni de couleurs de texte. Un contenu collé depuis Google Docs / Word est converti (gras, italique, souligné, barré, listes, titres, liens, images) et le reste est ignoré.
 - Trello doit être autorisé (même bouton que dans la vue Table) pour lire et écrire les documents.
 - Au-delà d'environ 1 000 cartes archivées dans le tableau, Trello peut ne pas toutes renvoyer dans une seule réponse : les plus anciens documents pourraient alors manquer à la liste.
 

@@ -79,6 +79,37 @@ describe('PriorityAgent.chatCompletions token parameter', () => {
     assert.equal(result.content, '{"ok":true}');
   });
 
+  it('keeps a small token budget when reasoning is off', async () => {
+    stubFetch(() => reply(200, OK));
+    await Agent.chatCompletions(openai, [{ role: 'user', content: 'hi' }], {
+      max_tokens: 24,
+      reasoningEffort: 'none'
+    });
+    assert.equal(bodies[0].max_completion_tokens, 24);
+    assert.equal(bodies[0].reasoning_effort, 'none');
+  });
+
+  it('drops a rejected reasoning_effort without raising the token floor', async () => {
+    stubFetch((body, n) =>
+      n === 1
+        ? reply(400, {
+            error: {
+              message:
+                "Unsupported parameter: 'reasoning_effort' is not supported with this model."
+            }
+          })
+        : reply(200, OK)
+    );
+    await Agent.chatCompletions(openai, [{ role: 'user', content: 'hi' }], {
+      max_tokens: 24,
+      reasoningEffort: 'none'
+    });
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].reasoning_effort, 'none');
+    assert.equal(bodies[1].reasoning_effort, undefined);
+    assert.equal(bodies[1].max_completion_tokens, 24);
+  });
+
   it('drops a rejected temperature and retries', async () => {
     stubFetch((body, n) =>
       n === 1

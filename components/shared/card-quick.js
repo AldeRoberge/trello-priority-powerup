@@ -274,6 +274,7 @@
     function moreMenu(anchor, row) {
       var items = [
         { id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', action: function () { if (opts.onOpen) opts.onOpen(); } },
+        { id: 'open-document', label: 'Document', icon: 'file-text', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', opts.cardId); } },
       ];
       if (row.link) {
         items.push({
@@ -329,6 +330,28 @@
         input.addEventListener('blur', function () { finish(true); });
       });
       return title;
+    }
+
+    function stepBlock(row) {
+      var os = global.WorkOS;
+      if (!os || typeof os.stepState !== 'function') return null;
+      var step = os.stepState(row);
+      if (!step) return null;
+      return el('div', 'cq-step' + (step.missing ? ' is-missing' : ''), { text: step.text || 'Sans prochaine action' });
+    }
+
+    function mentionBlock() {
+      var list = opts.mentions || [];
+      if (!list.length) return null;
+      var kids = [el('span', 'cq-mentions-k', { text: 'Mentionné dans' })];
+      list.forEach(function (m) {
+        kids.push(el('button', 'cq-mention', {
+          type: 'button',
+          text: m.title || 'Sans titre',
+          onclick: function () { if (m.open) m.open(); },
+        }));
+      });
+      return el('div', 'cq-mentions', null, kids);
     }
 
     /* Progress: ring (complete / reopen / unblock), draggable bar, number opens the detail */
@@ -461,6 +484,10 @@
       root.classList.toggle('is-blocked', info.blocked);
       root.appendChild(header(row));
       root.appendChild(titleBlock(row, info));
+      var stepEl = stepBlock(row);
+      if (stepEl) root.appendChild(stepEl);
+      var mentions = mentionBlock();
+      if (mentions) root.appendChild(mentions);
       root.appendChild(progressBlock(row, info));
       root.appendChild(chipsBlock(row, info));
       root.appendChild(descBlock(row, info));

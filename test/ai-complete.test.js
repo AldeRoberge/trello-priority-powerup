@@ -9,6 +9,8 @@ function el(opts) {
   const classes = opts.classes || [];
   const attrs = opts.attrs || {};
   return {
+    tagName: opts.tag || '',
+    className: classes.join(' '),
     classList: { contains: (name) => classes.indexOf(name) >= 0 },
     getAttribute: (name) => (attrs[name] != null ? attrs[name] : null),
     closest: (sel) => (opts.closest && opts.closest[sel] ? opts.closest[sel] : null),
@@ -55,12 +57,34 @@ describe('AiComplete', () => {
       assert.equal(AI.classifyField(el({ classes: ['en-name'] })), 'name');
     });
 
+    it('completes any other text you are writing', () => {
+      assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['info-desc-input'] })), 'text');
+      assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['cf-textarea'] })), 'text');
+      assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['kb-add-input'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['tb-add'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['db-add-input'], attrs: { 'aria-label': 'Nouvelle tâche' } })), 'task-name');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['blocked-reason-input'] })), 'text');
+      assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['tb-input'], closest: { 'td[data-key="desc"]': {} } })), 'text');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { 'aria-label': 'Nom du composant' } })), 'name');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { placeholder: 'Décrire une règle…' } })), 'text');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { id: 'settingsProfileDisplayName' } })), 'person-name');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', editable: true, classes: ['memory-ui-input'] })), '');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['kb-ai-input'] })), '');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { placeholder: 'Chercher un genre…' } })), '');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', type: 'url', attrs: { placeholder: 'https://…' } })), '');
+    });
+
     it('leaves search, passwords and the assistant composer alone', () => {
       assert.equal(AI.classifyField(el({ classes: ['dc-search-input'], type: 'search' })), '');
       assert.equal(AI.classifyField(el({ type: 'password' })), '');
       assert.equal(AI.classifyField(el({ classes: ['agent-composer-input'] })), '');
       assert.equal(AI.classifyField(el({ classes: ['dc-title'], attrs: { 'data-ai': 'off' } })), '');
       assert.equal(AI.classifyField(el({ classes: ['dc-title'], disabled: true })), '');
+      assert.equal(AI.classifyField(el({ classes: ['kb-ai-input'], tag: 'INPUT' })), '');
+      assert.equal(AI.classifyField(el({ classes: ['memory-ui-input'], editable: true })), '');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', attrs: { placeholder: 'Chercher un genre…' } })), '');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', type: 'url', attrs: { placeholder: 'https://…' } })), '');
+      assert.equal(AI.classifyField(el({ tag: 'SELECT', classes: ['en-input'] })), '');
     });
   });
 
@@ -73,6 +97,8 @@ describe('AiComplete', () => {
       assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour', lineAfter: '', menuOpen: true }), false);
       assert.equal(AI.shouldRequest({ kind: 'task-name', lineBefore: 'P', lineAfter: '' }), false);
       assert.equal(AI.shouldRequest({ kind: 'task-name', lineBefore: 'Pré', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'Bon', lineAfter: '' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'Bonjour', lineAfter: '' }), true);
       assert.equal(AI.shouldRequest({ kind: 'tag', lineBefore: 'Ur', lineAfter: '' }), true);
       assert.equal(AI.shouldRequest(null), false);
     });
@@ -101,6 +127,11 @@ describe('AiComplete', () => {
       const raw = 'un deux trois quatre cinq';
       assert.equal(AI.parseCompletion(raw, 'x ', 'tag'), 'un deux trois');
     });
+
+    it('drops a reply that answers the sentence', () => {
+      assert.equal(AI.parseCompletion(' answer?', 'What is 1+1? The', 'document'), '');
+      assert.equal(AI.parseCompletion('réponse : 2', 'Combien font 1+1? ', 'document'), '');
+    });
   });
 
   describe('buildMessages', () => {
@@ -115,6 +146,7 @@ describe('AiComplete', () => {
       assert.match(messages[1].content, /Préparer la réunion/);
       assert.match(messages[1].content, /Urgent/);
       assert.equal(messages[0].content.indexOf('\u2014'), -1);
+      assert.match(messages[0].content, /ne réponds pas à une question/);
     });
   });
 });

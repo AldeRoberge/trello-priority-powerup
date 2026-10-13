@@ -34,6 +34,8 @@
       row.start = rec.startDate || '';
       row.dueDone = !!rec.dueComplete;
       row.estimate = rec.estimatedMinutes || 0;
+      row.dueVague = (rec.inputs && rec.inputs.dueVague) || '';
+      row.dueMode = (rec.inputs && rec.inputs.dueMode) || '';
       return row;
     });
     return {
@@ -186,6 +188,36 @@
     }
   }
 
+  /**
+   * Place a card on a calendar day, or on a vague horizon.
+   * A horizon clears the hard date (same idea as setSomeday) so it stays off the day board.
+   * A day clears the horizon.
+   */
+  async function planAt(t, cardId, iso, vagueId) {
+    if (vagueId) {
+      await savePriority(t, cardId, {
+        dueMode: 'vague',
+        dueVague: vagueId,
+        dueDate: '',
+        startDate: '',
+      });
+      try {
+        var put = await PT().restPutCard(t, cardId, { due: null, start: null });
+        if (put && put.ok === false) throw new Error(put.reason || 'dates-failed');
+      } catch (e) {
+        /* the horizon still keeps the card off the day board */
+      }
+      return;
+    }
+    await planDay(t, cardId, iso);
+    await savePriority(t, cardId, {
+      dueMode: 'precise',
+      dueVague: '',
+      dueDate: iso || '',
+      startDate: iso || '',
+    });
+  }
+
   async function complete(t, row, lists, done) {
     var auth = await GT().ensureRestAuthorized(t);
     if (!auth.ok) throw Object.assign(new Error(auth.reason || 'not-authorized'), { reason: auth.reason });
@@ -197,6 +229,99 @@
   async function cancel(t, row, lists) {
     var moved = await moveToCategory(t, row, lists, ['canceled']);
     if (!moved) await TT().archiveCard(t, row.id);
+  }
+
+  async function setSomeday(t, row, lists) {
+    await savePriority(t, row.id, {
+      dueMode: 'vague',
+      dueVague: 'eventuellement',
+      dueDate: '',
+      startDate: '',
+    });
+    try {
+      var put = await PT().restPutCard(t, row.id, { due: null, start: null });
+      if (put && put.ok === false) throw new Error(put.reason || 'dates-failed');
+    } catch (e) {
+      /* the vague flag keeps the card off the planner even if Trello keeps a date */
+    }
+    row.dueVague = 'eventuellement';
+    row.due = '';
+    row.start = '';
+    row.dueTime = '';
+    return moveToCategory(t, row, lists, ['backlog', 'unstarted']);
+  }
+
+  async function setWaiting(t, row, lists, who) {
+    var name = String(who || '').replace(/\s+/g, ' ').trim();
+    if (!name) return null;
+    var meta = global.DescMeta;
+    var desc = row.fullDesc || row.desc || '';
+    if (meta && typeof meta.setMeta === 'function') {
+      desc = meta.setMeta(desc, 'waiting', name);
+      desc = meta.setMeta(desc, 'waiting-since', new Date().toISOString().slice(0, 10));
+    }
+    var put = await PT().restPutCard(t, row.id, { desc: desc });
+    if (put && put.ok === false) throw new Error(put.reason || 'desc-failed');
+    row.fullDesc = desc;
+    row.waiting = name;
+    row.waitingSince = desc && meta ? meta.getMeta(desc, 'waiting-since') : '';
+    return moveToCategory(t, row, lists, ['backlog', 'unstarted']);
+  }
+
+  async function saveNextStep(t, cardId, text) {
+    var ct = CT();
+    var clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean || !ct) return;
+    var data = ct.normalizeCompletionData((await ct.getCardCompletionById(t, cardId)) || { items: [] });
+    var items = (data.items || []).slice();
+    if (items.length && items[0].done !== true && items[0].text === clean) return;
+    items.unshift({
+      id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      text: clean,
+      progress: 0,
+      done: false,
+    });
+    await ct.saveCardCompletionById(t, cardId, Object.assign({}, data, { items: items }));
+  }
+
+  async function fileReference(t, row) {
+    var docs = global.DocsTrello;
+    if (!docs || typeof docs.listDocs !== 'function') {
+      throw Object.assign(new Error('no-docs'), { reason: 'no-docs' });
+    }
+    var line = '- ' + (row.name || 'Note');
+    var extra = row.desc ? '\n\n' + row.desc : '';
+    var list = await docs.listDocs(t);
+    var found = (list || []).filter(function (d) { return d.title === 'Références'; })[0];
+    if (!found) {
+      await docs.createDoc(t, 'Références', line + extra);
+      return;
+    }
+    var full = await docs.loadDoc(t, found.id);
+    var body = String(full.body || '').replace(/\s+$/, '');
+    body = body ? body + '\n' + line + extra : line + extra;
+    await docs.saveDoc(t, { id: full.id, body: body, rev: full.rev, cover: full.cover, subject: full.subject, props: full.props });
+  }
+
+  var SCALE_KEY = 'tp-dashboard-scale';
+
+  function getScale() {
+    try {
+      var id = global.localStorage.getItem(SCALE_KEY) || 'day';
+      var known = global.DashboardModel && global.DashboardModel.SCALES;
+      if (known && !known.some(function (s) { return s.id === id; })) return 'day';
+      return id;
+    } catch (e) {
+      return 'day';
+    }
+  }
+
+  function setScale(id) {
+    try {
+      global.localStorage.setItem(SCALE_KEY, id || 'day');
+    } catch (e) {
+      /* storage unavailable: the scale stays for this session */
+    }
   }
 
   function getCapacity() {
@@ -227,9 +352,16 @@
     savePriority: savePriority,
     saveEstimate: saveEstimate,
     planDay: planDay,
+    planAt: planAt,
     complete: complete,
     cancel: cancel,
+    saveNextStep: saveNextStep,
+    fileReference: fileReference,
+    setWaiting: setWaiting,
+    setSomeday: setSomeday,
     getCapacity: getCapacity,
     setCapacity: setCapacity,
+    getScale: getScale,
+    setScale: setScale,
   };
 })(typeof window !== 'undefined' ? window : this);

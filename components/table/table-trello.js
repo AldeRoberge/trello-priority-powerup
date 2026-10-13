@@ -174,9 +174,9 @@
     need(res);
   }
 
-  async function createRow(t, name, listId) {
+  async function createRow(t, name, listId, pos) {
     await ensureAuth(t);
-    var res = await PT().createCard(t, { name: name, idList: listId, pos: 'bottom' });
+    var res = await PT().createCard(t, { name: name, idList: listId, pos: pos != null && pos !== '' ? pos : 'bottom' });
     return need(res);
   }
 

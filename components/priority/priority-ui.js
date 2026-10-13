@@ -4448,6 +4448,7 @@
     { id: 'prochain-mois', label: 'Dans le mois qui vient', days: 45 },
     { id: 'quelques-mois', label: 'Dans quelques mois', days: 90 },
     { id: 'semestre', label: 'Dans un semestre', days: 180 },
+    { id: 'long-terme', label: '\u00c0 long terme', days: 270 },
     { id: 'lointain', label: 'Dans un futur lointain', days: 365 },
     { id: 'an-ou-deux', label: 'Dans un an ou deux', days: 548 },
     { id: 'eventuellement', label: '\u00c9ventuellement', days: 1095 },

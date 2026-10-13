@@ -1,0 +1,261 @@
+/*
+ * Trello-style insert: the pointer in the seam under an item reveals a +, and
+ * clicking it opens a one-line title at that spot.
+ *
+ *   InsertGap.watch(container, {
+ *     item: '.kb-card',          // elements that stack
+ *     placeholder: 'Titre…',
+ *     enabled: function () { return true; },
+ *     float: false,              // composer follows the seam instead of joining the list
+ *     tail: '.tb-add-row',       // when inserting after the last item, land before this
+ *     wrap: function (input) {}, // optional node that holds the input (a <tr>, an <li>)
+ *     onCreate: function (title, info) {}, // info.above / info.below / info.index
+ *   })
+ *
+ * gapAt / underAt are pure and unit-tested. `under` is for free-positioned items
+ * (a mindmap node): the pointer sits just below that item, not in a column seam.
+ */
+(function (global) {
+  'use strict';
+
+  var watches = [];
+  var listening = false;
+
+  function gapAt(rects, x, y, slack) {
+    var rows = (rects || []).slice().sort(function (a, b) {
+      return a.top - b.top || a.left - b.left;
+    });
+    if (!rows.length) return null;
+    slack = slack == null ? 14 : slack;
+    var left = rows[0].left;
+    var right = rows[0].right;
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i].left < left) left = rows[i].left;
+      if (rows[i].right > right) right = rows[i].right;
+    }
+    if (x < left - 12 || x > right + 12) return null;
+    var best = null;
+    for (var j = 0; j < rows.length; j++) {
+      var below = rows[j + 1] || null;
+      var seam = below ? (rows[j].bottom + below.top) / 2 : rows[j].bottom + 8;
+      var dist = Math.abs(y - seam);
+      if (dist > slack) continue;
+      var mid = (rows[j].top + rows[j].bottom) / 2;
+      if (Math.abs(y - mid) < dist) continue;
+      if (below) {
+        var mid2 = (below.top + below.bottom) / 2;
+        if (Math.abs(y - mid2) < dist) continue;
+      }
+      if (!best || dist < best.dist) {
+        best = { index: j + 1, seam: seam, dist: dist, above: rows[j], below: below };
+      }
+    }
+    return best;
+  }
+
+  /** Pointer just under a free-positioned item (not a vertical list). */
+  function underAt(rects, x, y, slack) {
+    slack = slack == null ? 18 : slack;
+    var best = null;
+    (rects || []).forEach(function (r, i) {
+      if (x < r.left - 8 || x > r.right + 8) return;
+      if (y < r.bottom - 6 || y > r.bottom + slack) return;
+      var dist = Math.max(0, y - r.bottom);
+      if (!best || dist < best.dist) {
+        best = { index: i + 1, seam: r.bottom + 8, dist: dist, above: r, below: null };
+      }
+    });
+    return best;
+  }
+
+  function ensureCss() {
+    if (!global.document || global.document.getElementById('insert-gap-css')) return;
+    var src = '';
+    var scripts = global.document.getElementsByTagName('script');
+    for (var i = 0; i < scripts.length; i++) {
+      var s = scripts[i].getAttribute('src') || '';
+      if (/insert-gap\.js/.test(s)) { src = s; break; }
+    }
+    var href = src ? src.replace(/insert-gap\.js(\?[^#]*)?$/, 'insert-gap.css') : 'components/shared/insert-gap.css';
+    var link = global.document.createElement('link');
+    link.id = 'insert-gap-css';
+    link.rel = 'stylesheet';
+    link.href = href;
+    global.document.head.appendChild(link);
+  }
+
+  function hide(w) {
+    if (w.btn) w.btn.hidden = true;
+    w.hit = null;
+  }
+
+  function childOf(container, el) {
+    while (el && el.parentNode !== container) el = el.parentNode;
+    return el && el.parentNode === container ? el : null;
+  }
+
+  function rectsOf(w) {
+    var nodes = w.container.querySelectorAll(w.opts.item);
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].closest && nodes[i].closest('.ig-compose')) continue;
+      var r = nodes[i].getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      out.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right, el: nodes[i] });
+    }
+    return out;
+  }
+
+  function placeButton(w, hit) {
+    var btn = w.btn;
+    var box = hit.above;
+    var x = hit.below
+      ? (Math.min(box.left, hit.below.left) + Math.max(box.right, hit.below.right)) / 2
+      : (box.left + box.right) / 2;
+    btn.style.left = x + 'px';
+    btn.style.top = hit.seam + 'px';
+    btn.hidden = false;
+    w.hit = hit;
+  }
+
+  function onMove(w, e) {
+    if (w.composing) return;
+    if (w.opts.enabled && w.opts.enabled() === false) { hide(w); return; }
+    if (e.target && e.target.closest && e.target.closest('.ig-compose')) { hide(w); return; }
+    var rows = rectsOf(w);
+    var hit = w.opts.mode === 'under'
+      ? underAt(rows, e.clientX, e.clientY, w.opts.slack)
+      : gapAt(rows, e.clientX, e.clientY, w.opts.slack);
+    if (!hit) { hide(w); return; }
+    placeButton(w, hit);
+  }
+
+  function removeCompose(w) {
+    w.composing = false;
+    if (w.compose && w.compose.parentNode) w.compose.parentNode.removeChild(w.compose);
+    w.compose = null;
+  }
+
+  function openCompose(w) {
+    var hit = w.hit;
+    if (!hit || w.composing) return;
+    w.composing = true;
+    hide(w);
+    var input = global.document.createElement('input');
+    input.type = 'text';
+    input.className = 'ig-input';
+    input.placeholder = w.opts.placeholder || 'Titre…';
+    input.setAttribute('aria-label', input.placeholder);
+    input.autocomplete = 'off';
+    var node;
+    if (w.opts.float) {
+      node = global.document.createElement('form');
+      node.className = 'ig-compose ig-compose--float';
+      node.style.left = ((hit.above.left + hit.above.right) / 2) + 'px';
+      node.style.top = (hit.above.bottom + 4) + 'px';
+      node.appendChild(input);
+      global.document.body.appendChild(node);
+    } else {
+      node = w.opts.wrap ? w.opts.wrap(input, hit) : null;
+      if (!node) {
+        node = global.document.createElement('form');
+        node.className = 'ig-compose';
+        node.appendChild(input);
+      } else if (!node.contains(input)) {
+        node.appendChild(input);
+      }
+      if (!node.classList.contains('ig-compose')) node.classList.add('ig-compose');
+      var below = hit.below ? childOf(w.container, hit.below.el) : null;
+      var tail = !below && w.opts.tail ? w.container.querySelector(w.opts.tail) : null;
+      var ref = below || tail;
+      if (ref) w.container.insertBefore(node, ref);
+      else w.container.appendChild(node);
+    }
+    w.compose = node;
+    var busy = false;
+    function close() { removeCompose(w); }
+    function submit() {
+      if (busy) return;
+      var title = input.value.replace(/\s+/g, ' ').trim();
+      if (!title) { close(); return; }
+      busy = true;
+      input.disabled = true;
+      var info = {
+        index: hit.index,
+        above: hit.above.el,
+        below: hit.below ? hit.below.el : null,
+      };
+      var job;
+      try { job = w.opts.onCreate(title, info); }
+      catch (err) { busy = false; input.disabled = false; return; }
+      Promise.resolve(job).then(close, function () {
+        busy = false;
+        input.disabled = false;
+        input.focus();
+      });
+    }
+    node.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+    input.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); submit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    });
+    input.addEventListener('blur', function () {
+      setTimeout(function () {
+        if (!w.compose || busy) return;
+        if (input.value.replace(/\s+/g, ' ').trim()) submit();
+        else close();
+      }, 0);
+    });
+    input.focus();
+  }
+
+  function ensureListen() {
+    if (listening || !global.document) return;
+    listening = true;
+    global.addEventListener('scroll', function () {
+      watches.forEach(hide);
+    }, true);
+  }
+
+  function detach(w) {
+    watches = watches.filter(function (x) { return x !== w; });
+    hide(w);
+    removeCompose(w);
+    if (w.btn && w.btn.parentNode) w.btn.parentNode.removeChild(w.btn);
+  }
+
+  function watch(container, opts) {
+    if (!container || !global.document) return { detach: function () {} };
+    opts = opts || {};
+    ensureCss();
+    ensureListen();
+    var prev = null;
+    for (var i = 0; i < watches.length; i++) if (watches[i].container === container) prev = watches[i];
+    if (prev) detach(prev);
+    var btn = global.document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ig-plus';
+    btn.hidden = true;
+    btn.title = 'Ajouter ici';
+    btn.setAttribute('aria-label', 'Ajouter ici');
+    btn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';
+    var w = { container: container, opts: opts, btn: btn, hit: null, composing: false, compose: null };
+    btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openCompose(w); });
+    btn.addEventListener('pointerleave', function (e) {
+      if (e.relatedTarget && container.contains(e.relatedTarget)) return;
+      hide(w);
+    });
+    global.document.body.appendChild(btn);
+    container.addEventListener('pointermove', function (e) { onMove(w, e); });
+    container.addEventListener('pointerleave', function (e) {
+      if (e.relatedTarget === btn) return;
+      hide(w);
+    });
+    watches.push(w);
+    return { detach: function () { detach(w); } };
+  }
+
+  global.InsertGap = { watch: watch, gapAt: gapAt, underAt: underAt };
+})(typeof window !== 'undefined' ? window : global);

@@ -47,6 +47,8 @@ describe('TableModel', () => {
     assert.equal(row.category, 'Vidéo');
     assert.equal(row.statut, 'En cours');
     assert.equal(TM.cellText(row, 'progress'), '42%');
+    assert.deepEqual(row.items, []);
+    assert.equal(row.dueVague, '');
   });
 
   it('blanks computed columns when priority is disabled', () => {
@@ -56,9 +58,11 @@ describe('TableModel', () => {
   });
 
   it('shows only the visible part of the description', () => {
-    const row = TM.rowFromRecord(rec({ desc: 'Bonjour\n\n<!-- cerveau-meta\nfoo: bar\n-->' }));
+    const row = TM.rowFromRecord(rec({ desc: 'Bonjour\n\n<!-- cerveau-meta\nwaiting: Paul\nwaiting-since: 2026-10-01\n-->' }));
     assert.equal(row.desc, 'Bonjour');
     assert.match(row.fullDesc, /cerveau-meta/);
+    assert.equal(row.waiting, 'Paul');
+    assert.equal(row.waitingSince, '2026-10-01');
   });
 
   it('sorts by several levels, later ones breaking ties', () => {

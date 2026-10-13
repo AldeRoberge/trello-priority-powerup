@@ -32,6 +32,10 @@ describe('Échéance vague mode', () => {
       'tres-lointain'
     );
     assert.equal(PU.formatDueVagueLabel('bientot'), 'Bientôt');
+    assert.equal(PU.formatDueVagueLabel('long-terme'), 'À long terme');
+    assert.ok(PU.dueVagueIndex('long-terme') > PU.dueVagueIndex('semestre'));
+    assert.ok(PU.dueVagueIndex('long-terme') < PU.dueVagueIndex('lointain'));
+    assert.equal(PU.formatDueVagueCountdown('long-terme'), 'À faire à long terme');
     assert.equal(
       PU.formatDueVagueCountdown('tres-lointain'),
       'À faire dans un futur très lointain'

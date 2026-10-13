@@ -180,6 +180,28 @@ describe('DocsTrello (against an in-memory Trello)', () => {
     await assert.rejects(() => DT.createDoc(empty.t, 'x', ''), { reason: 'no-list' });
   });
 
+  it('creates an open board card from selected text, not an archived document', async () => {
+    const card = await DT.createTask(fake.t, 'Appeler le client', 'l2', 'Rappeler demain');
+    assert.equal(card.name, 'Appeler le client');
+    assert.equal(card.idList, 'l2');
+    const stored = fake.cards.find((c) => c.id === card.id);
+    assert.equal(stored.closed, false);
+    assert.equal(stored.desc, 'Rappeler demain');
+    assert.equal(stored.name.includes('📄'), false);
+    const docs = await DT.listDocs(fake.t);
+    assert.equal(docs.some((d) => d.id === card.id), false);
+  });
+
+  it('files the task in the first list when none is chosen', async () => {
+    const card = await DT.createTask(fake.t, 'Sans liste', '', '');
+    assert.equal(card.idList, 'l1');
+    assert.equal(fake.cards.find((c) => c.id === card.id).desc, '');
+  });
+
+  it('refuses an empty task name', async () => {
+    await assert.rejects(() => DT.createTask(fake.t, '   ', 'l1', ''), { reason: 'no-name' });
+  });
+
   it('surfaces a missing Trello authorization as a reason the UI can act on', async () => {
     fake.setAuthorized(false);
     await assert.rejects(() => DT.listDocs(fake.t), { reason: 'not-authorized' });

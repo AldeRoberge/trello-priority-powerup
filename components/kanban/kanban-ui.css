@@ -169,6 +169,17 @@ html[data-color-mode] .tp-page--kanban {
   color: var(--kb-accent);
   background: color-mix(in srgb, var(--kb-accent) 16%, transparent);
 }
+.kb-col-count.is-over {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  border: 0;
+  cursor: pointer;
+  color: var(--tp-danger-text);
+  background: color-mix(in srgb, var(--tp-danger-text) 16%, transparent);
+}
+.kb-step { font-size: 12px; line-height: 1.35; color: var(--tp-text-muted); overflow-wrap: anywhere; }
+.kb-step.is-missing { color: var(--tp-danger-text); }
 .kb-iconbtn {
   font: inherit;
   display: inline-flex;

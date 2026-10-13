@@ -452,6 +452,9 @@ tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
 .tbm-label { flex: 1; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
 .tbm-hint { color: var(--tp-text-muted); font-size: 12px; margin-left: 16px; }
 .tbm-check { color: var(--tp-primary); font-size: 16px; margin-left: 16px; }
+.tbm-chevron { margin-left: 8px; font-size: 14px; color: var(--tp-text-muted); }
+.tbm-item.is-open { background: var(--tp-surface-hover); }
+.tbm-sub { z-index: 1001; }
 
 .tb-grid td, .tb-grid th { vertical-align: middle; }
 
@@ -769,3 +772,5 @@ body.tb-resizing {
 .tb-prog-ring:hover .tb-ring-track {
   stroke: var(--tp-text-subtle);
 }
+.tb-step { display: block; margin-top: 2px; font-size: 11px; line-height: 1.3; color: var(--tp-text-muted); overflow-wrap: anywhere; }
+.tb-step.is-missing { color: var(--tp-danger-text); }

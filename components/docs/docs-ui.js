@@ -203,6 +203,7 @@
       parent: h('button', { class: 'dc-parent', type: 'button', hidden: true }),
       props: h('div', { class: 'dc-props' }),
       meta: h('div', { class: 'dc-meta' }),
+      links: h('div', { class: 'dc-backlinks', hidden: true }),
       empty: h('div', { class: 'dc-empty', hidden: true }),
       outline: h('aside', { class: 'dc-outline', 'aria-label': 'Plan du document' }),
       suggest: h('div', { class: 'dc-suggest', hidden: true, role: 'listbox' }),
@@ -229,9 +230,10 @@
     els.page.appendChild(els.title);
     els.page.appendChild(els.props);
     els.page.appendChild(els.meta);
+    els.page.appendChild(els.links);
     els.blockUi = h('div', { class: 'dc-block-ui', hidden: true }, [
       h('button', { class: 'dc-block-add', type: 'button', 'aria-label': 'Ajouter un bloc', title: 'Ajouter' }, [icon('plus')]),
-      h('button', { class: 'dc-block-grip', type: 'button', draggable: 'true', 'aria-label': 'Déplacer ou transformer', title: 'Glisser ou transformer' }, [icon('grip-vertical')]),
+      h('div', { class: 'dc-block-grip', role: 'button', tabindex: '0', draggable: 'true', 'aria-label': 'Déplacer ou transformer', title: 'Glisser ou transformer' }, [icon('grip-vertical')]),
     ]);
     els.dropLine = h('div', { class: 'dc-drop-line', hidden: true });
     els.page.appendChild(els.blockUi);
@@ -817,7 +819,7 @@
     }
 
     function nestDoc(docId, parentId) {
-      editFolders(function (idx) {
+      return editFolders(function (idx) {
         if (DM().isDocInside(idx, docId, parentId)) return;
         idx.parents = idx.parents || {};
         idx.parents[docId] = parentId;
@@ -826,6 +828,7 @@
         if (!ok) return;
         setFolderOpen('doc:' + parentId, true);
         paintList();
+        if (state.current && (state.current.id === docId || state.current.id === parentId)) paintProps();
       });
     }
 
@@ -1110,6 +1113,32 @@
           })
         );
       }
+      paintBacklinks();
+    }
+
+    function docsForLinks() {
+      return (state.docs || []).map(function (d) {
+        if (state.current && d.id === state.current.id && editor) return Object.assign({}, d, { body: lastDomMd() });
+        return d;
+      });
+    }
+
+    function paintBacklinks() {
+      if (!els.links) return;
+      els.links.textContent = '';
+      if (!state.current || !global.WorkOS || typeof global.WorkOS.backlinks !== 'function') return;
+      var links = global.WorkOS.backlinks(docsForLinks(), 'doc', state.current.id);
+      if (!links.length) { els.links.hidden = true; return; }
+      els.links.hidden = false;
+      els.links.appendChild(h('span', { class: 'dc-backlinks-k', text: 'Mentionné dans' }));
+      links.forEach(function (d) {
+        els.links.appendChild(h('button', {
+          class: 'dc-mention-link',
+          type: 'button',
+          text: d.title,
+          onclick: function () { openDoc(d.id); },
+        }));
+      });
     }
 
     /* Author, last editor and version history (DocsHistory, from Trello card actions). */
@@ -1536,8 +1565,11 @@
           'aria-label': 'Mot-clé',
           maxlength: '20',
           onkeydown: function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); commitTag(e.target); }
-            else if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commitTag(e.target);
+              e.target.blur();
+            } else if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
           },
           onblur: function (e) { commitTag(e.target); },
         }));
@@ -1602,26 +1634,35 @@
       paintCover();
       attachEditor(ed);
       lastRange = null;
+      ensureTail();
+      fixImages();
+      hydrateImages();
+      hideBlockUi();
       lastMd = DM().domToMd(ed); // baseline = the normalized form, so opening never rewrites a document
       paintEmptyClass();
       refreshChips();
       paintOutline();
       paintMeta();
       paintToolbarState();
+      loadFace();
     }
 
     function attachEditor(ed) {
       ed.addEventListener('input', onInput);
       ed.addEventListener('keydown', onKeydown);
       ed.addEventListener('paste', onPaste);
-      ed.addEventListener('drop', function (e) {
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) e.preventDefault();
-      });
+      ed.addEventListener('dragover', onEditorDragOver);
+      ed.addEventListener('drop', onEditorDrop);
       ed.addEventListener('blur', function () {
         saveSel();
         if (state.saveState === 'dirty') saveNow();
       });
       ed.addEventListener('mousedown', function (e) {
+        if (e.target === ed) {
+          ensureTail();
+          var tail = ed.lastElementChild;
+          if (tail && tail.tagName === 'P') focusInside(tail);
+        }
         var li = e.target && e.target.closest && e.target.closest('.dc-todo > li');
         if (li && ed.contains(li) && e.offsetX >= 0 && e.clientX - li.getBoundingClientRect().left < 24 && e.target === li) {
           e.preventDefault();
@@ -1630,6 +1671,7 @@
         }
       });
       ed.addEventListener('click', onEditorClick);
+      ed.addEventListener('contextmenu', onEditorContextMenu, true);
       ed.addEventListener('mouseover', function (e) {
         var chip = e.target.closest && e.target.closest('.dc-mention--task');
         if (!chip || !ed.contains(chip) || (pop && !(previewChip && !previewPinned))) return;
@@ -1826,6 +1868,13 @@
     function onPaste(e) {
       var cd = e.clipboardData;
       if (!cd) return;
+      var pasted = imageFilesFrom(cd);
+      if (pasted.length) {
+        e.preventDefault();
+        var at = selNode();
+        insertImageFiles(pasted, at && rowOf(at), false);
+        return;
+      }
       var html = cd.getData('text/html');
       var text = cd.getData('text/plain');
       if (!html && !text) return;
@@ -1893,6 +1942,17 @@
         .then(function (src) {
           state.sources = src;
           rebuildIndex();
+          var STT = global.StatutTrello;
+          var TM = global.TableModel;
+          if (!STT || typeof STT.readStatutSettings !== 'function' || !TM || typeof TM.enrichLists !== 'function') {
+            state.taskLists = src.lists || [];
+            return;
+          }
+          return STT.readStatutSettings(t).then(function (settings) {
+            state.taskLists = TM.enrichLists(src.lists || [], settings, global.StatutMatch);
+          }, function () {
+            state.taskLists = src.lists || [];
+          });
         });
     }
 
@@ -1947,6 +2007,11 @@
         t: t,
         cardId: id,
         name: name,
+        mentions: global.WorkOS && typeof global.WorkOS.backlinks === 'function'
+          ? global.WorkOS.backlinks(docsForLinks(), 'task', id).map(function (d) {
+              return { title: d.title, open: function () { closePop(); openDoc(d.id); } };
+            })
+          : [],
         onOpen: function () { closePop(); openTask(id, name); },
         onChange: function () { loadSources(); },
         onHold: function (on) { if (on) previewPinned = true; },
@@ -2111,6 +2176,13 @@
           break;
         }
         case 'hr': insertRule(); break;
+        case 'image': {
+          var imgNode = selNode();
+          var imgRow = imgNode && rowOf(imgNode);
+          if (!imgRow) return;
+          openImagePopover(imgRow, isEmptyBlock(imgRow) || isImageBlock(imgRow));
+          return;
+        }
         case 'indent': document.execCommand('indent'); break;
         case 'outdent': document.execCommand('outdent'); break;
         case 'link': openLinkPopover(); return;
@@ -2123,6 +2195,646 @@
         onEdit();
         paintToolbarState();
       }
+    }
+
+    /* ── 5b. Block handles: drag, transform, add (including a picture) ─ */
+
+    function isImageBlock(el) {
+      return !!(el && el.classList && el.classList.contains('dc-image'));
+    }
+
+    function isEmptyBlock(el) {
+      if (!el || isImageBlock(el) || el.tagName === 'HR' || el.tagName === 'PRE') return false;
+      return !/\S/.test(el.textContent || '');
+    }
+
+    function rowOf(node) {
+      if (!node || !editor || !editor.contains(node) || node === editor) return null;
+      var el = node.nodeType === 1 ? node : node.parentNode;
+      var li = null;
+      while (el && el !== editor) {
+        if (el.tagName === 'LI' && !li) li = el;
+        el = el.parentNode;
+      }
+      if (li && editor.contains(li)) return li;
+      el = node.nodeType === 1 ? node : node.parentNode;
+      while (el && el.parentNode !== editor) el = el.parentNode;
+      if (!el || el === editor) return null;
+      if (el.tagName === 'UL' || el.tagName === 'OL') return el.querySelector('li');
+      return el;
+    }
+
+    function currentRow() {
+      var n = selNode();
+      return n ? rowOf(n) : null;
+    }
+
+    function showBlockUi(block) {
+      if (!block || !editor || !editor.contains(block) || !els.blockUi) return;
+      blockHover = block;
+      var top = block.getBoundingClientRect().top - els.page.getBoundingClientRect().top - els.page.clientTop;
+      els.blockUi.style.top = Math.max(0, top) + 'px';
+      els.blockUi.hidden = false;
+    }
+
+    function hideBlockUi() {
+      blockHover = null;
+      if (els.blockUi) els.blockUi.hidden = true;
+    }
+
+    function scheduleHideBlock() {
+      clearTimeout(blockHideTimer);
+      blockHideTimer = setTimeout(function () {
+        if (dragBlock) return;
+        if (pop && (pop.classList.contains('dc-block-menu') || pop.querySelector('input[type="file"]'))) return;
+        hideBlockUi();
+      }, 200);
+    }
+
+    function placeDropLine(row, before) {
+      var y = (before ? row.getBoundingClientRect().top : row.getBoundingClientRect().bottom) - els.page.getBoundingClientRect().top - els.page.clientTop;
+      els.dropLine.style.top = Math.max(0, y) + 'px';
+      els.dropLine.hidden = false;
+    }
+
+    function focusInside(el) {
+      if (!el || !editor) return;
+      editor.focus();
+      var sel = global.getSelection();
+      var r = document.createRange();
+      if (!el.firstChild || el.tagName === 'HR' || isImageBlock(el)) {
+        r.setStartBefore(el);
+        r.collapse(true);
+      } else {
+        r.selectNodeContents(el);
+        r.collapse(true);
+      }
+      sel.removeAllRanges();
+      sel.addRange(r);
+      saveSel();
+    }
+
+    function ensureTail() {
+      if (!editor) return;
+      var last = editor.lastElementChild;
+      if (last && (last.tagName === 'HR' || isImageBlock(last))) {
+        var p = document.createElement('p');
+        p.appendChild(document.createElement('br'));
+        editor.appendChild(p);
+      }
+    }
+
+    function ensureEditor() {
+      if (!editor) return;
+      if (!editor.firstElementChild) {
+        var p = document.createElement('p');
+        p.appendChild(document.createElement('br'));
+        editor.appendChild(p);
+      }
+      ensureTail();
+    }
+
+    function pruneEmpty(el) {
+      if (!el || el === editor || !el.parentNode) return;
+      if ((el.tagName === 'UL' || el.tagName === 'OL') && !el.querySelector('li')) el.parentNode.removeChild(el);
+    }
+
+    function fixImages() {
+      if (!editor) return;
+      Array.prototype.slice.call(editor.querySelectorAll('p > figure.dc-image, div > figure.dc-image')).forEach(function (fig) {
+        var parent = fig.parentNode;
+        // A picture is a direct child of the editor. Hoisting that match would
+        // pull it out of the contenteditable onto the page, so it would not save.
+        if (!parent || parent === editor) return;
+        var host = parent.parentNode;
+        if (!host || !editor.contains(parent)) return;
+        host.insertBefore(fig, parent.nextSibling);
+        if (parent !== editor && !/\S/.test(parent.textContent || '') && !parent.querySelector('figure, hr, img, li, pre')) host.removeChild(parent);
+      });
+      Array.prototype.forEach.call(editor.querySelectorAll('figure.dc-image'), function (fig) {
+        fig.setAttribute('contenteditable', 'false');
+        var img = fig.querySelector('img');
+        if (img) img.setAttribute('draggable', 'false');
+      });
+    }
+
+    function watchImage(fig, img) {
+      if (!img || img._dcWatch) return;
+      img._dcWatch = true;
+      img.addEventListener('load', function () {
+        fig.classList.remove('is-loading');
+        fig.classList.remove('is-broken');
+      });
+      img.addEventListener('error', function () {
+        fig.classList.remove('is-loading');
+        fig.classList.add('is-broken');
+      });
+      if (!img.getAttribute('src')) return;
+      if (img.complete && img.naturalWidth) {
+        fig.classList.remove('is-loading');
+        fig.classList.remove('is-broken');
+      } else if (img.complete) {
+        fig.classList.remove('is-loading');
+        fig.classList.add('is-broken');
+      } else fig.classList.add('is-loading');
+    }
+
+    function makeFigure(src, alt) {
+      var fig = document.createElement('figure');
+      fig.className = 'dc-image';
+      fig.setAttribute('contenteditable', 'false');
+      fig.setAttribute('data-src', src);
+      fig.setAttribute('data-alt', alt || '');
+      var img = document.createElement('img');
+      img.alt = alt || '';
+      img.setAttribute('draggable', 'false');
+      if (src.indexOf('upload:') !== 0) img.src = src;
+      fig.appendChild(img);
+      watchImage(fig, img);
+      return fig;
+    }
+
+    function replaceBlock(block, node) {
+      if (block.tagName !== 'LI') {
+        block.parentNode.replaceChild(node, block);
+        return;
+      }
+      var list = block.parentNode;
+      var parent = list.parentNode;
+      var next = block.nextSibling;
+      var ref = list.nextSibling;
+      list.removeChild(block);
+      var rest = null;
+      if (next) {
+        rest = document.createElement(list.tagName);
+        if (list.className) rest.className = list.className;
+        while (next) {
+          var n2 = next.nextSibling;
+          rest.appendChild(next);
+          next = n2;
+        }
+      }
+      if (!list.querySelector('li')) {
+        parent.removeChild(list);
+        parent.insertBefore(node, ref);
+      } else parent.insertBefore(node, list.nextSibling);
+      if (rest && rest.childNodes.length) parent.insertBefore(rest, node.nextSibling);
+    }
+
+    function insertNodeAfter(block, node) {
+      if (block.tagName !== 'LI') {
+        block.parentNode.insertBefore(node, block.nextSibling);
+        return;
+      }
+      var list = block.parentNode;
+      var parent = list.parentNode;
+      var next = block.nextSibling;
+      if (!next) {
+        parent.insertBefore(node, list.nextSibling);
+        return;
+      }
+      var rest = document.createElement(list.tagName);
+      if (list.className) rest.className = list.className;
+      while (next) {
+        var n2 = next.nextSibling;
+        rest.appendChild(next);
+        next = n2;
+      }
+      parent.insertBefore(node, list.nextSibling);
+      parent.insertBefore(rest, node.nextSibling);
+    }
+
+    function commitImage(block, src, alt, replace) {
+      var fig = makeFigure(src, alt);
+      if (!block || !editor.contains(block)) {
+        editor.appendChild(fig);
+        return fig;
+      }
+      if (replace || isEmptyBlock(block) || isImageBlock(block) || block.tagName === 'HR') replaceBlock(block, fig);
+      else insertNodeAfter(block, fig);
+      return fig;
+    }
+
+    function imageFileList(list) {
+      var out = [];
+      if (!list) return out;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && /^image\/(jpeg|png|webp|gif)$/.test(list[i].type)) out.push(list[i]);
+      }
+      return out;
+    }
+
+    function imageFilesFrom(data) {
+      if (!data) return [];
+      var out = imageFileList(data.files);
+      if (out.length || !data.items) return out;
+      for (var i = 0; i < data.items.length; i++) {
+        var it = data.items[i];
+        if (it.kind === 'file' && /^image\/(jpeg|png|webp|gif)$/.test(it.type)) {
+          var f = it.getAsFile();
+          if (f) out.push(f);
+        }
+      }
+      return out;
+    }
+
+    function imageExt(file) {
+      var t = String((file && file.type) || '').toLowerCase();
+      if (t === 'image/png') return 'png';
+      if (t === 'image/webp') return 'webp';
+      if (t === 'image/gif') return 'gif';
+      return 'jpg';
+    }
+
+    function hydrateImages() {
+      if (!editor || !DT() || typeof DT().coverBlobUrl !== 'function') return;
+      Array.prototype.forEach.call(editor.querySelectorAll('figure.dc-image'), function (fig) {
+        var src = fig.getAttribute('data-src') || '';
+        if (src.indexOf('upload:') !== 0) return;
+        var img = fig.querySelector('img');
+        if (!img || img.getAttribute('data-hydrated') === src) return;
+        var parts = src.slice(7).split('/');
+        if (parts.length !== 3) return;
+        fig.classList.add('is-loading');
+        DT().coverBlobUrl(t, { k: 'upload', c: parts[0], a: parts[1], n: parts[2] }).then(function (url) {
+          if (!img.isConnected) return;
+          if (url) {
+            img.src = url;
+            img.setAttribute('data-hydrated', src);
+            fig.classList.remove('is-loading');
+            fig.classList.remove('is-broken');
+          } else {
+            fig.classList.remove('is-loading');
+            fig.classList.add('is-broken');
+          }
+        }, function () {
+          if (!fig.isConnected) return;
+          fig.classList.remove('is-loading');
+          fig.classList.add('is-broken');
+        });
+      });
+    }
+
+    function insertImageFiles(files, block, replace) {
+      if (!state.current || !files.length) return;
+      var anchor = block && editor.contains(block) ? block : editor.lastElementChild;
+      var first = true;
+      var chain = Promise.resolve();
+      files.forEach(function (file) {
+        chain = chain.then(function () {
+          var rep = first && !!replace;
+          first = false;
+          return DT().uploadCover(t, state.current.id, file, imageExt(file)).then(function (cover) {
+            if (!cover || !cover.a) throw new Error('upload-failed');
+            var src = 'upload:' + cover.c + '/' + cover.a + '/' + cover.n;
+            var alt = String(file.name || '').replace(/\.[^.]+$/, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+            anchor = commitImage(anchor, src, alt, rep);
+          });
+        });
+      });
+      chain.then(function () {
+        ensureEditor();
+        hydrateImages();
+        onEdit();
+        if (anchor && editor.contains(anchor)) showBlockUi(anchor);
+      }, function (err) {
+        toast(reasonText(err), 'error');
+      });
+    }
+
+    function openImagePopover(block, replace) {
+      if (!block) return;
+      closePop();
+      var input = h('input', { class: 'dc-input', type: 'text', placeholder: 'https://…', 'aria-label': 'Adresse de l’image', spellcheck: 'false' });
+      var file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true });
+      var err = h('div', { class: 'dc-pop-err', hidden: true });
+      function applyUrl() {
+        var src = DM().imageSrc(input.value);
+        if (!src || src.indexOf('upload:') === 0) {
+          err.hidden = false;
+          err.textContent = 'Adresse non valide.';
+          return;
+        }
+        closePop();
+        var fig = commitImage(block, src, '', replace);
+        ensureEditor();
+        onEdit();
+        if (fig) showBlockUi(fig);
+      }
+      file.addEventListener('change', function () {
+        var picked = imageFileList(file.files);
+        closePop();
+        if (picked.length) insertImageFiles(picked, block, replace);
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyUrl(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closePop(); }
+      });
+      pop = h('div', { class: 'dc-pop' }, [
+        h('div', { class: 'dc-pop-row' }, [
+          input,
+          h('button', { class: 'dc-btn', type: 'button', title: 'Fichier', 'aria-label': 'Choisir un fichier', onclick: function () { file.click(); } }, [icon('upload')]),
+        ]),
+        err,
+        file,
+      ]);
+      var anchor = els.blockUi && !els.blockUi.hidden ? els.blockUi : block;
+      placePop(pop, anchor.getBoundingClientRect());
+      input.focus();
+    }
+
+    function plainFrom(el) {
+      var p = document.createElement('p');
+      if (isImageBlock(el)) {
+        var alt = el.getAttribute('data-alt') || '';
+        if (alt) p.textContent = alt;
+        else p.appendChild(document.createElement('br'));
+      } else if (el.tagName === 'HR') {
+        p.appendChild(document.createElement('br'));
+      } else if (el.tagName === 'PRE' || el.tagName === 'BLOCKQUOTE') {
+        var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) p.textContent = text;
+        else p.appendChild(document.createElement('br'));
+      } else {
+        while (el.firstChild) p.appendChild(el.firstChild);
+        if (!p.childNodes.length) p.appendChild(document.createElement('br'));
+      }
+      el.parentNode.replaceChild(p, el);
+      return p;
+    }
+
+    function blockKind(block) {
+      if (!block) return '';
+      if (isImageBlock(block)) return 'image';
+      var tag = block.tagName;
+      if (tag === 'HR') return 'hr';
+      if (tag === 'PRE') return 'codeblock';
+      if (tag === 'BLOCKQUOTE') return 'quote';
+      if (tag === 'LI') {
+        var list = block.parentNode;
+        if (list.classList && list.classList.contains('dc-todo')) return 'todo';
+        return list.tagName === 'OL' ? 'ol' : 'ul';
+      }
+      if (/^H[1-3]$/.test(tag)) return tag.toLowerCase();
+      return 'p';
+    }
+
+    function blockCommands() {
+      return COMMANDS.filter(function (c) {
+        return c.id !== 'mention-person' && c.id !== 'mention-task' && c.id !== 'mention-doc';
+      });
+    }
+
+    function transformBlock(block, cmd) {
+      if (!block || !editor || !editor.contains(block)) return;
+      if (cmd === 'image') {
+        openImagePopover(block, true);
+        return;
+      }
+      var target = block;
+      if (isImageBlock(block) || block.tagName === 'HR' || block.tagName === 'PRE') target = plainFrom(block);
+      focusInside(target);
+      runCommand(cmd, { force: true });
+      var row = currentRow();
+      if (row) showBlockUi(row);
+    }
+
+    function removeBlock(block) {
+      if (!block || !editor || !editor.contains(block)) return;
+      var parent = block.parentNode;
+      parent.removeChild(block);
+      pruneEmpty(parent);
+      ensureEditor();
+      onEdit();
+      hideBlockUi();
+    }
+
+    function addBlockAfter(block) {
+      if (!block || !editor || !editor.contains(block)) return;
+      closePop();
+      var fresh;
+      if (block.tagName === 'LI') {
+        fresh = document.createElement('li');
+        if (block.parentNode.classList && block.parentNode.classList.contains('dc-todo')) fresh.setAttribute('data-checked', 'false');
+        fresh.appendChild(document.createElement('br'));
+        block.parentNode.insertBefore(fresh, block.nextSibling);
+      } else {
+        fresh = document.createElement('p');
+        fresh.appendChild(document.createElement('br'));
+        block.parentNode.insertBefore(fresh, block.nextSibling);
+      }
+      focusInside(fresh);
+      onEdit();
+      showBlockUi(fresh);
+      openBlockMenu(fresh, els.blockUi.querySelector('.dc-block-add'), true);
+    }
+
+    function armFreshType() {
+      if (!editor) return;
+      if (freshTypeOff) editor.removeEventListener('input', freshTypeOff);
+      freshTypeOff = function () {
+        editor.removeEventListener('input', freshTypeOff);
+        freshTypeOff = null;
+        if (pop && pop.classList.contains('dc-block-menu')) closePop();
+      };
+      editor.addEventListener('input', freshTypeOff);
+    }
+
+    function openBlockMenu(block, anchor, fresh) {
+      if (!block || !anchor) return;
+      closePop();
+      var kind = blockKind(block);
+      var items = blockCommands().map(function (cmd) {
+        return h('button', {
+          class: 'dc-menu-item' + (cmd.id === kind ? ' is-on' : ''),
+          type: 'button',
+          onclick: function () {
+            closePop();
+            transformBlock(block, cmd.id);
+          },
+        }, [icon(cmd.icon), h('span', { text: cmd.label })]);
+      });
+      items.push(h('div', { class: 'dc-menu-sep' }));
+      items.push(h('button', {
+        class: 'dc-menu-item is-danger',
+        type: 'button',
+        onclick: function () {
+          closePop();
+          removeBlock(block);
+        },
+      }, [icon('trash'), h('span', { text: 'Supprimer' })]));
+      pop = h('div', { class: 'dc-pop dc-menu dc-block-menu', role: 'menu' }, items);
+      pop._block = block;
+      placePop(pop, anchor.getBoundingClientRect());
+      if (fresh) armFreshType();
+    }
+
+    function unwrapLi(li) {
+      var nodes = [];
+      var p = document.createElement('p');
+      Array.prototype.slice.call(li.childNodes).forEach(function (k) {
+        if (k.nodeType === 1 && (k.tagName === 'UL' || k.tagName === 'OL')) {
+          if (!p.childNodes.length) p.appendChild(document.createElement('br'));
+          nodes.push(p);
+          p = document.createElement('p');
+          nodes.push(k);
+        } else p.appendChild(k);
+      });
+      if (p.childNodes.length) nodes.push(p);
+      if (!nodes.length) {
+        var empty = document.createElement('p');
+        empty.appendChild(document.createElement('br'));
+        nodes.push(empty);
+      }
+      return nodes;
+    }
+
+    function moveBlock(src, dest, before) {
+      if (!src || !dest || src === dest || src.contains(dest)) return;
+      var destParent = dest.parentNode;
+      var ref = before ? dest : dest.nextSibling;
+      if (ref === src) return;
+      var srcParent = src.parentNode;
+      if (srcParent === destParent) {
+        srcParent.insertBefore(src, ref);
+        return;
+      }
+      if (src.tagName === 'LI' && destParent === editor) {
+        var nodes = unwrapLi(src);
+        srcParent.removeChild(src);
+        nodes.forEach(function (n) { editor.insertBefore(n, ref); });
+        pruneEmpty(srcParent);
+        return;
+      }
+      if (src.tagName === 'LI' && (destParent.tagName === 'UL' || destParent.tagName === 'OL')) {
+        if (destParent.classList.contains('dc-todo')) {
+          if (!src.hasAttribute('data-checked')) src.setAttribute('data-checked', 'false');
+        } else src.removeAttribute('data-checked');
+        destParent.insertBefore(src, ref);
+        pruneEmpty(srcParent);
+        return;
+      }
+      if (src.tagName !== 'LI' && (destParent.tagName === 'UL' || destParent.tagName === 'OL')) {
+        var li = document.createElement('li');
+        if (destParent.classList.contains('dc-todo')) li.setAttribute('data-checked', 'false');
+        if (src.tagName === 'P' || /^H[1-6]$/.test(src.tagName)) {
+          while (src.firstChild) li.appendChild(src.firstChild);
+          if (!li.childNodes.length) li.appendChild(document.createElement('br'));
+          srcParent.removeChild(src);
+        } else li.appendChild(src);
+        destParent.insertBefore(li, ref);
+        return;
+      }
+      if (destParent === editor && srcParent === editor) editor.insertBefore(src, ref);
+    }
+
+    function onEditorDragOver(e) {
+      if (dragBlock) {
+        var row = rowOf(e.target);
+        if (!row || row === dragBlock || dragBlock.contains(row) || row.contains(dragBlock)) {
+          els.dropLine.hidden = true;
+          dropAt = null;
+          return;
+        }
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        var r = row.getBoundingClientRect();
+        var before = e.clientY < r.top + r.height / 2;
+        dropAt = { row: row, before: before };
+        placeDropLine(row, before);
+        return;
+      }
+      var types = e.dataTransfer && e.dataTransfer.types;
+      if (types && Array.prototype.indexOf.call(types, 'Files') >= 0) e.preventDefault();
+    }
+
+    function onEditorDrop(e) {
+      if (dragBlock && dropAt) {
+        e.preventDefault();
+        var src = dragBlock;
+        var at = dropAt;
+        dragBlock = null;
+        dropAt = null;
+        els.dropLine.hidden = true;
+        src.classList.remove('is-dragging');
+        var beforeMd = lastDomMd();
+        moveBlock(src, at.row, at.before);
+        ensureEditor();
+        if (editor.contains(src)) showBlockUi(rowOf(src) || src);
+        if (lastDomMd() !== beforeMd) onEdit();
+        return;
+      }
+      var files = imageFilesFrom(e.dataTransfer);
+      if (!files.length) return;
+      e.preventDefault();
+      insertImageFiles(files, rowOf(e.target), false);
+    }
+
+    function wireBlockUi() {
+      if (!els.blockUi) return;
+      var addBtn = els.blockUi.querySelector('.dc-block-add');
+      var grip = els.blockUi.querySelector('.dc-block-grip');
+      addBtn.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      addBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        addBlockAfter(blockHover);
+      });
+      grip.addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+        if (pop && !pop.classList.contains('dc-block-menu')) closePop();
+      });
+      grip.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        openBlockMenu(blockHover, grip, false);
+      });
+      grip.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (gripDragged) return;
+        if (pop && pop.classList.contains('dc-block-menu') && pop._block === blockHover) {
+          closePop();
+          return;
+        }
+        openBlockMenu(blockHover, grip, false);
+      });
+      grip.addEventListener('dragstart', function (e) {
+        if (!blockHover) {
+          e.preventDefault();
+          return;
+        }
+        gripDragged = true;
+        dragBlock = blockHover;
+        dragBlock.classList.add('is-dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', 'bloc'); } catch (err) { /* some browsers refuse */ }
+          try { e.dataTransfer.setDragImage(dragBlock, 16, 16); } catch (err2) { /* ignore */ }
+        }
+        closePop();
+      });
+      grip.addEventListener('dragend', function () {
+        if (dragBlock) dragBlock.classList.remove('is-dragging');
+        dragBlock = null;
+        dropAt = null;
+        els.dropLine.hidden = true;
+        setTimeout(function () { gripDragged = false; }, 0);
+      });
+      els.page.addEventListener('mouseover', function (e) {
+        if (els.blockUi.contains(e.target)) {
+          clearTimeout(blockHideTimer);
+          return;
+        }
+        if (dragBlock) return;
+        var row = rowOf(e.target);
+        if (row) {
+          clearTimeout(blockHideTimer);
+          showBlockUi(row);
+        } else scheduleHideBlock();
+      });
+      els.page.addEventListener('mouseleave', scheduleHideBlock);
     }
 
     function buildToolbar() {
@@ -2417,6 +3129,42 @@
       onEdit();
     }
 
+    /** Puts a mention where `range` is, even if the selection was lost while the task was created. */
+    function insertMentionAtRange(range, item) {
+      if (!editor || !range || !editor.contains(range.startContainer)) return false;
+      editor.focus({ preventScroll: true });
+      var sel = global.getSelection();
+      sel.removeAllRanges();
+      var restored = false;
+      try {
+        sel.addRange(range);
+        restored = !sel.isCollapsed && editor.contains(sel.anchorNode);
+      } catch (e) {
+        restored = false;
+      }
+      if (restored) {
+        insertMention(item);
+        return true;
+      }
+      var tpl = document.createElement('template');
+      tpl.innerHTML = plainChips(DM().mentionHtml(item.type, item.id, item.label));
+      var chip = tpl.content.firstChild;
+      if (!chip) return false;
+      var space = document.createTextNode('\u00a0');
+      range.deleteContents();
+      range.insertNode(space);
+      range.insertNode(chip);
+      fixChips();
+      var caret = document.createRange();
+      caret.setStartAfter(space);
+      caret.collapse(true);
+      sel.removeAllRanges();
+      try { sel.addRange(caret); } catch (e2) { /* the caret stays where the browser left it */ }
+      refreshChips();
+      onEdit();
+      return true;
+    }
+
     /** The space that follows a fresh chip is already there: typing another one would double it. */
     function dropSpaceAfterChip() {
       var sel = global.getSelection();
@@ -2469,6 +3217,203 @@
           failure(err);
         }
       );
+    }
+
+    /* ── 6b. Selection -> task ───────────────────────────────────── */
+
+    function hideSelBar() {
+      if (selBar && selBar.parentNode) selBar.parentNode.removeChild(selBar);
+      selBar = null;
+    }
+
+    function rangeInOneMention(range) {
+      if (!range) return false;
+      var a = closestIn(range.startContainer, '.dc-mention');
+      var b = closestIn(range.endContainer, '.dc-mention');
+      return !!(a && a === b);
+    }
+
+    /** Only the selection the user has right now (not the one remembered for menus). */
+    function liveSelectionRange() {
+      var sel = global.getSelection();
+      if (
+        sel && sel.rangeCount && !sel.isCollapsed && editor &&
+        editor.contains(sel.anchorNode) && editor.contains(sel.focusNode)
+      ) {
+        return sel.getRangeAt(0).cloneRange();
+      }
+      return null;
+    }
+
+    function selectionRange() {
+      var live = liveSelectionRange();
+      if (live) return live;
+      if (lastRange && !lastRange.collapsed && editor && editor.contains(lastRange.startContainer)) {
+        return lastRange.cloneRange();
+      }
+      return null;
+    }
+
+    function selectedDraft() {
+      var range = liveSelectionRange();
+      if (!range || rangeInOneMention(range)) return null;
+      return DM().taskFromSelection(range.toString());
+    }
+
+    function taskListPool() {
+      var lists = state.taskLists && state.taskLists.length ? state.taskLists : (state.sources && state.sources.lists) || [];
+      return DM().taskListsForCreate(lists);
+    }
+
+    function selectionClientRect() {
+      var sel = global.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return null;
+      var live = sel.getRangeAt(0);
+      var rects = live.getClientRects();
+      var rect = rects.length ? rects[0] : live.getBoundingClientRect();
+      if (!rect || (!rect.width && !rect.height)) return null;
+      return rect;
+    }
+
+    function placeSelBar() {
+      if (!selBar) return;
+      var rect = selectionClientRect();
+      if (!rect) {
+        hideSelBar();
+        return;
+      }
+      selBar.style.left = '0px';
+      selBar.style.top = '0px';
+      var w = selBar.offsetWidth;
+      var hh = selBar.offsetHeight;
+      var left = Math.max(8, Math.min(rect.left, global.innerWidth - w - 8));
+      var top = rect.top - hh - 8;
+      if (top < 8) top = Math.min(global.innerHeight - hh - 8, rect.bottom + 8);
+      selBar.style.left = left + 'px';
+      selBar.style.top = top + 'px';
+    }
+
+    function updateSelBar() {
+      if (!selectedDraft() || !state.current || sugg) {
+        hideSelBar();
+        return;
+      }
+      var lists = taskListPool();
+      var more = lists.length > 1 ? '1' : '0';
+      if (selBar && selBar.parentNode && selBar.getAttribute('data-more') === more) {
+        placeSelBar();
+        return;
+      }
+      var buttons = [
+        h('button', {
+          class: 'dc-selbar-btn',
+          type: 'button',
+          onmousedown: function (e) {
+            e.preventDefault();
+            holdSelection();
+          },
+          onclick: function () { createTaskFromSelection(); },
+        }, [icon('plus'), h('span', { text: 'Créer une tâche' })]),
+      ];
+      if (lists.length > 1) {
+        buttons.push(h('button', {
+          class: 'dc-selbar-btn dc-selbar-btn--more',
+          type: 'button',
+          title: 'Choisir la liste',
+          'aria-label': 'Choisir la liste',
+          onmousedown: function (e) {
+            e.preventDefault();
+            holdSelection();
+          },
+          onclick: function (e) { openTaskListMenu(e.currentTarget); },
+        }, [icon('chevron-down')]));
+      }
+      hideSelBar();
+      selBar = h('div', { class: 'dc-selbar', role: 'toolbar', 'aria-label': 'Sélection', 'data-more': more }, buttons);
+      shell.appendChild(selBar);
+      placeSelBar();
+    }
+
+    function openTaskListMenu(anchor) {
+      var lists = taskListPool();
+      if (!lists.length) return;
+      var rect = anchor.getBoundingClientRect();
+      var def = DM().defaultTaskListId(lists);
+      saveSel();
+      hideSelBar();
+      closePop();
+      pop = h('div', { class: 'dc-pop dc-menu', role: 'menu' }, lists.map(function (l) {
+        return h('button', {
+          class: 'dc-menu-item' + (String(l.id) === String(def) ? ' is-on' : ''),
+          type: 'button',
+          onclick: function () {
+            closePop();
+            createTaskFromSelection(String(l.id));
+          },
+        }, [icon(l.icon || 'circle'), h('span', { text: l.name || 'Liste' })]);
+      }));
+      placePop(pop, rect);
+    }
+
+    var heldRange = null;
+
+    function holdSelection() {
+      var live = liveSelectionRange();
+      if (live) {
+        heldRange = live;
+        lastRange = live.cloneRange();
+      }
+      return heldRange;
+    }
+
+    function createTaskFromSelection(listId) {
+      var range = liveSelectionRange() || (heldRange && editor && editor.contains(heldRange.startContainer) ? heldRange.cloneRange() : selectionRange());
+      heldRange = null;
+      var draft = range && !rangeInOneMention(range) ? DM().taskFromSelection(range.toString()) : null;
+      if (!draft || !state.current) return;
+      var kept = range.cloneRange();
+      lastRange = kept;
+      hideSelBar();
+      closePop();
+      var lists = state.taskLists && state.taskLists.length ? state.taskLists : (state.sources && state.sources.lists) || [];
+      var id = listId || DM().defaultTaskListId(lists);
+      setBusy('Création de la tâche…');
+      DT().createTask(t, draft.name, id, draft.desc).then(function (card) {
+        setBusy('');
+        if (!state.sources) state.sources = { members: [], contacts: [], cards: [], lists: lists, failed: [] };
+        state.sources.cards = (state.sources.cards || []).filter(function (c) { return c && c.id !== card.id; });
+        state.sources.cards.push({ id: card.id, name: card.name, idList: card.idList, dueComplete: false });
+        rebuildIndex();
+        if (!insertMentionAtRange(kept, { type: 'task', id: card.id, label: card.name })) {
+          toast('Tâche créée, mais le lien n’a pas pu remplacer la sélection.', 'error');
+          return;
+        }
+        var listName = '';
+        lists.forEach(function (l) { if (l && String(l.id) === String(card.idList)) listName = l.name || ''; });
+        toast(listName ? 'Tâche créée dans « ' + listName + ' ».' : 'Tâche créée.', 'ok');
+      }, function (err) {
+        setBusy('');
+        failure(err);
+      });
+    }
+
+    function onEditorContextMenu(e) {
+      var CM = global.ContextMenu;
+      if (!CM || typeof CM.show !== 'function' || typeof CM.buildGenericItems !== 'function') return;
+      if (!selectedDraft()) return;
+      holdSelection();
+      var items = CM.buildGenericItems(e.target, document) || [];
+      items.unshift({ sep: true });
+      items.unshift({
+        id: 'create-task',
+        label: 'Créer une tâche',
+        icon: 'plus',
+        action: function () { createTaskFromSelection(); },
+      });
+      e.preventDefault();
+      e.stopPropagation();
+      hideSelBar();
+      CM.show(e, items);
     }
 
     /* ── 7. Popovers + dialogs ───────────────────────────────────── */
@@ -3236,6 +4181,8 @@
       els.toolbar.classList.toggle('is-disabled', !has);
       els.empty.hidden = has || !state.docsLoaded;
       paintHead();
+      if (!has) state.face = null;
+      paintProps();
       if (!has) {
         editor = null;
         paintCover();
@@ -3336,13 +4283,16 @@
             sortDocs();
             state.filter = '';
             els.search.value = '';
+            var placed = Promise.resolve();
             if (folderId) {
               setFolderOpen(folderId, true);
               moveDocToFolder(doc.id, folderId);
             } else if (parentDocId) {
-              nestDoc(doc.id, parentDocId);
+              placed = nestDoc(doc.id, parentDocId) || Promise.resolve();
             }
-            openDoc(doc.id, { skipSave: true, focusTitle: !title });
+            placed.then(function () {
+              openDoc(doc.id, { skipSave: true, focusTitle: !title });
+            });
           },
           function (err) {
             setBusy('');
@@ -3705,6 +4655,7 @@
       saveSel();
       paintToolbarState();
       if (editor === document.activeElement || (sugg && editor.contains(global.getSelection().anchorNode))) updateSuggest();
+      updateSelBar();
     });
     document.addEventListener('mousedown', function (e) {
       if (pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.cf-pop, .tp-context-menu'))) closePop();
@@ -3715,10 +4666,13 @@
     });
     global.addEventListener('resize', function () {
       if (sugg) placeSuggest();
+      if (selBar) placeSelBar();
+      if (blockHover) showBlockUi(blockHover);
     });
     els.scroll.addEventListener('scroll', function () {
       if (sugg) placeSuggest(); // the caret moved on screen, the popup follows (layout shifts also scroll)
       closePop();
+      if (selBar) placeSelBar();
     });
     global.addEventListener('focus', refreshRemote);
     document.addEventListener('visibilitychange', function () {
@@ -3733,8 +4687,25 @@
 
     buildSide();
     buildToolbar();
+    wireBlockUi();
     paintList();
     showCurrent();
+
+    function takeWantedSubject() {
+      var sp;
+      try { sp = new URLSearchParams(global.location.search); } catch (e) { return null; }
+      var task = DM().cleanId(sp.get('docTask'));
+      var entity = DM().cleanId(sp.get('docEntity'));
+      var want = task ? { k: 'task', id: task } : entity ? { k: 'entity', id: entity } : null;
+      if (!want) return null;
+      try {
+        var u = new URL(global.location.href);
+        u.searchParams.delete('docTask');
+        u.searchParams.delete('docEntity');
+        global.history.replaceState(null, '', u.pathname + u.search + u.hash);
+      } catch (e2) { /* the param simply stays in the address */ }
+      return want;
+    }
 
     function boot() {
       DT().isAuthorized(t).then(function (ok) {
@@ -3759,6 +4730,19 @@
             state.docsLoaded = true;
             paintList();
             rebuildIndex();
+            var want = takeWantedSubject();
+            if (want) {
+              var existing = DM().docForSubject(docs, want.k, want.id);
+              if (existing) return openDoc(existing.id, { skipSave: true });
+              return DT().ensureSubjectDoc(t, want.k, want.id).then(function (r) {
+                state.docs = r.docs;
+                state.idx = DT().getFolderIndex();
+                paintList();
+                return openDoc(r.doc.id, { skipSave: true });
+              }, function (err) {
+                failure(err);
+              });
+            }
             var last = recall(LAST_KEY);
             var pick = docs.filter(function (d) { return d.id === last; })[0] || docs[0];
             if (pick) return openDoc(pick.id, { skipSave: true });

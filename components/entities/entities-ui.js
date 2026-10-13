@@ -1367,6 +1367,9 @@
         anchor,
         function (el) {
           el.appendChild(menuItem('git-fork', 'Créer une variante', 'Une entité qui hérite de celle-ci', function () { cloneSelected(false); }));
+          el.appendChild(menuItem('file-text', 'Document', '', function () {
+            if (global.ViewTabs) global.ViewTabs.openSubject('entity', e.id);
+          }));
           el.appendChild(menuItem('copy', 'Dupliquer', 'Une copie sans lien avec l’original', function () { cloneSelected(true); }));
           if (e.base) {
             el.appendChild(
@@ -1495,6 +1498,13 @@
       }
       var items = [];
       if (state.selId !== e.id || state.mode !== 'entity') items.push({ id: 'open-card', label: 'Ouvrir', icon: 'arrow-up-right', group: 'Ouvrir', action: function () { openEntity(e.id); } });
+      items.push({
+        id: 'open-document',
+        label: 'Document',
+        icon: 'file-text',
+        group: 'Ouvrir',
+        action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('entity', e.id); },
+      });
       items.push({
         id: 'show-links',
         label: 'Liens',
@@ -3040,6 +3050,15 @@
                 state.entities = data.entities.slice();
                 state.loaded = true;
                 state.selId = state.entities.length ? state.entities[0].id : null;
+                try {
+                  var preset = new URLSearchParams(global.location.search).get('entity') || '';
+                  if (preset && state.entities.some(function (en) { return en.id === preset; })) {
+                    state.selId = preset;
+                    var addr = new URL(global.location.href);
+                    addr.searchParams.delete('entity');
+                    global.history.replaceState(null, '', addr.pathname + addr.search + addr.hash);
+                  }
+                } catch (eUrl) { /* keep the first entity */ }
                 paintList({ reveal: true });
                 paintMain();
                 // People and Places are entities too: bring the directories in (saved with the next write)

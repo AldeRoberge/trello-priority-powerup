@@ -85,6 +85,12 @@
     return String(desc || '');
   }
 
+  function metaGet(desc, key) {
+    var dm = global.DescMeta;
+    if (!dm || typeof dm.getMeta !== 'function') return '';
+    return dm.getMeta(desc, key) || '';
+  }
+
   /** One grid row from a GanttTrello.loadBoard record (+ optional Catégorie value). */
   function rowFromRecord(rec, category) {
     var inputs = rec.inputs || {};
@@ -110,6 +116,13 @@
       due: rec.dueDate || '',
       estimate: rec.estimatedMinutes > 0 ? Math.round(rec.estimatedMinutes) : 0,
       link: rec.url || '',
+      items: Array.isArray(rec.items) ? rec.items : [],
+      start: rec.startDate || '',
+      dueTime: rec.dueTime || '',
+      dueVague: inputs.dueVague || '',
+      waiting: metaGet(rec.desc, 'waiting'),
+      waitingSince: metaGet(rec.desc, 'waiting-since'),
+      outlookEvent: metaGet(rec.desc, 'outlook-event-id'),
     };
   }
 

@@ -383,6 +383,29 @@ describe('DocsModel', () => {
     });
   });
 
+  describe('image blocks', () => {
+    const pic = '![plage](https://example.com/a.png)';
+
+    it('round-trips a picture on its own line and inside a quote', () => {
+      assert.equal(roundTrip('avant\n\n' + pic + '\n\naprès'), 'avant\n\n' + pic + '\n\naprès');
+      assert.equal(roundTrip('> ' + pic), '> ' + pic);
+      assert.equal(roundTrip('![photo](upload:card1/att1/image-1.jpg)'), '![photo](upload:card1/att1/image-1.jpg)');
+      assert.match(DM.mdToHtml(pic), /<figure class="dc-image"[^>]*data-src="https:\/\/example.com\/a.png"/);
+      assert.equal(DM.mdToHtml('![x](upload:bad id/att/file.jpg)').indexOf('<img'), -1);
+    });
+
+    it('rejects unsafe urls and keeps a real image pasted as HTML', () => {
+      const bad = DM.mdToHtml('![x](javascript:alert(1))');
+      assert.equal(bad.indexOf('<img'), -1);
+      assert.equal(bad.indexOf('javascript'), -1);
+      assert.equal(toMd('<p>a<img src="x" alt="nope"></p>'), 'a');
+      assert.equal(toMd('<p>a<img src="https://example.com/a.png" alt="plage"></p>'), 'a\n\n' + pic);
+      assert.equal(toMd('<img src="https://example.com/a.png" alt="plage">'), pic);
+      assert.equal(DM.imageSrc('example.com/a.png'), 'https://example.com/a.png');
+      assert.equal(DM.imageSrc('javascript:alert(1)'), '');
+    });
+  });
+
   describe('@ trigger detection', () => {
     it('@ opens everything, @@ tasks, @@@ documents', () => {
       assert.deepEqual(DM.detectTrigger('@'), { scope: 'all', query: '', length: 1 });
@@ -499,6 +522,43 @@ describe('DocsModel', () => {
     it('drops items whose id cannot be stored in a link', () => {
       const ix = DM.buildMentionIndex({ cards: [{ id: 'bad id!', name: 'x' }, { id: 'ok_1', name: 'y' }] });
       assert.deepEqual(ix.task.map((t) => t.id), ['ok_1']);
+    });
+  });
+
+  describe('selection to task', () => {
+    it('uses the first line as the name and the rest as the description', () => {
+      assert.deepEqual(DM.taskFromSelection('  Appeler le client \n\n  Rappeler demain  '), {
+        name: 'Appeler le client',
+        desc: 'Rappeler demain',
+      });
+    });
+
+    it('returns null for a blank selection', () => {
+      assert.equal(DM.taskFromSelection('  \n\u200b '), null);
+      assert.equal(DM.taskFromSelection(''), null);
+    });
+
+    it('caps a long first line and keeps the overflow as the description', () => {
+      const long = 'a'.repeat(DM.TASK_NAME_MAX + 10);
+      const draft = DM.taskFromSelection(long + '\nSuite');
+      assert.equal(draft.name.length, DM.TASK_NAME_MAX);
+      assert.equal(draft.desc, 'a'.repeat(10) + '\nSuite');
+    });
+
+    it('prefers an unstarted list and skips done, canceled and blocked lists', () => {
+      const lists = [
+        { id: 'done', name: 'Terminé', category: 'completed' },
+        { id: 'go', name: 'À faire', category: 'unstarted' },
+        { id: 'late', name: 'En cours', category: 'started' },
+        { id: 'stop', name: 'Bloqué', category: 'blocked' },
+      ];
+      assert.equal(DM.defaultTaskListId(lists), 'go');
+      assert.deepEqual(DM.taskListsForCreate(lists).map((l) => l.id), ['go', 'late']);
+    });
+
+    it('falls back to the first list when none is categorized', () => {
+      assert.equal(DM.defaultTaskListId([{ id: 'l1' }, { id: 'l2' }]), 'l1');
+      assert.equal(DM.defaultTaskListId([]), '');
     });
   });
 

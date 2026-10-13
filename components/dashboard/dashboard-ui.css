@@ -197,6 +197,35 @@ button.db-chip:focus-visible { outline: 2px solid var(--tp-primary); outline-off
   padding: 14px 16px 10px;
 }
 .db-page--board .db-head { flex: none; align-items: center; margin-bottom: 10px; }
+.db-head-tools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.db-scales {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tp-text) 6%, transparent);
+}
+.db-scale {
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.db-scale:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.db-scale.is-on {
+  background: var(--tp-elev-4, var(--tp-surface));
+  color: var(--tp-text);
+  font-weight: 600;
+}
+.db-scale:focus { outline: none; }
+.db-scale:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
 .db-board {
   flex: 1 1 auto;
   min-height: 0;
@@ -239,19 +268,21 @@ button.db-chip:focus-visible { outline: 2px solid var(--tp-primary); outline-off
 .db-col-head {
   flex: none;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  height: 26px;
+  min-height: 28px;
+  height: auto;
 }
 .db-col-name {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
+  white-space: normal;
 }
 .db-col-count {
   flex: none;
@@ -311,6 +342,43 @@ button.db-meter-hit:hover .db-meter { background: var(--tp-border-strong); }
 .db-task.is-drag { opacity: 0.4; }
 .db-task-name { overflow-wrap: anywhere; line-height: 1.35; }
 .db-task-meta { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 6px; align-items: center; }
+.db-add {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.db-add:hover { opacity: 1; color: var(--tp-text); background: color-mix(in srgb, var(--tp-text) 6%, transparent); }
+.db-add-input {
+  flex: none;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--tp-elev-4, var(--tp-surface-subtle));
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+  outline: none;
+}
+.db-add-input::placeholder { color: var(--tp-text-muted); opacity: 0.7; }
 
 /* ── Today ───────────────────────────────────────────────────────────── */
 .db-load { display: flex; flex-direction: column; gap: 4px; min-width: 160px; align-items: flex-end; }
@@ -416,3 +484,28 @@ div.db-capture { resize: none; overflow: auto; max-height: 50vh; white-space: pr
 .db-banner > .ti { color: var(--tp-text-muted); }
 button.db-prio { border: 0; font-family: inherit; cursor: pointer; }
 .db-prio--btn:hover { filter: brightness(1.12); }
+
+.db-input {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--tp-input-bg, var(--tp-surface-subtle));
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.db-input::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
+.db-input:focus { outline: 2px solid var(--tp-primary); outline-offset: 0; }
+.db-actions--exits { border-top: 0; padding: 8px 0 0; flex-wrap: wrap; }
+.db-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.db-step { font-size: 12px; color: var(--tp-text-muted); overflow-wrap: anywhere; }
+.db-step.is-missing { color: var(--tp-danger-text); }
+.db-now-card { margin: -4px 0 8px; font-size: 12px; color: var(--tp-text-muted); }
+.db-project { padding: 8px 0; border-top: 1px solid var(--tp-border); }
+.db-project-nums { display: flex; gap: 12px; font-size: 12px; color: var(--tp-text-muted); }
+.db-project .db-row-name { cursor: default; }
+

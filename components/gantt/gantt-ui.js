@@ -1031,6 +1031,192 @@
     var ZOOM_LEVELS = ['year', 'month', 'week'];
     var MAX_WEEK_ZOOM = 100;
     var zoomAnim = { raf: 0, targetP: 0, curP: 0, clientX: 0 };
+    var nowTipTimer = 0;
+
+    function clearNowTip() {
+      if (nowTipTimer) {
+        clearInterval(nowTipTimer);
+        nowTipTimer = 0;
+      }
+    }
+
+    /**
+     * Hovering the red now-line shows its clock. The line itself ignores the
+     * pointer (so bars stay draggable); proximity on the timeline opens the tip.
+     * Precision comes from GanttModel.formatNowLineTitle (milliseconds when zoomed in).
+     */
+    function bindNowLineTip(scroll, timelineCol, marker, range, mapOpts) {
+      if (!marker || typeof model.formatNowLineTitle !== 'function') return;
+      var tip = el('div', 'gantt-now-tip');
+      tip.hidden = true;
+      tip.setAttribute('role', 'tooltip');
+      timelineCol.appendChild(tip);
+      var offTitle = timelineCol.getAttribute('title') || '';
+      var anchorY = 0;
+
+      function hide() {
+        clearNowTip();
+        tip.hidden = true;
+        if (offTitle) timelineCol.setAttribute('title', offTitle);
+      }
+
+      function paint() {
+        var width = state.timelineWidth;
+        var when = new Date();
+        var x =
+          typeof model.dateTimeToX === 'function'
+            ? model.dateTimeToX(when, range, width, mapOpts)
+            : parseFloat(marker.style.left) || 0;
+        marker.style.left = x + 'px';
+        var px =
+          typeof model.timelinePxPerSecond === 'function'
+            ? model.timelinePxPerSecond(when, range, width, mapOpts)
+            : 0;
+        tip.textContent = model.formatNowLineTitle(when, px);
+        var colRect = timelineCol.getBoundingClientRect();
+        var top = anchorY - colRect.top + 14;
+        if (top < 36) top = 36;
+        var maxTop = (timelineCol.offsetHeight || 0) - 28;
+        if (maxTop > 36 && top > maxTop) top = maxTop;
+        tip.style.top = top + 'px';
+        tip.hidden = false;
+        var tipW = tip.offsetWidth || 140;
+        if (x + 12 + tipW > width) {
+          tip.style.left = Math.max(0, x - 8) + 'px';
+          tip.style.transform = 'translateX(-100%)';
+        } else {
+          tip.style.left = x + 12 + 'px';
+          tip.style.transform = 'none';
+        }
+      }
+
+      function blocked(ev) {
+        var node = ev.target;
+        if (!node || !node.closest) return false;
+        return !!node.closest(
+          '.gantt-bar, .gantt-col-head, .gantt-hour-label, .gantt-timeline-header'
+        );
+      }
+
+      timelineCol.addEventListener('pointermove', function (ev) {
+        if (state.paint || state.drag || state.saving || blocked(ev)) {
+          hide();
+          return;
+        }
+        var rect = marker.getBoundingClientRect();
+        var lineX = rect.left + rect.width / 2;
+        if (Math.abs(ev.clientX - lineX) > 10) {
+          hide();
+          return;
+        }
+        anchorY = ev.clientY;
+        if (offTitle) timelineCol.removeAttribute('title');
+        if (!nowTipTimer) {
+          paint();
+          nowTipTimer = setInterval(paint, 80);
+        } else {
+          var colRect = timelineCol.getBoundingClientRect();
+          var top = anchorY - colRect.top + 14;
+          if (top < 36) top = 36;
+          tip.style.top = top + 'px';
+        }
+      });
+      timelineCol.addEventListener('pointerleave', hide);
+      scroll.addEventListener('scroll', hide);
+    }
+    var nowTipTimer = 0;
+
+    function clearNowTip() {
+      if (nowTipTimer) {
+        clearInterval(nowTipTimer);
+        nowTipTimer = 0;
+      }
+    }
+
+    /**
+     * Hovering the red now-line shows its clock. The line itself ignores the
+     * pointer (so bars stay draggable); proximity on the timeline opens the tip.
+     * Precision comes from GanttModel.formatNowLineTitle (milliseconds when zoomed in).
+     */
+    function bindNowLineTip(scroll, timelineCol, marker, range, mapOpts) {
+      if (!marker || typeof model.formatNowLineTitle !== 'function') return;
+      var tip = el('div', 'gantt-now-tip');
+      tip.hidden = true;
+      tip.setAttribute('role', 'tooltip');
+      timelineCol.appendChild(tip);
+      var offTitle = timelineCol.getAttribute('title') || '';
+      var anchorY = 0;
+
+      function hide() {
+        clearNowTip();
+        tip.hidden = true;
+        if (offTitle) timelineCol.setAttribute('title', offTitle);
+      }
+
+      function paint() {
+        var width = state.timelineWidth;
+        var when = new Date();
+        var x =
+          typeof model.dateTimeToX === 'function'
+            ? model.dateTimeToX(when, range, width, mapOpts)
+            : parseFloat(marker.style.left) || 0;
+        marker.style.left = x + 'px';
+        var px =
+          typeof model.timelinePxPerSecond === 'function'
+            ? model.timelinePxPerSecond(when, range, width, mapOpts)
+            : 0;
+        tip.textContent = model.formatNowLineTitle(when, px);
+        var colRect = timelineCol.getBoundingClientRect();
+        var top = anchorY - colRect.top + 14;
+        if (top < 36) top = 36;
+        var maxTop = (timelineCol.offsetHeight || 0) - 28;
+        if (maxTop > 36 && top > maxTop) top = maxTop;
+        tip.style.top = top + 'px';
+        tip.hidden = false;
+        var tipW = tip.offsetWidth || 140;
+        if (x + 12 + tipW > width) {
+          tip.style.left = Math.max(0, x - 8) + 'px';
+          tip.style.transform = 'translateX(-100%)';
+        } else {
+          tip.style.left = x + 12 + 'px';
+          tip.style.transform = 'none';
+        }
+      }
+
+      function blocked(ev) {
+        var node = ev.target;
+        if (!node || !node.closest) return false;
+        return !!node.closest(
+          '.gantt-bar, .gantt-col-head, .gantt-hour-label, .gantt-timeline-header'
+        );
+      }
+
+      timelineCol.addEventListener('pointermove', function (ev) {
+        if (state.paint || state.drag || state.saving || blocked(ev)) {
+          hide();
+          return;
+        }
+        var rect = marker.getBoundingClientRect();
+        var lineX = rect.left + rect.width / 2;
+        if (Math.abs(ev.clientX - lineX) > 10) {
+          hide();
+          return;
+        }
+        anchorY = ev.clientY;
+        if (offTitle) timelineCol.removeAttribute('title');
+        if (!nowTipTimer) {
+          paint();
+          nowTipTimer = setInterval(paint, 80);
+        } else {
+          var colRect = timelineCol.getBoundingClientRect();
+          var top = anchorY - colRect.top + 14;
+          if (top < 36) top = 36;
+          tip.style.top = top + 'px';
+        }
+      });
+      timelineCol.addEventListener('pointerleave', hide);
+      scroll.addEventListener('scroll', hide);
+    }
 
     function levelInfo(mode, anchorIso, avail, zoom) {
       var rr = model.viewRange(mode, anchorIso);
@@ -4167,6 +4353,7 @@
     }
 
     function renderChart() {
+      clearNowTip();
       var restoreLeft = state.pendingScrollLeft;
       state.pendingScrollLeft = null;
       if (state.pendingFocal) {
@@ -4398,9 +4585,12 @@
       timelineCol.appendChild(headerTimeline);
 
       // Today marker — placed at the current time within today's column.
+      // The line does not take the pointer (bars stay draggable). Hover text
+      // is a tip opened from the timeline when the cursor is on the line.
       var now = new Date();
       var todayDate = model.startOfDay(now);
       var todayLineX = null;
+      var nowMarker = null;
       if (
         todayDate.getTime() >= r.start.getTime() &&
         todayDate.getTime() <= r.end.getTime()
@@ -4410,15 +4600,10 @@
             ? model.dateTimeToX(now, r, state.timelineWidth, mapOpts)
             : model.dateToX(todayDate, r, state.timelineWidth);
         todayLineX = todayX;
-        var marker = el('div', 'gantt-today-line');
-        marker.style.left = todayX + 'px';
-        marker.title =
-          "Maintenant \u00b7 " +
-          now.toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-        timelineCol.appendChild(marker);
+        nowMarker = el('div', 'gantt-today-line');
+        nowMarker.style.left = todayX + 'px';
+        nowMarker.setAttribute('data-now', String(now.getTime()));
+        timelineCol.appendChild(nowMarker);
       }
 
       // The three state sections always stay, so "no rows" means "no task row and no collapsed
@@ -4881,6 +5066,8 @@
       if (restoreLeft != null && isFinite(restoreLeft)) scroll.scrollLeft = restoreLeft;
       bindHourScale(scroll, timelineCol, headerTimeline, r, mapOpts);
       bindWeekScale(scroll, timelineCol, headerTimeline, r);
+      if (nowMarker) bindNowLineTip(scroll, timelineCol, nowMarker, r, mapOpts);
+      if (nowMarker) bindNowLineTip(scroll, timelineCol, nowMarker, r, mapOpts);
 
       labelsCol.style.width = clampLabelsWidth(state.labelsWidth, chart) + 'px';
       state.labelsWidth = clampLabelsWidth(state.labelsWidth, chart);
@@ -5160,6 +5347,8 @@
 
     return {
       destroy: function () {
+        clearNowTip();
+        clearNowTip();
         if (measureRaf) {
           cancelAnimationFrame(measureRaf);
           measureRaf = 0;

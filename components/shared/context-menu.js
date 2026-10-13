@@ -65,6 +65,7 @@
     'feedback-up': 'thumb-up',
     'feedback-down': 'thumb-down',
     'open-card': 'external-link',
+    'open-document': 'file-text',
     'toggle-select': 'checkbox',
     'mini-blocked': 'player-pause',
     'mini-priority': 'flame',
@@ -1480,6 +1481,13 @@
           if (typeof opts.onOpen === 'function') opts.onOpen();
         },
       });
+      items.push({
+        id: 'open-document',
+        label: 'Document',
+        action: function () {
+          if (global.ViewTabs && typeof global.ViewTabs.openSubject === 'function') global.ViewTabs.openSubject('task', opts.cardId);
+        },
+      });
     }
     items.push({
       id: 'toggle-select',
@@ -1559,6 +1567,13 @@
         label: 'Ouvrir la carte',
         action: function () {
           if (typeof opts.onOpen === 'function') opts.onOpen();
+        },
+      });
+      items.push({
+        id: 'open-document',
+        label: 'Document',
+        action: function () {
+          if (global.ViewTabs && typeof global.ViewTabs.openSubject === 'function') global.ViewTabs.openSubject('task', opts.cardId);
         },
       });
     }

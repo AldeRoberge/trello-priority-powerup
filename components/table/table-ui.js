@@ -1040,6 +1040,10 @@
         td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
         td.title = row.name;
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
+        var step = global.WorkOS && global.WorkOS.stepState(row);
+        if (step && (step.text || step.missing)) {
+          td.appendChild(h('span', { class: 'tb-step' + (step.missing ? ' is-missing' : ''), text: step.text || 'Sans prochaine action' }));
+        }
         td.addEventListener('click', function () {
           state.selected = { rowId: row.id, key: key };
           beginEdit(row.id, key);
@@ -1315,6 +1319,7 @@
       var items = [
         { title: row.name || 'Carte' },
         { icon: 'arrow-up-right', label: 'Ouvrir la carte', action: function () { openCard(row); } },
+        { icon: 'file-text', label: 'Document', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id); } },
         { icon: 'brand-trello', label: 'Ouvrir dans Trello', disabled: !row.link, action: function () { window.open(row.link, '_blank', 'noopener'); } },
         { icon: 'link', label: 'Copier le lien de la carte', disabled: !row.link, action: function () { copyText(row.link); } },
       ];
@@ -1348,8 +1353,13 @@
       }
       if (!key || key === 'statut') {
         items.push({ sep: true });
-        items.push({ title: 'Statut' });
-        statutItems(row).forEach(function (i) { items.push(i); });
+        items.push({
+          icon: (list && list.icon) || 'progress-check',
+          color: list && list.color,
+          label: 'Statut',
+          hint: row.statut || (list && list.name) || '',
+          children: statutItems(row),
+        });
       }
       if (key) {
         var sorted = sortOf(key) && state.sorts.length === 1 ? sortOf(key).dir : null;

@@ -41,7 +41,7 @@
   var PLACE_EDGES =['at', 'from', 'via', 'to'];
 
   // Assignment and place verbs, [from the task, from the other end], by task phase.
-  // The task-side "by" phrase gains the person's first name in relationPhrase().
+  // The other card already shows the person's name, so the phrase stays the verb.
   var PHASE_VERBS = {
     by: {
       will: ['Sera fait par', 'Va faire'],
@@ -81,26 +81,41 @@
     parts: 'Fait partie de',
   };
 
-  /** First word of a person name, so an edge can say "Complété par Aldé". */
-  function shortName(label) {
-    var s = String(label || '').replace(/\s+/g, ' ').trim();
-    if (!s) return '';
-    return s.split(' ')[0];
+  function foldList(name) {
+    return String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  /** When the board has no stored category, the list title still says where the card sits. */
+  function categoryFromList(name) {
+    var n = foldList(name);
+    if (!n) return '';
+    function starts(words) {
+      for (var i = 0; i < words.length; i++) {
+        if (n === words[i] || n.indexOf(words[i] + ' ') === 0) return true;
+      }
+      return false;
+    }
+    if (starts(['canceled', 'cancelled', 'annule', 'annulee', 'abandoned'])) return 'canceled';
+    if (starts(['completed', 'complete', 'done', 'fini', 'finie', 'finished', 'termine', 'terminee', 'closed'])) return 'completed';
+    if (starts(['blocked', 'bloque', 'paused', 'stuck']) || n === 'on hold' || n === 'en pause') return 'blocked';
+    if (starts(['started', 'doing', 'wip']) || n === 'en cours' || n.indexOf('en cours ') === 0 || n === 'in progress' || n.indexOf('in progress ') === 0) return 'started';
+    return '';
   }
 
   /**
    * will: planned or paused, not being done right now.
    * doing: list "En cours", or some progress, and not blocked.
-   * done: completed (category, dueComplete, or 100%).
+   * done: completed (category, list title, dueComplete, or 100%).
    * canceled: dropped.
    */
   function taskPhase(rec) {
     rec = rec && typeof rec === 'object' ? rec : {};
-    if (rec.category === 'canceled') return 'canceled';
-    if (rec.category === 'completed' || rec.dueComplete || rec.done) return 'done';
+    var cat = rec.category || categoryFromList(rec.listName);
+    if (cat === 'canceled') return 'canceled';
+    if (cat === 'completed' || rec.dueComplete || rec.done) return 'done';
     if (typeof rec.progress === 'number' && rec.progress >= 100) return 'done';
-    if (rec.blocked || rec.category === 'blocked') return 'will';
-    if (rec.category === 'started') return 'doing';
+    if (rec.blocked || cat === 'blocked') return 'will';
+    if (cat === 'started') return 'doing';
     if (typeof rec.progress === 'number' && rec.progress > 0) return 'doing';
     return 'will';
   }
@@ -108,8 +123,8 @@
   /**
    * How to read `edge` when `focusId` is the node the user clicked (or null).
    * Returns { text, verb, phase, from, to }. `from` → `to` is the reading direction
-   * (arrow leaves the focused end). `text` is the edge label; `verb` is the same
-   * without the person's first name. getNode(id) → node ({ label, rec }).
+   * (arrow leaves the focused end). The phrase is the verb only: the other card
+   * already carries the name. getNode(id) → node ({ label, rec }).
    */
   function relationPhrase(edge, focusId, getNode) {
     var e = edge || {};
@@ -117,7 +132,6 @@
       return getNode && getNode[id];
     };
     var fromN = get(e.from);
-    var toN = get(e.to);
     var towardOther = !!(focusId && focusId === e.to && focusId !== e.from);
     var phase = null;
     var verb;
@@ -136,13 +150,8 @@
     } else {
       verb = EDGE_LABELS[e.kind] || e.kind || '';
     }
-    var text = verb;
-    if (e.kind === 'by' && !towardOther) {
-      var who = shortName(toN && toN.label);
-      if (who) text = verb + ' ' + who;
-    }
     return {
-      text: text,
+      text: verb,
       verb: verb,
       phase: phase,
       from: towardOther ? e.to : e.from,
@@ -899,6 +908,35 @@
     return finishGroups(groups, byId);
   }
 
+  /**
+   * User edits on top of a lens: { groupId: { name?, extra?: [nodeId], omit?: [nodeId] } }.
+   * extra pulls a node into the group, omit takes one out, name renames the boundary.
+   */
+  function applyGroupEdits(groups, edits, byId) {
+    if (!edits || typeof edits !== 'object') return groups || [];
+    var next = (groups || []).map(function (g) {
+      var e = edits[g.id];
+      if (!e || typeof e !== 'object') return g;
+      var omit = Object.create(null);
+      (Array.isArray(e.omit) ? e.omit : []).forEach(function (id) { if (id != null) omit[String(id)] = true; });
+      var members = g.members.filter(function (id) { return !omit[id]; });
+      var seen = Object.create(null);
+      members.forEach(function (id) { seen[id] = true; });
+      (Array.isArray(e.extra) ? e.extra : []).forEach(function (id) {
+        id = id == null ? '' : String(id);
+        if (!id || seen[id] || omit[id] || (byId && !byId[id])) return;
+        seen[id] = true;
+        members.push(id);
+      });
+      var name = e.name != null ? String(e.name).replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+      return makeGroup({
+        id: g.id, label: name || g.label, level: g.level, lens: g.lens,
+        hue: g.hue, anchorId: g.anchorId, members: members, parentId: g.parentId,
+      });
+    });
+    return finishGroups(next, byId || {});
+  }
+
   function autoOpen(g, lens, band) {
     if (band === 'work' || band === 'detail') return true;
     if (band === 'overview') return false;
@@ -926,8 +964,8 @@
 
   /**
    * What the map shows at this zoom. opts: { lens, zoom, manual, buckets, force:{groupId:'open'|'closed'},
-   * focusId, openTasks:{nodeId:true} }. A closed group hides its members. People, places and subtasks
-   * follow their tasks. Facets appear at the detail band (the focused task, or every task if none is focused).
+ * focusId, openTasks:{nodeId:true} }. A closed group hides its members. People, places and subtasks
+ * follow their tasks. At the detail band, the focused task (or one pinned in openTasks) opens into facet nodes.
    */
   function scene(graph, opts) {
     opts = opts || {};
@@ -937,7 +975,7 @@
     var edges = (graph && graph.edges) || [];
     var byNode = Object.create(null);
     nodes.forEach(function (n) { byNode[n.id] = n; });
-    var groups = buildGroups(graph, opts);
+    var groups = applyGroupEdits(buildGroups(graph, opts), opts.edits, byNode);
     var byGroup = Object.create(null);
     var force = opts.force || {};
     groups.forEach(function (g) {
@@ -986,8 +1024,7 @@
     var facets = [];
     nodes.forEach(function (n) {
       if (n.kind !== 'task' || hidden[n.id]) return;
-      var focused = opts.focusId && opts.focusId === n.id;
-      var explode = (band === 'detail' && (!opts.focusId || focused)) || (opts.openTasks && opts.openTasks[n.id]);
+      var explode = (band === 'detail' && opts.focusId === n.id) || (opts.openTasks && opts.openTasks[n.id]);
       if (!explode) return;
       facetsOf(n).forEach(function (f) { facets.push(f); });
     });
@@ -1123,6 +1160,7 @@
     zoomBand: zoomBand,
     normalizeManual: normalizeManual,
     buildGroups: buildGroups,
+    applyGroupEdits: applyGroupEdits,
     scene: scene,
     facetsOf: facetsOf,
     looseHull: looseHull,

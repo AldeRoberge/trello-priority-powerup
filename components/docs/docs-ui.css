@@ -470,6 +470,7 @@ html[data-color-mode="dark"] .dc-root {
 .dc-page {
   --dc-pad-top: 44px;
   --dc-pad-x: 64px;
+  position: relative;
   max-width: 820px;
   margin: 0 auto;
   padding: 44px 64px 72px;
@@ -819,6 +820,165 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   font-size: 12px;
   color: var(--tp-text-muted);
 }
+.dc-parent {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.dc-parent:hover { opacity: 1; }
+.dc-parent[hidden] { display: none; }
+.dc-props {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 10px 0 16px;
+}
+.dc-prop {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 28px;
+}
+.dc-prop-label {
+  flex: 0 0 118px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  color: var(--tp-text-muted);
+  font-size: 13px;
+}
+.dc-prop-label i { font-size: 15px; }
+.dc-prop-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.dc-prop-empty,
+.dc-prop-text,
+.dc-tag-input {
+  border: 0;
+  background: none;
+  padding: 3px 0;
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--tp-text);
+  text-align: left;
+  cursor: pointer;
+}
+.dc-prop-empty,
+.dc-tag-input.is-empty::placeholder {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+}
+.dc-prop-empty:hover,
+.dc-tag-input.is-empty:hover::placeholder,
+.dc-tag-input.is-empty:focus::placeholder {
+  opacity: 0.85;
+}
+.dc-prop-text {
+  max-width: 100%;
+  cursor: pointer;
+}
+.dc-tag-input {
+  flex: 1 1 120px;
+  min-width: 120px;
+  cursor: text;
+  outline: none;
+}
+.dc-tag-input::placeholder { color: var(--tp-text-muted); }
+.dc-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tp-text) 8%, transparent);
+}
+.dc-chip.is-dim { opacity: 0.55; }
+.dc-chip.is-quiet {
+  padding: 2px 8px;
+  font-size: 13px;
+  color: var(--tp-text-muted);
+}
+.dc-chip-main,
+.dc-chip-x {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dc-chip-main {
+  padding: 2px 8px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dc-chip-x {
+  padding: 2px 6px 2px 0;
+  opacity: 0.55;
+}
+.dc-chip-x:hover { opacity: 1; }
+.dc-prop-add {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+}
+.dc-prop-add:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.dc-subdoc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 8px 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dc-subdoc:hover { background: var(--tp-surface-hover); }
+.dc-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-bottom: 1px solid var(--tp-border);
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  padding: 4px 2px 6px;
+  outline: none;
+}
+.dc-picker-list {
+  max-height: 240px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
 .dc-size {
   padding: 1px 8px;
   border-radius: 10px;
@@ -925,6 +1085,96 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 }
 .dc-editor ::selection {
   background: color-mix(in srgb, var(--tp-primary) 28%, transparent);
+}
+
+/* Each line is a block: + adds, the grip drags or opens the type menu. */
+.dc-block-ui {
+  position: absolute;
+  left: calc(var(--dc-pad-x) - 52px);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0.55;
+}
+.dc-block-ui:hover,
+.dc-block-ui:focus-within {
+  opacity: 1;
+}
+.dc-block-ui[hidden] {
+  display: none;
+}
+.dc-block-ui button,
+.dc-block-grip {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.dc-block-ui button:hover,
+.dc-block-grip:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+.dc-block-grip {
+  cursor: grab;
+}
+.dc-block-grip:active {
+  cursor: grabbing;
+}
+.dc-block-ui .ti {
+  font-size: 16px;
+}
+.dc-drop-line {
+  position: absolute;
+  left: var(--dc-pad-x);
+  right: var(--dc-pad-x);
+  height: 2px;
+  margin-top: -1px;
+  background: var(--tp-primary);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 4;
+}
+.dc-drop-line[hidden] {
+  display: none;
+}
+.dc-editor figure.dc-image {
+  margin: 0.35em 0 0.7em;
+}
+.dc-editor figure.dc-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: 6px;
+  -webkit-user-drag: none;
+}
+.dc-editor figure.dc-image.is-loading {
+  min-height: 72px;
+  border-radius: 6px;
+  background: var(--tp-surface-subtle);
+}
+.dc-editor figure.dc-image.is-broken {
+  min-height: 48px;
+  border: 1px dashed var(--tp-border-strong);
+  border-radius: 6px;
+}
+.dc-editor .is-dragging {
+  opacity: 0.4;
+}
+.dc-block-menu {
+  max-height: min(420px, calc(100vh - 16px));
+  overflow: auto;
+}
+.dc-menu-item.is-on {
+  background: color-mix(in srgb, var(--tp-primary) 12%, transparent);
 }
 
 /* checklist */
@@ -1067,11 +1317,20 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   }
   .dc-page {
     --dc-pad-top: 28px;
-    --dc-pad-x: 24px;
-    padding: 28px 24px 56px;
+    --dc-pad-x: 16px;
+    padding: 28px 16px 56px 48px;
   }
   .dc-cover {
     height: 140px;
+    margin-left: -48px;
+    margin-right: -16px;
+  }
+  .dc-block-ui {
+    left: 4px;
+  }
+  .dc-drop-line {
+    left: 48px;
+    right: 16px;
   }
   .dc-cover-btn span {
     display: none;
@@ -1421,4 +1680,45 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 
 .dc-item.is-archived {
   opacity: 0.55;
+}
+
+/* Floating bar on a text selection: turn the selection into a linked task. */
+.dc-selbar {
+  position: fixed;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.18);
+}
+.dc-selbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dc-selbar-btn:hover {
+  background: var(--tp-surface-hover);
+}
+.dc-selbar-btn .ti {
+  font-size: 16px;
+}
+.dc-selbar-btn--more {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  color: var(--tp-text-subtle);
 }

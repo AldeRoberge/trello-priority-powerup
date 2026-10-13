@@ -1,0 +1,47 @@
+/* Trello-style insert: a + sits in the seam under an item. */
+.ig-plus {
+  position: fixed;
+  z-index: 80;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  border: 1px solid var(--tp-border-strong, #dfe1e6);
+  border-radius: 999px;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  box-shadow: 0 1px 4px rgba(9, 30, 66, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ig-plus .ti { font-size: 14px; line-height: 1; }
+.ig-plus:hover,
+.ig-plus:focus-visible {
+  background: var(--tp-primary, #0c66e4);
+  color: #fff;
+  border-color: transparent;
+  outline: none;
+}
+.ig-compose { margin: 2px 0; }
+.ig-compose input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--tp-primary, #0c66e4);
+  border-radius: 6px;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+}
+.ig-compose--float {
+  position: fixed;
+  z-index: 81;
+  width: 240px;
+  margin: 0 0 0 -120px;
+}
+tr.ig-compose td { padding: 2px 6px; background: transparent; }
+li.ig-compose { list-style: none; padding: 2px 0; }

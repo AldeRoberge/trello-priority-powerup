@@ -51,6 +51,15 @@
     return n < 10 ? '0' + n : String(n);
   }
 
+  function pad3(n) {
+    var v = Math.floor(Number(n) || 0);
+    if (v < 0) v = 0;
+    if (v > 999) v = 999;
+    if (v < 10) return '00' + v;
+    if (v < 100) return '0' + v;
+    return String(v);
+  }
+
   function toIsoDate(date) {
     if (!(date instanceof Date) || isNaN(date.getTime())) return '';
     return (
@@ -590,6 +599,38 @@
     }
     var startMs = startOfDay(range.start).getTime();
     return new Date(startMs + dayFloat * MS_DAY);
+  }
+
+  /**
+   * How many pixels one real second occupies at `date` (time warp included).
+   * Used to decide how much of the clock the now-line tooltip shows.
+   */
+  function timelinePxPerSecond(date, range, widthPx, options) {
+    if (!(date instanceof Date) || isNaN(date.getTime()) || !range) return 0;
+    var x0 = dateTimeToX(date, range, widthPx, options);
+    var ahead = dateTimeToX(new Date(date.getTime() + 1000), range, widthPx, options);
+    var px = ahead - x0;
+    if (!(px > 1e-6)) {
+      px = x0 - dateTimeToX(new Date(date.getTime() - 1000), range, widthPx, options);
+    }
+    if (!isFinite(px) || px < 0) return 0;
+    return px;
+  }
+
+  /**
+   * Tooltip for the red now-line. Precision follows the zoom:
+   * HH:MM, then seconds, then milliseconds once a second is wide enough
+   * to point at (hour grid, including compressed off-hours).
+   * @param {number} pxPerSecond from timelinePxPerSecond
+   */
+  function formatNowLineTitle(date, pxPerSecond) {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+    var px = Number(pxPerSecond);
+    if (!isFinite(px) || px < 0) px = 0;
+    var clock = pad2(date.getHours()) + ':' + pad2(date.getMinutes());
+    if (px >= 0.002) clock += ':' + pad2(date.getSeconds());
+    if (px >= 0.004) clock += '.' + pad3(date.getMilliseconds());
+    return 'Maintenant \u00b7 ' + clock;
   }
 
   function snapDate(date, mode) {
@@ -1983,6 +2024,8 @@
     dateTimeToX: dateTimeToX,
     xToDate: xToDate,
     xToDateTime: xToDateTime,
+    timelinePxPerSecond: timelinePxPerSecond,
+    formatNowLineTitle: formatNowLineTitle,
     buildTimeWarp: buildTimeWarp,
     realFracToVisual: realFracToVisual,
     visualFracToReal: visualFracToReal,

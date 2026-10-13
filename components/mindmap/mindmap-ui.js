@@ -14,7 +14,8 @@
  *  - "Ajouter" creates a vision / mission / goal / objective / project; "Hiérarchie" lays the graph out from the center
  *  - "Groupes" picks the lens (hiérarchie, vision, mission, but, objectif, projet, type, manuel). A group is a soft
  *    boundary. Zooming out hides what is inside; zooming in shows it, and up close a task opens into nodes
- *    (progrès, priorité, statut, pause, échéance). Click a group name to open or close it. Grouper (menu) is manual.
+ *    (progrès, priorité, statut, pause, échéance). Click a group to select it, drag it to move its contents,
+ *    double-click its name to rename it, double-click the boundary to open or close it. Drop a card on a group to add it.
  *  - "Dépend de…" / "Contribue à…" (panel) or the Relier button: click another node to add / remove the link
  * Icons: Tabler webfont.
  */
@@ -128,6 +129,7 @@
       cycles: {},
       selected: null,
       selectedEdge: null,
+      selectedGroup: null,
       multi: {}, // node id → true: cards / goals picked with Ctrl+A or Ctrl/Maj+click
       clip: null, // internal clipboard (Ctrl+C / Ctrl+X) pasted by Ctrl+V
       pasteN: 0,
@@ -148,6 +150,7 @@
       groupsOn: (function () { try { return localStorage.getItem('tp-mindmap-groups-on') !== '0'; } catch (e) { return true; } })(),
       manual: [],
       boardId: '',
+      groupEdits: {},
       groupForce: {},
       scene: null,
       lodSig: '',
@@ -160,7 +163,7 @@
 
     root.innerHTML = '';
     var els = {
-      bar: h('div', { class: 'mm-bar' }),
+      bar: h('div', { class: 'mm-bar', role: 'toolbar', 'aria-label': 'Outils' }),
       hint: h('div', { class: 'mm-hint', hidden: true }),
       canvas: h('div', { class: 'mm-canvas' }),
       panel: h('aside', { class: 'mm-panel', hidden: true }),
@@ -245,13 +248,34 @@
     }
 
     /* ── Toolbar ───────────────────────────────────────────────────── */
-    function toggle(key, iconName, label) {
-      return h('button', {
-        class: 'mm-btn' + (state.show[key] ? ' is-active' : ''),
-        title: label,
-        'aria-pressed': state.show[key] ? 'true' : 'false',
+    /** Square icon button, Paint / Premiere style. opts.badge is a corner count. */
+    function tool(iconName, label, opts) {
+      opts = opts || {};
+      var glyph = icon(iconName);
+      glyph.setAttribute('aria-hidden', 'true');
+      var kids = [glyph];
+      if (opts.badge) kids.push(h('span', { class: 'mm-tool-n', text: opts.badge }));
+      var attrs = {
+        class: 'mm-tool' + (opts.armed ? ' is-armed' : (opts.pressed ? ' is-on' : '')) + (opts.menu ? ' mm-tool--menu' : '') + (opts.extra ? ' ' + opts.extra : ''),
+        type: 'button',
+        title: opts.title || label,
+        'aria-label': label,
+        onclick: opts.onclick,
+      };
+      if (opts.toggle !== false) attrs['aria-pressed'] = opts.pressed ? 'true' : 'false';
+      if (opts.menu) attrs['aria-haspopup'] = 'menu';
+      return h('button', attrs, kids);
+    }
+
+    function toolSep() {
+      return h('span', { class: 'mm-tool-sep', 'aria-hidden': 'true' });
+    }
+
+    function showTool(key, iconName, label) {
+      return tool(iconName, label, {
+        pressed: !!state.show[key],
         onclick: function () { state.show[key] = !state.show[key]; rebuild({ relayout: true }); },
-      }, [icon(iconName), label]);
+      });
     }
 
     function renderBar() {
@@ -267,52 +291,73 @@
       var tasks = state.graph.nodes.filter(function (n) { return n.kind === 'task'; }).length;
       var kids = [
         h('span', { class: 'mm-search' }, [icon('search'), filter]),
-        toggle('depends', 'arrow-bend-down-right', 'Dépendances'),
-        toggle('by', 'user', 'Personnes'),
-        toggle('at', 'map-pin', 'Lieux'),
-        toggle('goals', 'target-arrow', 'Objectifs'),
-        h('button', {
-          class: 'mm-btn' + (state.linkFrom ? ' is-active' : ''),
-          title: 'Choisir une tâche ou un objectif, puis cliquer l’élément à relier',
-          onclick: function () {
-            if (state.linkFrom) return endLink();
-            var n = state.selected && nodeById(state.selected);
-            if (n && MM().rankOf(n) >= 0) startLink(n.id);
-            else setStatus('Sélectionnez d’abord une tâche ou un objectif', 'error');
-          },
-        }, [icon('link'), 'Relier']),
-        h('button', {
-          class: 'mm-btn',
-          title: 'Créer une vision, une mission, un but, un objectif ou un projet',
-          onclick: function () { openComposer(); },
-        }, [icon('plus'), 'Ajouter']),
-        h('button', {
-          class: 'mm-btn' + (state.layout === 'tree' ? ' is-active' : ''),
-          'aria-pressed': state.layout === 'tree' ? 'true' : 'false',
-          title: 'Disposer du centre (vision, mission) vers l’extérieur (buts, objectifs, projets, tâches)',
-          onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
-        }, [icon('hierarchy-3'), 'Hiérarchie']),
-        h('button', {
-          class: 'mm-btn mm-lens-btn' + (state.groupsOn ? ' is-active' : ''),
-          title: 'Regrouper par vision, projet, type, ou à la main',
-          onclick: function (ev) { openLensMenu(ev.currentTarget); },
-        }, [icon('circle-dashed'), lensName()]),
-        h('button', {
-          class: 'mm-btn' + (state.snap ? ' is-active' : ''),
-          'aria-pressed': state.snap ? 'true' : 'false',
-          title: 'Aimanter les cartes à la grille en les déplaçant (Alt = déplacement libre)',
-          onclick: function () {
-            state.snap = !state.snap;
-            try { localStorage.setItem('tp-mindmap-snap', state.snap ? '1' : '0'); } catch (e) { /* ignore */ }
-            renderBar();
-          },
-        }, [icon('grid-dots'), 'Grille']),
-        h('button', {
-          class: 'mm-btn' + (state.marqueeTool ? ' is-active' : ''),
-          'aria-pressed': state.marqueeTool ? 'true' : 'false',
-          title: 'Sélection rectangle : glisser sur le fond pour sélectionner plusieurs cartes (Maj/Ctrl + glisser fait la même chose, sans activer l’outil)',
-          onclick: function () { state.marqueeTool = !state.marqueeTool; root.classList.toggle('is-marquee', state.marqueeTool); renderBar(); },
-        }, [icon('square-dashed'), 'Sélection']),
+        h('div', { class: 'mm-tools', role: 'group', 'aria-label': 'Outils' }, [
+          showTool('depends', 'arrow-bend-down-right', 'Dépendances'),
+          showTool('by', 'user', 'Personnes'),
+          showTool('at', 'map-pin', 'Lieux'),
+          showTool('goals', 'target-arrow', 'Objectifs'),
+          toolSep(),
+          tool('link', 'Relier', {
+            pressed: !!state.linkFrom,
+            title: 'Relier',
+            onclick: function () {
+              if (state.linkFrom) return endLink();
+              var n = state.selected && nodeById(state.selected);
+              if (n && MM().rankOf(n) >= 0) startLink(n.id);
+              else setStatus('Sélectionnez d’abord une tâche ou un objectif', 'error');
+            },
+          }),
+          tool('plus', 'Ajouter', {
+            toggle: false,
+            title: 'Ajouter',
+            onclick: function () { openComposer(); },
+          }),
+          toolSep(),
+          tool('hierarchy-3', 'Hiérarchie', {
+            pressed: state.layout === 'tree',
+            title: 'Hiérarchie',
+            onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
+          }),
+          tool('circle-dashed', 'Groupes', {
+            pressed: !!state.groupsOn,
+            menu: true,
+            extra: 'mm-lens-btn',
+            title: 'Groupes',
+            onclick: function (ev) { openLensMenu(ev.currentTarget); },
+          }),
+          toolSep(),
+          tool('pointer', 'Pointeur', {
+            pressed: !state.marqueeTool,
+            armed: !state.marqueeTool,
+            title: 'Pointeur',
+            onclick: function () {
+              if (!state.marqueeTool) return;
+              state.marqueeTool = false;
+              root.classList.remove('is-marquee');
+              renderBar();
+            },
+          }),
+          tool('square-dashed', 'Sélection', {
+            pressed: !!state.marqueeTool,
+            armed: !!state.marqueeTool,
+            title: 'Sélection',
+            onclick: function () {
+              if (state.marqueeTool) return;
+              state.marqueeTool = true;
+              root.classList.add('is-marquee');
+              renderBar();
+            },
+          }),
+          tool('grid-dots', 'Grille', {
+            pressed: !!state.snap,
+            title: 'Grille',
+            onclick: function () {
+              state.snap = !state.snap;
+              try { localStorage.setItem('tp-mindmap-snap', state.snap ? '1' : '0'); } catch (e) { /* ignore */ }
+              renderBar();
+            },
+          }),
+        ]),
         state.goalsAuth === false ? h('button', {
           class: 'mm-btn mm-btn--primary',
           title: 'Trello doit être autorisé pour lire et enregistrer les objectifs',
@@ -327,17 +372,28 @@
       }
       kids.push(h('span', { class: 'mm-count' }, [tasks + (tasks > 1 ? ' tâches' : ' tâche')]));
       var doneCount = state.records.filter(function (r) { return MM().isClosed(r); }).length;
-      kids.push(h('button', {
-        class: 'mm-btn' + (state.hideDone ? ' is-active' : ''), 'aria-pressed': state.hideDone ? 'true' : 'false',
-        title: HD.title(state.hideDone),
-        onclick: function () { HD.set(!state.hideDone); },
-      }, [icon(HD.icon(state.hideDone)), HD.label(state.hideDone, doneCount)]));
-      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Dézoomer', 'aria-label': 'Dézoomer', onclick: function () { zoomBy(1 / 1.25); } }, [icon('minus')]));
-      kids.push(h('button', { class: 'mm-btn mm-zoom', title: 'Zoom 100 %', onclick: function () { zoomBy(1 / state.view.k); } }, [Math.round(state.view.k * 100) + ' %']));
-      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Zoomer', 'aria-label': 'Zoomer', onclick: function () { zoomBy(1.25); } }, [icon('plus')]));
-      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Recentrer', 'aria-label': 'Recentrer', onclick: fit }, [icon('focus-2')]));
-      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Réorganiser', 'aria-label': 'Réorganiser', onclick: function () { rebuild({ relayout: true, fresh: true }); } }, [icon('layout-grid')]));
-      kids.push(h('button', { class: 'mm-btn mm-btn--icon', title: 'Actualiser', 'aria-label': 'Actualiser', onclick: function () { reload().then(loadGoals); } }, [icon('refresh')]));
+      kids.push(h('div', { class: 'mm-tools', role: 'group', 'aria-label': 'Affichage' }, [
+        tool(HD.icon(state.hideDone), HD.label(state.hideDone, doneCount), {
+          pressed: state.hideDone,
+          title: HD.title(state.hideDone),
+          badge: state.hideDone && doneCount ? String(Math.min(doneCount, 99)) : '',
+          onclick: function () { HD.set(!state.hideDone); },
+        }),
+        toolSep(),
+        tool('zoom-out', 'Dézoomer', { toggle: false, onclick: function () { zoomBy(1 / 1.25); } }),
+        h('button', {
+          class: 'mm-tool mm-tool--zoom mm-zoom',
+          type: 'button',
+          title: 'Zoom 100 %',
+          'aria-label': 'Zoom 100 %',
+          onclick: function () { zoomBy(1 / state.view.k); },
+        }, [Math.round(state.view.k * 100) + ' %']),
+        tool('zoom-in', 'Zoomer', { toggle: false, onclick: function () { zoomBy(1.25); } }),
+        toolSep(),
+        tool('focus-2', 'Recentrer', { toggle: false, onclick: fit }),
+        tool('layout-grid', 'Réorganiser', { toggle: false, onclick: function () { rebuild({ relayout: true, fresh: true }); } }),
+        tool('refresh', 'Actualiser', { toggle: false, onclick: function () { reload().then(loadGoals); } }),
+      ]));
       els.bar.textContent = '';
       kids.forEach(function (k) { if (k) els.bar.appendChild(k); });
       if (document.activeElement === document.body && state.filter) {
@@ -940,12 +996,19 @@
           moved = true;
           drag(start.nx + dx / state.view.k, start.ny + dy / state.view.k, me.altKey);
         }
-        function up() {
+        function up(me) {
           g.removeEventListener('pointermove', move);
           g.removeEventListener('pointerup', up);
           g.removeEventListener('pointercancel', up);
           gGuides.textContent = '';
-          if (!moved) { if (modKey && !state.relink && !state.linkFrom) toggleMulti(n); else onNodeClick(n); }
+          if (!moved) { if (modKey && !state.relink && !state.linkFrom) toggleMulti(n); else onNodeClick(n); return; }
+          if (me && me.altKey && state.selectedGroup) {
+            var sel = groupById(state.selectedGroup);
+            if (sel && sel.members.indexOf(n.id) >= 0) removeNodeFromGroup(state.selectedGroup, n);
+          } else if (me && !me.altKey) {
+            var gid = groupAt(n);
+            if (gid) addNodeToGroup(gid, n);
+          }
         }
         g.addEventListener('pointermove', move);
         g.addEventListener('pointerup', up);
@@ -1042,23 +1105,36 @@
       selectEdge(e.id);
     }
 
+    function paintGroupSelection() {
+      if (!gGroups) return;
+      var id = state.selectedGroup;
+      var nodes = svg.querySelectorAll('.mm-hull, .mm-hull-label');
+      for (var i = 0; i < nodes.length; i++) {
+        nodes[i].classList.toggle('is-selected', nodes[i].getAttribute('data-group') === id);
+      }
+    }
+
     function select(id) {
       state.multi = {};
       state.selected = id;
       state.selectedEdge = null;
+      state.selectedGroup = null;
       state.confirmDelete = null;
       applyFocus();
       renderPanel();
       applyLod();
+      if (typeof paintGroupSelection === 'function') paintGroupSelection();
     }
 
     function selectEdge(id) {
       state.multi = {};
       state.selectedEdge = id;
       state.selected = null;
+      state.selectedGroup = null;
       state.confirmDelete = null;
       applyFocus();
       renderPanel();
+      if (typeof paintGroupSelection === 'function') paintGroupSelection();
     }
 
     /* ── Multi-selection: Ctrl+A, Suppr, Ctrl+C / X / V ───────────────── */
@@ -1073,9 +1149,11 @@
       if (!Object.keys(state.multi).length && state.selected && state.selected !== n.id) state.multi[state.selected] = true;
       state.selected = null;
       state.selectedEdge = null;
+      state.selectedGroup = null;
       if (state.multi[n.id]) delete state.multi[n.id]; else state.multi[n.id] = true;
       applyFocus();
       renderPanel();
+      if (typeof paintGroupSelection === 'function') paintGroupSelection();
     }
 
     function selectAll() {
@@ -1083,9 +1161,11 @@
       state.graph.nodes.forEach(function (n) { if (n.kind === 'task' || n.kind === 'goal') state.multi[n.id] = true; });
       state.selected = null;
       state.selectedEdge = null;
+      state.selectedGroup = null;
       state.confirmDelete = null;
       applyFocus();
       renderPanel();
+      if (typeof paintGroupSelection === 'function') paintGroupSelection();
       setStatus(Object.keys(state.multi).length + ' éléments sélectionnés', 'ok');
     }
 
@@ -2122,11 +2202,6 @@
     var FACET_HUE = { progress: 150, priority: 25, status: 210, blocked: 0, due: 265 };
     var lensMenuEl = null;
 
-    function lensName() {
-      if (!state.groupsOn) return 'Groupes';
-      var l = MM().lensById(state.lens);
-      return l ? l.label : 'Groupes';
-    }
     function manualKey() { return 'tp-mindmap-groups:' + (state.boardId || 'local'); }
     function loadManual() {
       try { return MM().normalizeManual(JSON.parse(localStorage.getItem(manualKey()) || '[]')); }
@@ -2141,10 +2216,16 @@
         localStorage.setItem('tp-mindmap-groups-on', state.groupsOn ? '1' : '0');
       } catch (e) { /* ignore */ }
     }
+    function editsSig() {
+      return Object.keys(state.groupEdits || {}).sort().map(function (id) {
+        var e = state.groupEdits[id] || {};
+        return id + ':' + (e.name || '') + '/' + (e.extra || []).join(',') + '/' + (e.omit || []).join(',');
+      }).join(';');
+    }
     function lodSignature() {
       var force = state.groupForce || {};
       var fk = Object.keys(force).sort().map(function (id) { return id + '=' + force[id]; }).join(',');
-      return [state.groupsOn ? 1 : 0, state.lens, MM().zoomBand(state.view.k), state.selected || '', fk, state.manual.length, state.graph.nodes.length, state.graph.edges.length].join('|');
+      return [state.groupsOn ? 1 : 0, state.lens, MM().zoomBand(state.view.k), state.selected || '', fk, state.manual.length, editsSig(), state.graph.nodes.length, state.graph.edges.length].join('|');
     }
     function applyLod(forceRebuild) {
       if (!state.graph || !gGroups) return;
@@ -2159,6 +2240,7 @@
           lens: state.lens,
           zoom: state.view.k,
           manual: state.manual,
+          edits: state.groupEdits,
           force: state.groupForce,
           focusId: state.selected,
         });
@@ -2176,34 +2258,247 @@
       drawHulls();
       if (!scaleOnly) drawFacets();
     }
+    function editsKey() { return 'tp-mindmap-group-edits:' + (state.boardId || 'local'); }
+    function loadEdits() {
+      try {
+        var raw = JSON.parse(localStorage.getItem(editsKey()) || '{}');
+        return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+      } catch (e) { return {}; }
+    }
+    function saveEdits() {
+      try { localStorage.setItem(editsKey(), JSON.stringify(state.groupEdits)); } catch (e) { /* ignore */ }
+    }
+    function editGroup(gid, mut, quiet) {
+      var cur = state.groupEdits[gid] || {};
+      var e = {
+        extra: Array.isArray(cur.extra) ? cur.extra.slice() : [],
+        omit: Array.isArray(cur.omit) ? cur.omit.slice() : [],
+      };
+      if (cur.name) e.name = cur.name;
+      mut(e);
+      e.extra = e.extra.filter(Boolean);
+      e.omit = e.omit.filter(Boolean);
+      if (!e.extra.length && !e.omit.length && !e.name) delete state.groupEdits[gid];
+      else state.groupEdits[gid] = e;
+      saveEdits();
+      if (!quiet) applyLod(true);
+    }
+    function groupById(id) {
+      return state.scene && state.scene.groups.filter(function (g) { return g.id === id; })[0];
+    }
+    function groupMoveIds(g) {
+      var ids = Object.create(null);
+      if (!g) return ids;
+      if (g.anchorId) ids[g.anchorId] = true;
+      (g.members || []).forEach(function (id) { ids[id] = true; });
+      var groups = (state.scene && state.scene.groups) || [];
+      var grew = true;
+      var guard = 0;
+      while (grew && guard++ < 8) {
+        grew = false;
+        groups.forEach(function (child) {
+          if (!child.anchorId || !ids[child.anchorId]) return;
+          child.members.forEach(function (id) {
+            if (!ids[id]) { ids[id] = true; grew = true; }
+          });
+        });
+      }
+      state.graph.edges.forEach(function (e) {
+        var other = ids[e.from] ? e.to : ids[e.to] ? e.from : '';
+        if (!other || ids[other]) return;
+        var n = nodeById(other);
+        if (n && (n.kind === 'person' || n.kind === 'place' || n.kind === 'subtask')) ids[other] = true;
+      });
+      return ids;
+    }
+    function selectGroup(id) {
+      state.multi = {};
+      state.selected = null;
+      state.selectedEdge = null;
+      state.selectedGroup = id;
+      state.confirmDelete = null;
+      applyFocus();
+      renderPanel();
+      paintGroupSelection();
+    }
+    function startGroupGesture(ev, g) {
+      if (!ev || ev.button) return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      var ids = groupMoveIds(g);
+      var nodes = state.graph.nodes.filter(function (n) { return ids[n.id]; });
+      var lead = (g.anchorId && nodeById(g.anchorId)) || nodes[0];
+      if (!lead) { selectGroup(g.id); return; }
+      selectGroup(g.id);
+      var start = { x: ev.clientX, y: ev.clientY, nx: lead.x, ny: lead.y };
+      var drag = dragGroup(nodes, lead);
+      var moved = false;
+      function move(me) {
+        var dx = me.clientX - start.x;
+        var dy = me.clientY - start.y;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        moved = true;
+        drag(start.nx + dx / state.view.k, start.ny + dy / state.view.k, me.altKey);
+      }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
+        gGuides.textContent = '';
+        if (!moved) selectGroup(g.id);
+        else paintGroupSelection();
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', up);
+    }
+    function groupBox(g, exceptId) {
+      var scene = state.scene;
+      if (!scene || !g) return null;
+      var pts = [];
+      function add(id) {
+        if (!id || id === exceptId) return;
+        var node = nodeById(id);
+        if (node && isFinite(node.x) && isFinite(node.y)) pts.push(node);
+      }
+      if (!g.open) {
+        if (g.anchorId && !scene.hidden[g.anchorId]) add(g.anchorId);
+        else g.members.forEach(add);
+        if (!pts.length) return null;
+        var cx = 0;
+        var cy = 0;
+        pts.forEach(function (p) { cx += p.x; cy += p.y; });
+        cx /= pts.length;
+        cy /= pts.length;
+        var sc = 1 / (state.view.k || 1);
+        return { x0: cx - 100 * sc, y0: cy - 36 * sc, x1: cx + 100 * sc, y1: cy + 36 * sc };
+      }
+      if (g.anchorId) add(g.anchorId);
+      g.members.forEach(function (id) { if (!scene.hidden[id]) add(id); });
+      if (!pts.length) return null;
+      var x0 = Infinity;
+      var y0 = Infinity;
+      var x1 = -Infinity;
+      var y1 = -Infinity;
+      pts.forEach(function (p) {
+        var b = nodeBox(p);
+        x0 = Math.min(x0, p.x - b.w / 2);
+        x1 = Math.max(x1, p.x + b.w / 2);
+        y0 = Math.min(y0, p.y - b.h / 2);
+        y1 = Math.max(y1, p.y + b.h / 2);
+      });
+      return { x0: x0 - 42, y0: y0 - 42, x1: x1 + 42, y1: y1 + 42 };
+    }
+    function groupAt(n) {
+      var scene = state.scene;
+      if (!scene || !n || (n.kind !== 'task' && n.kind !== 'goal')) return '';
+      var best = '';
+      var bestArea = Infinity;
+      scene.groups.forEach(function (g) {
+        if (g.hidden || g.anchorId === n.id || g.members.indexOf(n.id) >= 0) return;
+        var box = groupBox(g, n.id);
+        if (!box || n.x < box.x0 || n.x > box.x1 || n.y < box.y0 || n.y > box.y1) return;
+        var area = (box.x1 - box.x0) * (box.y1 - box.y0);
+        if (area < bestArea) { bestArea = area; best = g.id; }
+      });
+      return best;
+    }
+    function groupHolding(nodeId) {
+      var scene = state.scene;
+      if (!scene) return '';
+      if (state.selectedGroup) {
+        var sel = groupById(state.selectedGroup);
+        if (sel && (sel.anchorId === nodeId || sel.members.indexOf(nodeId) >= 0)) return sel.id;
+      }
+      var found = '';
+      scene.groups.forEach(function (g) {
+        if (g.members.indexOf(nodeId) >= 0) found = g.id;
+      });
+      return found;
+    }
+    function addNodeToGroup(gid, n) {
+      if (!gid || !n || (n.kind !== 'task' && n.kind !== 'goal')) return;
+      var g = groupById(gid);
+      if (!g || g.anchorId === n.id || g.members.indexOf(n.id) >= 0) return;
+      if (g.lens === 'manual') { addToManual(gid, [n]); setStatus('Dans « ' + g.label + ' »', 'ok'); return; }
+      (state.scene ? state.scene.groups : []).forEach(function (other) {
+        if (other.id === gid || other.lens === 'manual' || other.members.indexOf(n.id) < 0) return;
+        editGroup(other.id, function (e) {
+          e.extra = e.extra.filter(function (id) { return id !== n.id; });
+          if (e.omit.indexOf(n.id) < 0) e.omit.push(n.id);
+        }, true);
+      });
+      editGroup(gid, function (e) {
+        e.omit = e.omit.filter(function (id) { return id !== n.id; });
+        if (e.extra.indexOf(n.id) < 0) e.extra.push(n.id);
+      });
+      setStatus('Dans « ' + g.label + ' »', 'ok');
+    }
+    function removeNodeFromGroup(gid, n) {
+      if (!gid || !n) return;
+      var g = groupById(gid);
+      if (!g || g.anchorId === n.id) return;
+      if (g.lens === 'manual') {
+        state.manual = MM().normalizeManual(state.manual.map(function (mg) {
+          if (mg.id !== gid) return mg;
+          return { id: mg.id, name: mg.name, members: mg.members.filter(function (id) { return id !== n.id; }) };
+        }));
+        saveManual();
+        applyLod(true);
+      } else {
+        editGroup(gid, function (e) {
+          e.extra = e.extra.filter(function (id) { return id !== n.id; });
+          if (e.omit.indexOf(n.id) < 0) e.omit.push(n.id);
+        });
+      }
+      setStatus('Retiré', 'ok');
+    }
+    function renameGroup(g, name) {
+      name = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!name || !g || name === g.label) return;
+      if (g.lens === 'manual') { renameManual(g.id, name); return; }
+      if (g.anchorId) {
+        var node = nodeById(g.anchorId);
+        if (node && node.kind === 'goal') { renameGoal(g.anchorId, name); return; }
+      }
+      editGroup(g.id, function (e) { e.name = name; });
+    }
     function toggleGroup(id) {
       var g = state.scene && state.scene.groups.filter(function (x) { return x.id === id; })[0];
       if (!g) return;
       state.groupForce[id] = g.open ? 'closed' : 'open';
       applyLod(true);
     }
-    function hullLabel(g, x, y, withCount) {
+    function hullClass(g, closed) {
+      return 'mm-hull ' + (closed ? 'is-closed' : 'is-open') + (state.selectedGroup === g.id ? ' is-selected' : '');
+    }
+    function bindShape(el, g) {
+      el.addEventListener('pointerdown', function (ev) { startGroupGesture(ev, g); });
+      el.addEventListener('dblclick', function (ev) {
+        ev.stopPropagation();
+        ev.preventDefault();
+        toggleGroup(g.id);
+      });
+    }
+    function hullLabel(g, x, y, text) {
       var sc = 1 / (state.view.k || 1);
-      var text = g.label + (withCount && g.taskCount ? ' · ' + g.taskCount : '');
       var t = s('text', {
-        class: 'mm-hull-label', 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'data-group': g.id,
+        class: 'mm-hull-label' + (state.selectedGroup === g.id ? ' is-selected' : ''),
+        'text-anchor': 'middle', 'dominant-baseline': 'middle', 'data-group': g.id,
         transform: 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + sc.toFixed(3) + ')',
       });
       t.textContent = text;
-      t.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
-      t.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        if (ev.detail > 1) return;
-        toggleGroup(g.id);
-      });
+      t.addEventListener('pointerdown', function (ev) { startGroupGesture(ev, g); });
       t.addEventListener('dblclick', function (ev) {
         ev.stopPropagation();
         ev.preventDefault();
-        if (g.lens === 'manual') renameGroupInline(g);
+        renameGroupInline(g);
       });
       return t;
     }
     function drawHulls() {
+      var oldLabels = gTop.querySelectorAll('.mm-hull-label');
+      for (var i = oldLabels.length - 1; i >= 0; i--) oldLabels[i].parentNode.removeChild(oldLabels[i]);
       gGroups.textContent = '';
       var scene = state.scene;
       if (!state.groupsOn || !scene) return;
@@ -2222,22 +2517,25 @@
           if (g.anchorId) add(byNode[g.anchorId]);
           g.members.forEach(function (id) { if (!scene.hidden[id]) add(byNode[id]); });
           if (!pts.length) return;
-          var hull = s('path', { class: 'mm-hull is-open', d: MM().looseHull(pts, 42), 'data-group': g.id });
+          var d = MM().looseHull(pts, 42);
+          var hull = s('path', { class: hullClass(g, false), d: d, 'data-group': g.id });
           hull.style.setProperty('--mm-hull', hue);
+          var hit = s('path', { class: 'mm-hull-hit', d: d, 'data-group': g.id });
+          bindShape(hit, g);
           gGroups.appendChild(hull);
+          gGroups.appendChild(hit);
           var top = pts[0];
           pts.forEach(function (p) { if (p.y - p.h / 2 < top.y - top.h / 2) top = p; });
-          gGroups.appendChild(hullLabel(g, top.x, top.y - top.h / 2 - 16 / k, false));
+          gTop.appendChild(hullLabel(g, top.x, top.y - top.h / 2 - 22 / k, g.label));
           return;
         }
         if (g.anchorId && byNode[g.anchorId] && !scene.hidden[g.anchorId]) {
           add(byNode[g.anchorId]);
-          var halo = s('path', { class: 'mm-hull is-closed', d: MM().looseHull(pts, 18), 'data-group': g.id });
+          var halo = s('path', { class: hullClass(g, true), d: MM().looseHull(pts, 18), 'data-group': g.id });
           halo.style.setProperty('--mm-hull', hue);
-          halo.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
-          halo.addEventListener('click', function (ev) { ev.stopPropagation(); toggleGroup(g.id); });
+          bindShape(halo, g);
           gGroups.appendChild(halo);
-          gGroups.appendChild(hullLabel(g, pts[0].x, pts[0].y - pts[0].h / 2 - 16 / k, true));
+          if (g.taskCount) gTop.appendChild(hullLabel(g, pts[0].x + pts[0].w / 2, pts[0].y - pts[0].h / 2, String(g.taskCount)));
           return;
         }
         g.members.forEach(function (id) { add(byNode[id]); });
@@ -2249,14 +2547,13 @@
         cy /= pts.length;
         var sc = 1 / k;
         var chip = s('ellipse', {
-          class: 'mm-hull is-closed', cx: cx.toFixed(1), cy: cy.toFixed(1),
+          class: hullClass(g, true), cx: cx.toFixed(1), cy: cy.toFixed(1),
           rx: (86 * sc).toFixed(1), ry: (22 * sc).toFixed(1), 'data-group': g.id,
         });
         chip.style.setProperty('--mm-hull', hue);
-        chip.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
-        chip.addEventListener('click', function (ev) { ev.stopPropagation(); toggleGroup(g.id); });
+        bindShape(chip, g);
         gGroups.appendChild(chip);
-        gGroups.appendChild(hullLabel(g, cx, cy, true));
+        gTop.appendChild(hullLabel(g, cx, cy, g.label + (g.taskCount ? ' · ' + g.taskCount : '')));
       });
     }
     function drawFacets() {
@@ -2269,11 +2566,11 @@
         var parent = nodeById(pid);
         if (!parent || !isFinite(parent.x)) return;
         var list = byParent[pid];
+        var panelOpen = els.panel && !els.panel.hidden;
+        var dir = panelOpen ? -1 : 1;
         list.forEach(function (f, i) {
-          var spread = (i - (list.length - 1) / 2) * Math.min(0.7, 2.2 / list.length);
-          var a = Math.PI / 2 + spread;
-          f.x = parent.x + Math.cos(a) * ((parent.w || 180) * 0.55 + 36);
-          f.y = parent.y + (parent.h || 48) / 2 + 40 + Math.abs(spread) * 8;
+          f.x = parent.x + dir * ((parent.w || 180) / 2 + 86);
+          f.y = parent.y + (i - (list.length - 1) / 2) * 36;
           var link = s('line', {
             class: 'mm-facet-link',
             x1: parent.x.toFixed(1), y1: (parent.y + (parent.h || 40) / 2).toFixed(1),
@@ -2425,7 +2722,7 @@
         done = true;
         var v = input.value;
         if (input.parentNode) input.parentNode.removeChild(input);
-        if (save) renameManual(g.id, v);
+        if (save) renameGroup(g, v);
       }
       input.addEventListener('keydown', function (ev) {
         ev.stopPropagation();
@@ -2444,6 +2741,7 @@
       function use(id) {
         state.boardId = id ? String(id) : 'local';
         state.manual = loadManual();
+        state.groupEdits = loadEdits();
         applyLod(true);
       }
       if (!p || typeof p.then !== 'function') { use('local'); return; }
@@ -2514,7 +2812,7 @@
         svg.removeEventListener('pointercancel', up);
         if (moved || ev.button !== 0) return;
         if (edgeId && edgeById(edgeId)) onEdgeClick(edgeById(edgeId));
-        else if (state.selected || state.selectedEdge) select(null);
+        else if (state.selected || state.selectedEdge || state.selectedGroup) select(null);
       }
       svg.addEventListener('pointermove', move);
       svg.addEventListener('pointerup', up);
@@ -2604,7 +2902,17 @@
     });
     /* ── Right-click menu (align / distribute / reorganize, like Canva) ── */
     var menuEl = null;
+    var subEl = null;
+    function closeSub() {
+      if (menuEl) {
+        var open = menuEl.querySelector('.is-open');
+        if (open) open.classList.remove('is-open');
+      }
+      if (subEl && subEl.parentNode) subEl.parentNode.removeChild(subEl);
+      subEl = null;
+    }
     function closeMenu() {
+      closeSub();
       if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl);
       menuEl = null;
     }
@@ -2684,6 +2992,7 @@
         selectAll: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="9" y="9" width="6" height="6" rx="1"/>',
         layout: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
         group: '<circle cx="8" cy="12" r="3"/><circle cx="16" cy="8" r="3"/><circle cx="16" cy="16" r="3"/>',
+        chevron: '<path d="m9 6 6 6-6 6"/>',
       };
       function icon(name) {
         var s = h('span', { class: 'mm-menu-ico' });
@@ -2703,10 +3012,29 @@
         items.push(['Description…', '', function () { openFieldEditor(cardRec, 'desc', anchorEl); }, false, 'desc']);
         items.push([cardRec.blocked ? 'Bloqué…' : 'Bloquer…', '', function () { openFieldEditor(cardRec, 'blocked', anchorEl); }, false, 'ban']);
         items.push(['Contribue à… / Dépend de…', '', function () { startLink(n.id); }, false, 'link']);
-        (state.lists || []).forEach(function (l) {
-          var here = String(l.id) === String(cardRec.listId);
-          items.push(['Statut : ' + l.name, here ? '✓' : '', function () { runEdit(function () { return TTm.moveCard(t, cardRec.id, l.id, 'bottom'); }, statusEntry(cardRec, l.id)); }, here, 'status']);
-        });
+        var statusLists = state.lists || [];
+        if (statusLists.length) {
+          var currentList = null;
+          statusLists.forEach(function (l) {
+            if (String(l.id) === String(cardRec.listId)) currentList = l;
+          });
+          items.push({
+            label: 'Statut',
+            hint: currentList ? currentList.name : '',
+            icon: 'status',
+            children: statusLists.map(function (l) {
+              var here = String(l.id) === String(cardRec.listId);
+              return {
+                label: l.name,
+                checked: here,
+                action: function () {
+                  if (here) return;
+                  runEdit(function () { return TTm.moveCard(t, cardRec.id, l.id, 'bottom'); }, statusEntry(cardRec, l.id));
+                },
+              };
+            }),
+          });
+        }
         items.push(['Archiver la carte', '', function () { deleteSelection({ force: true, nodes: [n] }); }, false, 'archive']);
         items.push(null);
       }
@@ -2741,13 +3069,71 @@
       }
       items.push(['Tout sélectionner', 'Ctrl+A', selectAll, false, 'selectAll']);
       items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }, false, 'layout']);
-      var menu = h('div', { class: 'mm-menu', role: 'menu' }, items.map(function (it) {
+      function renderItem(it, inSub) {
         if (!it) return h('div', { class: 'mm-menu-sep' });
-        if (it.title) return h('div', { class: 'mm-menu-title', text: it.title });
-        var b = h('button', { class: 'mm-menu-item', type: 'button', role: 'menuitem', disabled: !!it[3] }, [icon(it[4]), h('span', { class: 'mm-menu-label', text: it[0] }), h('kbd', { text: it[1] })]);
-        b.addEventListener('click', function () { closeMenu(); it[2](); });
+        if (it.title && !it.children) return h('div', { class: 'mm-menu-title', text: it.title });
+        if (it.children) return renderSubmenu(it);
+        var tuple = Array.isArray(it);
+        var label = tuple ? it[0] : it.label;
+        var hint = tuple ? it[1] : (it.checked ? '✓' : (it.hint || ''));
+        var action = tuple ? it[2] : it.action;
+        var disabled = tuple ? !!it[3] : !!it.disabled;
+        var iconName = tuple ? it[4] : it.icon;
+        var parts = [];
+        if (iconName) parts.push(icon(iconName));
+        parts.push(h('span', { class: 'mm-menu-label', text: label }));
+        if (hint) parts.push(h('kbd', { text: hint }));
+        var b = h('button', {
+          class: 'mm-menu-item',
+          type: 'button',
+          role: 'menuitem',
+          disabled: disabled || null,
+        }, parts);
+        b.addEventListener('mouseenter', function () { if (!inSub) closeSub(); });
+        b.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          closeMenu();
+          if (typeof action === 'function') action();
+        });
         return b;
-      }));
+      }
+      function renderSubmenu(it) {
+        var parts = [icon(it.icon || 'status'), h('span', { class: 'mm-menu-label', text: it.label })];
+        if (it.hint) parts.push(h('kbd', { class: 'mm-menu-current', title: it.hint, text: it.hint }));
+        parts.push(icon('chevron'));
+        var b = h('button', { class: 'mm-menu-item', type: 'button', role: 'menuitem', 'aria-haspopup': 'menu' }, parts);
+        function show(ev) {
+          if (ev) ev.stopPropagation();
+          openSub(b, it.children);
+        }
+        b.addEventListener('mouseenter', show);
+        b.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (!subEl) show(ev);
+        });
+        return b;
+      }
+      function openSub(anchor, children) {
+        closeSub();
+        anchor.classList.add('is-open');
+        var fly = h('div', { class: 'mm-menu mm-submenu', role: 'menu' }, children.map(function (c) { return renderItem(c, true); }));
+        fly.style.visibility = 'hidden';
+        els.canvas.appendChild(fly);
+        var ar = anchor.getBoundingClientRect();
+        var cr = els.canvas.getBoundingClientRect();
+        var fw = fly.offsetWidth || 180;
+        var fh = fly.offsetHeight || 40;
+        var left = ar.right - cr.left + 4;
+        if (left + fw > cr.width - 4) left = Math.max(4, ar.left - cr.left - fw - 4);
+        var top = ar.top - cr.top - 4;
+        if (top + fh > cr.height - 4) top = Math.max(4, cr.height - fh - 4);
+        fly.style.left = left + 'px';
+        fly.style.top = Math.max(4, top) + 'px';
+        fly.style.visibility = '';
+        subEl = fly;
+      }
+      var menu = h('div', { class: 'mm-menu', role: 'menu' }, items.map(function (it) { return renderItem(it, false); }));
       var r = els.canvas.getBoundingClientRect();
       menu.style.left = Math.max(4, Math.min(ev.clientX - r.left, r.width - 250)) + 'px';
       menu.style.top = Math.max(4, Math.min(ev.clientY - r.top, r.height - items.length * 30)) + 'px';
@@ -2756,7 +3142,7 @@
     }
     svg.addEventListener('contextmenu', openMenu);
     document.addEventListener('pointerdown', function (ev) {
-      if (menuEl && !menuEl.contains(ev.target)) closeMenu();
+      if (menuEl && !menuEl.contains(ev.target) && !(subEl && subEl.contains(ev.target))) closeMenu();
       if (lensMenuEl && !lensMenuEl.contains(ev.target) && !(ev.target.closest && ev.target.closest('.mm-lens-btn'))) closeLensMenu();
     }, true);
     document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeMenu(); closeLensMenu(); } });

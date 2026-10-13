@@ -69,6 +69,24 @@
   function type(text) {
     document.execCommand('insertText', false, text);
   }
+  function selectInEditor(text) {
+    var walker = document.createTreeWalker(ed(), NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      var i = node.nodeValue.indexOf(text);
+      if (i < 0) continue;
+      ed().focus();
+      var r = document.createRange();
+      r.setStart(node, i);
+      r.setEnd(node, i + text.length);
+      var s = getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;
+    }
+    return false;
+  }
   function press(k, o) {
     var e = new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, o || {}));
     ed().dispatchEvent(e);
@@ -779,9 +797,71 @@
     assert(ed().classList.contains('is-empty'), 'placeholder for the body');
   });
 
+  test('selecting text creates a task on the board and links it', async function () {
+    caretAtEnd();
+    type('Appeler le client');
+    assert(selectInEditor('Appeler le client'), 'the typed sentence is selected');
+    var bar = await waitFor(function () { return $('.dc-selbar'); }, 'selection bar');
+    assert(/Créer une tâche/.test(bar.textContent), 'the bar offers to create a task');
+    var btn = bar.querySelector('.dc-selbar-btn');
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    var chip = null;
+    try {
+      chip = await waitFor(function () {
+        return ed().querySelector('.dc-mention--task[data-label="Appeler le client"]');
+      }, 'task chip', 5000);
+    } catch (err) {
+      var names = fake.cards.map(function (c) { return c.name + (c.closed ? ' (archivé)' : ''); }).join(' | ');
+      throw new Error(err.message + ' — toast: ' + (($('.dc-toast') && $('.dc-toast').textContent) || '') + ' — cartes: ' + names + ' — html: ' + ed().innerHTML.slice(-400));
+    }
+    var card = cardOf(chip.getAttribute('data-id'));
+    assert(card, 'the card was stored');
+    assert(!card.closed, 'a task stays on the board');
+    eq(card.name, 'Appeler le client');
+    eq(card.idList, 'l1');
+    assert(md().indexOf('(task:' + card.id + ')') >= 0, 'the document links the new task');
+  });
+
   test('document cards never show among the open cards of the board', async function () {
     var open = await fake.t.cards('id', 'name');
     assert(open.every(function (c) { return c.name.indexOf('📄') < 0; }), 'no document among open cards');
+  });
+
+  test('a line is a block: the left handle adds, transforms and drags, including a picture', async function () {
+    await freshDoc('Blocs', 'Un\n\nDeux\n\n![plage](https://example.com/a.png)');
+    var fig = ed().querySelector('figure.dc-image');
+    assert(fig, 'picture is a block');
+    eq(fig.getAttribute('data-src'), 'https://example.com/a.png');
+    eq(md().indexOf('![plage](https://example.com/a.png)') > 0, true, 'picture saved as its own line');
+    fig.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    var ui = await waitFor(function () { return document.querySelector('.dc-block-ui:not([hidden])'); }, 'handle');
+    ui.querySelector('.dc-block-grip').click();
+    var menu = await waitFor(function () { return document.querySelector('.dc-block-menu'); }, 'type menu');
+    assert(/Image/.test(menu.textContent) && /Titre 1/.test(menu.textContent), 'types include image and heading');
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    var p = ed().querySelector('p');
+    p.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    document.querySelector('.dc-block-add').click();
+    menu = await waitFor(function () { return document.querySelector('.dc-block-menu'); }, 'add menu');
+    var titre = Array.prototype.filter.call(menu.querySelectorAll('.dc-menu-item'), function (b) { return b.textContent === 'Titre 1'; })[0];
+    assert(titre, 'Titre 1 in the add menu');
+    titre.click();
+    await waitFor(function () { return ed().querySelector('h1'); }, 'new block became a heading');
+    var blocks = ed().querySelectorAll('p');
+    var first = blocks[0];
+    var second = blocks[1];
+    assert(first && second && /Un/.test(first.textContent) && /Deux/.test(second.textContent), 'two paragraphs before the drag');
+    first.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    var grip = document.querySelector('.dc-block-grip');
+    var dt = new DataTransfer();
+    grip.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    var rect = second.getBoundingClientRect();
+    second.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientY: rect.bottom - 1, dataTransfer: dt }));
+    second.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, clientY: rect.bottom - 1, dataTransfer: dt }));
+    grip.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+    await sleep(30);
+    assert(md().indexOf('Deux') < md().indexOf('Un'), 'dragged the first line below the second: ' + md());
   });
 
   /* ── without a Trello token ─────────────────────────────────────── */

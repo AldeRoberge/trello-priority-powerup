@@ -218,16 +218,17 @@
     return (a.pos || 0) - (b.pos || 0);
   }
 
-  /** Day a task is planned on: its start date, else its due date, else ''. */
+  /** Day a task is planned on. A vague horizon stays off the calendar. */
   function plannedDay(row) {
+    if (row && row.dueVague) return '';
     return row.start || row.due || '';
   }
 
-  /** Open work that is not in triage and has no planned day yet, best first. */
+  /** Open work that is not in triage, not a vague horizon, and has no planned day yet, best first. */
   function unplanned(rows) {
     return (rows || [])
       .filter(function (r) {
-        return isOpen(r) && r.statutKey !== 'triage' && !plannedDay(r);
+        return isOpen(r) && r.statutKey !== 'triage' && !r.dueVague && !plannedDay(r);
       })
       .sort(byPriority);
   }
@@ -270,6 +271,149 @@
         return isOpen(r) && r.statutKey !== 'triage' && d && d < from;
       })
       .sort(byPriority);
+  }
+
+  var SCALES = [
+    { id: 'day', label: 'Jour' },
+    { id: 'week', label: 'Semaine' },
+    { id: 'month', label: 'Mois' },
+    { id: 'year', label: 'Ann\u00e9e' },
+    { id: 'years', label: 'Ann\u00e9es' },
+    { id: 'vague', label: 'Vague' },
+  ];
+
+  function mondayOf(iso) {
+    var d = parseIso(iso);
+    if (!d) return iso;
+    var day = d.getDay();
+    return addDays(iso, day === 0 ? -6 : 1 - day);
+  }
+
+  /** Columns for one orchestrator zoom. Vague tasks stay off every calendar scale. */
+  function horizonPlan(rows, from, scale, capacity, vagueOpts) {
+    capacity = capacity > 0 ? capacity : DEFAULT_CAPACITY;
+    var buckets = scale === 'vague' ? vagueBuckets(vagueOpts) : calendarBuckets(from, scale);
+    buckets.forEach(function (b) {
+      b.tasks = [];
+      b.capacity = b.workdays ? capacity * b.workdays : 0;
+    });
+    (rows || []).forEach(function (r) {
+      if (!isOpen(r) || r.statutKey === 'triage') return;
+      var b = scale === 'vague' ? vagueBucketFor(r, buckets, from) : calendarBucketFor(r, buckets, from);
+      if (b) b.tasks.push(r);
+    });
+    buckets.forEach(function (b) {
+      b.tasks.sort(byPriority);
+      b.used = minutesOf(b.tasks);
+      b.over = b.capacity > 0 && b.used > b.capacity;
+    });
+    return buckets;
+  }
+
+  function calendarBuckets(from, scale) {
+    var out = [];
+    if (scale === 'week') {
+      var start = mondayOf(from);
+      for (var w = 0; w < 8; w++) {
+        var s = addDays(start, w * 7);
+        out.push({ key: s, date: s, end: addDays(s, 7), workdays: 5 });
+      }
+      return out;
+    }
+    if (scale === 'month') {
+      var base = parseIso(from);
+      for (var m = 0; m < 12; m++) {
+        var startD = new Date(base.getFullYear(), base.getMonth() + m, 1);
+        var endD = new Date(base.getFullYear(), base.getMonth() + m + 1, 1);
+        out.push({ key: isoOf(startD).slice(0, 7), date: isoOf(startD), end: isoOf(endD), workdays: 20 });
+      }
+      return out;
+    }
+    if (scale === 'year' || scale === 'years') {
+      var y0 = parseIso(from).getFullYear();
+      var n = scale === 'years' ? 12 : 5;
+      for (var y = 0; y < n; y++) {
+        out.push({
+          key: String(y0 + y),
+          date: y === 0 ? from : (y0 + y) + '-01-01',
+          end: (y0 + y + 1) + '-01-01',
+          workdays: 240,
+        });
+      }
+      return out;
+    }
+    nextDays(from, 7).forEach(function (iso) {
+      out.push({ key: iso, date: iso, end: addDays(iso, 1), workdays: 1 });
+    });
+    return out;
+  }
+
+  function calendarBucketFor(row, buckets, from) {
+    var day = plannedDay(row);
+    if (!day || !buckets.length) return null;
+    if (day < from) return buckets[0];
+    for (var i = 0; i < buckets.length; i++) {
+      if (day >= buckets[i].date && day < buckets[i].end) return buckets[i];
+    }
+    return null;
+  }
+
+  function vagueBuckets(opts) {
+    return (opts || []).map(function (o, i) {
+      return {
+        key: o.id,
+        vague: o.id,
+        label: o.label || o.id,
+        days: o.days,
+        fromDays: i === 0 ? 0 : opts[i - 1].days,
+        toDays: o.days,
+        date: '',
+        end: '',
+        workdays: 0,
+      };
+    });
+  }
+
+  function daysBetween(from, iso) {
+    var a = parseIso(from);
+    var b = parseIso(iso);
+    if (!a || !b) return 0;
+    return Math.round((b - a) / 86400000);
+  }
+
+  function vagueBucketFor(row, buckets, from) {
+    if (!buckets.length) return null;
+    if (row.dueVague) {
+      for (var i = 0; i < buckets.length; i++) if (buckets[i].key === row.dueVague) return buckets[i];
+    }
+    var day = row.start || row.due || '';
+    if (!day) return null;
+    var dist = daysBetween(from, day);
+    if (dist < 0) return buckets[0];
+    for (var j = 0; j < buckets.length; j++) if (dist <= buckets[j].toDays) return buckets[j];
+    return buckets[buckets.length - 1];
+  }
+
+  /**
+   * Auto-plan onto a coarser calendar (week, month, year). Vague stays a manual choice.
+   * Returns [{ id, date }]. The date is the bucket start, or today when that start is past.
+   */
+  function placeAuto(rows, from, scale, capacity, vagueOpts) {
+    if (!scale || scale === 'day' || scale === 'vague') return [];
+    var plan = horizonPlan(rows, from, scale, capacity, vagueOpts);
+    var used = plan.map(function (b) { return b.used; });
+    var out = [];
+    unplanned(rows).forEach(function (r) {
+      var minutes = estimateOf(r);
+      for (var i = 0; i < plan.length; i++) {
+        if (used[i] + minutes <= plan[i].capacity || used[i] === 0) {
+          used[i] += minutes;
+          out.push({ id: r.id, date: plan[i].date < from ? from : plan[i].date });
+          return;
+        }
+      }
+    });
+    return out;
   }
 
   /**
@@ -347,6 +491,23 @@
     return h + ' h' + (m ? ' ' + ('0' + m).slice(-2) : '');
   }
 
+  /**
+   * Title typed in an orchestrator column.
+   * A trailing date in the title (via `parse`) wins over the column.
+   * Otherwise the task takes the column day, or its vague horizon.
+   * Returns { name, date, vague } or null when there is nothing to create.
+   */
+  function taskDraft(typed, columnDate, parse, vague) {
+    var raw = String(typed || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return null;
+    var q = typeof parse === 'function' ? parse(raw) : null;
+    var name = q && q.name != null ? String(q.name).replace(/\s+/g, ' ').trim() : raw;
+    if (!name) name = raw;
+    if (!name) return null;
+    if (q && q.dueDate) return { name: name, date: q.dueDate, vague: '' };
+    return { name: name, date: columnDate || '', vague: vague || '' };
+  }
+
   /** Sidebar badge counts. */
   function counts(rows, today) {
     return {
@@ -381,12 +542,16 @@
     minutesOf: minutesOf,
     weekPlan: weekPlan,
     autoPlan: autoPlan,
+    SCALES: SCALES,
+    horizonPlan: horizonPlan,
+    placeAuto: placeAuto,
     todayList: todayList,
     nextAction: nextAction,
     suggestions: suggestions,
     timeline: timeline,
     hhmm: hhmm,
     formatMinutes: formatMinutes,
+    taskDraft: taskDraft,
     counts: counts,
   };
 })(typeof window !== 'undefined' ? window : this);

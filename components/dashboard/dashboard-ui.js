@@ -1,11 +1,13 @@
 /*
- * Role: UI of the Dashboard view, a Linear-style workspace in four steps:
+ * Role: UI of the Dashboard view, a Linear-style workspace:
  *   Ingest        type tasks (one per line) → cards land in the triage list; optional "Demander à l'IA"
- *   Triage        inbox, one card at a time: define priority / estimate / date, then accept, backlog or cancel
- *   Orchestrateur plan the week: one row of days, backlog column aligned with them, drag onto a day or "Planifier auto"
- *   Aujourd'hui   focus list + hour-by-hour timeline of the day
- * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel (pure).
- * Keys: 1-4 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
+ *   Triage        what the item is, then priority / estimate / date: accept, backlog, reference, waiting, someday, cancel
+ *   Orchestrateur plan across Jour, Semaine, Mois, Année, Années, then Vague. Each column creates a task in place.
+ *   Aujourd'hui   focus list + hour-by-hour timeline of the day. The next action is the first open checklist item.
+ *   Revue         flags: triage, missing next step, waiting, work in progress, project outcome
+ * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel + WorkOS (pure).
+ * Keys: 1-5 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
+ * Right-click a card: triage exits, day, fields, open, move, archive (same menu in every section).
  * Icons: Tabler webfont.
  */
 (function (global) {
@@ -14,12 +16,14 @@
   var DM = function () { return global.DashboardModel; };
   var DT = function () { return global.DashboardTrello; };
   var TM = function () { return global.TableModel; };
+  var WO = function () { return global.WorkOS; };
 
   var SECTIONS = [
     { key: 'ingest', label: 'Capture', icon: 'inbox', hint: '1' },
     { key: 'triage', label: 'Triage', icon: 'circle-arrow-down', hint: '2' },
     { key: 'orchestrator', label: 'Orchestrateur', icon: 'calendar-event', hint: '3' },
     { key: 'today', label: 'Aujourd’hui', icon: 'sun', hint: '4' },
+    { key: 'review', label: 'Revue', icon: 'list-check', hint: '5' },
   ];
   var URGENCIES = [
     ['aucun', 'Aucune'],
@@ -83,13 +87,143 @@
     return d === 0 || d === 6;
   }
 
+  /**
+   * Right-click entries for one card. Actions are attached by the page (`perform`);
+   * this only decides labels, icons and submenus so the same menu can be tested.
+   * ctx: { today, lists, waitingNames, canCreate, vagues: [{ id, label }] }
+   */
+  function menuEntries(row, ctx) {
+    ctx = ctx || {};
+    row = row || {};
+    var today = ctx.today || '';
+    var triage = row.statutKey === 'triage';
+    var done = !!row.dueDone || row.statutKey === 'completed';
+    var canceled = row.statutKey === 'canceled';
+    var open = !done && !canceled;
+    var items = [];
+
+    if (triage) {
+      items.push({ id: 'accept', label: 'Accepter', icon: 'check', group: 'Trier', hint: 'A' });
+      items.push({ id: 'backlog', label: 'Backlog', icon: 'circle-dashed', group: 'Trier', hint: 'B' });
+    }
+    if (open) {
+      items.push({ id: 'reference', label: 'Référence', icon: 'bookmark', group: 'Trier' });
+      var names = ctx.waitingNames || [];
+      var waitKids = names.map(function (n) {
+        return { id: 'wait:' + n, label: n, icon: 'user', checked: row.waiting === n };
+      });
+      if (triage) waitKids.push({ id: 'wait:', label: names.length ? 'Autre…' : 'Choisir…', icon: 'pencil' });
+      if (waitKids.length) items.push({ id: 'waiting', label: 'En attente', icon: 'hourglass', group: 'Trier', children: waitKids });
+      items.push({ id: 'someday', label: 'Un jour', icon: 'calendar-off', group: 'Trier' });
+    }
+    if (triage) items.push({ id: 'cancel', label: 'Annuler', icon: 'circle-x', group: 'Trier', hint: 'X', danger: true });
+    if (open && !triage) items.push({ id: 'complete', label: 'Terminer', icon: 'circle-check', group: 'Trier' });
+    if (done) items.push({ id: 'reopen', label: 'Rouvrir', icon: 'rotate', group: 'Trier' });
+
+    var days = [];
+    if (today && DM()) {
+      for (var n = 0; n <= 7; n++) {
+        var iso = DM().addDays(today, n);
+        days.push({
+          id: 'plan:' + iso,
+          label: dayLabel(iso, today),
+          icon: dayIconName(iso, today),
+          checked: row.due === iso && !row.dueVague,
+        });
+      }
+    }
+    if (row.due && !row.dueVague && !days.some(function (d) { return d.checked; })) {
+      days.unshift({ id: 'plan:' + row.due, label: dayLabel(row.due, today), icon: 'calendar-event', checked: true });
+    }
+    (ctx.vagues || []).forEach(function (v) {
+      days.push({ id: 'vague:' + v.id, label: v.label, icon: 'calendar-time', checked: row.dueVague === v.id });
+    });
+    if (row.due || row.dueVague) days.push({ id: 'plan:', label: 'Effacer la date', icon: 'calendar-off', danger: true });
+    if (days.length) items.push({ id: 'due', label: 'Jour prévu', icon: 'calendar-event', group: 'Échéance', children: days });
+
+    items.push({ id: 'priority', label: 'Priorité…', icon: 'flag', group: 'Modifier' });
+    items.push({
+      id: 'urgency',
+      label: 'Urgence',
+      icon: 'flame',
+      group: 'Modifier',
+      children: URGENCIES.map(function (u) {
+        return { id: 'urg:' + u[0], label: u[1], icon: 'flame', checked: row.urgency === u[1] || row.urgency === u[0] };
+      }),
+    });
+    items.push({
+      id: 'estimate',
+      label: 'Estimation',
+      icon: 'clock',
+      group: 'Modifier',
+      children: QUICK_ESTIMATES.map(function (m) {
+        return {
+          id: 'est:' + m,
+          label: m && DM() ? DM().formatMinutes(m) : 'Non estimée',
+          icon: m ? 'clock' : 'clock-off',
+          checked: (row.estimate || 0) === m,
+        };
+      }),
+    });
+    items.push({ id: 'progress', label: 'Progrès…', icon: 'chart-donut', group: 'Modifier' });
+    items.push({ id: 'desc', label: 'Description…', icon: 'align-left', group: 'Modifier' });
+    items.push({
+      id: 'blocked',
+      label: row.blocked ? 'Débloquer' : 'Bloquer',
+      icon: row.blocked ? 'player-play' : 'player-pause',
+      group: 'Modifier',
+    });
+
+    items.push({ id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', group: 'Ouvrir' });
+    items.push({ id: 'open-document', label: 'Document', icon: 'file-text', group: 'Ouvrir' });
+    items.push({ id: 'open-trello', label: 'Ouvrir dans Trello', icon: 'brand-trello', group: 'Ouvrir', disabled: !row.link });
+    items.push({ id: 'copy-link', label: 'Copier le lien', icon: 'link', group: 'Ouvrir', disabled: !row.link });
+
+    var lists = ctx.lists || [];
+    if (lists.length) {
+      items.push({
+        id: 'move',
+        label: 'Déplacer vers',
+        icon: 'arrow-right',
+        group: 'Statut',
+        children: lists.map(function (l) {
+          return { id: 'list:' + l.id, label: l.name, icon: l.icon || 'circle', checked: l.id === row.listId };
+        }),
+      });
+    }
+
+    items.push({ id: 'new-card', label: 'Nouvelle carte', icon: 'plus', group: 'Créer', hint: 'C', disabled: ctx.canCreate === false });
+    items.push({ id: 'archive', label: 'Archiver', icon: 'archive', group: 'Suppression', danger: true });
+    return items;
+  }
+
+  /** Right-click on empty dashboard space (no card under the pointer). */
+  function pageEntries(ctx) {
+    ctx = ctx || {};
+    var items = [{ id: 'new-card', label: 'Nouvelle carte', icon: 'plus', group: 'Créer', hint: 'C', disabled: ctx.canCreate === false }];
+    (ctx.sections || SECTIONS).forEach(function (s) {
+      items.push({
+        id: 'go:' + s.key,
+        label: s.label,
+        icon: s.icon,
+        group: 'Aller à',
+        hint: s.hint,
+        checked: s.key === ctx.section,
+      });
+    });
+    items.push({ id: 'reload', label: 'Recharger', icon: 'refresh', group: 'Affichage' });
+    return items;
+  }
+
   function mount(root, t) {
     var state = {
       section: 'ingest',
       lists: [],
       rows: [],
+      projects: [],
       selected: null, // triage selection (card id)
       capacity: DT().getCapacity(),
+      scale: DT().getScale ? DT().getScale() : 'day',
       busy: false,
       status: '',
       statusKind: '',
@@ -97,6 +231,8 @@
       files: {}, // pending attachments of the capture editor: id → { file, thumb }
       authOk: true,
       landed: false, // first load decides the landing section once
+      composer: null, // orchestrator column open for a new task ('pool', 'cal:ISO', 'vague:id')
+      composerText: '',
     };
     var statusTimer = null;
     var reloadTimer = null;
@@ -197,9 +333,10 @@
     /* ── Sidebar ───────────────────────────────────────────────────── */
     function renderSide() {
       var c = DM().counts(state.rows, today);
+      var rev = WO() ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] }) : { flags: [] };
       els.side.textContent = '';
       SECTIONS.forEach(function (s) {
-        var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : 0;
+        var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : s.key === 'review' ? rev.flags.length : 0;
         els.side.appendChild(h('button', {
           class: 'db-nav' + (state.section === s.key ? ' is-on' : ''),
           type: 'button',
@@ -362,10 +499,282 @@
     }
 
     function openCard(row) {
-      if (row.link && global.window && typeof t.showCard === 'function') {
-        var id = row.link.split('/c/')[1];
-        t.showCard(id ? id.split('/')[0] : row.id).catch(function () {});
+      if (!row) return;
+      var id = row.id;
+      if (row.link) {
+        var part = String(row.link).split('/c/')[1];
+        if (part) id = part.split('/')[0];
       }
+      if (t && typeof t.showCard === 'function') {
+        t.showCard(id).catch(function () {
+          if (row.link) global.open(row.link, '_blank', 'noopener');
+        });
+        return;
+      }
+      if (row.link) global.open(row.link, '_blank', 'noopener');
+    }
+
+    var people = [];
+
+    function namesForWaiting() {
+      var seen = {};
+      var out = [];
+      function add(n) {
+        n = String(n || '').replace(/\s+/g, ' ').trim();
+        var key = n.toLowerCase();
+        if (!n || seen[key]) return;
+        seen[key] = true;
+        out.push(n);
+      }
+      people.forEach(add);
+      state.rows.forEach(function (r) { add(r.waiting); });
+      return out;
+    }
+
+    function menuCtx() {
+      return {
+        today: today,
+        lists: state.lists,
+        waitingNames: namesForWaiting(),
+        canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard),
+        vagues: vagueOptions().map(function (v) { return { id: v.id, label: VAGUE_SHORT[v.id] || v.label }; }),
+      };
+    }
+
+    function typedField(label) {
+      var el = els.main.querySelector('[aria-label="' + label + '"]');
+      return el ? String(el.value || '').replace(/\s+/g, ' ').trim() : '';
+    }
+
+    function advanceSelection(row) {
+      if (!row || state.selected !== row.id) return;
+      var q = DM().triageQueue(state.rows);
+      var i = -1;
+      for (var n = 0; n < q.length; n++) if (q[n].id === row.id) i = n;
+      var nxt = i >= 0 ? (q[i + 1] || q[i - 1]) : null;
+      state.selected = nxt && nxt.id !== row.id ? nxt.id : null;
+    }
+
+    function applyList(row, list) {
+      if (!list) return;
+      row.listId = list.id;
+      row.statut = list.name;
+      row.statutKey = list.category;
+    }
+
+    function exitMove(row, cats, label, withStep) {
+      var list = DT().listFor(state.lists, cats);
+      if (!list) return setStatus('Aucune liste « ' + label + ' » : définissez les Statuts du tableau.', 'error');
+      var step = withStep && state.selected === row.id ? typedField('Prochaine action') : '';
+      advanceSelection(row);
+      applyList(row, list);
+      var job = step && DT().saveNextStep ? DT().saveNextStep(t, row.id, step) : Promise.resolve();
+      write(Promise.resolve(job).then(function () { return DT().moveToCategory(t, row, state.lists, cats); }));
+      setStatus('« ' + row.name + ' » → ' + list.name, 'ok');
+      render();
+    }
+
+    function exitCancel(row) {
+      advanceSelection(row);
+      state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
+      write(DT().cancel(t, row, state.lists));
+      setStatus('« ' + row.name + ' » annulée', 'ok');
+      render();
+    }
+
+    function exitReference(row) {
+      advanceSelection(row);
+      state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
+      write(DT().fileReference(t, row).then(function () { return DT().cancel(t, row, state.lists); }));
+      setStatus('« ' + row.name + ' » dans Références', 'ok');
+      render();
+    }
+
+    function exitWait(row, name) {
+      var list = DT().listFor(state.lists, ['backlog', 'unstarted']);
+      if (!list) return setStatus('Aucune liste « Backlog » : définissez les Statuts du tableau.', 'error');
+      advanceSelection(row);
+      row.waiting = name;
+      applyList(row, list);
+      write(DT().setWaiting(t, row, state.lists, name));
+      setStatus('En attente de ' + name, 'ok');
+      render();
+    }
+
+    function exitSomeday(row) {
+      var list = DT().listFor(state.lists, ['backlog', 'unstarted']);
+      if (!list) return setStatus('Aucune liste « Backlog » : définissez les Statuts du tableau.', 'error');
+      advanceSelection(row);
+      row.dueVague = 'eventuellement';
+      row.due = '';
+      row.start = '';
+      row.dueMode = 'vague';
+      applyList(row, list);
+      write(DT().setSomeday(t, row, state.lists));
+      setStatus('Un jour', 'ok');
+      render();
+    }
+
+    function exitComplete(row, done) {
+      row.dueDone = !!done;
+      write(DT().complete(t, row, state.lists, !!done));
+      setStatus(done ? '« ' + row.name + ' » terminée' : '« ' + row.name + ' » rouverte', 'ok');
+      render();
+    }
+
+    function exitArchive(row) {
+      advanceSelection(row);
+      state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
+      write(global.TableTrello.archiveCard(t, row.id));
+      setStatus('« ' + row.name + ' » archivée', 'ok');
+      render();
+    }
+
+    function exitBlocked(row) {
+      var on = !row.blocked;
+      row.blocked = on;
+      var job = global.GanttTrello && global.GanttTrello.setCardBlocked
+        ? global.GanttTrello.setCardBlocked(t, row.id, on)
+        : Promise.resolve();
+      write(Promise.resolve(job).then(function (res) {
+        if (res && res.ok === false) throw new Error(res.reason || 'Échec du blocage');
+      }));
+      setStatus(on ? 'Carte bloquée' : 'Carte débloquée', 'ok');
+      render();
+    }
+
+    function openEditor(row, kind, anchor) {
+      if (!global.CardFields || !anchor) return;
+      var extra = {};
+      if (kind === 'desc' && global.TableTrello && global.TableTrello.saveDesc) {
+        extra.value = row.desc || '';
+        extra.save = function (text) {
+          var prev = row.desc;
+          row.desc = text;
+          return global.TableTrello.saveDesc(t, row, text).then(function (full) {
+            row.fullDesc = full;
+          }, function (err) { row.desc = prev; throw err; });
+        };
+      }
+      global.CardFields.open(kind, Object.assign({
+        t: t,
+        cardId: row.id,
+        cardName: row.name,
+        anchor: anchor,
+        onSaved: function () { setStatus('Enregistré', 'ok', 2500); },
+        onError: function (m) { setStatus(m, 'error'); },
+        onClose: function (changed) { if (changed) reload({ quiet: true }); },
+      }, extra));
+    }
+
+    function copyLink(url) {
+      var clip = global.navigator && global.navigator.clipboard;
+      if (!url || !clip || typeof clip.writeText !== 'function') return;
+      clip.writeText(url).then(function () { setStatus('Lien copié', 'ok'); }, function () {});
+    }
+
+    function focusWho(row) {
+      state.selected = row.id;
+      state.section = 'triage';
+      render();
+      setTimeout(function () {
+        var input = els.main.querySelector('[aria-label="En attente de"]');
+        if (input) input.focus();
+      }, 0);
+    }
+
+    function createCard() {
+      var target = DT().listFor(state.lists, ['triage']);
+      if (!target || !global.NewCard) return;
+      global.NewCard.open({
+        t: t,
+        lists: state.lists,
+        listId: target.id,
+        onError: fail,
+        onCreated: function (c) {
+          setStatus('Carte créée dans « ' + c.list.name + ' »', 'ok');
+          reload({ quiet: true });
+          setTimeout(function () { reload({ quiet: true }); }, 1200);
+        },
+      });
+    }
+
+    function perform(row, id, anchor) {
+      if (id === 'accept') return exitMove(row, ['unstarted', 'backlog'], 'À faire', true);
+      if (id === 'backlog') return exitMove(row, ['backlog', 'unstarted'], 'Backlog', true);
+      if (id === 'cancel') return exitCancel(row);
+      if (id === 'reference') return exitReference(row);
+      if (id === 'someday') return exitSomeday(row);
+      if (id === 'complete') return exitComplete(row, true);
+      if (id === 'reopen') return exitComplete(row, false);
+      if (id === 'archive') return exitArchive(row);
+      if (id === 'blocked') return exitBlocked(row);
+      if (id === 'priority' || id === 'progress' || id === 'desc') return openEditor(row, id, anchor);
+      if (id === 'open-card') return openCard(row);
+      if (id === 'open-document') {
+        if (global.ViewTabs && typeof global.ViewTabs.openSubject === 'function') global.ViewTabs.openSubject('task', row.id);
+        return;
+      }
+      if (id === 'open-trello') {
+        if (row && row.link) global.open(row.link, '_blank', 'noopener');
+        return;
+      }
+      if (id === 'copy-link') return copyLink(row && row.link);
+      if (id === 'new-card') return createCard();
+      if (id === 'reload') return reload();
+      if (id.indexOf('go:') === 0) return go(id.slice(3));
+      if (id === 'waiting-go' || id === 'wait:') {
+        var typed = id === 'waiting-go' ? typedField('En attente de') : '';
+        if (!typed) {
+          var input = els.main.querySelector('[aria-label="En attente de"]');
+          if (input && row && state.section === 'triage' && state.selected === row.id) { input.focus(); return; }
+          if (row) focusWho(row);
+          return;
+        }
+        return exitWait(row, typed);
+      }
+      if (id.indexOf('wait:') === 0) return exitWait(row, id.slice(5));
+      if (id.indexOf('plan:') === 0) return plan(row, id.slice(5));
+      if (id.indexOf('vague:') === 0) return plan(row, '', id.slice(6));
+      if (id.indexOf('urg:') === 0) {
+        var uid = id.slice(4);
+        var lab = uid;
+        URGENCIES.forEach(function (u) { if (u[0] === uid) lab = u[1]; });
+        row.urgency = lab;
+        write(DT().savePriority(t, row.id, { empressement: uid }));
+        setStatus('Urgence modifiée', 'ok');
+        render();
+        return;
+      }
+      if (id.indexOf('est:') === 0) return setEstimate(row, Number(id.slice(4)) || 0);
+      if (id.indexOf('list:') === 0) {
+        var lid = id.slice(5);
+        var list = state.lists.filter(function (l) { return l.id === lid; })[0];
+        if (!list || list.id === row.listId) return;
+        if (row.statutKey === 'triage') advanceSelection(row);
+        applyList(row, list);
+        write(global.TableTrello.moveCard(t, row.id, list.id, 'bottom'));
+        setStatus('« ' + row.name + ' » → ' + list.name, 'ok');
+        render();
+      }
+    }
+
+    function withActions(row, entries, anchor) {
+      return (entries || []).map(function (it) {
+        var item = {
+          id: it.id,
+          label: it.label,
+          icon: it.icon,
+          group: it.group,
+          hint: it.hint,
+          checked: !!it.checked,
+          disabled: !!it.disabled,
+          danger: !!it.danger,
+        };
+        if (it.children) item.children = withActions(row, it.children, anchor);
+        else item.action = function () { perform(row, it.id, anchor); };
+        return item;
+      });
     }
 
     /* ── 1. Ingest (rich capture) ──────────────────────────────────── */
@@ -586,7 +995,7 @@
         ]),
         recent.length ? h('div', { class: 'db-section-title', text: 'Derniers ajouts' }) : null,
         recent.length ? h('div', { class: 'db-list' }, recent.map(function (r) {
-          return h('div', { class: 'db-row', onclick: function () { state.selected = r.id; go('triage'); } }, [statusIcon(r), h('span', { class: 'db-row-name', text: r.name })]);
+          return h('div', { class: 'db-row', 'data-card': r.id, onclick: function () { state.selected = r.id; go('triage'); } }, [statusIcon(r), h('span', { class: 'db-row-name', text: r.name })]);
         })) : null,
       ]));
       setTimeout(function () { ed.focus(); }, 0);
@@ -614,7 +1023,7 @@
       var sel = q.filter(function (r) { return r.id === state.selected; })[0] || q[0];
       state.selected = sel.id;
       var list = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) {
-        return h('div', { class: 'db-row' + (r.id === sel.id ? ' is-sel' : ''), 'data-id': r.id, onclick: function () { state.selected = r.id; render(); } }, [
+        return h('div', { class: 'db-row' + (r.id === sel.id ? ' is-sel' : ''), 'data-id': r.id, 'data-card': r.id, onclick: function () { state.selected = r.id; render(); } }, [
           statusIcon(r), h('span', { class: 'db-row-name', text: r.name }), prioBadge(r),
         ]);
       }));
@@ -625,25 +1034,20 @@
     }
 
     function triageDetail(row, q) {
-      function nextAfter() {
-        var i = q.indexOf(row);
-        var n = q[i + 1] || q[i - 1];
-        state.selected = n ? n.id : null;
-      }
-      function leave(fn, msg) {
-        nextAfter();
-        fn();
-        setStatus(msg, 'ok');
-        render();
-      }
-      function accept(cats, label) {
-        var l = DT().listFor(state.lists, cats);
-        if (!l) return setStatus('Aucune liste « ' + label + ' » : définissez les Statuts du tableau.', 'error');
-        leave(function () {
-          row.listId = l.id; row.statut = l.name; row.statutKey = l.category;
-          write(DT().moveToCategory(t, row, state.lists, cats));
-        }, '« ' + row.name + ' » → ' + l.name);
-      }
+      var nextStep = h('input', {
+        class: 'db-input',
+        type: 'text',
+        placeholder: 'Prochaine action',
+        'aria-label': 'Prochaine action',
+        onkeydown: function (e) { e.stopPropagation(); },
+      });
+      var who = h('input', {
+        class: 'db-input',
+        type: 'text',
+        placeholder: 'Qui ?',
+        'aria-label': 'En attente de',
+        onkeydown: function (e) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
+      });
       var impact = h('input', { type: 'range', min: '0', max: '10', step: '1', value: String(row.impact == null ? 5 : row.impact), 'aria-label': 'Impact' });
       var impactVal = h('span', { class: 'db-muted', text: impact.value });
       impact.addEventListener('input', function () { impactVal.textContent = impact.value; });
@@ -673,7 +1077,7 @@
           renderSide();
         },
       });
-      return h('div', { class: 'db-detail' }, [
+      return h('div', { class: 'db-detail', 'data-card': row.id }, [
         h('div', { class: 'db-detail-head' }, [
           statusIcon(row),
           h('input', {
@@ -695,15 +1099,16 @@
         field('Urgence', urgency),
         field('Estimation', est),
         field('Jour prévu', date),
+        h('div', { class: 'db-actions db-actions--exits' }, [nextStep, who]),
         h('div', { class: 'db-actions db-actions--detail' }, [
-          h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () { accept(['unstarted', 'backlog'], 'À faire'); } }, [icon('check'), document.createTextNode('Accepter'), h('kbd', { text: 'A' })]),
-          h('button', { class: 'db-btn', type: 'button', onclick: function () { accept(['backlog', 'unstarted'], 'Backlog'); } }, [icon('circle-dashed'), document.createTextNode('Backlog'), h('kbd', { text: 'B' })]),
-          h('button', { class: 'db-btn db-btn--danger', type: 'button', onclick: function () {
-            leave(function () {
-              state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
-              write(DT().cancel(t, row, state.lists));
-            }, '« ' + row.name + ' » annulée');
-          } }, [icon('circle-x'), document.createTextNode('Annuler'), h('kbd', { text: 'X' })]),
+          h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () { perform(row, 'accept'); } }, [icon('check'), document.createTextNode('Accepter'), h('kbd', { text: 'A' })]),
+          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'backlog'); } }, [icon('circle-dashed'), document.createTextNode('Backlog'), h('kbd', { text: 'B' })]),
+          h('button', { class: 'db-btn db-btn--danger', type: 'button', onclick: function () { perform(row, 'cancel'); } }, [icon('circle-x'), document.createTextNode('Annuler'), h('kbd', { text: 'X' })]),
+        ]),
+        h('div', { class: 'db-actions db-actions--exits' }, [
+          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'reference'); } }, [icon('file-text'), document.createTextNode('Référence')]),
+          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'waiting-go'); } }, [icon('hourglass'), document.createTextNode('En attente')]),
+          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'someday'); } }, [icon('calendar-off'), document.createTextNode('Un jour')]),
         ]),
       ]);
     }
@@ -712,18 +1117,93 @@
       return h('label', { class: 'db-field' }, [h('span', { class: 'db-field-l', text: label }), control]);
     }
 
-    /* ── 3. Orchestrator ───────────────────────────────────────────── */
-    function plan(row, iso) {
-      row.start = iso; row.due = iso;
-      write(DT().planDay(t, row.id, iso));
+    /** List a task created in the orchestrator lands in, so it shows on the board (not in triage). */
+    function workList() {
+      var lists = state.lists || [];
+      var list = DT().listFor(lists, ['unstarted', 'backlog']);
+      if (list) return list;
+      for (var i = 0; i < lists.length; i++) {
+        var c = lists[i].category;
+        if (c !== 'triage' && c !== 'completed' && c !== 'canceled') return lists[i];
+      }
+      return null;
+    }
+
+    function createHere(draft) {
+      var list = workList();
+      var TT = global.TableTrello;
+      if (!list || !TT || typeof TT.createRow !== 'function') {
+        setStatus('Aucune liste « À faire » pour créer la tâche.', 'error');
+        return;
+      }
+      var day = draft.date || '';
+      var vague = draft.vague || '';
+      var row = {
+        id: 'new-' + Date.now(),
+        listId: list.id,
+        pos: Date.now(),
+        name: draft.name,
+        statut: list.name,
+        statutKey: list.category || 'unstarted',
+        start: vague ? '' : day,
+        due: vague ? '' : day,
+        dueVague: vague,
+        dueMode: vague ? 'vague' : (day ? 'precise' : ''),
+        estimate: 0,
+        priority: null,
+        items: [],
+        dueDone: false,
+        blocked: false,
+        desc: '',
+        fullDesc: '',
+      };
+      state.rows.push(row);
       render();
+      var born = els.main.querySelector('.db-task[data-id="' + row.id + '"]');
+      if (born && born.scrollIntoView) born.scrollIntoView({ block: 'nearest' });
+      var job = TT.createRow(t, draft.name, list.id).then(function (res) {
+        var id = res && res.cardId;
+        if (!id) throw new Error('no-card');
+        row.id = id;
+        if (!day && !vague) return res;
+        return DT().planAt ? DT().planAt(t, id, day, vague) : DT().planDay(t, id, day);
+      });
+      write(job, '« ' + draft.name + ' » créée');
+    }
+
+    /* ── 3. Orchestrator ───────────────────────────────────────────── */
+    function plan(row, iso, vague) {
+      row.dueVague = vague || '';
+      row.dueMode = vague ? 'vague' : (iso ? 'precise' : '');
+      row.start = vague ? '' : iso;
+      row.due = vague ? '' : iso;
+      var writePlan = DT().planAt
+        ? DT().planAt(t, row.id, iso, vague || '')
+        : DT().planDay(t, row.id, iso);
+      write(writePlan);
+      render();
+    }
+
+    function stepLine(row) {
+      var s = WO() ? WO().stepState(row) : null;
+      if (!s) return null;
+      if (s.text) return h('span', { class: 'db-step', text: s.text });
+      if (s.missing) return h('span', { class: 'db-step is-missing', text: 'Sans prochaine action' });
+      return null;
     }
 
     function taskCard(row, showDue) {
       var late = !!(DM().plannedDay(row) && DM().plannedDay(row) < today);
-      var el = h('div', { class: 'db-task' + (late ? ' is-late' : ''), draggable: 'true', title: row.name }, [
+      var hard = WO() && WO().dateKind(row) === 'hard';
+      var el = h('div', { class: 'db-task' + (late ? ' is-late' : '') + (hard ? ' is-hard' : ''), draggable: 'true', title: row.name, 'data-id': row.id, 'data-card': row.id }, [
         h('div', { class: 'db-task-name', text: row.name }),
-        h('div', { class: 'db-task-meta' }, [prioBadge(row, true), estChip(row), showDue === true ? dueChip(row) : null]),
+        stepLine(row),
+        h('div', { class: 'db-task-meta' }, [
+          hard ? h('span', { class: 'db-chip', text: 'Échéance' }) : null,
+          prioBadge(row, true),
+          estChip(row),
+          showDue === true ? dueChip(row) : null,
+        ]),
       ]);
       el.addEventListener('dragstart', function (e) {
         e.dataTransfer.setData('text/plain', row.id);
@@ -735,7 +1215,9 @@
       return el;
     }
 
-    function dropZone(el, iso) {
+    function dropZone(el, spec) {
+      var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
+      var vague = spec && spec.vague ? spec.vague : '';
       el.addEventListener('dragover', function (e) { e.preventDefault(); el.classList.add('is-drop'); });
       el.addEventListener('dragleave', function () { el.classList.remove('is-drop'); });
       el.addEventListener('drop', function (e) {
@@ -743,24 +1225,71 @@
         el.classList.remove('is-drop');
         var id = e.dataTransfer.getData('text/plain');
         var row = state.rows.filter(function (r) { return r.id === id; })[0];
-        if (row && (row.start || row.due || '') !== iso) plan(row, iso);
+        if (!row) return;
+        if (vague) {
+          if (row.dueVague !== vague) plan(row, '', vague);
+          return;
+        }
+        if ((row.dueVague || '') || (row.start || row.due || '') !== iso) plan(row, iso, '');
       });
       return el;
     }
 
+    var VAGUE_SHORT = {
+      'bientot': 'Bientôt',
+      'sous-peu': 'Sous peu',
+      'quelques-semaines': 'Quelques sem.',
+      'proche': 'Proche',
+      'prochain-mois': 'Mois prochain',
+      'quelques-mois': 'Quelques mois',
+      'semestre': 'Semestre',
+      'long-terme': 'À long terme',
+      'lointain': 'Lointain',
+      'an-ou-deux': '1 ou 2 ans',
+      'eventuellement': 'Éventuellement',
+      'assez-lointain': 'Assez lointain',
+      'tres-lointain': 'Très lointain',
+    };
+    var MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+    function vagueOptions() {
+      var opts = global.PriorityUI && global.PriorityUI.DUE_DATE_VAGUE_OPTIONS;
+      if (!opts || !opts.length) return [];
+      return opts.map(function (o) { return { id: o.id, label: o.label, days: o.days }; });
+    }
+
     function renderOrchestrator() {
-      var week = DM().weekPlan(state.rows, today, HORIZON, state.capacity);
+      var scale = state.scale || 'day';
+      var buckets = DM().horizonPlan(state.rows, today, scale, state.capacity, vagueOptions());
       var pool = DM().unplanned(state.rows);
       var autoBtn = h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () {
-        var moves = DM().autoPlan(state.rows, today, HORIZON, state.capacity);
+        var moves = scale === 'day'
+          ? DM().autoPlan(state.rows, today, HORIZON, state.capacity)
+          : DM().placeAuto(state.rows, today, scale, state.capacity, vagueOptions());
         if (!moves.length) return setStatus('Rien à planifier.', 'ok');
         moves.forEach(function (m) {
           var row = state.rows.filter(function (r) { return r.id === m.id; })[0];
-          if (row) { row.start = m.date; row.due = m.date; }
+          if (row) { row.start = m.date; row.due = m.date; row.dueVague = ''; row.dueMode = 'precise'; }
         });
         render();
-        write(moves.reduce(function (p, m) { return p.then(function () { return DT().planDay(t, m.id, m.date); }); }, Promise.resolve()), moves.length + (moves.length > 1 ? ' tâches planifiées' : ' tâche planifiée'));
+        var place = DT().planAt
+          ? function (m) { return DT().planAt(t, m.id, m.date, ''); }
+          : function (m) { return DT().planDay(t, m.id, m.date); };
+        write(moves.reduce(function (p, m) { return p.then(function () { return place(m); }); }, Promise.resolve()), moves.length + (moves.length > 1 ? ' tâches planifiées' : ' tâche planifiée'));
       } }, [icon('wand'), document.createTextNode('Planifier auto')]);
+      var scales = h('div', { class: 'db-scales', role: 'tablist' }, (DM().SCALES || []).map(function (s) {
+        return h('button', {
+          class: 'db-scale' + (scale === s.id ? ' is-on' : ''),
+          type: 'button',
+          role: 'tab',
+          'aria-selected': scale === s.id ? 'true' : 'false',
+          onclick: function () {
+            state.scale = s.id;
+            if (DT().setScale) DT().setScale(s.id);
+            render();
+          },
+        }, [document.createTextNode(s.label)]);
+      }));
       function capacityMenu(anchor) {
         var CM = global.ContextMenu;
         if (!CM || typeof CM.show !== 'function') return;
@@ -789,30 +1318,131 @@
         ]);
         return bar;
       }
-      function column(extra, head, bar, body, iso) {
+      function columnKey(spec) {
+        if (spec && spec.vague) return 'vague:' + spec.vague;
+        var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
+        return iso ? 'cal:' + iso : 'pool';
+      }
+      function columnPlace(spec) {
+        if (spec && spec.vague) return { date: '', vague: spec.vague };
+        var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
+        return { date: iso, vague: '' };
+      }
+      function addSlot(spec) {
+        var key = columnKey(spec);
+        var place = columnPlace(spec);
+        if (state.composer === key) {
+          var input = h('input', {
+            class: 'db-add-input',
+            type: 'text',
+            placeholder: 'Nouvelle tâche…',
+            'aria-label': 'Nouvelle tâche',
+            autocomplete: 'off',
+            value: state.composerText || '',
+          });
+          var closed = false;
+          function finish(fromBlur) {
+            if (closed) return;
+            var parse = global.QuickParse && global.QuickParse.parse;
+            var draft = DM().taskDraft(input.value, place.date, parse, place.vague);
+            if (!draft) {
+              if (fromBlur && state.composer === key) {
+                closed = true;
+                state.composer = null;
+                state.composerText = '';
+                render();
+              }
+              return;
+            }
+            closed = true;
+            state.composerText = '';
+            if (fromBlur && state.composer === key) state.composer = null;
+            createHere(draft);
+          }
+          input.addEventListener('input', function () { state.composerText = input.value; });
+          input.addEventListener('keydown', function (e) {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(false); }
+            else if (e.key === 'Escape') {
+              e.preventDefault();
+              closed = true;
+              state.composer = null;
+              state.composerText = '';
+              render();
+            }
+          });
+          input.addEventListener('blur', function () { setTimeout(function () { finish(true); }, 0); });
+          return input;
+        }
+        return h('button', {
+          class: 'db-add',
+          type: 'button',
+          onclick: function () {
+            if (state.composer !== key) state.composerText = '';
+            state.composer = key;
+            render();
+          },
+        }, [icon('plus'), h('span', { text: 'Nouvelle tâche' })]);
+      }
+      function column(extra, head, bar, body, spec) {
+        var cards = (body || []).slice();
+        cards.push(addSlot(spec));
         return dropZone(h('section', { class: 'db-col-card' + (extra ? ' ' + extra : '') }, [
           h('header', { class: 'db-col-head' }, head),
           bar,
-          h('div', { class: 'db-col-body' }, body),
-        ]), iso);
+          h('div', { class: 'db-col-body' }, cards),
+        ]), spec);
       }
+      function bucketLabel(b) {
+        if (scale === 'vague') return VAGUE_SHORT[b.vague] || b.label || b.key;
+        if (scale === 'day') return dayLabel(b.date, today);
+        if (scale === 'week') {
+          if (today >= b.date && today < b.end) return 'Cette semaine';
+          if (today >= DM().addDays(b.date, -7) && today < b.date) return 'Semaine prochaine';
+          return TM() ? TM().formatDay(b.date) : b.date;
+        }
+        if (scale === 'month') {
+          var d = new Date(b.date + 'T00:00:00');
+          var y = d.getFullYear();
+          var thisY = new Date(today + 'T00:00:00').getFullYear();
+          return MONTHS_FR[d.getMonth()] + (y === thisY ? '' : ' ' + y);
+        }
+        return b.key;
+      }
+      function bucketIcon(b) {
+        if (scale === 'day') return dayIconName(b.date, today);
+        if (scale === 'week') return 'calendar-week';
+        if (scale === 'month') return 'calendar-month';
+        if (scale === 'vague') return 'tilde';
+        return 'calendar';
+      }
+      var spacer = h('div', { class: 'db-meter-hit db-meter-hit--spacer', 'aria-hidden': 'true' }, [
+        h('span', { class: 'db-meter' }),
+      ]);
       var poolCol = column('db-col-card--pool', [
         h('span', { class: 'db-col-name', text: 'À planifier' }),
         h('span', { class: 'db-col-count', text: String(pool.length) }),
-      ], h('div', { class: 'db-meter-hit db-meter-hit--spacer', 'aria-hidden': 'true' }, [
-        h('span', { class: 'db-meter' }),
-      ]), pool.length
+      ], spacer, pool.length
         ? pool.map(function (r) { return taskCard(r, true); })
         : [h('div', { class: 'db-col-empty', text: 'Tout est planifié.' })], '');
-      var days = week.map(function (d) {
-        var extra = (d.date === today ? 'is-today' : '') + (isWeekend(d.date) ? ' is-weekend' : '');
-        return column(extra.trim(), [
-          h('span', { class: 'db-col-name' }, [icon(dayIconName(d.date, today), 'db-day-icon'), document.createTextNode(dayLabel(d.date, today))]),
-          d.used ? h('span', { class: 'db-cap-n' + (d.over ? ' is-over' : ''), text: DM().formatMinutes(d.used) }) : null,
-        ], dayBar(d), d.tasks.map(taskCard), d.date);
+      var days = buckets.map(function (b) {
+        var current = b.date && today >= b.date && today < b.end;
+        var extra = (current ? 'is-today' : '') + (scale === 'day' && isWeekend(b.date) ? ' is-weekend' : '');
+        var head = [
+          h('span', { class: 'db-col-name', title: scale === 'vague' ? (b.label || null) : null }, [
+            icon(bucketIcon(b), 'db-day-icon'),
+            document.createTextNode(bucketLabel(b)),
+          ]),
+        ];
+        if (scale === 'vague') head.push(h('span', { class: 'db-col-count', text: String(b.tasks.length) }));
+        else if (b.used) head.push(h('span', { class: 'db-cap-n' + (b.over ? ' is-over' : ''), text: DM().formatMinutes(b.used) }));
+        var spec = scale === 'vague'
+          ? { vague: b.vague }
+          : { iso: b.date < today ? today : b.date };
+        return column(extra.trim(), head, scale === 'vague' ? spacer.cloneNode(true) : dayBar(b), b.tasks.map(taskCard), spec);
       });
       els.main.appendChild(h('div', { class: 'db-page db-page--board' }, [
-        pageHead('Orchestrateur', null, autoBtn),
+        pageHead('Orchestrateur', null, h('div', { class: 'db-head-tools' }, [scales, scale === 'vague' ? null : autoBtn])),
         h('div', { class: 'db-board' }, [
           poolCol,
           h('div', { class: 'db-board-days', style: 'grid-template-columns:repeat(' + days.length + ',minmax(168px,1fr))' }, days),
@@ -829,7 +1459,7 @@
       tasks.forEach(function (r) { byId[r.id] = r; });
       var focus = h('div', { class: 'db-list' }, tasks.length ? tasks.map(function (r) {
         var late = r.due && r.due < today;
-        return h('div', { class: 'db-row' }, [
+        return h('div', { class: 'db-row', 'data-card': r.id }, [
           h('button', {
             class: 'db-check',
             type: 'button',
@@ -841,7 +1471,10 @@
               render();
             },
           }, [icon('circle-check')]),
-          h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+          h('span', { class: 'db-row-main' }, [
+            h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+            stepLine(r),
+          ]),
           late ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
           prioBadge(r),
           estChip(r),
@@ -862,16 +1495,21 @@
         var r = byId[b.id];
         grid.appendChild(h('div', {
           class: 'db-tl-block',
+          'data-card': r ? r.id : null,
           style: 'top:' + ((b.start - first) / 60) * hourPx + 'px;height:' + Math.max(20, ((b.end - b.start) / 60) * hourPx - 2) + 'px',
           title: DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end),
-        }, [h('b', { text: r.name }), h('span', { text: DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end) })]));
+        }, [h('b', { text: (function () { var s = WO() && WO().stepState(r); return s && s.text ? s.text : r.name; })() }), h('span', { text: DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end) })]));
       });
       var pct = Math.min(100, Math.round((used / state.capacity) * 100));
       var next = DM().nextAction(state.rows, today);
       var sugg = DM().suggestions(state.rows, today, 5);
-      var nowCard = next ? h('section', { class: 'db-now' }, [
+      var nextStep = next ? (WO() && WO().stepState(next.row)) : null;
+      var actionText = nextStep && nextStep.text ? nextStep.text : (next ? next.row.name : '');
+      var nowCard = next ? h('section', { class: 'db-now', 'data-card': next.row.id }, [
         h('div', { class: 'db-now-k' }, [icon('target-arrow'), document.createTextNode(next.from === 'today' ? ' Prochaine action' : ' Rien de prévu : je suggère')]),
-        h('div', { class: 'db-now-name', text: next.row.name, onclick: function () { openCard(next.row); } }),
+        h('div', { class: 'db-now-name', text: actionText, onclick: function () { openCard(next.row); } }),
+        nextStep && nextStep.text ? h('div', { class: 'db-now-card', text: next.row.name }) : null,
+        nextStep && nextStep.missing ? h('div', { class: 'db-step is-missing', text: 'Sans prochaine action' }) : null,
         h('div', { class: 'db-now-meta' }, [
           next.row.due && next.row.due < today && DM().isOpen(next.row) ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
           prioBadge(next.row),
@@ -891,7 +1529,7 @@
       var suggBox = sugg.length ? h('section', { class: 'db-sugg' }, [
         h('h3', { class: 'db-sugg-h' }, [icon('bulb'), document.createTextNode(' À planifier · par priorité')]),
         h('div', { class: 'db-list' }, sugg.map(function (r) {
-          return h('div', { class: 'db-row' }, [
+          return h('div', { class: 'db-row', 'data-card': r.id }, [
             h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
             prioBadge(r),
             estChip(r),
@@ -910,17 +1548,90 @@
       ]));
     }
 
+    function parkStarted(row) {
+      var list = DT().listFor(state.lists, ['unstarted', 'backlog']);
+      if (!list || !row) return;
+      row.listId = list.id;
+      row.statut = list.name;
+      row.statutKey = list.category;
+      write(DT().moveToCategory(t, row, state.lists, ['unstarted', 'backlog']), '« ' + row.name + ' » rangée');
+      render();
+    }
+
+    function renderReview() {
+      var rep = WO()
+        ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] })
+        : { flags: [], steps: [], waiting: [], wip: { over: false }, projects: state.projects || [] };
+      var projects = rep.projects || [];
+      var body = [pageHead('Revue', null)];
+      if (!rep.flags.length && !projects.length) {
+        body.push(h('div', { class: 'db-empty' }, [icon('list-check'), h('p', { text: 'Rien à revoir.' })]));
+      }
+      rep.flags.forEach(function (f) {
+        body.push(h('div', { class: 'db-row' }, [
+          h('span', { class: 'db-row-name', text: f.label }),
+          h('span', { class: 'db-chip', text: f.detail }),
+          f.id === 'triage' ? h('button', { class: 'db-btn', type: 'button', onclick: function () { go('triage'); } }, [document.createTextNode('Ouvrir')]) : null,
+          f.id === 'wip' && rep.wip && rep.wip.park ? h('button', { class: 'db-btn', type: 'button', title: 'Ranger la moins prioritaire', onclick: function () { parkStarted(rep.wip.park); } }, [document.createTextNode('Ranger')]) : null,
+        ]));
+      });
+      (rep.steps || []).forEach(function (r) {
+        body.push(h('div', { class: 'db-row', 'data-card': r.id }, [
+          h('span', { class: 'db-row-main' }, [
+            h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+            h('span', { class: 'db-step is-missing', text: 'Sans prochaine action' }),
+          ]),
+        ]));
+      });
+      (rep.waiting || []).forEach(function (r) {
+        body.push(h('div', { class: 'db-row', 'data-card': r.id }, [
+          h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
+          h('span', { class: 'db-chip', text: r.waiting }),
+        ]));
+      });
+      projects.forEach(function (p) {
+        var stepText = p.step && p.step.text ? p.step.text : 'Sans prochaine action';
+        body.push(h('div', { class: 'db-project' }, [
+          h('div', { class: 'db-row-name', text: p.name }),
+          h('div', { class: 'db-step' + (p.missingOutcome ? ' is-missing' : ''), text: p.outcome || 'Sans résultat' }),
+          h('div', {
+            class: 'db-step' + (p.missingStep ? ' is-missing' : ''),
+            'data-card': p.step && p.step.cardId ? p.step.cardId : null,
+            text: stepText,
+            onclick: p.step && p.step.cardId ? function () {
+              var card = state.rows.filter(function (r) { return r.id === p.step.cardId; })[0];
+              if (card) openCard(card);
+            } : null,
+          }),
+          h('div', { class: 'db-project-nums' }, [
+            p.work == null ? null : h('span', { text: 'Travail ' + p.work + ' %' }),
+            p.metricLabel ? h('span', { text: 'Résultat ' + p.metricLabel }) : (p.missingMeasure ? h('span', { class: 'db-step is-missing', text: 'Sans mesure' }) : null),
+          ]),
+        ]));
+      });
+      els.main.appendChild(h('div', { class: 'db-page' }, body));
+    }
+
     /* ── Render + keys ─────────────────────────────────────────────── */
     function render() {
       today = todayIso();
       var keepScroll = els.main.scrollTop;
+      var colScroll = [];
+      els.main.querySelectorAll('.db-col-body').forEach(function (b) { colScroll.push(b.scrollTop); });
       els.main.textContent = '';
       renderSide();
       if (state.section === 'ingest') renderIngest();
       else if (state.section === 'triage') renderTriage();
       else if (state.section === 'orchestrator') renderOrchestrator();
+      else if (state.section === 'review') renderReview();
       else renderToday();
       els.main.scrollTop = keepScroll;
+      var bodies = els.main.querySelectorAll('.db-col-body');
+      for (var i = 0; i < bodies.length && i < colScroll.length; i++) bodies[i].scrollTop = colScroll[i];
+      if (state.section === 'orchestrator' && state.composer != null) {
+        var addInput = els.main.querySelector('.db-add-input');
+        if (addInput && document.activeElement !== addInput) addInput.focus({ preventScroll: true });
+      }
     }
 
     shell.addEventListener('keydown', function (e) {
@@ -928,7 +1639,7 @@
       var tag = (e.target && e.target.tagName) || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var k = e.key.toLowerCase();
-      var idx = '1234'.indexOf(k);
+      var idx = '12345'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (k === 'c') { e.preventDefault(); return go('ingest'); }
       if (state.section !== 'triage') return;
@@ -944,15 +1655,32 @@
       }
     });
 
+    function loadChain() {
+      var goalsP = global.MindmapGoalsTrello && typeof global.MindmapGoalsTrello.load === 'function'
+        ? global.MindmapGoalsTrello.load(t).catch(function () { return { nodes: [], links: [] }; })
+        : Promise.resolve({ nodes: [], links: [] });
+      var boardP = global.GoalsTrello
+        ? Promise.all([
+            global.GoalsTrello.getObjectifs(t).catch(function () { return []; }),
+            global.GoalsTrello.getMetrics(t).catch(function () { return []; }),
+          ]).catch(function () { return [[], []]; })
+        : Promise.resolve([[], []]);
+      return Promise.all([goalsP, boardP]);
+    }
+
     function reload(opts) {
       opts = opts || {};
       if (!opts.quiet) {
         root.innerHTML = skeleton();
       }
-      return DT().load(t).then(function (res) {
+      return Promise.all([DT().load(t), loadChain()]).then(function (res) {
         if (!root.contains(shell)) { root.innerHTML = ''; root.appendChild(shell); }
-        state.lists = res.lists;
-        state.rows = res.rows;
+        state.lists = res[0].lists;
+        state.rows = res[0].rows;
+        var goals = res[1][0] || { nodes: [], links: [] };
+        var objectifs = (res[1][1] && res[1][1][0]) || [];
+        var metrics = (res[1][1] && res[1][1][1]) || [];
+        state.projects = WO() ? WO().projectChain(goals, state.rows, metrics, objectifs) : [];
         // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Capture.
         if (!state.landed) {
           state.landed = true;
@@ -1000,27 +1728,42 @@
             onError: function (m) { setStatus('Erreur échéance : ' + m, 'error'); },
           });
         },
-        newCard: function () {
-          var target = DT().listFor(state.lists, ['triage']);
-          if (!target || !global.NewCard) return;
-          global.NewCard.open({
-            t: t,
-            lists: state.lists,
-            listId: target.id,
-            onError: fail,
-            onCreated: function (c) {
-              setStatus('Carte créée dans « ' + c.list.name + ' »', 'ok');
-              reload({ quiet: true });
-              // Trello can take a moment to list the new card: refresh once more.
-              setTimeout(function () { reload({ quiet: true }); }, 1200);
-            },
-          });
-        },
+        newCard: function () { createCard(); },
       });
     }
+
+    if (t && typeof t.board === 'function') {
+      t.board('members').then(function (b) {
+        var list = (b && b.members) || (Array.isArray(b) ? b : []);
+        people = list.map(function (m) { return m && (m.fullName || m.username); }).filter(Boolean);
+      }, function () {});
+    }
+
+    shell.addEventListener('contextmenu', function (e) {
+      var CM = global.ContextMenu;
+      if (!CM || !e) return;
+      if (e.target && e.target.closest && e.target.closest('.tp-context-menu')) return;
+      var cardEl = e.target && e.target.closest && e.target.closest('[data-card]');
+      var editable = CM.isNativeEditableTarget && CM.isNativeEditableTarget(e.target);
+      if (!cardEl && editable) return;
+      var row = null;
+      if (cardEl) {
+        row = state.rows.filter(function (r) { return r.id === cardEl.getAttribute('data-card'); })[0] || null;
+        if (!row) return;
+      }
+      e.preventDefault();
+      var anchor = e.target && e.target.nodeType === 1 ? e.target : cardEl;
+      var entries = row ? menuEntries(row, menuCtx()) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
+      var items = withActions(row, entries, anchor || cardEl);
+      if (row && editable && typeof CM.buildGenericItems === 'function') {
+        var field = CM.buildGenericItems(e.target, document);
+        if (field && field.length) items = items.concat([{ sep: true }]).concat(field);
+      }
+      CM.show(e, items);
+    });
 
     reload();
   }
 
-  global.DashboardUI = { mount: mount, skeleton: skeleton };
+  global.DashboardUI = { mount: mount, skeleton: skeleton, menuEntries: menuEntries, pageEntries: pageEntries };
 })(typeof window !== 'undefined' ? window : this);

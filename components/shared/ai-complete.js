@@ -1,7 +1,7 @@
 /**
  * Ghost text while typing. A short continuation from the assistant, accepted with Tab.
- * Knows the field (document, task name, document name, person, label) and a slim
- * snapshot of the board (tasks, documents, people, labels) plus whatever is on screen.
+ * Knows the field (document, task name, document name, person, label, or any other
+ * text you are writing) and a slim snapshot of the board plus whatever is on screen.
  *
  * Exposes window.AiComplete. UI modules stay free of fetch: this file calls PriorityAgent.
  *
@@ -13,7 +13,7 @@
 (function (global) {
   'use strict';
 
-  var DEBOUNCE_MS = 420;
+  var DEBOUNCE_MS = 280;
   var HINT_TTL_MS = 60000;
   var KINDS = {
     document: true,
@@ -21,7 +21,8 @@
     'task-name': true,
     'person-name': true,
     tag: true,
-    name: true
+    name: true,
+    text: true
   };
   var KIND_GUIDE = {
     document:
@@ -32,15 +33,17 @@
     'person-name':
       'Tu complètes un nom de personne. Si le début correspond à quelqu\'un du contexte, finis ce nom. Sinon, seulement la suite naturelle du prénom ou du nom, pas une phrase.',
     tag: 'Tu complètes le nom d\'une étiquette. Un ou deux mots, comme les autres étiquettes.',
-    name: 'Tu complètes un nom court, dans le même style que les noms du contexte. Pas une phrase.'
+    name: 'Tu complètes un nom court, dans le même style que les noms du contexte. Pas une phrase.',
+    text: 'Tu continues la phrase en cours. Quelques mots, le même ton, la même langue.'
   };
   var KIND_WORDS = {
-    document: 12,
+    document: 8,
     'doc-name': 8,
     'task-name': 8,
     'person-name': 4,
     tag: 3,
-    name: 6
+    name: 6,
+    text: 12
   };
   var KIND_MAX = {
     document: 90,
@@ -48,7 +51,8 @@
     'task-name': 70,
     'person-name': 40,
     tag: 24,
-    name: 48
+    name: 48,
+    text: 140
   };
 
   function fold(s) {
@@ -84,7 +88,9 @@
     var kind = snap && snap.kind;
     var guide = KIND_GUIDE[kind] || KIND_GUIDE.name;
     var system = [
-      'Tu proposes la suite immédiate d\'un texte en cours de frappe.',
+      'Tu continues les mots déjà tapés, comme une saisie automatique.',
+      'Tu ne réponds pas à une question écrite dans le texte.',
+      'Tu n\'ajoutes pas une réponse, ni le mot réponse, ni answer.',
       guide,
       'Réponds uniquement par les caractères à insérer au curseur.',
       'Pas de guillemets, pas d\'explication, pas de préambule.',
@@ -95,7 +101,7 @@
     ].join(' ');
     var lines = [];
     function add(label, list) {
-      var items = clipList(list, 24);
+      var items = clipList(list, 8);
       if (items.length) lines.push(label + ': ' + items.join(' | '));
     }
     add('Tâches', hints.tasks);
@@ -103,7 +109,7 @@
     add('Personnes', hints.people);
     add('Étiquettes', hints.tags);
     if (hints.note) lines.push(String(hints.note).replace(/\s+/g, ' ').trim().slice(0, 200));
-    var prefix = String((snap && (snap.prefix || snap.before)) || '').slice(-1400);
+    var prefix = String((snap && (snap.prefix || snap.before)) || '').slice(-500);
     var user = (lines.length ? lines.join('\n') + '\n\n' : '') + 'Avant le curseur:\n' + prefix;
     var after = String((snap && (snap.lineAfter || snap.after)) || '');
     if (after.trim()) user += '\n\nAprès le curseur:\n' + after.slice(0, 280);
@@ -132,19 +138,20 @@
    * Keeps one leading space when the word before the caret is finished.
    */
   function parseCompletion(raw, before, kind) {
-    var s = String(raw == null ? '' : raw).trim();
-    if (!s) return '';
-    if (s.charAt(0) === '{') {
+    var s = String(raw == null ? '' : raw).replace(/^\uFEFF/, '').replace(/\s+$/, '');
+    var trimmed = s.trim();
+    if (!trimmed) return '';
+    if (trimmed.charAt(0) === '{') {
       try {
-        var parsed = JSON.parse(s);
+        var parsed = JSON.parse(trimmed);
         if (parsed && typeof parsed === 'object') {
-          s = String(parsed.text || parsed.suite || parsed.completion || '').trim();
+          s = String(parsed.text || parsed.suite || parsed.completion || '');
         }
       } catch (e) {
-        /* not JSON */
+        s = trimmed;
       }
     }
-    s = s.replace(/^```[a-z]*\s*/i, '').replace(/```$/, '').trim();
+    s = s.replace(/^\s*```[a-z]*\s*/i, '').replace(/```\s*$/, '');
     if (
       (s.charAt(0) === '"' && s.charAt(s.length - 1) === '"') ||
       (s.charAt(0) === '\u00ab' && s.charAt(s.length - 1) === '\u00bb')
@@ -153,7 +160,7 @@
     }
     s = s.split(/\r?\n/)[0];
     if (!s || s === '.' || s === '\u2026' || /^aucun\.?$/i.test(s) || /^rien\.?$/i.test(s)) return '';
-    if (/^(je |voici |suggestion|compl[eé]tion|r[eé]ponse)/i.test(s)) return '';
+    if (/^(je |voici |suggestion|compl[eé]tion|r[eé]ponse|answer)\b/i.test(s.trim())) return '';
     s = dropOverlap(before, s).replace(/\s+/g, ' ');
     var wantsSpace = /^\s/.test(s);
     s = s.trim();
@@ -181,7 +188,7 @@
     if (/[@/][^\s]*$/.test(line)) return false;
     var trimmed = line.replace(/\u00a0/g, ' ').replace(/\s+$/, '');
     if (!trimmed) return false;
-    if (snap.kind === 'document') return trimmed.length >= 6;
+    if (snap.kind === 'document' || snap.kind === 'text') return trimmed.length >= 6;
     return trimmed.length >= 2;
   }
 
@@ -209,8 +216,13 @@
     return String((el && (el.type || attr(el, 'type'))) || '').toLowerCase();
   }
 
+  function isTextControl(el) {
+    var tag = el && el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA';
+  }
+
   function isEditableHost(el) {
-    if (!el) return false;
+    if (!el || isTextControl(el)) return false;
     if (el.isContentEditable) return true;
     var c = attr(el, 'contenteditable');
     return c === 'true' || c === '';
@@ -228,7 +240,10 @@
     }
     if (
       classHas(el, 'agent-composer-input') ||
+      classHas(el, 'memory-ui-input') ||
+      classHas(el, 'kb-ai-input') ||
       classHas(el, 'dc-search-input') ||
+      classHas(el, 'en-search-input') ||
       classHas(el, 'mm-filter') ||
       classHas(el, 'tb-filter')
     ) {
@@ -255,6 +270,7 @@
       classHas(el, 'dc-people-input') ||
       attr(el, 'id') === 'peopleEditName' ||
       attr(el, 'id') === 'profileDisplayName' ||
+      attr(el, 'id') === 'settingsProfileDisplayName' ||
       closest(el, '.dc-people, [data-dc-field="people"]')
     ) {
       return 'person-name';
@@ -269,13 +285,59 @@
       return 'tag';
     }
     if (classHas(el, 'en-name') || attr(el, 'data-name') === '1') return 'name';
+    if (
+      classHas(el, 'kb-add-input') ||
+      classHas(el, 'db-add-input') ||
+      classHas(el, 'tb-add') ||
+      classHas(el, 'mm-card-title')
+    ) {
+      return 'task-name';
+    }
+    if (
+      classHas(el, 'info-desc-input') ||
+      classHas(el, 'info-desc-rich') ||
+      classHas(el, 'cf-textarea') ||
+      classHas(el, 'en-area') ||
+      classHas(el, 'blocked-reason-input')
+    ) {
+      return 'text';
+    }
     var blob = fold(attr(el, 'aria-label') + ' ' + attr(el, 'placeholder'));
     if (/etiquette/.test(blob) || /\btag\b/.test(blob)) return 'tag';
     if (/personne/.test(blob) && /nom|ajouter/.test(blob)) return 'person-name';
-    return '';
+    return fallbackKind(el);
   }
 
-  function menuOpen() {
+  /** Search, secrets and addresses stay quiet. Everything else you type gets a ghost. */
+  function notWriting(el) {
+    var type = fieldType(el);
+    if (type === 'search' || type === 'email' || type === 'url' || type === 'tel') return true;
+    var blob = fold(
+      attr(el, 'placeholder') + ' ' + attr(el, 'aria-label') + ' ' + attr(el, 'id') + ' ' +
+      attr(el, 'name') + ' ' + (typeof el.className === 'string' ? el.className : '')
+    );
+    if (/recherch|filtrer|\bcherch|\bsearch\b|\bfilter\b/.test(blob)) return true;
+    if (/\b(token|secret|apikey|api-key|password|mot de passe)\b/.test(blob)) return true;
+    if (/https?:|adresse du lien|adresse de l|unit[eé]\b|latitude|longitude/.test(blob)) return true;
+    return false;
+  }
+
+  function fallbackKind(el) {
+    if (!isTextControl(el) && !isEditableHost(el)) return '';
+    if (notWriting(el)) return '';
+    var blob = fold(attr(el, 'aria-label') + ' ' + attr(el, 'placeholder'));
+    if (/personne/.test(blob) && /nom|ajout/.test(blob)) return 'person-name';
+    if (/etiquette|étiquette|\btag\b|\balias\b/.test(blob)) return 'tag';
+    if (/t[aâ]che|titre de la carte|nouvelle carte/.test(blob)) return 'task-name';
+    if (closest(el, 'td[data-key="desc"]')) return 'text';
+    if (closest(el, 'td[data-key="category"]')) return 'tag';
+    if (el.tagName === 'TEXTAREA' || isEditableHost(el)) return 'text';
+    if (/description|commentaire|\bnote\b|r[eè]gle|phrase|blocage|cause/.test(blob)) return 'text';
+    return 'name';
+  }
+
+  function menuOpen(field) {
+    if (!classHas(field, 'dc-editor')) return false;
     var box = global.document && document.querySelector && document.querySelector('.dc-suggest');
     return !!(box && !box.hidden);
   }
@@ -357,7 +419,7 @@
       prefix: caret.prefix,
       lineBefore: caret.lineBefore,
       lineAfter: caret.lineAfter,
-      menuOpen: menuOpen()
+      menuOpen: menuOpen(field)
     };
   }
 
@@ -722,10 +784,17 @@
       if (gen !== session.gen) return;
       if (!provider || (typeof Agent.isConfigured === 'function' && !Agent.isConfigured(provider))) return;
       var messages = buildMessages(snap, mergeHints());
-      return Agent.chatCompletions(provider, messages, {
+      var model =
+        typeof Agent.modelForTier === 'function'
+          ? Agent.modelForTier(provider, 'efficient')
+          : provider.model;
+      var tuned = Object.assign({}, provider, { model: model || provider.model });
+      return Agent.chatCompletions(tuned, messages, {
+        model: model || provider.model,
         jsonMode: false,
-        temperature: 0.2,
-        max_tokens: 48
+        max_tokens: 24,
+        reasoningEffort: 'none',
+        _drop: ['temperature']
       }).then(function (res) {
         if (gen !== session.gen) return;
         var text = parseCompletion(res && res.content, snap.lineBefore, snap.kind);
@@ -787,7 +856,7 @@
       return;
     }
     if (e.key !== 'Tab' || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
-    if (menuOpen() || !session.suggestion) return;
+    if (menuOpen(activeField() || session.el) || !session.suggestion) return;
     if (accept()) {
       e.preventDefault();
       e.stopPropagation();

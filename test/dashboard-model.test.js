@@ -104,14 +104,15 @@ describe('DashboardModel', () => {
 
   it('unplanned excludes triage, done and dated cards, best priority first', () => {
     const rows = [
-      row('a', { priority: 2 }),
+      row('a', { priority: 1 }),
       row('b', { priority: 9 }),
-      row('c', { statutKey: 'triage' }),
-      row('d', { statutKey: 'completed' }),
-      row('e', { due: '2026-10-08' }),
-      row('f', { dueDone: true }),
+      row('c', { statutKey: 'triage', priority: 10 }),
+      row('d', { due: '2026-10-08', priority: 10 }),
+      row('e', { statutKey: 'completed', priority: 10 }),
+      row('f', { dueVague: 'eventuellement', due: '2027-01-01', start: '2027-01-01', priority: 10 }),
     ];
     assert.deepEqual(DM.unplanned(rows).map((r) => r.id), ['b', 'a']);
+    assert.equal(DM.plannedDay(rows[5]), '');
   });
 
   it('weekPlan carries late tasks on the first day and flags overload', () => {
@@ -205,6 +206,57 @@ describe('DashboardModel', () => {
     assert.equal(DM.formatMinutes(45), '45 min');
     assert.equal(DM.formatMinutes(120), '2 h');
     assert.equal(DM.formatMinutes(90), '1 h 30');
+  });
+
+  it('horizonPlan covers week, month, year and a vague horizon', () => {
+    const wed = [row('w', { due: '2026-10-14' })];
+    const week = DM.horizonPlan(wed, '2026-10-13', 'week', 360);
+    assert.equal(week.length, 8);
+    assert.equal(week.find((b) => b.tasks.some((r) => r.id === 'w')).date, '2026-10-12');
+
+    const months = DM.horizonPlan([row('m', { due: '2026-11-03' })], '2026-10-13', 'month', 360);
+    assert.equal(months.length, 12);
+    assert.deepEqual(months.find((b) => b.key === '2026-11').tasks.map((r) => r.id), ['m']);
+
+    const years = DM.horizonPlan([row('y', { due: '2027-06-01' })], '2026-10-13', 'year', 360);
+    assert.equal(years.length, 5);
+    assert.deepEqual(years.find((b) => b.key === '2027').tasks.map((r) => r.id), ['y']);
+    assert.equal(DM.horizonPlan([], '2026-10-13', 'years', 360).length, 12);
+
+    const opts = [
+      { id: 'bientot', label: 'Bientôt', days: 7 },
+      { id: 'long-terme', label: 'À long terme', days: 270 },
+      { id: 'tres-lointain', label: 'Dans un futur très lointain', days: 1825 },
+    ];
+    const vague = DM.horizonPlan([
+      row('v', { dueVague: 'long-terme' }),
+      row('d', { due: '2026-10-20' }),
+    ], '2026-10-13', 'vague', 360, opts);
+    assert.deepEqual(vague.find((b) => b.key === 'long-terme').tasks.map((r) => r.id), ['v']);
+    assert.deepEqual(vague.find((b) => b.key === 'bientot').tasks.map((r) => r.id), ['d']);
+    assert.equal(DM.plannedDay(vague[0] && { dueVague: 'long-terme', due: '2027-07-01' }), '');
+  });
+
+  it('placeAuto stays manual on Jour and Vague', () => {
+    const rows = [row('a')];
+    assert.deepEqual(DM.placeAuto(rows, '2026-10-13', 'day', 360), []);
+    assert.deepEqual(DM.placeAuto(rows, '2026-10-13', 'vague', 360, []), []);
+    const week = DM.placeAuto(rows, '2026-10-13', 'week', 360);
+    assert.equal(week.length, 1);
+    assert.equal(week[0].id, 'a');
+  });
+
+  it('taskDraft places a new orchestrator task on the column, unless the title names a day', () => {
+    assert.equal(DM.taskDraft('   ', '2026-10-14', null), null);
+    assert.deepEqual(DM.taskDraft('  Appeler Paul  ', '2026-10-14', null), {
+      name: 'Appeler Paul', date: '2026-10-14', vague: '',
+    });
+    assert.deepEqual(DM.taskDraft('Ranger', '', null), { name: 'Ranger', date: '', vague: '' });
+    assert.deepEqual(DM.taskDraft('Lire', '', null, 'bientot'), { name: 'Lire', date: '', vague: 'bientot' });
+    assert.deepEqual(
+      DM.taskDraft('Rapport demain', '2026-10-14', function () { return { name: 'Rapport', dueDate: '2026-10-15' }; }, 'bientot'),
+      { name: 'Rapport', date: '2026-10-15', vague: '' }
+    );
   });
 
   it('counts feeds the sidebar badges', () => {
