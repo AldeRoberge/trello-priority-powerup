@@ -2959,31 +2959,62 @@
     'getCompletion'
   ];
 
-  // App build stamp for "what version is running?". version.js sets
-  // BuildVersion.current once the popup/settings fetch it; otherwise fetch once here.
-  var appBuiltAtCache = null;
-  var appBuiltAtRequested = false;
-  function currentAppBuiltAt() {
+  // App build stamp for "what version is running?" and the release notes from
+  // CHANGELOG.md. version.js sets BuildVersion.current once the popup/settings
+  // fetch it; otherwise fetch once here.
+  var appBuildInfoCache = null;
+  var appBuildInfoRequested = false;
+  function currentAppBuildInfo() {
     var bv = global.BuildVersion;
-    if (bv && bv.current) return bv.current;
-    if (appBuiltAtCache) return appBuiltAtCache;
-    if (!appBuiltAtRequested && typeof global.fetch === 'function') {
-      appBuiltAtRequested = true;
+    if (bv && bv.current) return { builtAt: bv.current, releases: bv.releases || [] };
+    if (appBuildInfoCache) return appBuildInfoCache;
+    if (!appBuildInfoRequested && typeof global.fetch === 'function') {
+      appBuildInfoRequested = true;
       try {
         global.fetch('./build-info.json', { cache: 'no-store' })
           .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (j) { if (j && j.builtAt) appBuiltAtCache = j.builtAt; })
+          .then(function (j) {
+            if (j && j.builtAt) {
+              appBuildInfoCache = { builtAt: j.builtAt, releases: Array.isArray(j.releases) ? j.releases : [] };
+            }
+          })
           .catch(function () { /* ignore */ });
       } catch (e) { /* ignore */ }
     }
     return null;
   }
 
+  /** "il y a 3 jours" style age of the build, for the assistant's answer. */
+  function appBuildAgo(iso, nowMs) {
+    var then = Date.parse(iso);
+    if (isNaN(then)) return '';
+    var minutes = Math.floor(((nowMs || Date.now()) - then) / 60000);
+    if (minutes < 60) return 'il y a moins d\'une heure';
+    var hours = Math.floor(minutes / 60);
+    if (hours < 24) return 'il y a ' + hours + (hours === 1 ? ' heure' : ' heures');
+    var days = Math.floor(hours / 24);
+    return 'il y a ' + days + (days === 1 ? ' jour' : ' jours');
+  }
+
+  /** Last two releases from CHANGELOG.md, as a short list for the prompt. */
+  function recentChangesText(releases) {
+    var lines = [];
+    (releases || []).slice(0, 2).forEach(function (release) {
+      lines.push('- ' + release.date + ' :');
+      (release.items || []).slice(0, 8).forEach(function (item) {
+        lines.push('  · ' + item);
+      });
+    });
+    return lines.join('\n');
+  }
+
   function buildContext(bridge) {
+    var appInfo = currentAppBuildInfo() || {};
     var ctx = {
       today: todayIsoLocal(),
       nowTime: nowTimeLocal(),
-      appBuiltAt: currentAppBuiltAt(),
+      appBuiltAt: appInfo.builtAt || null,
+      appReleases: appInfo.releases || [],
       /** 'task' = card popup; 'project' = board-wide assistant window. */
       scope: ASSISTANT_SCOPES.TASK,
       cardName: '',
@@ -4112,10 +4143,14 @@
           'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu peux aider sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s) quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
         ];
     var builtAt = context && context.appBuiltAt;
+    var recent = recentChangesText(context && context.appReleases);
     var buildLine = builtAt
-      ? 'App Cerveau : version / build en cours = ' + builtAt +
-        ' (UTC, horodatage du dernier déploiement). Si on te demande quelle version tourne, réponds avec cette date (il n\'y a pas de numéro sémantique). Ne dis JAMAIS que tu ne peux pas la voir.'
-      : 'App Cerveau : l\'horodatage du build n\'a pas pu être chargé ; si on te demande la version, dis seulement que l\'info de build n\'est pas disponible pour l\'instant.';
+      ? 'App Cerveau : build en cours = ' + builtAt +
+        ' (UTC, dernier d\u00e9ploiement, ' + appBuildAgo(builtAt) + ').' +
+        ' Si on te demande quelle version tourne : donne la date du build en clair (ex. \u00ab\u00a06 oct. 2026, 19 h 19 UTC\u00a0\u00bb), dis depuis quand il est d\u00e9ploy\u00e9, puis liste les nouveaut\u00e9s r\u00e9centes ci-dessous. Il n\'y a pas de num\u00e9ro s\u00e9mantique. Ne dis JAMAIS que tu ne peux pas la voir.' +
+        ' Si on demande les nouveaut\u00e9s ou ce qui a chang\u00e9, r\u00e9ponds avec ce journal (les plus r\u00e9centes d\'abord), sans en inventer.' +
+        (recent ? '\nNouveaut\u00e9s r\u00e9centes (journal CHANGELOG.md) :\n' + recent : '')
+      : 'App Cerveau : l\'horodatage du build n\'a pas pu \u00eatre charg\u00e9 ; si on te demande la version, dis seulement que l\'info de build n\'est pas disponible pour l\'instant.';
     return [identityLine, langLine, buildLine]
       .concat(voiceLines)
       .concat(profileLines)

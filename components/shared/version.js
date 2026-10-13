@@ -106,9 +106,10 @@
       probeUrl ? headLastModified(probeUrl) : Promise.resolve(NaN),
     ]);
     if (!buildRes.ok) throw new Error('build info not found');
-    const { builtAt } = await buildRes.json();
+    const { builtAt, releases } = await buildRes.json();
     const resolved = resolveBuiltAt(builtAt, lastModifiedMs(buildRes), probeMs);
     global.BuildVersion.current = resolved;
+    global.BuildVersion.releases = Array.isArray(releases) ? releases : [];
     return resolved;
   }
 
