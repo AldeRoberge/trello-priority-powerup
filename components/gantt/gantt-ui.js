@@ -5121,6 +5121,25 @@
     }
 
     if (global.AssistantDock) {
+        newCard: openNewCard,
+      });
+    }
+    // C: same composer as Tableau and Kanban; the card lands in the first "to do" list.
+    function openNewCard() {
+      var lists = state.boardLists || [];
+      var open = lists.filter(function (l) { return l.category !== 'completed' && l.category !== 'canceled' && l.category !== 'blocked'; });
+      var target = open.filter(function (l) { return l.category === 'unstarted'; })[0] || open[0];
+      if (!target || !global.NewCard) return;
+      global.NewCard.open({
+        t: t,
+        lists: lists,
+        listId: target.id,
+        onError: function (err) { setStatus('Erreur : ' + (err && err.message ? err.message : err), true); },
+        onCreated: function (c) {
+          if (c.cardId) record({ type: 'create', targetId: c.cardId, title: c.name, after: c.list.name });
+          setStatus('Carte créée dans « ' + c.list.name + ' »');
+          refreshBoardQuiet();
+        },
       global.AssistantDock.mount({ t: t, after: mount, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return state.miniPopover || !!document.querySelector('.gantt-card-overlay'); } });
     }
 

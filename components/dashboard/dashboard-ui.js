@@ -597,7 +597,7 @@
       var sel = q.filter(function (r) { return r.id === state.selected; })[0] || q[0];
       state.selected = sel.id;
       var list = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) {
-        return h('div', { class: 'db-row' + (r.id === sel.id ? ' is-sel' : ''), onclick: function () { state.selected = r.id; render(); } }, [
+        return h('div', { class: 'db-row' + (r.id === sel.id ? ' is-sel' : ''), 'data-id': r.id, onclick: function () { state.selected = r.id; render(); } }, [
           statusIcon(r), h('span', { class: 'db-row-name', text: r.name }), prioBadge(r),
         ]);
       }));
@@ -906,6 +906,60 @@
       }).catch(function (err) {
         root.innerHTML = '';
         root.appendChild(h('div', { class: 'db-loading', text: 'Impossible de charger le Dashboard : ' + (err && err.message) }));
+      });
+    }
+
+    // Linear-style keys on a triage row: S statut, P urgence, D échéance, C nouvelle carte (shared with Tableau and Kanban).
+    if (global.LinearKeys) {
+      global.LinearKeys.attach({
+        t: t,
+        hoverSelector: '.db-row[data-id]',
+        idOf: function (el) { return el.getAttribute('data-id'); },
+        selectedId: function () { return state.selected || ''; },
+        row: function (id) { return state.rows.filter(function (r) { return r.id === id; })[0] || null; },
+        lists: function () { return state.lists; },
+        setStatus: function (row, list) {
+          setStatus('Enregistrement…', 'busy');
+          global.TableTrello.moveCard(t, row.id, list.id, 'bottom').then(function () {
+            row.listId = list.id; row.statut = list.name; row.statutKey = list.category;
+            setStatus('Statut modifié', 'ok');
+            reload({ quiet: true });
+          }, fail);
+        },
+        setUrgency: function (row, urgencyId) {
+          setStatus('Enregistrement…', 'busy');
+          global.LinearKeys.saveUrgency(t, row.id, urgencyId).then(function () {
+            setStatus('Urgence modifiée', 'ok');
+            return reload({ quiet: true });
+          }, fail);
+        },
+        openDue: function (row, anchor) {
+          if (!global.CardFields) return;
+          global.CardFields.open('due', {
+            t: t,
+            cardId: row.id,
+            cardName: row.name,
+            anchor: anchor,
+            onSaved: function () { setStatus('Échéance enregistrée', 'ok'); reload({ quiet: true }); },
+            onError: function (m) { setStatus('Erreur échéance : ' + m, 'error'); },
+          });
+        },
+        newCard: function () {
+          var target = DT().listFor(state.lists, ['triage']);
+          if (!target || !global.NewCard) return;
+          global.NewCard.open({
+            t: t,
+            lists: state.lists,
+            listId: target.id,
+            onError: fail,
+            onCreated: function (c) {
+              setStatus('Carte créée dans « ' + c.list.name + ' »', 'ok');
+              reload({ quiet: true });
+              // Trello can take a moment to list the new card: refresh once more.
+              setTimeout(function () { reload({ quiet: true }); }, 1200);
+            },
+          });
+        },
       });
     }
 

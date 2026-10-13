@@ -2389,6 +2389,45 @@
       state.hideDone = on;
       rebuild({ relayout: true });
     });
+    // Linear-style keys on a task node: S statut, P urgence, D échéance, C nouvelle carte (shared with Tableau and Kanban).
+    function taskRec(cardId) {
+      return (state.records || []).filter(function (r) { return r.id === cardId; })[0] || null;
+    }
+    function openNewCard() {
+      var open = (state.lists || []).filter(function (l) { return l.category !== 'completed' && l.category !== 'canceled' && l.category !== 'blocked'; });
+      var target = open.filter(function (l) { return l.category === 'unstarted'; })[0] || open[0];
+      if (!target || !global.NewCard) return;
+      global.NewCard.open({
+        t: t,
+        lists: state.lists,
+        listId: target.id,
+        onError: function (err) { setStatus('Échec : ' + ((err && err.message) || 'erreur'), 'error'); },
+        onCreated: function (c) { setStatus('Carte créée dans « ' + c.list.name + ' »', 'ok'); refreshAfterEdit(); },
+      });
+    }
+    if (global.LinearKeys) {
+      global.LinearKeys.attach({
+        t: t,
+        hoverSelector: '.mm-node--task[data-id]',
+        idOf: function (el) { return String(el.getAttribute('data-id') || '').replace(/^t:/, ''); },
+        selectedId: function () { var s = String(state.selected || ''); return s.indexOf('t:') === 0 ? s.slice(2) : ''; },
+        row: function (id) { var r = taskRec(id); return r ? { id: id, listId: r.listId, name: r.name } : null; },
+        lists: function () { return state.lists || []; },
+        setStatus: function (row, list) {
+          var rec = taskRec(row.id);
+          if (!rec) return;
+          runEdit(function () { return global.TableTrello.moveCard(t, rec.id, list.id, 'bottom'); }, statusEntry(rec, list.id));
+        },
+        setUrgency: function (row, urgencyId) {
+          runEdit(function () { return global.LinearKeys.saveUrgency(t, row.id, urgencyId); });
+        },
+        openDue: function (row, anchor) {
+          var rec = taskRec(row.id);
+          if (rec) openFieldEditor(rec, 'due', anchor);
+        },
+        newCard: openNewCard,
+      });
+    }
     renderBar();
     if (global.AssistantDock) {
       global.AssistantDock.mount({ t: t, after: root, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return global.CardFields && global.CardFields.isOpen(); } });
