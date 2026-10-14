@@ -419,6 +419,19 @@
     var d = doc();
     var vw = (global.innerWidth || (d.documentElement && d.documentElement.clientWidth) || 800);
     var vh = (global.innerHeight || (d.documentElement && d.documentElement.clientHeight) || 600);
+    var narrow = global.ViewShell && typeof global.ViewShell.isNarrow === 'function'
+      ? global.ViewShell.isNarrow()
+      : vw <= 640;
+    if (narrow) {
+      menuEl.classList.add('is-sheet');
+      menuEl.style.visibility = '';
+      menuEl.style.left = '8px';
+      menuEl.style.right = '8px';
+      menuEl.style.top = 'auto';
+      menuEl.style.bottom = '8px';
+      menuEl.style.width = 'auto';
+      return;
+    }
     menuEl.style.visibility = 'hidden';
     menuEl.style.left = '0px';
     menuEl.style.top = '0px';

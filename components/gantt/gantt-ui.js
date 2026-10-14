@@ -266,9 +266,14 @@
     } else if (chartWidthOrEl && chartWidthOrEl.clientWidth) {
       chartW = chartWidthOrEl.clientWidth;
     }
-    var max = Math.max(LABELS_W_MIN, chartW - 220);
+    var min =
+      global.ViewShell && typeof global.ViewShell.labelsMin === 'function'
+        ? global.ViewShell.labelsMin(chartW)
+        : LABELS_W_MIN;
+    var room = chartW < 640 ? 120 : 220;
+    var max = Math.max(min, chartW - room);
     var w = Math.round(Number(width) || LABELS_W_DEFAULT);
-    return Math.max(LABELS_W_MIN, Math.min(max, w));
+    return Math.max(min, Math.min(max, w));
   }
 
   /**
@@ -576,7 +581,9 @@
       i.className = 'ti ti-' + HD.icon(on);
       i.setAttribute('aria-hidden', 'true');
       hideDoneBtn.appendChild(i);
-      hideDoneBtn.appendChild(document.createTextNode(HD.label(on)));
+      var lab = document.createElement('span');
+      lab.textContent = HD.label(on);
+      hideDoneBtn.appendChild(lab);
     }
 
     /** Filters changed: save, redraw the rows, keep every control in sync. */
@@ -1968,8 +1975,10 @@
           }
         );
         hdBtn.title = HD.title(state.hideCompleted);
+        hdBtn.classList.add('gantt-btn--hide-done');
         hideDoneBtn = hdBtn;
         filters.appendChild(hdBtn);
+        refreshHideDoneBtn();
       }
       if (histBtn) filters.appendChild(histBtn);
       toolbar.appendChild(filters);

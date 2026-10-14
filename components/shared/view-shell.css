@@ -1,0 +1,421 @@
+/* Phone / narrow-iframe chrome. Loaded after each view's CSS so these rules win.
+   Patterns: Sheets freeze, Trello snap-list, Docs overlay list, Linear list→page. */
+
+/* ── Viewport: visual keyboard + notch ─────────────────────────────── */
+html {
+  height: var(--vvh, 100dvh);
+}
+body.tp-page--dashboard,
+body.tp-page--table,
+body.tp-page--kanban,
+body.tp-page--docs,
+body.tp-page--mindmap,
+body.tp-page--entities,
+html[data-color-mode] body.tp-page--dashboard,
+html[data-color-mode] body.tp-page--table,
+html[data-color-mode] body.tp-page--kanban,
+html[data-color-mode] body.tp-page--docs,
+html[data-color-mode] body.tp-page--mindmap,
+html[data-color-mode] body.tp-page--entities {
+  height: var(--vvh, 100dvh);
+  max-height: var(--vvh, 100dvh);
+}
+html:has(body.tp-page--gantt),
+html:has(body.tp-page--journey),
+html:has(body.tp-page--gantt) body,
+html:has(body.tp-page--journey) body {
+  height: var(--vvh, 100dvh);
+  max-height: var(--vvh, 100dvh);
+}
+
+.vt-bar {
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.ad-dock {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Tabs: same size on/off so a tap never moves the next one ─────── */
+.vt-tab.is-on {
+  font-weight: 500;
+}
+.vt-tabs {
+  -webkit-overflow-scrolling: touch;
+}
+
+.en-back--list {
+  display: none;
+}
+
+/* ── Pickers as sheets ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .vt-tab,
+  .vt-tab.is-on {
+    padding: 10px 10px 8px;
+    font-size: 0;
+    gap: 0;
+  }
+  .vt-tab .ti,
+  .vt-tab.is-on .ti {
+    font-size: 18px;
+  }
+  .vt-tabs {
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 12px), transparent);
+  }
+
+  .lp-pop,
+  .lp-pop.is-sheet {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto;
+    max-width: none;
+    top: auto !important;
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    max-height: min(50dvh, 340px);
+    border-radius: 16px;
+  }
+  .tp-context-menu.is-sheet {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto;
+    max-width: none;
+    top: auto !important;
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    max-height: min(70dvh, 480px);
+    border-radius: 16px;
+  }
+
+  .nc-scrim {
+    padding-top: 8px;
+    align-items: flex-end;
+  }
+  .nc-card {
+    width: min(620px, calc(100vw - 16px));
+    border-radius: 16px 16px 8px 8px;
+  }
+
+  /* Toolbars: wrap, shrink search, icon-only actions */
+  .tb-bar,
+  .kb-bar,
+  .mm-bar,
+  .gantt-toolbar,
+  .jy-bar,
+  .db-head-tools {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .tb-filter,
+  .kb-filter,
+  .mm-filter,
+  .jy-search {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 132px;
+  }
+  .tb-bar .tb-btn > span,
+  .kb-bar .kb-btn > span,
+  .hp-toolbar-btn > span:not(.hp-badge),
+  .kb-facet > span:not(.kb-facet-n),
+  .gantt-btn--hide-done > span {
+    display: none;
+  }
+  .tb-count,
+  .kb-count,
+  .mm-count,
+  .tb-status:not(.is-error),
+  .kb-status:not(.is-error),
+  .ad-dock-hint {
+    display: none;
+  }
+  .kb-ai--bar {
+    display: none;
+  }
+  .hp-input {
+    min-width: 0;
+    width: 100%;
+  }
+  .hp-drawer {
+    height: 38%;
+    min-height: 140px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tb-drawer {
+    height: 36%;
+    min-height: 120px;
+  }
+  .tb-menu {
+    min-width: 0;
+    left: 8px;
+    right: 8px;
+    width: auto;
+  }
+  textarea.tb-input {
+    min-width: 0;
+    width: min(320px, calc(100vw - 24px));
+  }
+
+  /* Table: Sheets pan — keep a short gutter; title stays a column and scrolls with the rest */
+  .tb-corner,
+  .tb-num {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+  }
+  .tb-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Kanban: one list per swipe (Trello) */
+  .kb-board {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .kb-col {
+    flex: 0 0 calc(100vw - 28px);
+    width: calc(100vw - 28px);
+    max-width: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .kb-detail:not([hidden]) {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    flex: none;
+    width: auto;
+    border-left: 0;
+  }
+
+  /* Gantt: title column, timeline pans */
+  .gantt-root {
+    min-height: 0;
+  }
+  .gantt-label-cell {
+    grid-template-columns: 22px minmax(72px, 1fr);
+  }
+  .gantt-detail-icons,
+  .gantt-row-actions {
+    display: none;
+  }
+
+  /* Docs: list is a drawer; body is the page */
+  .dc-main {
+    position: relative;
+  }
+  .dc-root:not(.is-side-collapsed) .dc-main::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: rgba(9, 30, 66, 0.35);
+  }
+  .dc-side {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(320px, calc(100% - 48px));
+    box-shadow: 8px 0 24px rgba(9, 30, 66, 0.22);
+  }
+  .dc-page {
+    --dc-pad-top: 16px;
+    --dc-pad-x: 16px;
+    padding: 16px 16px 72px 16px;
+  }
+  .dc-cover {
+    margin-left: -16px;
+    margin-right: -16px;
+  }
+  .dc-block-ui {
+    left: 0;
+  }
+  .dc-drop-line {
+    left: 16px;
+    right: 16px;
+  }
+  .dc-scroll {
+    padding: 8px 8px 72px;
+  }
+
+  /* Entités: list first, item is a full page */
+  .en-body {
+    position: relative;
+  }
+  .en-side {
+    flex: 1 1 auto;
+    flex-basis: auto;
+    width: 100%;
+    min-width: 0;
+    border-right: 0;
+  }
+  .en-main {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background: var(--en-page);
+    overflow: auto;
+  }
+  .en-root.is-entity-open .en-main {
+    display: block;
+  }
+  .en-root.is-entity-open .en-side {
+    visibility: hidden;
+  }
+  .en-page {
+    padding: 12px 16px 72px;
+  }
+  .en-title-text {
+    font-size: 18px;
+  }
+
+  /* Dashboard / Orchestrateur: snap a day at a time */
+  .db-head-tools {
+    flex-wrap: wrap;
+  }
+  .db-zoom-range {
+    width: 72px;
+  }
+  .db-scale {
+    font-size: 0;
+    padding: 6px;
+  }
+  .db-scale .ti {
+    font-size: 14px;
+  }
+  .db-board-days {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .db-board-days .db-col-card {
+    flex: 0 0 min(280px, calc(100vw - 80px));
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .db-field {
+    grid-template-columns: 1fr;
+  }
+  .db-row-line {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .db-row-line .db-row-name {
+    flex: 1 1 auto;
+    min-width: 7rem;
+    overflow-wrap: break-word;
+    white-space: normal;
+  }
+
+  /* Mindmap: panel as a bottom sheet */
+  .mm-panel {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-width: none;
+    max-height: 48%;
+    border-radius: 16px;
+  }
+  .mm-filter {
+    min-width: 0;
+  }
+  .mm-tools {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  /* Journey bar */
+  .jy-zoom button {
+    width: auto;
+    min-width: 44px;
+    padding: 0 8px;
+  }
+  .en-back--list {
+    display: inline-flex;
+    margin-bottom: 8px;
+  }
+}
+
+/* Kanban stage (board + optional card sheet) fills the column */
+.kb-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+.kb-stage .kb-board {
+  flex: 1 1 auto;
+}
+.kb-detail {
+  flex: 0 0 min(320px, 40%);
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid var(--tp-border);
+  background: var(--tp-surface);
+}
+.kb-detail[hidden] {
+  display: none;
+}
+
+/* Facets (Kanban) — always, so the bar has a size on desktop too */
+.kb-facet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.kb-facet:hover {
+  background: var(--tp-surface-hover);
+}
+.kb-facet.is-active {
+  color: var(--tp-primary);
+  box-shadow: inset 0 0 0 1px var(--tp-primary);
+}
+.kb-facet-n {
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+/* Coarse pointer: show the always-there actions, keep their visual size */
+@media (pointer: coarse) {
+  .tb-rowbtn,
+  .tb-edit,
+  .tb-cell--pill .tb-caret {
+    visibility: visible;
+    opacity: 0.55;
+  }
+  .kb-chip--empty {
+    opacity: 0.45;
+  }
+  .tp-context-menu-item,
+  .lp-item {
+    min-height: 40px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-board,
+  .db-board-days {
+    scroll-snap-type: none;
+  }
+}

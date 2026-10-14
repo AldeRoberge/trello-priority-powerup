@@ -6,6 +6,7 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 |---|---|---|
 | journey | (released) `view-tabs.js` has the Parcours tab. Please keep that `VIEWS` entry. | Journey map and next-action queue are on main. |
 | link-doc | (released) | Link button searches documents; selected words stay |
+| phone-fit | (released) | Phone chrome: Sheets freeze, Trello snap, Docs overlay |
 | orbit-map | `mindmap-model.js` (`orbit` only), `mindmap-ui.js` (focus orbit, node corners; not `renderBar` / `openMenu`), `mindmap-ui.css` (`.mm-node.is-context`, `.mm-edge.is-context`, `.mm-orbit-ring`; not `.mm-tool*`), `test/mindmap-model.test.js`, `mindmap.html` cache, `CHANGELOG.md` one line | Click gathers a neighbourhood; background click returns the map |
 | work-ladder | (released) | Vision to task, who leads, who blocks |
 | board-face | (released) | Kanban: side panel, full-height columns, overdue/blocked chips, AI on demand |

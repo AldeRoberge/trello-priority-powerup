@@ -1897,6 +1897,10 @@
         page.classList.add('en-page--schema');
         paintSchema(page);
       } else paintEntity(page);
+      root.classList.toggle(
+        'is-entity-open',
+        state.mode === 'schema' || !!(state.selId && selected())
+      );
       els.main.scrollTop = keep;
       if (state.refocus) {
         var f = page.querySelector(state.refocus);
@@ -1912,6 +1916,24 @@
         page.appendChild(emptyState());
         return;
       }
+      page.appendChild(
+        h(
+          'button',
+          {
+            class: 'en-back en-back--list',
+            type: 'button',
+            title: 'Liste',
+            'aria-label': 'Retour à la liste',
+            onclick: function () {
+              state.selId = null;
+              state.mode = 'entity';
+              paintMain();
+              paintList();
+            },
+          },
+          [icon('chevron-left'), 'Liste']
+        )
+      );
       page.appendChild(heroBlock(e));
       var shownNature = 0;
       EM()
