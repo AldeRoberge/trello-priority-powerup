@@ -132,7 +132,11 @@
     return el && el.parentNode === container ? el : null;
   }
 
+  var RECT_MS = 120;
+
   function rectsOf(w) {
+    var now = Date.now();
+    if (w.rects && now - w.rectAt < RECT_MS) return w.rects;
     var nodes = w.container.querySelectorAll(w.opts.item);
     var out = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -141,7 +145,13 @@
       if (r.width < 2 || r.height < 2) continue;
       out.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right, el: nodes[i] });
     }
+    w.rects = out;
+    w.rectAt = now;
     return out;
+  }
+
+  function sameHit(a, b) {
+    return !!(a && b && a.index === b.index && Math.abs(a.seam - b.seam) < 0.5);
   }
 
   function placeButton(w, hit) {
@@ -159,18 +169,31 @@
     w.hit = hit;
   }
 
-  function onMove(w, e) {
+  function moveAt(w, x, y, target) {
     if (w.composing) return;
     if (w.opts.enabled && w.opts.enabled() === false) { hide(w); return; }
-    if (e.target && e.target.closest && e.target.closest('.ig-compose')) { hide(w); return; }
+    if (target && target.closest && target.closest('.ig-compose')) { hide(w); return; }
     var rows = rectsOf(w);
     var hit = w.opts.mode === 'under'
-      ? underAt(rows, e.clientX, e.clientY, w.opts.slack)
+      ? underAt(rows, x, y, w.opts.slack)
       : w.opts.mode === 'split'
-        ? splitAt(rows, e.clientX, e.clientY, w.opts.slack)
-        : gapAt(rows, e.clientX, e.clientY, w.opts.slack);
+        ? splitAt(rows, x, y, w.opts.slack)
+        : gapAt(rows, x, y, w.opts.slack);
     if (!hit) { hide(w); return; }
+    if (sameHit(w.hit, hit)) return;
     placeButton(w, hit);
+  }
+
+  function onMove(w, e) {
+    w.px = e.clientX;
+    w.py = e.clientY;
+    w.pt = e.target;
+    if (w.moveRaf) return;
+    var raf = global.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+    w.moveRaf = raf(function () {
+      w.moveRaf = 0;
+      moveAt(w, w.px, w.py, w.pt);
+    });
   }
 
   function removeCompose(w) {
@@ -259,7 +282,10 @@
     if (listening || !global.document) return;
     listening = true;
     global.addEventListener('scroll', function () {
-      watches.forEach(hide);
+      watches.forEach(function (w) {
+        w.rectAt = 0;
+        hide(w);
+      });
     }, true);
   }
 

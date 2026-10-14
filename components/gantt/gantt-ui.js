@@ -1388,6 +1388,8 @@
       headerTimeline.appendChild(labels);
       headerTimeline.classList.add('gantt-timeline-header--hours');
       var raf = 0;
+      var drawnLeft = -1e9;
+      var drawnRight = -1e9;
       var labelEvery = Math.max(1, Math.ceil(MIN_WEEK_LABEL_PX / (dayPx * 7)));
       var showMonth = dayPx * 7 * labelEvery >= 70;
 
@@ -1395,6 +1397,11 @@
         raf = 0;
         var left = scroll.scrollLeft - 200;
         var right = scroll.scrollLeft + scroll.clientWidth + 200;
+        var reuseTicks = Math.abs(left - drawnLeft) < 64 && Math.abs(right - drawnRight) < 64;
+        if (!reuseTicks) {
+          drawnLeft = left;
+          drawnRight = right;
+        }
         var linesFrag = document.createDocumentFragment();
         var labelsFrag = document.createDocumentFragment();
         for (var c = 0; c < cols.length; c++) {
@@ -1405,7 +1412,7 @@
             var shift = Math.max(0, Math.min(scroll.scrollLeft - x0, x1 - x0 - 60));
             cell.style.paddingLeft = shift + 8 + 'px';
           }
-          if (x1 < left || x0 > right) continue;
+          if (reuseTicks || x1 < left || x0 > right) continue;
           var d = model.startOfWeek(cols[c].start);
           if (d.getTime() < cols[c].start.getTime()) d = model.addDays(d, 7);
           for (; d.getTime() <= cols[c].end.getTime(); d = model.addDays(d, 7)) {

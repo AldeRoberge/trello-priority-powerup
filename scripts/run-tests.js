@@ -71,6 +71,7 @@ const UNIT_FILES = [
   'outlook-sync.test.js',
   'outlook-ics.test.js',
   'desc-meta.test.js',
+  'field-catalog.test.js',
   'docs-model.test.js',
   'docs-rich.test.js',
   'docs-trello.test.js',

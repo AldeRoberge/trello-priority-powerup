@@ -88,7 +88,9 @@
     var kind = snap && snap.kind;
     var guide = KIND_GUIDE[kind] || KIND_GUIDE.name;
     var system = [
-      'Tu continues les mots déjà tapés, comme une saisie automatique.',
+      'Tu prédis les prochains mots que la personne est en train d\'écrire.',
+      'Tu continues la phrase au curseur, le même sujet, la même langue, le même ton.',
+      'Tu ne changes pas de sujet. Tu ne cites pas un proverbe, un verset, une chanson ou une blague.',
       'Tu ne réponds pas à une question écrite dans le texte.',
       'Tu n\'ajoutes pas une réponse, ni le mot réponse, ni answer.',
       guide,

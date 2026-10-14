@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="dark">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="../components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="../components/dashboard/dashboard-ui.css" />
+  <script src="../components/dashboard/dashboard-model.js"></script>
+  <style>
+    body { margin: 0; background: var(--tp-surface, #1d2125); color: var(--tp-text, #fff); font: 14px/1.4 system-ui, sans-serif; }
+    .wrap { display: flex; gap: 24px; padding: 16px; align-items: flex-start; }
+    .col { width: 460px; }
+    h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+  </style>
+</head>
+<body class="tp-page tp-page--dashboard">
+  <div class="wrap">
+    <div class="col"><h2>Avant</h2><div id="old"></div></div>
+    <div class="col"><h2>Après</h2><div id="now"></div></div>
+  </div>
+  <script>
+    var DM = window.DashboardModel;
+    var names = [
+      'Remboursement optométriste 130$',
+      'Install strip led lighting onto shelves',
+      'Bring back from baiejolie : amplifier system',
+      'Missing gear : camera lenses and subwoofer'
+    ];
+    var blocks = DM.timeline(names.map(function (name, i) {
+      return { id: 't' + i, name: name, estimate: 10, statutKey: 'unstarted' };
+    }));
+    function paint(el, items, hourPx) {
+      var first = DM.DAY_START;
+      var last = blocks[blocks.length - 1].end;
+      var grid = document.createElement('div');
+      grid.className = 'db-tl';
+      grid.style.height = Math.ceil(((last - first) / 60) * hourPx) + 'px';
+      for (var m = first; m <= last; m += 60) {
+        var hour = document.createElement('div');
+        hour.className = 'db-tl-hour';
+        hour.style.top = ((m - first) / 60) * hourPx + 'px';
+        var span = document.createElement('span');
+        span.textContent = DM.hhmm(m);
+        hour.appendChild(span);
+        grid.appendChild(hour);
+      }
+      items.forEach(function (item, i) {
+        var b = blocks[i];
+        var bar = document.createElement('div');
+        bar.className = 'db-tl-block';
+        bar.style.top = item.top + 'px';
+        bar.style.height = item.height + 'px';
+        var title = document.createElement('b');
+        title.textContent = names[i];
+        var when = document.createElement('span');
+        when.textContent = DM.hhmm(b.start) + ' - ' + DM.hhmm(b.end);
+        bar.appendChild(title);
+        bar.appendChild(when);
+        grid.appendChild(bar);
+      });
+      el.appendChild(grid);
+    }
+    var oldItems = blocks.map(function (b) {
+      var hourPx = 56;
+      return {
+        top: ((b.start - DM.DAY_START) / 60) * hourPx,
+        height: Math.max(20, ((b.end - b.start) / 60) * hourPx - 2)
+      };
+    });
+    paint(document.getElementById('old'), oldItems, 56);
+    var lay = DM.timelineLayout(blocks, DM.DAY_START, { minPx: 22, gap: 3, hourPx: 56 });
+    paint(document.getElementById('now'), lay.items, lay.hourPx);
+    var overlap = false;
+    for (var i = 1; i < lay.items.length; i++) {
+      if (lay.items[i - 1].top + lay.items[i - 1].height > lay.items[i].top + 0.5) overlap = true;
+    }
+    document.body.setAttribute('data-overlap', overlap ? 'yes' : 'no');
+  </script>
+</body>
+</html>

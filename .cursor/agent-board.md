@@ -4,11 +4,13 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
-| tl-overlap | `dashboard-model.js` (`timelineLayout` only), `dashboard-ui.js` (today timeline geometry only, not `db-props`), `dashboard-ui.css` (`.db-tl-block` only), `test/dashboard-model.test.js` (timeline layout test), `CHANGELOG.md` one line | Today timeline: short tasks no longer cover the next title |
+| tag-fields | NEW `field-catalog.js`, `test/field-catalog.test.js`, `scripts/run-tests.js` (one line), `docs-ui.js` (task property rows only; not Tab, preview, or code blocks), `docs-trello.js` (`loadCardFace` meta + `saveCardMeta` + `loadTaskFields`), `priority-trello.js` (`saveCardInputsById` places only), `docs.html` + `sandbox/e2e/docs.html` (one script tag each), `fake-trello.js` (board labels), `gantt-mini-editors.test.js` (one places test), `CHANGELOG.md` one line | Prefixed labels become fields on the document page. |
+| list-tab | `docs-ui.js` (Tab list branch + indent helpers only), `docs-ui.css` (ul/ol list-style-type), `sandbox/e2e/docs-tests.js` (checklist Tab test), `docs.html` (cache `subtask-1`), `docs/documents.md` (Tab cell), `CHANGELOG.md` one line | Tab nests a subtask; same bullet or checkbox |
+| tl-overlap | (released) | Today timeline: short tasks no longer cover the next title |
 | pop-zoom | `card-quick.js` (`resizeRect` + `zoomAt` only), `test/card-quick.test.js`, `docs-ui.js` (`openTaskPreview` size only), `docs-ui.css` (`.dc-pop--task` + `.dc-pop-corner` only), `CHANGELOG.md` one line | Task preview: drag any corner, wheel zooms at the cursor |
-| ghost-sense | `ai-complete.js`, `test/ai-complete.test.js`, `CHANGELOG.md` one line | Ghost text stays on the same sentence |
+| ghost-sense | (released) | Ghost text stays on the same sentence |
 | block-noreason | `card-fields.js` (`openBlocked` only), `priority-ui.js` (block composer `commitCustom` only), `popup.html` (`overviewBlockWithReasons` only), `CHANGELOG.md` one line | Block a card with no reason. The reason field stays optional. |
-| code-exit | `docs-ui.js` (arrow-out of `PRE` in `onKeydown`, mousedown below a `pre`, `ensureTail` only), `sandbox/e2e/docs-tests.js` (one exit test), `docs.html` + `sandbox/e2e/docs.html` (docs-ui cache query), `CHANGELOG.md` one line | Down arrow or a click below a code block leaves it |
+| code-exit | (released) | Down arrow or a click below a code block leaves it |
 | insert-gap | (released) | Entity list: + above, below, and between rows |
 | span-scroll | (released) | Gantt scroll loads the next day/week/month/year. Dashboard not touched. |
 | prop-align | (released) | Today list: score, estimate, day, arrow in fixed columns |
@@ -53,5 +55,5 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 | rel-phrase | (done) leave `relationPhrase`, `taskPhase`, `phraseSections` and `.mm-edge-label*` alone | Mindmap link phrases follow the clicked node and the task phase |
 | pad-entity | (released) | Nouvelle entité dialog hugs the name field (`entities-interview-ui.css`) |
 | ghost-everywhere | (released) | Tab ghost on writing fields (`ai-complete.js` classify fallback). Assistant composer and Kanban « Demander à l'IA » left alone. |
-| genre-type | `entities-interview.js`, `entities-interview-ui.js`, `test/entities-interview.test.js`, `CHANGELOG.md` (one line) | Typed genre searches the catalog; a new word creates the genre |
+| genre-type | (released) | Typed genre searches the catalog; a new word creates the genre |
 | block-align | `docs-ui.js` (`showBlockUi` + first-line anchor only), `docs-ui.css` (`.dc-block-ui` height only), `docs.html` (docs-ui.js cache query), `CHANGELOG.md` (one line) | Notion handle centered on the first line of every block. Leaves the menu, drag, and gutter ownership of doc-blocks otherwise. |

@@ -133,6 +133,38 @@ describe('AiComplete', () => {
       assert.equal(AI.parseCompletion(' answer?', 'What is 1+1? The', 'document'), '');
       assert.equal(AI.parseCompletion('réponse : 2', 'Combien font 1+1? ', 'document'), '');
     });
+
+    it('separates a new word and drops a different story', () => {
+      assert.equal(
+        AI.parseCompletion('and C++', 'The best programming language in the world is C', 'document'),
+        ' and C++'
+      );
+      assert.equal(AI.parseCompletion('de la semaine', 'Préparer', 'task-name'), ' de la semaine');
+      assert.equal(
+        AI.parseCompletion(
+          'and on the seventh day, he rested and',
+          'The best programming language in the world is C',
+          'document'
+        ),
+        ''
+      );
+      assert.equal(
+        AI.parseCompletion(
+          ' because it is close to the machine',
+          'The best programming language in the world is C',
+          'document'
+        ),
+        ' because it is close to the machine'
+      );
+      assert.equal(
+        AI.parseCompletion(
+          'et le septième jour il se reposa',
+          'The best programming language in the world is C',
+          'document'
+        ),
+        ''
+      );
+    });
   });
 
   describe('buildMessages', () => {
@@ -149,6 +181,9 @@ describe('AiComplete', () => {
       assert.equal(messages[0].content.indexOf('\u2014'), -1);
       assert.match(messages[0].content, /ne réponds pas à une question/);
       assert.match(messages[0].content, /4 suites/);
+      assert.match(messages[0].content, /même sujet/);
+      assert.match(messages[0].content, /la plus probable/);
+      assert.equal(messages[0].content.indexOf('directions différentes'), -1);
     });
   });
 

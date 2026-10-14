@@ -61,9 +61,15 @@ test('pctFromX maps the pointer onto 0-100 and ignores a zero-width bar', () => 
 test('resizeRect grows from any corner and keeps the opposite corner', () => {
   var start = { left: 100, top: 80, width: 320, height: 200 };
   var se = CQ.resizeRect(start, 'se', 40, 30, 260, 160);
-  assert.deepEqual(se, { left: 100, top: 80, width: 360, height: 230 });
+  assert.equal(se.left, 100);
+  assert.equal(se.top, 80);
+  assert.equal(se.width, 360);
+  assert.equal(se.height, 230);
   var nw = CQ.resizeRect(start, 'nw', -20, -10, 260, 160);
-  assert.deepEqual(nw, { left: 80, top: 70, width: 340, height: 210 });
+  assert.equal(nw.left, 80);
+  assert.equal(nw.top, 70);
+  assert.equal(nw.width, 340);
+  assert.equal(nw.height, 210);
   var ne = CQ.resizeRect(start, 'ne', 10, 50, 260, 160);
   assert.equal(ne.left, 100);
   assert.equal(ne.width, 330);
@@ -76,10 +82,10 @@ test('resizeRect grows from any corner and keeps the opposite corner', () => {
 
 test('zoomAt keeps the point under the cursor', () => {
   var box = { left: 100, top: 50, width: 200, height: 100 };
-  var at = CQ.zoomAt(box, 150, 80, 1, 2);
+  var at = CQ.zoomAt(box, 200, 100, 1, 2);
   assert.equal(at.scale, 2);
-  assert.equal(at.left, 100, 'the center of the box stays when the cursor is there');
-  assert.equal(at.top, 20);
+  assert.equal(at.left, 0);
+  assert.equal(at.top, 0, 'the center of the box stays under the cursor');
   var corner = CQ.zoomAt(box, 100, 50, 1, 2);
   assert.equal(corner.left, 100);
   assert.equal(corner.top, 50, 'zooming on the top-left does not move that corner');

@@ -1244,11 +1244,13 @@
       paintSelBarState();
     }
 
-    function onEdit() {
-      fixTables();
+    function onEdit(kind) {
+      if (kind !== 'text') {
+        fixTables();
+        fixImages();
+        fixChips();
+      }
       normalizeRoot();
-      fixImages();
-      fixChips();
       paintEmptyClass();
       if (state.saveState !== 'conflict') setSave('dirty');
       scheduleSave(SAVE_DELAY_MS);
@@ -1263,7 +1265,7 @@
       els.meta.textContent = '';
       if (!state.current || !editor) return;
       var cur = state.current;
-      var words = DM().countWords(editor.innerText || editor.textContent || '');
+      var words = DM().countWords(editor.textContent || '');
       var who = docWho(cur);
       var line = [];
       if (who && who.author) line.push('Créé par ' + whoName(who.author.member));
@@ -1439,7 +1441,7 @@
       return box;
     }
 
-    function openPicker(anchor, rows) {
+    function openPicker(anchor, rows, tail) {
       closePop();
       var box = h('div', { class: 'dc-pop dc-picker' });
       var search = h('input', { class: 'dc-picker-search', type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher' });
@@ -1458,7 +1460,8 @@
             onclick: function () { r.run(); },
           }, [icon(r.on ? 'check' : (r.icon || 'point')), h('span', { text: r.label })]));
         });
-        if (!shown) list.appendChild(h('div', { class: 'dc-pop-sub', text: 'Aucun résultat' }));
+        if (typeof tail === 'function') tail(list, q || '', shown);
+        if (!list.childNodes.length) list.appendChild(h('div', { class: 'dc-pop-sub', text: 'Aucun résultat' }));
       }
       search.addEventListener('input', function () { paint(search.value); });
       box.appendChild(search);
@@ -1606,14 +1609,40 @@
 
     function childDocs() {
       var id = state.current && state.current.id;
+      if (!id) return [];
       var parents = (state.idx && state.idx.parents) || {};
-      return state.docs.filter(function (d) { return parents[d.id] === id; });
+      var folder = DM().folderByDoc(state.idx, id);
+      var skip = {};
+      (state.idx.folders || []).forEach(function (f) { if (f.doc) skip[f.doc] = true; });
+      return state.docs.filter(function (d) {
+        if (d.id === id || skip[d.id]) return false;
+        if (parents[d.id] === id) return true;
+        return !!(folder && state.idx.docs[d.id] === folder.id);
+      });
+    }
+
+    function childFolders() {
+      var folder = state.current && DM().folderByDoc(state.idx, state.current.id);
+      if (!folder) return [];
+      return state.idx.folders.filter(function (f) {
+        return f.parent === folder.id && (state.showArchived || !f.archived);
+      }).sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
     }
 
     function paintParent() {
       var cur = state.current;
-      var pid = cur && state.idx && state.idx.parents && state.idx.parents[cur.id];
+      var parents = (state.idx && state.idx.parents) || {};
+      var pid = cur && parents[cur.id];
       var parent = pid && state.docs.filter(function (d) { return d.id === pid; })[0];
+      if (!parent && cur && state.idx && state.idx.docs[cur.id]) {
+        var holder = DM().folderById(state.idx, state.idx.docs[cur.id]);
+        if (holder && holder.doc && holder.doc !== cur.id) parent = state.docs.filter(function (d) { return d.id === holder.doc; })[0];
+      }
+      if (!parent && cur) {
+        var me = DM().folderByDoc(state.idx, cur.id);
+        var up = me && me.parent && DM().folderById(state.idx, me.parent);
+        if (up && up.doc) parent = state.docs.filter(function (d) { return d.id === up.doc; })[0];
+      }
       els.parent.hidden = !parent;
       els.parent.textContent = '';
       if (!parent) return;
@@ -1756,6 +1785,12 @@
         onclick: function (e) { e.stopPropagation(); newDoc(null, null, null, cur.id); },
       }, [icon('plus')]);
       els.props.appendChild(propRow('files', 'Documents', function (v) {
+        childFolders().forEach(function (f) {
+          v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', onclick: function () { openFolder(f.id); } }, [
+            icon('folder'),
+            h('span', { text: folderLabel(f) }),
+          ]));
+        });
         childDocs().forEach(function (d) {
           v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', onclick: function () { openDoc(d.id); } }, [
             icon(d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text'),
@@ -1903,7 +1938,7 @@
           onEdit();
         });
       }
-      onEdit();
+      onEdit(type === 'insertText' || type === 'insertCompositionText' || type.indexOf('delete') === 0 ? 'text' : '');
       updateSuggest();
     }
 
@@ -4455,6 +4490,7 @@
       closePop();
       var d = state.docs.filter(function (x) { return x.id === docId; })[0] || (state.current && state.current.id === docId ? state.current : null);
       if (!d) return;
+      var asFolder = DM().folderByDoc(state.idx, docId);
       function item(iconName, label, run, danger) {
         return h('button', {
           class: 'dc-menu-item' + (danger ? ' is-danger' : ''),
@@ -4479,10 +4515,10 @@
           : null,
         item('download', 'Télécharger (.md)', function () { exportDoc(docId, 'download'); }),
         item('clipboard', 'Copier en Markdown', function () { exportDoc(docId, 'copy'); }),
-        state.idx.parents && state.idx.parents[docId] && state.docs.some(function (x) { return x.id === state.idx.parents[docId]; })
+        !asFolder && state.idx.parents && state.idx.parents[docId] && state.docs.some(function (x) { return x.id === state.idx.parents[docId]; })
           ? item('arrow-bar-up', 'Sortir du document parent', function () { unnestDoc(docId); })
           : null,
-        item('folder-share', 'Déplacer vers un dossier…', function () {
+        asFolder ? null : item('folder-share', 'Déplacer vers un dossier…', function () {
           openFolderPicker(anchor, 'Déplacer le document vers', state.idx.docs[docId] || '', '', function (to) { moveDocToFolder(docId, to); });
         }),
         state.driveUrl
@@ -4491,9 +4527,13 @@
           })
           : null,
         h('div', { class: 'dc-menu-sep' }),
-        state.idx.archived && state.idx.archived[docId]
-          ? item('archive-off', 'Restaurer', function () { restoreDoc(docId); })
-          : item('archive', 'Archiver', function () { confirmDelete(docId); }, true),
+        asFolder
+          ? (asFolder.archived
+            ? item('archive-off', 'Restaurer', function () { editFolders(function (idx) { DM().restoreFolderIn(idx, asFolder.id); }, 'Dossier restauré.'); })
+            : item('archive', 'Archiver…', function () { deleteFolder(asFolder.id); }, true))
+          : (state.idx.archived && state.idx.archived[docId]
+            ? item('archive-off', 'Restaurer', function () { restoreDoc(docId); })
+            : item('archive', 'Archiver', function () { confirmDelete(docId); }, true)),
       ]);
       placePop(pop, anchor.getBoundingClientRect());
     }
@@ -5287,6 +5327,7 @@
             cur.title = r.title;
             histRenamed(cur.id, oldTitle, r.title);
             touchListItem(cur.id, { title: r.title });
+            syncFolderName(cur.id, r.title);
             rebuildIndex();
           });
         });
@@ -5370,6 +5411,8 @@
       if (!state.authOk || !state.docsLoaded || saving || (force !== true && Date.now() - lastRefreshAt < REFRESH_MIN_MS)) return Promise.resolve();
       lastRefreshAt = Date.now();
       return DT().listDocs(t).then(function (docs) {
+        return DT().ensureFolderDocs(t, docs).then(function (r) { return r.docs; }, function () { return docs; });
+      }).then(function (docs) {
         var openId = state.current && state.current.id;
         state.docs = docs;
         state.idx = DT().getFolderIndex();
@@ -5704,6 +5747,8 @@
             function (r) { return r.docs; },
             function (err) { failure(err); return docs; } // creation failed: show the empty state
           );
+        }).then(function (docs) {
+          return DT().ensureFolderDocs(t, docs).then(function (r) { return r.docs; }, function () { return docs; });
         }).then(
           function (docs) {
             state.docs = docs;

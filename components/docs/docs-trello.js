@@ -414,6 +414,15 @@
     };
   }
 
+  function metaOf(full) {
+    var meta = global.DescMeta;
+    if (meta && typeof meta.splitDesc === 'function') {
+      var split = meta.splitDesc(full);
+      return (split && split.meta) || {};
+    }
+    return {};
+  }
+
   function visibleOf(full) {
     var meta = global.DescMeta;
     if (meta && typeof meta.splitDesc === 'function') return meta.splitDesc(full).visible || '';
@@ -441,6 +450,7 @@
       id: String(card.id || cardId),
       name: card.name || '',
       desc: visibleOf(card.desc),
+      meta: metaOf(card.desc),
       due: card.due || '',
       dueComplete: !!card.dueComplete,
       closed: !!card.closed,
@@ -471,6 +481,58 @@
   async function setCardLabels(t, cardId, ids) {
     var list = (ids || []).map(function (id) { return DM().cleanId(id); }).filter(Boolean);
     need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { idLabels: list.join(',') }));
+  }
+
+  /** Writes one hidden desc-meta key on the task card and keeps the visible text. */
+  async function saveCardMeta(t, cardId, key, value) {
+    var meta = global.DescMeta;
+    if (!meta || typeof meta.setMeta !== 'function') throw fail('no-meta');
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=desc'));
+    var next = meta.setMeta(card && card.desc, key, value);
+    if (next.length > 16384) throw fail('too-long');
+    need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { desc: next }));
+    return { meta: metaOf(next) };
+  }
+
+  /**
+   * Priority inputs and the Catégorie custom field for one task.
+   * Missing pieces stay empty; the page still shows the label-derived value.
+   */
+  async function loadTaskFields(t, cardId) {
+    var inputs = null;
+    var pt = PT();
+    if (pt && typeof pt.getCardInputsById === 'function') {
+      try {
+        inputs = await pt.getCardInputsById(t, cardId);
+      } catch (e) {
+        inputs = null;
+      }
+    }
+    var category = '';
+    var categoryFieldId = null;
+    try {
+      var board = await t.board('id');
+      var boardId = board && board.id;
+      if (boardId) {
+        var fields = await ST().trelloRest(t, '/boards/' + enc(boardId) + '/customFields');
+        if (fields && fields.ok) {
+          var field = (fields.data || []).filter(function (f) {
+            return f && f.name === 'Catégorie' && f.type === 'text';
+          })[0];
+          if (field) {
+            categoryFieldId = field.id;
+            var card = await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=id&customFieldItems=true');
+            var item = card && card.ok && card.data
+              ? (card.data.customFieldItems || []).filter(function (i) { return i.idCustomField === field.id; })[0]
+              : null;
+            if (item && item.value && item.value.text) category = String(item.value.text);
+          }
+        }
+      }
+    } catch (e2) {
+      category = '';
+    }
+    return { inputs: inputs, category: category, categoryFieldId: categoryFieldId };
   }
 
   var ENTITY_MARK = '🧩';
@@ -610,6 +672,8 @@
     saveCardDesc: saveCardDesc,
     setCardMembers: setCardMembers,
     setCardLabels: setCardLabels,
+    saveCardMeta: saveCardMeta,
+    loadTaskFields: loadTaskFields,
     loadEntityFace: loadEntityFace,
     listEntityChoices: listEntityChoices,
     ensureSubjectDoc: ensureSubjectDoc,

@@ -14,7 +14,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Créer une tâche | sélectionner du texte, puis **Créer une tâche** (ou clic droit). Le texte devient une tâche du tableau, liée à la place de la sélection. La flèche choisit la liste |
 | Lier un autre document | `@@@` |
 | Tout chercher d'un coup | `@` seul liste personnes, tâches et documents (3 de chaque) |
-| Commandes | `/` puis un mot (`/titre`, `/liste`, `/image`…) |
+| Commandes | `/` puis un mot (`/titre`, `/liste`, `/tableau`, `/note`, `/image`…) |
 | Bloc | survoler une ligne : **+** ajoute un bloc, la poignée la glisse ou ouvre le menu pour changer le type |
 | Raccourcis Markdown | `# ` `## ` `### ` titres, `- ` puces, `1. ` numérotée, `[] ` cases à cocher, `> ` citation, `---` + Entrée séparateur, ```` ``` ```` + Entrée bloc de code |
 | Mise en forme | barre d'outils, ou la barre au-dessus d'une sélection (style, couleur, surlignage, gras, italique, lien, listes) ; Ctrl+B / I / U, Ctrl+Maj+X barré, Ctrl+E code, Ctrl+K lien, Ctrl+Maj+7/8/9 listes, Ctrl+Alt+0…3 styles, Tab / Maj+Tab pour imbriquer une sous-tâche (la puce ou la case ne change pas) |

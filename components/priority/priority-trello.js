@@ -3544,6 +3544,14 @@
       else delete base.depTypes;
     }
 
+    if (Object.prototype.hasOwnProperty.call(patch, 'places')) {
+      if (patch.places && typeof patch.places === 'object' && !Array.isArray(patch.places)) {
+        base.places = patch.places;
+      } else {
+        delete base.places;
+      }
+    }
+
     var normalized = normalizeInputs(base);
     if (!normalized) {
       throw new Error('saveCardInputsById: invalid inputs');
