@@ -4510,7 +4510,10 @@
     }
 
     function insertMention(item) {
-      document.execCommand('insertHTML', false, plainChips(DM().mentionHtml(item.type, item.id, item.label)) + '&nbsp;');
+      /* An entity keeps the typed words flush with the next letter. A zero-width
+         space still stops Chrome from stripping the span's attributes. */
+      var trail = item.type === 'entity' ? '&#8203;' : '&nbsp;';
+      document.execCommand('insertHTML', false, plainChips(DM().mentionHtml(item.type, item.id, item.label)) + trail);
       fixChips();
       refreshChips();
       onEdit();
@@ -4537,7 +4540,7 @@
       tpl.innerHTML = plainChips(DM().mentionHtml(item.type, item.id, item.label));
       var chip = tpl.content.firstChild;
       if (!chip) return false;
-      var space = document.createTextNode('\u00a0');
+      var space = document.createTextNode(item.type === 'entity' ? '\u200b' : '\u00a0');
       range.deleteContents();
       range.insertNode(space);
       range.insertNode(chip);

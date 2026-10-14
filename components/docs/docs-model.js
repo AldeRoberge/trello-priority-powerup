@@ -19,7 +19,7 @@
  *   text color {c:red}…{/c}   colored highlight {h:green}…{/h}   (gray brown orange yellow green blue purple pink red)
  *   - bullets (nested by 2 spaces)   1. numbers   - [ ] / - [x] checklist   > quote   ``` fence   ---
  *   callout: > [!note] | [!tip] | [!warning]     GFM table     <!--align:center--> or <!--align:right--> on the next line
- *   mentions: [@Label](person:ID) [@Label](task:ID) [@Label](doc:ID)
+ *   mentions: [@Label](person:ID) [@Label](task:ID) [@Label](doc:ID) [@texte](entity:ID)
  *   a person shown by first name only: [@Prénom](person:ID:short)
  *   a picture on its own line: ![alt](https://…) or ![alt](upload:cardId/attId/file.jpg)
  *   <!--blank-->  an intentionally empty paragraph
@@ -40,6 +40,7 @@
     person: { icon: 'user', group: 'Personnes' },
     task: { icon: 'checkbox', group: 'Tâches' },
     doc: { icon: 'file-text', group: 'Documents' },
+    entity: { icon: 'stack-2', group: 'Entités' },
   };
 
   function isDocName(name) {
@@ -659,6 +660,12 @@
     var cid = cleanId(id);
     if (!spec || !cid) return esc(label || '');
     var text = String(label == null ? '' : label).replace(/\s+/g, ' ').trim() || '?';
+    if (type === 'entity') {
+      return (
+        '<span class="dc-ent" data-m="entity" data-id="' + cid +
+        '" data-label="' + esc(text) + '" contenteditable="false">' + esc(text) + '</span>'
+      );
+    }
     var short = type === 'person' && !!(opts && opts.short);
     var shown = short ? (firstName(text) || text) : text;
     return (
@@ -712,7 +719,7 @@
     if (k >= n) return null;
     var label = s.slice(i + 1, j);
     var url = s.slice(j + 2, k).trim();
-    var m = /^(person|task|doc):([A-Za-z0-9_-]{1,64})(?::(short))?$/.exec(url);
+    var m = /^(person|task|doc|entity):([A-Za-z0-9_-]{1,64})(?::(short))?$/.exec(url);
     if (m && label.charAt(0) === '@') {
       return {
         html: mentionHtml(m[1], m[2], label.slice(1).replace(/\\(.)/g, '$1'), { short: m[3] === 'short' }),
@@ -1708,6 +1715,7 @@
     var person = [];
     var task = [];
     var doc = [];
+    var entity = [];
     var by = Object.create(null);
     var seenMember = Object.create(null);
     function add(list, item) {
@@ -1778,7 +1786,18 @@
       }
       add(doc, item);
     });
-    return { person: person, task: task, doc: doc, by: by };
+    (Array.isArray(src.entities) ? src.entities : []).forEach(function (e) {
+      if (!e || e.id == null || !e.name) return;
+      var roles = (e.roles || []).concat((e.relations || []).map(function (r) { return r && r.role; }));
+      add(entity, {
+        type: 'entity',
+        id: e.id,
+        label: String(e.name).replace(/\s+/g, ' ').trim() || 'Entité',
+        sub: e.sub || '',
+        kw: fold((e.aliases || []).concat(roles).join(' ')),
+      });
+    });
+    return { person: person, task: task, doc: doc, entity: entity, by: by };
   }
 
   function initialsOf(name) {
@@ -1810,7 +1829,7 @@
   function searchMentions(index, scope, query, opts) {
     opts = opts || {};
     var q = fold(String(query || '').trim());
-    var types = scope === 'task' ? ['task'] : scope === 'doc' ? ['doc'] : ['person', 'task', 'doc'];
+    var types = scope === 'task' ? ['task'] : scope === 'doc' ? ['doc'] : scope === 'entity' ? ['entity'] : ['person', 'entity', 'task', 'doc'];
     var per = opts.perGroup || (types.length === 1 ? 8 : q ? 5 : 3);
     var groups = [];
     types.forEach(function (type) {
@@ -1873,7 +1892,7 @@
 
   /** Mentions become plain "@Label" so an exported file reads naturally. */
   function mentionsToPlain(md) {
-    return String(md == null ? '' : md).replace(/\[@((?:\\.|[^\]\\])*)\]\((?:person|task|doc):[A-Za-z0-9_-]+(?::short)?\)/g, function (_a, label) {
+    return String(md == null ? '' : md).replace(/\[@((?:\\.|[^\]\\])*)\]\((?:person|task|doc|entity):[A-Za-z0-9_-]+(?::short)?\)/g, function (_a, label) {
       return '@' + label.replace(/\\(.)/g, '$1');
     });
   }

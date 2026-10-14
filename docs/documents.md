@@ -11,8 +11,10 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Nouveau document | bouton **Nouveau** (ou `@@@titre` puis *Créer le document « titre »* depuis un autre document) |
 | Ouvrir un dossier | clic sur son nom : le dossier est un document, on y écrit comme dans les autres. Le chevron montre ce qu’il contient |
 | Mentionner une personne | `@` puis quelques lettres ; ↑ ↓ pour choisir, **Entrée** ou **Tab** pour valider, **Échap** pour fermer |
+| Entité dans le texte | un nom, un alias ou une façon de la nommer (« mon boss ») se lie tout seul. Le surlignage est très discret ; le survol montre l'entité |
 | Lier une tâche (carte) | `@@` |
 | Créer une tâche | sélectionner du texte, puis **Créer une tâche** (ou clic droit). Le texte devient une tâche du tableau, liée à la place de la sélection. La flèche choisit la liste |
+| Créer une entité | sélectionner le nom, puis **Créer une entité** (ou clic droit). Le nom reste, lié à la nouvelle entité. Un nom déjà connu est relié, pas recopié |
 | Lier un autre document | `@@@` |
 | Tout chercher d'un coup | `@` seul liste personnes, tâches et documents (3 de chaque) |
 | Commandes | `/` puis un mot (`/titre`, `/liste`, `/tableau`, `/note`, `/image`…) |
@@ -40,7 +42,7 @@ Les données de Power-Up sont limitées à 4096 caractères par portée, c'est t
 - la carte est classée dans la **première liste** du tableau (une carte archivée a besoin d'une liste) ;
 - un bloc caché `<!--cerveau-meta type: document, rev: N -->` en fin de description porte un compteur de révision : si quelqu'un d'autre enregistre entre-temps, la sauvegarde est refusée et une barre propose *Charger sa version* ou *Écraser avec la mienne*.
 
-Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `==surligné==`, `{c:red}texte{/c}` et `{h:green}texte{/h}` (gris, brun, orange, jaune, vert, bleu, violet, rose, rouge), `` `code` ``, `[texte](https://…)`, `![légende](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, encadrés `> [!note]` / `> [!tip]` / `> [!warning]`, tableaux, `<!--align:center-->` ou `<!--align:right-->` sur la ligne suivante, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`.
+Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `==surligné==`, `{c:red}texte{/c}` et `{h:green}texte{/h}` (gris, brun, orange, jaune, vert, bleu, violet, rose, rouge), `` `code` ``, `[texte](https://…)`, `![légende](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, encadrés `> [!note]` / `> [!tip]` / `> [!warning]`, tableaux, `<!--align:center-->` ou `<!--align:right-->` sur la ligne suivante, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`, `[@texte](entity:ID)`.
 
 ## Limites
 

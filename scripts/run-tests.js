@@ -77,6 +77,7 @@ const UNIT_FILES = [
   'docs-rich.test.js',
   'docs-live.test.js',
   'docs-pins.test.js',
+  'docs-entities.test.js',
   'docs-trello.test.js',
   'docs-history.test.js',
   'card-quick.test.js',
