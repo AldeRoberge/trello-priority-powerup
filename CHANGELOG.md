@@ -4,7 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
-- Aujourd’hui : la revue (triage, prochaine action, attente, en cours, résultat) est sur la même page.
+- Saisie : la suggestion arrive tout de suite, avec le modèle rapide, dès les premiers mots.
+- Le + d’insertion n’apparaît qu’au survol d’un espace entre deux éléments.- Aujourd’hui : la revue (triage, prochaine action, attente, en cours, résultat) est sur la même page.
 - Saisie : après une question, la suggestion ne finit plus le mot « answer ».
 - Mindmap : le contour d'un groupe suit le bord des cartes qu'il contient.
 - Documents : approcher une tâche mentionnée fait apparaître un point pour relier une tâche parente, une tâche voisine ou un responsable.

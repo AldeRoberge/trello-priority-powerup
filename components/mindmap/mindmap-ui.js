@@ -170,12 +170,6 @@
       composer: h('form', { class: 'mm-composer', hidden: true }),
     };
     var svg = s('svg', { class: 'mm-svg', width: '100%', height: '100%' });
-    var defs = s('defs');
-    ['depends', 'by', 'at', 'serves', 'sub'].forEach(function (k) {
-      defs.appendChild(s('marker', { id: 'mm-arrow-' + k, viewBox: '0 0 10 10', refX: '9', refY: '5', markerUnits: 'userSpaceOnUse', markerWidth: '11', markerHeight: '11', orient: 'auto-start-reverse' },
-        [s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mm-arrow mm-arrow--' + k })]));
-    });
-    svg.appendChild(defs);
     var gView = s('g', { class: 'mm-view' });
     var gGroups = s('g', { class: 'mm-groups' });
     var gEdges = s('g', { class: 'mm-edges' });
@@ -540,6 +534,37 @@
         ' C' + (p1.x + p1.nx * off1).toFixed(1) + ',' + (p1.y + p1.ny * off1).toFixed(1) +
         ' ' + (p2.x + p2.nx * off2).toFixed(1) + ',' + (p2.y + p2.ny * off2).toFixed(1) +
         ' ' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1);
+    }
+
+    /**
+     * Filled head whose base sits on the end of the wire. The wire stops at that base,
+     * so the shaft and the head share one point instead of a gap (the marker used to).
+     */
+    function arrowJoin(p2) {
+      var dist = Math.sqrt(Math.pow(p2.x - (p2.fromX || p2.x), 2) + Math.pow(p2.y - (p2.fromY || p2.y), 2));
+      var len = Math.min(11, Math.max(8, dist ? Math.min(11, dist * 0.45) : 11));
+      var hw = len * 0.42;
+      var bx = p2.x + p2.nx * len;
+      var by = p2.y + p2.ny * len;
+      var px = -p2.ny;
+      var py = p2.nx;
+      return {
+        base: { x: bx, y: by, nx: p2.nx, ny: p2.ny },
+        d: 'M' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1) +
+          ' L' + (bx + px * hw).toFixed(1) + ',' + (by + py * hw).toFixed(1) +
+          ' L' + (bx - px * hw).toFixed(1) + ',' + (by - py * hw).toFixed(1) + ' Z',
+      };
+    }
+
+    /** A dashed wire must end on ink, or the last gap opens a hole in front of the head. */
+    function seatDash(path) {
+      if (!path || !path.classList.contains('mm-edge--sub')) return;
+      var len = 0;
+      try { len = path.getTotalLength(); } catch (e) { len = 0; }
+      if (!len) return;
+      var dash = 2;
+      var period = dash + 4;
+      path.style.strokeDashoffset = String((len % period) - dash / 2);
     }
 
     function renderGraph() {

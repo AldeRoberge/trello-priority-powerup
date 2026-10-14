@@ -4,6 +4,8 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
+| arrow-neck | `mindmap-ui.js` (edge arrow only; not `renderBar` or `openMenu`), `mindmap-ui.css` (`.mm-arrow` / `.mm-edge` neck only), `mindmap.html` (cache query), `CHANGELOG.md` (one line) | Arrow shaft meets the head |
+| ghost-fast | `ai-complete.js` (debounce, model tier, stream first line only), `CHANGELOG.md` one line | Ghost text uses the fast model and shows the first line as it arrives |
 | plus-hide | `insert-gap.css` (hidden plus), `insert-gap.js` (hide, placeButton, prune disconnected watches; not `onMove` / `rectsOf`), `test/insert-gap.test.js`, `CHANGELOG.md` one line | Stray + circles stay hidden |
 | orch-glide | `dashboard-model.js` (zoomLayout only), `dashboard-ui.js` (orchestrator zoom glide only), `test/dashboard-model.test.js`, `dashboard.html` (model + ui cache), `CHANGELOG.md` one line | Smooth zoom like the Gantt |
 | ghost-ans | (released) | Don't finish "answer" on a question line |

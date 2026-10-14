@@ -125,7 +125,10 @@
   }
 
   function hide(w) {
-    if (w.btn) w.btn.hidden = true;
+    if (w.btn) {
+      w.btn.hidden = true;
+      w.btn.style.display = 'none';
+    }
     w.hit = null;
   }
 
@@ -167,6 +170,7 @@
       : (box.left + box.right) / 2;
     btn.style.left = x + 'px';
     btn.style.top = hit.seam + 'px';
+    btn.style.display = '';
     btn.hidden = false;
     w.hit = hit;
   }
@@ -284,11 +288,19 @@
     if (listening || !global.document) return;
     listening = true;
     global.addEventListener('scroll', function () {
+      pruneGone();
       watches.forEach(function (w) {
         w.rectAt = 0;
         hide(w);
       });
     }, true);
+  }
+
+  function pruneGone() {
+    for (var i = watches.length - 1; i >= 0; i--) {
+      var c = watches[i].container;
+      if (!c || c.isConnected === false) detach(watches[i]);
+    }
   }
 
   function detach(w) {
@@ -303,6 +315,7 @@
     opts = opts || {};
     ensureCss();
     ensureListen();
+    pruneGone();
     var prev = null;
     for (var i = 0; i < watches.length; i++) if (watches[i].container === container) prev = watches[i];
     if (prev) detach(prev);
@@ -310,6 +323,7 @@
     btn.type = 'button';
     btn.className = 'ig-plus';
     btn.hidden = true;
+    btn.style.display = 'none';
     btn.title = 'Ajouter ici';
     btn.setAttribute('aria-label', 'Ajouter ici');
     btn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i>';

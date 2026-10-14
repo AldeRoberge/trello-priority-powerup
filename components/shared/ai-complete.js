@@ -13,7 +13,7 @@
 (function (global) {
   'use strict';
 
-  var DEBOUNCE_MS = 280;
+  var DEBOUNCE_MS = 60;
   var HINT_TTL_MS = 60000;
   var KINDS = {
     document: true,
@@ -1068,6 +1068,25 @@
     showRest(el, snap, rest);
   }
 
+  /** Show the first line while the rest of the reply is still arriving. */
+  function paintPartial(gen, snap, accumulated) {
+    if (gen !== session.gen || !snap) return;
+    var first = String(accumulated || '').split(/\r?\n/)[0];
+    if (!first.trim()) return;
+    var one = parseCompletion(first, snap.lineBefore, snap.kind);
+    if (!one) return;
+    var el = activeField();
+    if (!el) return;
+    var now = snapshot(el);
+    if (!now || now.kind !== snap.kind || now.lineBefore !== snap.lineBefore) return;
+    if (session.anchor !== snap.lineBefore || !session.branches.length) {
+      adoptBranches(snap.kind, snap.lineBefore, [one]);
+    } else {
+      session.branches[0] = one;
+    }
+    showRest(el, now, one);
+  }
+
   function ask(gen, snap) {
     var key = snap.kind + '\n' + snap.lineBefore;
     var hit = cacheGet(key);
@@ -1087,15 +1106,20 @@
       var messages = buildMessages(snap, mergeHints());
       var model =
         typeof Agent.modelForTier === 'function'
-          ? Agent.modelForTier(provider, 'balanced')
+          ? Agent.modelForTier(provider, 'efficient')
           : provider.model;
       var tuned = Object.assign({}, provider, { model: model || provider.model });
       var call = {
         model: model || provider.model,
         jsonMode: false,
-        max_tokens: 128,
+        max_tokens: 64,
         reasoningEffort: 'none',
-        temperature: 0
+        temperature: 0,
+        stream: true,
+        includeUsage: false,
+        onDelta: function (_piece, accumulated) {
+          paintPartial(gen, snap, accumulated);
+        }
       };
       var modelId = String(call.model || '').toLowerCase().replace(/^.*\//, '');
       if (/^(gpt-5|o\d)/.test(modelId)) call._drop = ['temperature'];

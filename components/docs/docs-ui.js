@@ -644,8 +644,7 @@
 
     /* Click the sidebar glyph to pick another one and a color. Stored on the document. */
 
-    var iconTimer = null;
-    var iconSaveId = '';
+    var iconTimers = {};
 
     function itemIcon(doc, fallback, whenMissing) {
       var mark = DM().normalizeIcon(doc && doc.icon);
@@ -677,9 +676,8 @@
     }
 
     function scheduleIconSave(id) {
-      iconSaveId = id;
-      clearTimeout(iconTimer);
-      iconTimer = setTimeout(function () { persistIcon(id); }, 350);
+      clearTimeout(iconTimers[id]);
+      iconTimers[id] = setTimeout(function () { persistIcon(id); }, 350);
     }
 
     function applyIcon(doc, next) {
@@ -691,20 +689,20 @@
     }
 
     function persistIcon(id) {
-      iconTimer = null;
+      iconTimers[id] = null;
       var d = state.docs.filter(function (x) { return x.id === id; })[0];
       if (!d) return;
       if (saving) {
-        iconTimer = setTimeout(function () { persistIcon(id); }, 200);
+        scheduleIconSave(id);
         return;
       }
       var cur = state.current && state.current.id === id ? state.current : null;
       var sent = DM().iconLine(d.icon);
       var pre = cur ? saveNow() : Promise.resolve(true);
       pre.then(function (ok) {
-        if (!ok || iconSaveId !== id) return;
+        if (!ok) return;
         if (saving) {
-          iconTimer = setTimeout(function () { persistIcon(id); }, 200);
+          scheduleIconSave(id);
           return;
         }
         saving = true;
@@ -728,8 +726,7 @@
           if (newer) scheduleIconSave(id);
         }, function (err) {
           saving = false;
-          if (cur && state.current === cur) failure(err);
-          else failure(err);
+          failure(err);
         });
       });
     }

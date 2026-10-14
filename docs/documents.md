@@ -67,7 +67,7 @@ npm run setup:documents-drive
 
 Le script demande le dossier Drive (collez l'URL d'un dossier d'un **Drive partagé**, ou Entrée pour en créer un dans Mon Drive), le partage avec le compte de service, enregistre le secret `GOOGLE_DRIVE_FOLDER_ID`, redéploie le Worker et lance une première passe.
 
-**Limite importante** : Google n'accorde aucun quota de stockage aux comptes de service. Avec un compte Google personnel (gmail.com), la création des fichiers dans *Mon Drive* est refusée (erreur `storageQuotaExceeded`, affichée par le script). Il faut alors un dossier dans un **Drive partagé** (Google Workspace). Sans `GOOGLE_DRIVE_FOLDER_ID`, la copie Drive est simplement désactivée.
+**Limite** : un compte de service n'a aucun quota de stockage. Sur un compte Google personnel, les fichiers sont donc créés avec votre compte (autorisation Drive demandée une fois). Un dossier de Drive partagé fonctionne aussi, sans cette autorisation. Sans `GOOGLE_DRIVE_FOLDER_ID`, la copie Drive est simplement désactivée.
 
 ## Synchronisation Google Sheets
 

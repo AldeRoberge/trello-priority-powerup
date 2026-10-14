@@ -1512,44 +1512,49 @@
         },
       }, [icon('wand'), document.createTextNode('Planifier auto')]) : null;
       var list = DM().SCALES || [];
-      var idx = 0;
-      for (var si = 0; si < list.length; si++) if (list[si].id === scale) idx = si;
-      function goScale(i) {
-        if (i < 0 || i >= list.length || !list[i] || list[i].id === state.scale) return;
-        state.scale = list[i].id;
-        if (DT().setScale) DT().setScale(state.scale);
-        render();
-      }
+      var label = '';
+      for (var si = 0; si < list.length; si++) if (list[si].id === scale) label = list[si].label;
+      var bounds = DM().zoomBounds();
       var range = h('input', {
         class: 'db-zoom-range',
         type: 'range',
         min: '0',
-        max: String(Math.max(0, list.length - 1)),
+        max: '1000',
         step: '1',
-        value: String(idx),
+        value: String(DM().zoomSlider(layout.pxPerDay)),
         'aria-label': 'Zoom',
-        title: (list[idx] && list[idx].label) || '',
+        title: label,
       });
-      range.addEventListener('input', function () { goScale(Number(range.value)); });
+      range.addEventListener('input', function () {
+        if (zoomAnim.raf) { cancelAnimationFrame(zoomAnim.raf); zoomAnim.raf = 0; }
+        var p = DM().zoomFromSlider(range.value);
+        zoomAnim.cur = p;
+        zoomAnim.target = p;
+        applyZoom(p, null);
+      });
+      function nudge(dir) {
+        var base = zoomAnim.raf ? zoomAnim.target : state.zoomP;
+        easeZoom(base * (dir < 0 ? 1.5 : 1 / 1.5), null);
+      }
       var scales = h('div', { class: 'db-zoom' }, [
         h('button', {
           class: 'db-zoom-btn',
           type: 'button',
           title: 'Zoom avant',
-          disabled: idx === 0,
-          onclick: function () { goScale(idx - 1); },
+          disabled: layout.pxPerDay >= bounds.max * 0.985,
+          onclick: function () { nudge(-1); },
         }, [icon('zoom-in')]),
         range,
         h('button', {
           class: 'db-zoom-btn',
           type: 'button',
           title: 'Zoom arrière',
-          disabled: idx >= list.length - 1,
-          onclick: function () { goScale(idx + 1); },
+          disabled: scale === 'vague',
+          onclick: function () { nudge(1); },
         }, [icon('zoom-out')]),
         h('span', { class: 'db-zoom-label' }, [
           icon(SCALE_ICON[scale] || 'calendar'),
-          document.createTextNode((list[idx] && list[idx].label) || ''),
+          h('span', { class: 'db-zoom-name', text: label }),
         ]),
       ]);
       function capacityMenu(anchor) {
@@ -1721,26 +1726,30 @@
           : b.time
             ? { iso: b.date, time: b.time }
             : { iso: b.date < today ? today : b.date };
-        return column(extra.trim(), head, scale === 'vague' ? spacer.cloneNode(true) : dayBar(b), b.tasks.map(taskCard), spec);
+        var node = column(extra.trim(), head, scale === 'vague' ? spacer.cloneNode(true) : dayBar(b), b.tasks.map(taskCard), spec);
+        var span = bucketRange(b);
+        if (span) {
+          node.setAttribute('data-zoom-start', String(span.start));
+          node.setAttribute('data-zoom-end', String(span.end));
+        }
+        return node;
       });
-      var minCol = (scale === 'hour' || scale === 'minute') ? 112 : 168;
+      var colTrack = scale === 'vague'
+        ? 'repeat(' + days.length + ',minmax(168px,1fr))'
+        : 'repeat(' + days.length + ',' + layout.colPx + 'px)';
       var page = h('div', { class: 'db-page db-page--board' }, [
         pageHead('Orchestrateur', null, h('div', { class: 'db-head-tools' }, [scales])),
         h('div', { class: 'db-board' }, [
           poolCol,
-          h('div', { class: 'db-board-days', style: 'grid-template-columns:repeat(' + days.length + ',minmax(' + minCol + 'px,1fr))' }, days),
+          h('div', { class: 'db-board-days', style: 'grid-template-columns:' + colTrack }, days),
         ]),
       ]);
-      page.addEventListener('wheel', function (e) {
-        if (e.target && e.target.classList && e.target.classList.contains('db-zoom-range')) return;
-        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-        var at = Date.now();
-        if (at - (state.zoomAt || 0) < 180) { e.preventDefault(); return; }
-        state.zoomAt = at;
-        e.preventDefault();
-        goScale(idx + (e.deltaY > 0 ? 1 : -1));
-      }, { passive: false });
       els.main.appendChild(page);
+      if (state.zoomFocalMs != null) {
+        scrollStripTo(page.querySelector('.db-board-days'), state.zoomFocalMs, state.zoomFocalX);
+        state.zoomFocalMs = null;
+        state.zoomFocalX = null;
+      }
     }
 
     /* ── 4. Today ──────────────────────────────────────────────────── */
@@ -1981,6 +1990,10 @@
       today = todayIso();
       if (state.section === 'review') state.section = 'today';
       var keepScroll = els.main.scrollTop;
+      var holdDays = state.zoomFocalMs == null;
+      var daysScroll = 0;
+      var prevDays = els.main.querySelector('.db-board-days');
+      if (prevDays) daysScroll = prevDays.scrollLeft;
       var colScroll = [];
       els.main.querySelectorAll('.db-col-body').forEach(function (b) { colScroll.push(b.scrollTop); });
       els.main.textContent = '';
@@ -1992,6 +2005,8 @@
       els.main.scrollTop = keepScroll;
       var bodies = els.main.querySelectorAll('.db-col-body');
       for (var i = 0; i < bodies.length && i < colScroll.length; i++) bodies[i].scrollTop = colScroll[i];
+      var daysNow = els.main.querySelector('.db-board-days');
+      if (holdDays && daysNow) daysNow.scrollLeft = daysScroll;
       if (state.section === 'orchestrator' && state.composer != null) {
         var addInput = els.main.querySelector('.db-add-input');
         if (addInput && document.activeElement !== addInput) addInput.focus({ preventScroll: true });
