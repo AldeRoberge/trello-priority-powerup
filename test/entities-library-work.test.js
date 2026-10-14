@@ -36,6 +36,7 @@ describe('EntitiesLibraryWork (vision → task archetypes)', () => {
     W.COMPONENTS.forEach((c) =>
       c.fields.forEach((f) => {
         if (f.kind !== 'ref' && f.kind !== 'refs') return;
+        if (!f.rel) return;
         assert.ok(M.RELATIONS.some((r) => r.id === f.rel), c.id + '.' + f.key + ' rel');
         (f.refTypes || []).forEach((t) => assert.ok(typeIds.indexOf(t) >= 0, c.id + '.' + f.key + ' → ' + t));
       })

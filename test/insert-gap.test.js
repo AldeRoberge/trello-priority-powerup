@@ -87,3 +87,84 @@ describe('InsertGap.underAt', function () {
     assert.equal(underAt(col, 400, 46, 18), null);
   });
 });
+
+describe('InsertGap.watch', function () {
+  it('keeps the plus hidden, and drops it when its column is gone', async function () {
+    var savedDoc = global.document;
+    var savedAdd = global.addEventListener;
+    var ids = {};
+    function node(tag) {
+      return {
+        tagName: tag,
+        id: '',
+        hidden: false,
+        style: {},
+        className: '',
+        title: '',
+        type: '',
+        innerHTML: '',
+        isConnected: true,
+        parentNode: null,
+        children: [],
+        attrs: {},
+        listeners: {},
+        setAttribute: function (k, v) { this.attrs[k] = v; },
+        getAttribute: function (k) { return this.attrs[k] || null; },
+        addEventListener: function (type, fn) { this.listeners[type] = fn; },
+        appendChild: function (child) {
+          child.parentNode = this;
+          this.children.push(child);
+          if (child.id) ids[child.id] = child;
+        },
+        removeChild: function (child) {
+          this.children = this.children.filter(function (c) { return c !== child; });
+          if (child.parentNode === this) child.parentNode = null;
+        },
+        contains: function () { return false; },
+      };
+    }
+    var body = node('body');
+    global.document = {
+      head: node('head'),
+      body: body,
+      getElementById: function (id) { return ids[id] || null; },
+      getElementsByTagName: function () { return []; },
+      createElement: function (tag) { return node(tag); },
+    };
+    global.addEventListener = function () {};
+    try {
+      var col = node('div');
+      global.InsertGap.watch(col, { item: '.db-task', onCreate: function () {} });
+      assert.equal(body.children.length, 1);
+      var btn = body.children[0];
+      assert.equal(btn.hidden, true);
+      assert.equal(btn.style.display, 'none');
+      btn.hidden = false;
+      btn.style.display = '';
+      col.listeners.pointerleave({ relatedTarget: null });
+      assert.equal(btn.hidden, true);
+      assert.equal(btn.style.display, 'none');
+
+      var built = [node('div'), node('div')];
+      built[0].isConnected = false;
+      built[1].isConnected = false;
+      global.InsertGap.watch(built[0], { item: '.db-task', onCreate: function () {} });
+      global.InsertGap.watch(built[1], { item: '.db-task', onCreate: function () {} });
+      assert.equal(body.children.length, 3);
+      built[0].isConnected = true;
+      built[1].isConnected = true;
+      await new Promise(function (resolve) { setTimeout(resolve, 30); });
+      assert.equal(body.children.length, 3);
+
+      col.isConnected = false;
+      var col2 = node('div');
+      global.InsertGap.watch(col2, { item: '.db-task', onCreate: function () {} });
+      assert.equal(btn.parentNode, null);
+      assert.equal(body.children.length, 3);
+    } finally {
+      global.document = savedDoc;
+      if (savedAdd) global.addEventListener = savedAdd;
+      else delete global.addEventListener;
+    }
+  });
+});

@@ -19,6 +19,11 @@
  * goal, objective, project, label / entity type, or a manual set. scene() decides what the current zoom
  * shows: far away a group is one chip, closer its members appear, and up close a task breaks into facet
  * nodes (progress, priority, status, pause, due). The lens is which of those meanings the flat map uses.
+ *
+ * orbit() is a temporary reading of the same graph: the focused node stays where it is, and each
+ * direct relation takes a fixed side (above, right, lower right, below, lower left, left). A person,
+ * a place, or a goal whose only neighbours are the work under it opens into a full ring. The next
+ * relation sits just behind. Nothing is written back; the caller keeps the resting layout.
  */
 (function (global) {
   'use strict';
@@ -1029,6 +1034,201 @@
       facetsOf(n).forEach(function (f) { facets.push(f); });
     });
     return { band: band, lens: lens, groups: groups, hidden: hidden, facets: facets };
+  }
+
+  /**
+   * Where each node sits while `focusId` is the center of attention.
+   * The focus keeps the coordinates it was given. Direct relations take a fixed side of the
+   * compass. When the only relations are the work under a person, a place or a goal, they
+   * open into a ring. One further relation sits behind each of those. Nodes already far
+   * from the focus stay put; a node sitting in the neighbourhood steps outward.
+   * Does not mutate `nodes`. Returns { positions: {id:{x,y}}, rings: {id:0|1|2} }.
+   */
+  function orbit(nodes, edges, focusId) {
+    var list = nodes || [];
+    var byId = Object.create(null);
+    list.forEach(function (n) { if (n && n.id != null) byId[n.id] = n; });
+    var focus = byId[focusId];
+    var positions = {};
+    var rings = {};
+    if (!focus || !isFinite(focus.x) || !isFinite(focus.y)) return { positions: positions, rings: rings };
+    var cx = focus.x;
+    var cy = focus.y;
+    positions[focus.id] = { x: cx, y: cy };
+    rings[focus.id] = 0;
+
+    var wedges = {
+      above: [-120, -60],
+      needs: [-60, 0],
+      where: [0, 60],
+      below: [60, 120],
+      who: [120, 180],
+      needed: [180, 240],
+    };
+    var buckets = { above: [], below: [], needs: [], needed: [], who: [], where: [] };
+    var direct = Object.create(null);
+    var rank = { above: 1, below: 2, needs: 3, needed: 4, who: 5, where: 6 };
+
+    function roleOf(edge) {
+      var out = edge.from === focusId;
+      if (edge.kind === 'sub') return out ? 'below' : 'above';
+      if (edge.kind === 'serves') return out ? 'above' : 'below';
+      if (edge.kind === 'depends') return out ? 'needs' : 'needed';
+      if (edge.kind === 'by') return focus.kind === 'person' ? 'below' : 'who';
+      if (edge.kind === 'at' || edge.kind === 'from' || edge.kind === 'via' || edge.kind === 'to') {
+        return focus.kind === 'place' ? 'below' : 'where';
+      }
+      return 'below';
+    }
+
+    (edges || []).forEach(function (e) {
+      if (!e) return;
+      var other = e.from === focusId ? e.to : e.to === focusId ? e.from : null;
+      if (!other || other === focusId || !byId[other]) return;
+      var role = roleOf(e);
+      var prev = direct[other];
+      if (prev && rank[prev] <= rank[role]) return;
+      if (prev) {
+        var pile = buckets[prev];
+        var at = pile.indexOf(other);
+        if (at >= 0) pile.splice(at, 1);
+      }
+      direct[other] = role;
+      buckets[role].push(other);
+    });
+
+    function clusterKey(id) {
+      var parent = '';
+      (edges || []).forEach(function (e) {
+        if (!parent && e && e.kind === 'serves' && e.from === id) parent = String(e.to);
+      });
+      var node = byId[id];
+      return parent + '\n' + (node && node.label ? node.label : id);
+    }
+    Object.keys(buckets).forEach(function (role) {
+      buckets[role].sort(function (a, b) {
+        var ka = clusterKey(a);
+        var kb = clusterKey(b);
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+      });
+    });
+
+    var usedRoles = Object.keys(buckets).filter(function (role) { return buckets[role].length; });
+    var fullRing = usedRoles.length === 1 && usedRoles[0] === 'below';
+    var placed = Object.create(null);
+    placed[focus.id] = true;
+
+    function toRad(deg) { return deg * Math.PI / 180; }
+
+    function placeIds(ids, a0, a1, base) {
+      if (!ids.length) return;
+      var span = a1 - a0;
+      if (span <= 0) span += Math.PI * 2;
+      var gap = span / ids.length;
+      var widest = 220;
+      ids.forEach(function (id) {
+        var n = byId[id];
+        if (n && n.w) widest = Math.max(widest, n.w);
+      });
+      var radius = Math.max(base, (widest + 40) / gap);
+      ids.forEach(function (id, i) {
+        var a = a0 + gap * (i + 0.5);
+        positions[id] = { x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius };
+        rings[id] = 1;
+        placed[id] = true;
+      });
+    }
+
+    if (fullRing) placeIds(buckets.below, toRad(-90), toRad(270), 300);
+    else usedRoles.forEach(function (role) {
+      var span = wedges[role];
+      placeIds(buckets[role], toRad(span[0]), toRad(span[1]), 300);
+    });
+
+    var kindRank = { goal: 0, place: 1, person: 2, task: 3, subtask: 4 };
+    var contextLeft = 18;
+    var ring1 = Object.keys(rings).filter(function (id) { return rings[id] === 1; });
+    ring1.forEach(function (pid) {
+      if (contextLeft <= 0) return;
+      var parent = positions[pid];
+      var extras = [];
+      var seen = Object.create(null);
+      (edges || []).forEach(function (e) {
+        if (!e) return;
+        var other = e.from === pid ? e.to : e.to === pid ? e.from : null;
+        if (!other || placed[other] || seen[other] || !byId[other]) return;
+        seen[other] = true;
+        extras.push(other);
+      });
+      extras.sort(function (a, b) {
+        var ka = kindRank[byId[a].kind] != null ? kindRank[byId[a].kind] : 9;
+        var kb = kindRank[byId[b].kind] != null ? kindRank[byId[b].kind] : 9;
+        if (ka !== kb) return ka - kb;
+        var la = byId[a].label || a;
+        var lb = byId[b].label || b;
+        return la < lb ? -1 : la > lb ? 1 : 0;
+      });
+      extras = extras.slice(0, Math.min(5, contextLeft));
+      if (!extras.length) return;
+      var pa = Math.atan2(parent.y - cy, parent.x - cx);
+      var pr = Math.sqrt(Math.pow(parent.x - cx, 2) + Math.pow(parent.y - cy, 2)) || 300;
+      var fan = Math.min(0.7, 0.22 * extras.length);
+      var radius = pr + 250;
+      extras.forEach(function (id, i) {
+        var t = extras.length === 1 ? 0 : (i / (extras.length - 1)) - 0.5;
+        var a = pa + t * fan;
+        positions[id] = { x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius };
+        rings[id] = 2;
+        placed[id] = true;
+        contextLeft--;
+      });
+    });
+
+    var moving = Object.keys(placed).filter(function (id) { return id !== focus.id; });
+    for (var it = 0; it < 18; it++) {
+      var moved = false;
+      for (var i = 0; i < moving.length; i++) {
+        for (var j = i + 1; j < moving.length; j++) {
+          var a = byId[moving[i]];
+          var b = byId[moving[j]];
+          var pa = positions[a.id];
+          var pb = positions[b.id];
+          var dx = pb.x - pa.x;
+          var dy = pb.y - pa.y;
+          var min = ((a.w || 200) + (b.w || 200)) / 2 + 28;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist >= min) continue;
+          moved = true;
+          if (dist < 1) { dx = 1; dy = 0; dist = 1; }
+          var push = (min - dist) / 2;
+          pa.x -= (dx / dist) * push;
+          pa.y -= (dy / dist) * push;
+          pb.x += (dx / dist) * push;
+          pb.y += (dy / dist) * push;
+        }
+      }
+      if (!moved) break;
+    }
+
+    var bubble = 0;
+    moving.forEach(function (id) {
+      var p = positions[id];
+      bubble = Math.max(bubble, Math.sqrt(Math.pow(p.x - cx, 2) + Math.pow(p.y - cy, 2)));
+    });
+    bubble += 160;
+    list.forEach(function (n) {
+      if (!n || placed[n.id] || !isFinite(n.x) || !isFinite(n.y)) return;
+      var dx = n.x - cx;
+      var dy = n.y - cy;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bubble) {
+        var a = dist < 8 ? ((String(n.id).length * 1.7) % 6) : Math.atan2(dy, dx);
+        positions[n.id] = { x: cx + Math.cos(a) * bubble, y: cy + Math.sin(a) * bubble };
+      } else {
+        positions[n.id] = { x: n.x, y: n.y };
+      }
+    });
+    return { positions: positions, rings: rings };
   }
 
   function ellipsePath(cx, cy, rx, ry) {

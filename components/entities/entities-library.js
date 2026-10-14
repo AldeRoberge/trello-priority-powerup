@@ -358,7 +358,7 @@
   ];
 
   var TYPES = [
-    { group: 'matter', id: 'objet', name: 'Objet', nature: 'matter', icon: 'box', aliases: ['object', 'chose', 'item', 'article'], components: ['matiere', 'provenance', 'propriete'], description: 'Une chose matérielle fabriquée ou trouvée.' },
+    { group: 'matter', id: 'objet', name: 'Objet', nature: 'matter', icon: 'box', aliases: ['object', 'chose', 'item', 'article'], components: ['matiere', 'provenance', 'propriete', 'location'], description: 'Une chose matérielle fabriquée ou trouvée.' },
     { group: 'matter', id: 'produit', name: 'Produit', nature: 'matter', icon: 'bottle', parents: ['objet'], aliases: ['product', 'article de vente'], components: ['produit'], description: 'Un objet fabriqué sous une marque et un modèle. Le reste (ingrédients, péremption, pièces, batterie) vient des composants ajoutés.' },
     { group: 'matter', id: 'cosmetique', name: 'Cosmétique', nature: 'matter', icon: 'bottle', parents: ['produit'], aliases: ['cosmetic', 'crème', 'creme', 'savon', 'soin', 'lotion'], components: ['ingredients', 'soin_peau', 'consommable', 'conservation'], description: 'Un produit de soin : crème pour les mains, savon, lotion.' },
     { group: 'matter', id: 'aliment', name: 'Aliment', nature: 'matter', icon: 'apple', parents: ['produit'], aliases: ['food', 'nourriture', 'boisson', 'breuvage'], components: ['ingredients', 'nutrition', 'consommable', 'conservation'], description: 'Un produit qui se mange ou se boit.' },
@@ -370,18 +370,20 @@
     { group: 'matter', id: 'contenant', name: 'Contenant', nature: 'matter', icon: 'package', parents: ['objet'], aliases: ['container', 'récipient'], components: ['contenant'], description: 'Un objet qui contient autre chose, avec une capacité et un niveau.' },
     { group: 'matter', id: 'bouteille', name: 'Bouteille', nature: 'matter', icon: 'bottle', parents: ['produit', 'consommable', 'contenant'], aliases: ['bottle', 'gourde', 'flacon'], components: [], description: 'Un produit, consommable et contenant à la fois : rien de plus qu’une composition de composants.' },
     { group: 'matter', id: 'substance', name: 'Substance', nature: 'matter', icon: 'flask', aliases: ['ingrédient', 'ingredient', 'matière première', 'material'], components: ['matiere'], description: 'De la matière sans forme propre : glycérine, eau, pierre, bois.' },
-    { group: 'living', id: 'etre_vivant', name: 'Être vivant', nature: 'living', icon: 'leaf', aliases: ['living', 'organisme', 'vivant'], components: ['vivant', 'propriete'], description: 'Ce qui naît, croît et meurt.' },
+    { group: 'living', id: 'etre_vivant', name: 'Être vivant', nature: 'living', icon: 'leaf', aliases: ['living', 'organisme', 'vivant'], components: ['vivant', 'propriete', 'location'], description: 'Ce qui naît, croît et meurt.' },
     { group: 'living', id: 'animal', name: 'Animal', nature: 'living', icon: 'paw', parents: ['etre_vivant'], aliases: ['pet', 'bête', 'animaux'], components: [], description: 'Un être vivant qui se déplace.' },
+    { group: 'living', id: 'plante', name: 'Plante', nature: 'living', icon: 'plant', parents: ['etre_vivant'], aliases: ['plant', 'verdure', 'plants'], components: ['entretien'], defaults: { 'entretien.frequence': 7 }, description: 'Un végétal qu’on entretient.' },
     { group: 'people', id: 'personne', name: 'Personne', nature: 'agent', icon: 'user', aliases: ['person', 'people', 'humain', 'gens'], components: ['personne'], description: 'Un être humain : il agit, il a des intentions.' },
     { group: 'people', id: 'travailleur', name: 'Travailleur', nature: 'agent', icon: 'briefcase', parents: ['personne'], role: true, aliases: ['worker', 'employé', 'employee', 'ouvrier', 'collègue'], components: ['emploi'], description: 'Une personne dans son rôle d’employé : le rôle dépend d’un contexte, la personne reste la même.' },
     { group: 'people', id: 'organisation', name: 'Organisation', nature: 'social', icon: 'building-community', aliases: ['organization', 'entreprise', 'company', 'institution'], components: ['organisation'], description: 'Un groupe reconnu qui agit comme un seul : il existe par convention.' },
-    { group: 'people', id: 'groupe', name: 'Groupe de personnes', nature: 'social', icon: 'users-group', aliases: ['group', 'groupe', 'équipe', 'equipe', 'team', 'crew', 'comité', 'famille'], components: [], description: 'Des personnes réunies sous un nom : une équipe de tournage, une famille. Les membres s’ajoutent dans la fiche.' },
+    { group: 'people', id: 'groupe', name: 'Groupe de personnes', nature: 'social', icon: 'users-group', aliases: ['group', 'groupe', 'équipe', 'equipe', 'team', 'crew', 'comité'], components: [], description: 'Des personnes réunies sous un nom.' },
+    { group: 'people', id: 'famille', name: 'Famille', nature: 'social', icon: 'home', parents: ['groupe'], aliases: ['famille', 'family', 'foyer'], components: [], description: 'Un foyer ou une parenté.' },
     { group: 'places', id: 'place', name: 'Lieu', nature: 'place', icon: 'map-pin', aliases: ['endroit', 'location'], components: ['adresse', 'propriete'], description: 'Une portion d’espace.' },
     { group: 'places', id: 'region', name: 'Région du monde', nature: 'place', icon: 'world', parents: ['place'], aliases: ['région', 'region', 'zone', 'territoire', 'world region', 'continent'], components: ['geographie'], description: 'Une zone de la carte : continent, province, région.' },
     { group: 'places', id: 'pays', name: 'Pays', nature: 'place', icon: 'flag', parents: ['region'], aliases: ['country', 'nation'], components: ['pays'], description: 'Un territoire gouverné.' },
     { group: 'places', id: 'ville', name: 'Ville', nature: 'place', icon: 'building-skyscraper', parents: ['place'], aliases: ['city', 'town', 'municipalité', 'village'], components: ['geographie'], description: 'Une agglomération.' },
     { group: 'places', id: 'batiment', name: 'Bâtiment', nature: 'place', icon: 'building', parents: ['place', 'objet'], aliases: ['building', 'édifice', 'immeuble'], components: ['construction'], description: 'À la fois un lieu qu’on habite et un objet construit avec de la matière.' },
-    { group: 'places', id: 'piece', name: 'Pièce', nature: 'place', icon: 'door', parents: ['place'], aliases: ['room', 'local', 'salle', 'bureau'], components: ['espace'], description: 'Un espace à l’intérieur d’un bâtiment.' },
+    { group: 'places', id: 'piece', name: 'Pièce', nature: 'place', icon: 'door', parents: ['place'], aliases: ['room', 'local', 'salle'], components: ['espace'], description: 'Un espace à l’intérieur d’un bâtiment.' },
     { group: 'time', id: 'evenement', name: 'Événement', nature: 'event', icon: 'calendar-event', aliases: ['event', 'réunion', 'rencontre', 'meeting'], components: ['temps', 'location'], description: 'Ce qui se passe dans le temps, quelque part.' },
     { group: 'ideas', id: 'concept', name: 'Concept', nature: 'abstract', icon: 'bulb', aliases: ['idea', 'idée', 'notion', 'abstraction', 'abstrait', 'abstract'], components: ['concept'], description: 'Une idée sans corps : elle ne vaut que par ce qui l’incarne ou l’exprime.' },
     { group: 'ideas', id: 'valeur', name: 'Valeur', nature: 'abstract', icon: 'scale', parents: ['concept'], aliases: ['value', 'principe', 'principle'], components: [], description: 'Un concept qui oriente l’action : justice, liberté, sobriété.' },
@@ -482,11 +484,22 @@
       var have = installedAs(next, pid);
       if (have) map[pid] = have.id;
     });
-    // components first (types refer to them), then types parents-first
+    // components first (types refer to them), then types parents-first.
+    // A built-in stub with the same id (the empty Lieu) receives the components it is still missing.
+    // A user type that merely shares the preset's name is left as the user wrote it.
     var compIds = [];
     all.forEach(function (pid) {
-      if (map[pid]) return;
-      presetType(pid).components.forEach(function (cid) {
+      var p = presetType(pid);
+      var have = map[pid] ? EM().findById(next.types, map[pid]) : null;
+      var ownStub = have && have.id === pid;
+      if (map[pid] && !ownStub) return;
+      var wantedComps = p.components || [];
+      if (ownStub) {
+        wantedComps = wantedComps.filter(function (cid) {
+          return (have.components || []).indexOf(cid) < 0;
+        });
+      }
+      wantedComps.forEach(function (cid) {
         requiredFirst(cid, compIds);
       });
     });
@@ -495,6 +508,40 @@
       var c = presetComponent(cid);
       next = EM().upsertComponent(next, c);
       added.components.push(c.name);
+    });
+    all.forEach(function (pid) {
+      if (map[pid] !== pid) return;
+      var have = EM().findById(next.types, pid);
+      var p = presetType(pid);
+      if (!have || !p) return;
+      var comps = have.components.slice();
+      (p.components || []).forEach(function (cid) {
+        if (comps.indexOf(cid) < 0 && EM().findById(next.components, cid)) comps.push(cid);
+      });
+      var aliases = have.aliases.slice();
+      (p.aliases || []).forEach(function (a) {
+        if (!aliases.some(function (x) { return EM().normKey(x) === EM().normKey(a); })) aliases.push(a);
+      });
+      var defaults = Object.assign({}, p.defaults || {}, have.defaults || {});
+      var description = have.description || p.description || '';
+      var nature = have.nature || p.nature || '';
+      var icon = have.icon || p.icon || '';
+      var same =
+        comps.join() === have.components.join() &&
+        aliases.join() === have.aliases.join() &&
+        description === (have.description || '') &&
+        nature === (have.nature || '') &&
+        icon === (have.icon || '') &&
+        JSON.stringify(defaults) === JSON.stringify(have.defaults || {});
+      if (same) return;
+      next = EM().upsertType(next, Object.assign({}, have, {
+        components: comps,
+        aliases: aliases,
+        defaults: defaults,
+        description: description,
+        nature: nature,
+        icon: icon,
+      }));
     });
     var pending = all.filter(function (pid) {
       return !map[pid];
@@ -519,6 +566,7 @@
             return map[par];
           }),
           components: p.components,
+          defaults: p.defaults || {},
         });
         map[pid] = p.id;
         added.types.push(p.name);

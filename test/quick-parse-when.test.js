@@ -17,7 +17,10 @@ describe('QuickParse.parseWhen', () => {
     ["l'an dernier", '2025-01-01', 'année'],
     ['il y a 2 ans', '2024-10-06', 'approx'],
     ['il y a quelques années', '2023-10-06', 'approx'],
-    ['il y a trois mois', '2026-07-06', 'approx'],
+    ['il y a trois mois', '2026-07-06', 'mois'],
+    ['il y a deux moi', '2026-08-06', 'mois'],
+    ['dans deux mois', '2026-12-06', 'mois'],
+    ['dans 3 jours', '2026-10-09', 'jour'],
     ['il y a 10 jours', '2026-09-26', 'jour'],
     ['vers 2019', '2019-01-01', 'approx'],
     ['cet été', '2026-06-01', 'approx'],
@@ -39,6 +42,7 @@ describe('QuickParse.parseWhen', () => {
   it('labels show the precision', () => {
     assert.equal(parseWhen('octobre 2023', NOW).label, 'octobre 2023');
     assert.equal(parseWhen('il y a 2 ans', NOW).label, 'vers 2024');
+    assert.equal(parseWhen('il y a deux moi', NOW).label, 'août 2026');
   });
 
   it('refuses what is not a date', () => {

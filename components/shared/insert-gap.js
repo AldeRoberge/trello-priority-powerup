@@ -298,9 +298,18 @@
 
   function pruneGone() {
     for (var i = watches.length - 1; i >= 0; i--) {
-      var c = watches[i].container;
-      if (!c || c.isConnected === false) detach(watches[i]);
+      var w = watches[i];
+      if (w.live && (!w.container || w.container.isConnected === false)) detach(w);
     }
+  }
+
+  function arm(w) {
+    var raf = global.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+    w.arm = raf(function () {
+      w.arm = 0;
+      if (!w.container || w.container.isConnected === false) detach(w);
+      else w.live = true;
+    });
   }
 
   function detach(w) {
@@ -341,6 +350,7 @@
       hide(w);
     });
     watches.push(w);
+    arm(w);
     return { detach: function () { detach(w); } };
   }
 

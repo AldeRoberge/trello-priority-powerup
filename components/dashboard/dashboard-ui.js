@@ -243,6 +243,7 @@
       capacity: DT().getCapacity(),
       scale: DT().getScale ? DT().getScale() : 'day',
       zoomP: 0, // pixels per day; 0 means "fit the saved scale" until the user zooms
+      zoomTouched: false,
       zoomColPx: 0,
       zoomDay: '', // clock scales follow the day under the cursor
       zoomFocalMs: null,
@@ -1412,6 +1413,7 @@
 
     function applyZoom(px, clientX) {
       if (!DM().zoomLayout) return;
+      state.zoomTouched = true;
       var prevCol = state.zoomColPx;
       var prevScale = state.scale;
       var strip = els.main.querySelector('.db-board-days');
@@ -1476,6 +1478,55 @@
       if (f > 1.6) f = 1.6;
       easeZoom((zoomAnim.raf ? zoomAnim.target : state.zoomP) * f, e.clientX);
     }, { passive: false });
+
+    // Middle button pans the board, like the Gantt. Left button stays for moving a card.
+    var MIDDLE = 1;
+    els.main.addEventListener('mousedown', function (e) {
+      if (e.button !== MIDDLE || state.section !== 'orchestrator') return;
+      if (!e.target.closest || !e.target.closest('.db-board')) return;
+      e.preventDefault();
+    }, true);
+    els.main.addEventListener('pointerdown', function (e) {
+      if (e.button !== MIDDLE || state.section !== 'orchestrator') return;
+      if (!e.target.closest) return;
+      if (e.target.closest('input, textarea, select, .db-zoom')) return;
+      var board = e.target.closest('.db-board');
+      if (!board) return;
+      var strip = board.querySelector('.db-board-days');
+      if (!strip) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var body = e.target.closest('.db-col-body');
+      var pan = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        left: strip.scrollLeft,
+        top: body ? body.scrollTop : 0,
+        body: body,
+      };
+      strip.classList.add('is-panning');
+      try { strip.setPointerCapture(e.pointerId); } catch (err) { /* already released */ }
+      function onMove(ev) {
+        if (ev.pointerId !== pan.id) return;
+        strip.scrollLeft = pan.left - (ev.clientX - pan.x);
+        if (pan.body) pan.body.scrollTop = pan.top - (ev.clientY - pan.y);
+      }
+      function onUp(ev) {
+        if (ev.pointerId !== pan.id) return;
+        strip.classList.remove('is-panning');
+        strip.removeEventListener('pointermove', onMove);
+        strip.removeEventListener('pointerup', onUp);
+        strip.removeEventListener('pointercancel', onUp);
+        try { strip.releasePointerCapture(pan.id); } catch (err2) { /* not captured */ }
+      }
+      strip.addEventListener('pointermove', onMove);
+      strip.addEventListener('pointerup', onUp);
+      strip.addEventListener('pointercancel', onUp);
+    });
+    els.main.addEventListener('auxclick', function (e) {
+      if (e.button === MIDDLE && state.section === 'orchestrator') e.preventDefault();
+    });
 
     function renderOrchestrator() {
       var layout = ensureZoom();
@@ -1745,6 +1796,36 @@
         ]),
       ]);
       els.main.appendChild(page);
+      if (!state.zoomTouched && scale !== 'vague') {
+        var strip0 = page.querySelector('.db-board-days');
+        var n0 = strip0 ? strip0.children.length : 0;
+        if (strip0 && n0) {
+          var inner = strip0.clientWidth - 10;
+          var col0 = (inner - Math.max(0, n0 - 1) * 4) / n0;
+          var days0 = DM().zoomSpanDays(scale);
+          if (days0 && col0 > 80) {
+            var fitted = DM().zoomLayout(col0 / days0);
+            if (fitted.scale === scale) {
+              state.zoomP = fitted.pxPerDay;
+              state.zoomColPx = fitted.colPx;
+              strip0.style.gridTemplateColumns = 'repeat(' + n0 + ', ' + fitted.colPx + 'px)';
+              var extra = strip0.scrollWidth - strip0.clientWidth;
+              if (extra > 0) {
+                var tighter = Math.max(80, fitted.colPx - Math.ceil(extra / n0));
+                var again = DM().zoomLayout(tighter / days0);
+                if (again.scale === scale) {
+                  state.zoomP = again.pxPerDay;
+                  state.zoomColPx = again.colPx;
+                  strip0.style.gridTemplateColumns = 'repeat(' + n0 + ', ' + again.colPx + 'px)';
+                  fitted = again;
+                }
+              }
+              var range0 = page.querySelector('.db-zoom-range');
+              if (range0) range0.value = String(DM().zoomSlider(fitted.pxPerDay));
+            }
+          }
+        }
+      }
       if (state.zoomFocalMs != null) {
         scrollStripTo(page.querySelector('.db-board-days'), state.zoomFocalMs, state.zoomFocalX);
         state.zoomFocalMs = null;

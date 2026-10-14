@@ -10,6 +10,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 |--------|---------|
 | Nouveau document | bouton **Nouveau** (ou `@@@titre` puis *Créer le document « titre »* depuis un autre document) |
 | Ouvrir un dossier | clic sur son nom : le dossier est un document, on y écrit comme dans les autres. Le chevron montre ce qu’il contient |
+| Icône | clic sur l’icône dans la liste : choisir le dessin et la couleur |
 | Mentionner une personne | `@` puis quelques lettres ; ↑ ↓ pour choisir, **Entrée** ou **Tab** pour valider, **Échap** pour fermer |
 | Entité dans le texte | un nom, un alias ou une façon de la nommer (« mon boss ») se lie tout seul. Le surlignage est très discret ; le survol montre l'entité |
 | Lier une tâche (carte) | `@@` |

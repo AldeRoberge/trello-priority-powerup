@@ -10,16 +10,58 @@
     return key === 'completed' || key === 'canceled';
   }
 
+  function isBlockedRow(row) {
+    return !!(row && (row.blocked || row.statutKey === 'blocked'));
+  }
+
+  /** Past due date on a card that is not in a completed or canceled list. */
+  function isOverdueRow(row, today) {
+    if (!row || isClosedKey(row.statutKey)) return false;
+    var due = String(row.due || '');
+    return /^\d{4}-\d{2}-\d{2}/.test(due) && due.slice(0, 10) < String(today || '');
+  }
+
   /**
-   * One column per board list (in board order), each with its cards sorted by Trello `pos`.
-   * opts: { filter: string, hideDone: bool } — hideDone drops the cards of completed/canceled lists
-   * (the column itself stays so cards can still be dropped into it).
+   * Rows that pass the text search and the hide-completed rule.
+   * Facets (blocked, overdue) are applied by the caller so chip counts stay stable while a facet is on.
    */
-  function buildColumns(rows, lists, opts) {
+  function rowsInView(rows, lists, opts) {
     opts = opts || {};
     var TM = global.TableModel;
     var q = String(opts.filter || '').trim();
-    var visible = q && TM ? TM.filterRows(rows, q) : rows;
+    var visible = q && TM ? TM.filterRows(rows, q) : (rows || []).slice();
+    if (opts.hideDone) {
+      var closed = Object.create(null);
+      (lists || []).forEach(function (l) {
+        if (isClosedKey(l.category)) closed[l.id] = true;
+      });
+      visible = visible.filter(function (r) { return !closed[r.listId]; });
+    }
+    return visible;
+  }
+
+  /** How many of `rows` are blocked, and how many are overdue on `today` (YYYY-MM-DD). */
+  function facetCounts(rows, today) {
+    var blocked = 0;
+    var overdue = 0;
+    (rows || []).forEach(function (r) {
+      if (isBlockedRow(r)) blocked += 1;
+      if (isOverdueRow(r, today)) overdue += 1;
+    });
+    return { blocked: blocked, overdue: overdue };
+  }
+
+  /**
+   * One column per board list (in board order), each with its cards sorted by Trello `pos`.
+   * opts: { filter, hideDone, blocked, overdue, today } — hideDone drops the cards of completed/canceled
+   * lists (the column itself stays so cards can still be dropped into it). blocked and overdue are
+   * AND facets on top of the text filter.
+   */
+  function buildColumns(rows, lists, opts) {
+    opts = opts || {};
+    var visible = rowsInView(rows, lists, opts);
+    if (opts.blocked) visible = visible.filter(isBlockedRow);
+    if (opts.overdue) visible = visible.filter(function (r) { return isOverdueRow(r, opts.today); });
     var byList = Object.create(null);
     visible.forEach(function (r) {
       (byList[r.listId] = byList[r.listId] || []).push(r);
@@ -76,6 +118,10 @@
     columnInsertIndex: columnInsertIndex,
     reorderLists: reorderLists,
     buildColumns: buildColumns,
+    rowsInView: rowsInView,
+    facetCounts: facetCounts,
+    isBlockedRow: isBlockedRow,
+    isOverdueRow: isOverdueRow,
     siblingsFor: siblingsFor,
     insertIndex: insertIndex,
     isClosedKey: isClosedKey,

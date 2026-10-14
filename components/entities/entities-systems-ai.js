@@ -66,7 +66,7 @@
       '- on : identifiants pris UNIQUEMENT dans la liste des composants ; l’entité doit les porter tous.',
       '- when : toutes les conditions doivent être vraies ; chaque path doit être un champ d’un composant de « on », pris dans la liste des champs.',
       '- opérations : eq (égal), ne (différent), gt (plus grand que), lt (plus petit que), set (rempli), empty (vide), contains (contient), in (parmi une liste).',
-      '  Pour les dates : past (déjà passée, sans value), soon (dans N jours ou moins, value = N), ago (il y a plus de N jours, value = N).',
+      '  Pour les dates : past (déjà passée, sans value), soon (dans N jours ou moins, value = N), ago (il y a plus de N jours, value = N), overdue (une date plus vieille que le nombre de jours d’un autre champ, value = le chemin de ce champ).',
       '  Pour un niveau ou un nombre à zéro : eq avec value 0. Pour un oui/non : eq avec true ou false.',
       '- then.text : le message affiché ; {name} = le nom de l’entité, {composant.champ} = la valeur d’un champ. then.card : titre de la carte à proposer, seulement si l’utilisateur veut une tâche ou un rappel.',
       'Si la règle ne peut pas s’exprimer avec ces composants et champs, renvoie {"error":"raison courte"}.',

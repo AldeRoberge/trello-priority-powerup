@@ -287,7 +287,8 @@
       var c = st.card;
       if (!c || !c.field || c.field.kind !== 'date' || !st.text || !global.QuickParse) return null;
       var w = global.QuickParse.parseWhen(st.text, new Date());
-      return h('div', { class: 'iv-read', text: w ? '→ ' + w.label : 'Je ne comprends pas encore cette date.' });
+      if (!w) return null;
+      return h('div', { class: 'iv-read', text: '→ ' + w.label });
     }
 
     function paintCard() {

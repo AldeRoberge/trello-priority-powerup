@@ -8,8 +8,11 @@
  * places are edited in the card.
  *  - drag the background (or hold the middle button anywhere) to pan, wheel to zoom, drag a node to move it
  *  - drag from a pin (card side) onto another node to link it (task → task: dependency; otherwise "Contribue à")
- *  - click a node to focus it: its neighbours stay lit, each link is read from that node
- *    (a task "Sera fait par Aldé", the person "Va faire"), and the side panel lists its links
+ *  - click a node to focus it: it stays where it is and its neighbourhood gathers around it
+ *    (goals above, what it needs to the right, places lower right, work below, people lower left).
+ *    The next relation sits just behind, dimmer. Click the background and the map returns.
+ *    Each link is read from that node (a task "Sera fait par Aldé", the person "Va faire"),
+ *    and the side panel lists its links
  *  - click a link to select it: delete, reverse or re-target it from the panel (Suppr also deletes it)
  *  - "Ajouter" creates a vision / mission / goal / objective / project; "Hiérarchie" lays the graph out from the center
  *  - "Groupes" picks the lens (hiérarchie, vision, mission, but, objectif, projet, type, manuel). A group is a soft
@@ -286,7 +289,7 @@
       var kids = [
         h('span', { class: 'mm-search' }, [icon('search'), filter]),
         h('div', { class: 'mm-tools', role: 'group', 'aria-label': 'Outils' }, [
-          showTool('depends', 'arrow-bend-down-right', 'Dépendances'),
+          showTool('depends', 'arrow-curve-right', 'Dépendances'),
           showTool('by', 'user', 'Personnes'),
           showTool('at', 'map-pin', 'Lieux'),
           showTool('goals', 'target-arrow', 'Objectifs'),
@@ -331,7 +334,7 @@
               renderBar();
             },
           }),
-          tool('square-dashed', 'Sélection', {
+          tool('marquee-2', 'Sélection', {
             pressed: !!state.marqueeTool,
             armed: !!state.marqueeTool,
             title: 'Sélection',
@@ -540,9 +543,8 @@
      * Filled head whose base sits on the end of the wire. The wire stops at that base,
      * so the shaft and the head share one point instead of a gap (the marker used to).
      */
-    function arrowJoin(p2) {
-      var dist = Math.sqrt(Math.pow(p2.x - (p2.fromX || p2.x), 2) + Math.pow(p2.y - (p2.fromY || p2.y), 2));
-      var len = Math.min(11, Math.max(8, dist ? Math.min(11, dist * 0.45) : 11));
+    function arrowJoin(p2, dist) {
+      var len = !dist || dist > 36 ? 11 : Math.max(7, dist * 0.34);
       var hw = len * 0.42;
       var bx = p2.x + p2.nx * len;
       var by = p2.y + p2.ny * len;
@@ -576,18 +578,20 @@
       graph.edges.forEach(function (e) {
         var cls = e.kind === 'depends' ? 'depends' : e.kind === 'by' ? 'by' : e.kind === 'serves' ? 'serves' : e.kind === 'sub' ? 'sub' : 'at';
         var glow = s('path', { class: 'mm-edge-glow mm-edge-glow--' + cls });
-        var line = s('path', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : ''), 'marker-end': 'url(#mm-arrow-' + cls + ')' });
+        var line = s('path', { class: 'mm-edge mm-edge--' + cls + (state.cycles[e.from] && state.cycles[e.to] && e.kind === 'depends' ? ' is-cycle' : '') });
+        var arrow = s('path', { class: 'mm-arrow mm-arrow--' + cls });
+        var neck = s('path', { class: 'mm-edge-neck mm-edge-neck--' + cls });
         var title = s('title');
         title.textContent = edgeLabel(e);
         line.appendChild(title);
         var label = s('text', { class: 'mm-edge-label mm-edge-label--' + cls, 'text-anchor': 'middle' });
         label.textContent = edgeLabel(e);
-        var wrapG = s('g', { class: 'mm-wire-group' }, [glow, line, label]);
+        var wrapG = s('g', { class: 'mm-wire-group' }, [glow, line, neck, arrow, label]);
         // wide invisible stroke so any link is easy to click (select / delete / change it)
         var hit = s('path', { class: 'mm-edge-hit', 'data-edge': e.id });
         hit.addEventListener('click', function (ev) { ev.stopPropagation(); onEdgeClick(e); });
         wrapG.appendChild(hit);
-        edgeEls[e.id] = { line: line, glow: glow, label: label, title: title, hit: hit, e: e };
+        edgeEls[e.id] = { line: line, glow: glow, arrow: arrow, neck: neck, label: label, title: title, hit: hit, e: e };
         gEdges.appendChild(wrapG);
       });
       graph.nodes.forEach(function (n) {
@@ -769,8 +773,25 @@
       // the wire stops just outside each card so the pin and arrowhead stay visible
       p1.x += p1.nx * PIN_GAP; p1.y += p1.ny * PIN_GAP;
       p2.x += p2.nx * PIN_GAP; p2.y += p2.ny * PIN_GAP;
-      var d = wirePath(p1, p2);
-      [ref.line, ref.glow, ref.hit].forEach(function (l) { if (l) l.setAttribute('d', d); });
+      var dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+      var join = arrowJoin(p2, dist);
+      var base = join.base;
+      var room = Math.max(0, dist - 12);
+      var neckLen = Math.min(16, room * 0.35);
+      var end = base;
+      if (ref.neck && neckLen >= 6) {
+        var sx = base.x + base.nx * neckLen;
+        var sy = base.y + base.ny * neckLen;
+        ref.neck.setAttribute('display', '');
+        ref.neck.setAttribute('d', 'M' + sx.toFixed(1) + ',' + sy.toFixed(1) + ' L' + base.x.toFixed(1) + ',' + base.y.toFixed(1));
+        end = { x: sx, y: sy, nx: base.nx, ny: base.ny };
+      } else if (ref.neck) ref.neck.setAttribute('display', 'none');
+      var d = wirePath(p1, end);
+      if (ref.line) ref.line.setAttribute('d', d);
+      if (ref.glow) ref.glow.setAttribute('d', d);
+      if (ref.hit) ref.hit.setAttribute('d', wirePath(p1, p2));
+      if (ref.arrow) ref.arrow.setAttribute('d', join.d);
+      seatDash(ref.line);
       // sit the phrase nearer the object, off the wire, so several links from one node don't share one spot
       var dx = p2.x - p1.x;
       var dy = p2.y - p1.y;
@@ -873,6 +894,8 @@
         var lit = selEdge ? chosen : !focus || e.from === focus || e.to === focus;
         ref.line.classList.toggle('is-dim', !lit);
         ref.glow.classList.toggle('is-dim', !lit);
+        if (ref.arrow) ref.arrow.classList.toggle('is-dim', !lit);
+        if (ref.neck) ref.neck.classList.toggle('is-dim', !lit);
         ref.line.classList.toggle('is-selected', chosen);
         ref.glow.classList.toggle('is-selected', chosen);
         ref.label.classList.toggle('is-shown', (!!focus || chosen) && lit);

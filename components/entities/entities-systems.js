@@ -31,7 +31,7 @@
   }
 
   /** Does one condition hold for the value of its field? Dates are ISO strings, so they compare as text. */
-  function holds(cond, actual, now) {
+  function holds(cond, actual, now, read) {
     var today = isoDay(now);
     var day = typeof actual === 'string' ? actual.slice(0, 10) : '';
     switch (cond.op) {
@@ -41,6 +41,11 @@
         return !!day && day <= shiftDays(now, Number(cond.value) || 0);
       case 'ago':
         return !!day && day <= shiftDays(now, -(Number(cond.value) || 0));
+      case 'overdue':
+        var span = Number(typeof read === 'function' ? read(cond.value) : NaN);
+        if (!isFinite(span)) return false;
+        if (!day) return true;
+        return day <= shiftDays(now, -Math.max(0, Math.round(span)));
       default: {
         var expected = cond.value;
         // a rule written as text ("0") still compares with a number
@@ -84,7 +89,9 @@
           return;
         }
         var ok = sys.when.every(function (c) {
-          return holds(c, EM().getValue(flat[i], c.path), now);
+          return holds(c, EM().getValue(flat[i], c.path), now, function (path) {
+            return EM().getValue(flat[i], path);
+          });
         });
         if (!ok) return;
         out.push({
@@ -123,6 +130,10 @@
     var label = f ? f.field.label : c.path;
     if (c.op === 'soon') return label + ' dans ' + c.value + ' jours ou moins';
     if (c.op === 'ago') return label + ' depuis plus de ' + c.value + ' jours';
+    if (c.op === 'overdue') {
+      var other = EM().fieldOf(schema, c.value);
+      return label + ' dépasse ' + (other ? other.field.label : c.value);
+    }
     var v = c.value === undefined ? '' : ' ' + (Array.isArray(c.value) ? c.value.join(' ou ') : typeof c.value === 'boolean' ? (c.value ? 'oui' : 'non') : c.value);
     return label + ' ' + (OP_WORDS[c.op] || c.op) + v;
   }
@@ -156,6 +167,13 @@
       then: { text: '{name} se périme le {consommable.peremption}', level: 'warn', card: 'Utiliser ou remplacer {name}' },
     },
     {
+      id: 'entretien_en_retard',
+      name: 'Entretien en retard',
+      on: ['entretien'],
+      when: [{ path: 'entretien.dernier', op: 'overdue', value: 'entretien.frequence' }],
+      then: { text: '{name} attend son entretien', level: 'warn', card: 'Entretenir {name}' },
+    },
+    {
       id: 'echeance_depassee',
       name: 'Échéance dépassée',
       on: ['travail'],
@@ -171,6 +189,30 @@
       on: ['assignation'],
       when: [{ path: 'assignation.assigne_a', op: 'empty' }],
       then: { text: 'Personne n’est assigné à {name}', level: 'info' },
+    },
+    {
+      id: 'travail_sans_responsable',
+      name: 'Travail sans responsable',
+      on: ['travail'],
+      when: [
+        { path: 'travail.responsable', op: 'empty' },
+        { path: 'travail.statut', op: 'ne', value: 'terminé' },
+      ],
+      then: { text: 'Personne ne dirige {name}', level: 'info' },
+    },
+    {
+      id: 'sans_amont',
+      name: 'Ne contribue à rien',
+      on: ['contribution'],
+      when: [{ path: 'contribution.sert', op: 'empty' }],
+      then: { text: '{name} ne contribue encore à rien', level: 'info' },
+    },
+    {
+      id: 'sans_critere',
+      name: 'Sans critère de réussite',
+      on: ['resultat'],
+      when: [{ path: 'resultat.succes', op: 'empty' }],
+      then: { text: '{name} n’a pas de critère de réussite', level: 'warn' },
     },
   ];
 

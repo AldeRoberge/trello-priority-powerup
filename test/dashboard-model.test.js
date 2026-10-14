@@ -318,4 +318,31 @@ describe('DashboardModel', () => {
     const rows = [row('a', { statutKey: 'triage' }), row('b'), row('c', { due: '2026-10-06' })];
     assert.deepEqual(DM.counts(rows, '2026-10-06'), { triage: 1, orchestrator: 1, today: 1 });
   });
+
+  it('zoomLayout stretches a column and changes scale only past the next size', () => {
+    const day = DM.zoomLayout(200);
+    assert.equal(day.scale, 'day');
+    assert.equal(day.colPx, 200);
+    const still = DM.zoomLayout(200 * 1.22);
+    assert.equal(still.scale, 'day');
+    assert.ok(still.colPx > day.colPx);
+    const hour = DM.zoomLayout(148 * 24);
+    assert.equal(hour.scale, 'hour');
+    assert.equal(hour.colPx, 148);
+    const minute = DM.zoomLayout(148 * 96);
+    assert.equal(minute.scale, 'minute');
+    const week = DM.zoomLayout(148 / 7);
+    assert.equal(week.scale, 'week');
+    assert.equal(week.colPx, 148);
+    const years = DM.zoomLayout(120 / 365.25);
+    assert.equal(years.scale, 'years');
+    assert.equal(DM.zoomLayout(0.01).scale, 'vague');
+    const back = DM.zoomLayout(DM.zoomFromSlider(DM.zoomSlider(200)));
+    assert.ok(Math.abs(back.pxPerDay - 200) < 3);
+    const fit = DM.zoomLayout(DM.zoomFit('day', 1400, 7));
+    assert.equal(fit.scale, 'day');
+    const hourFit = DM.zoomLayout(DM.zoomFit('hour', 1400, 12));
+    assert.equal(hourFit.scale, 'hour');
+    assert.ok(hourFit.colPx > 160);
+  });
 });

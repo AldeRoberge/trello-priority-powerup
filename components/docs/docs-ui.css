@@ -239,8 +239,8 @@ button.dc-item-icon:hover {
   color: var(--tp-primary);
 }
 .dc-iconpick {
-  width: 256px;
-  max-width: 256px;
+  width: 274px;
+  max-width: 274px;
 }
 .dc-iconpick .dc-input {
   width: 100%;
@@ -276,7 +276,9 @@ button.dc-item-icon:hover {
   grid-template-columns: repeat(8, 28px);
   gap: 2px;
   max-height: 168px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .dc-iconpick-btn {
   width: 28px;

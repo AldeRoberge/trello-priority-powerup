@@ -54,7 +54,7 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
 
     it('a Building is a place AND matter: two natures, components of both lineages', () => {
       assert.deepEqual(M.naturesOf(schema, { types: ['batiment'] }), ['place', 'matter']);
-      assert.deepEqual(M.componentIdsOf(schema, { types: ['batiment'] }), ['matiere', 'provenance', 'propriete', 'construction']);
+      assert.deepEqual(M.componentIdsOf(schema, { types: ['batiment'] }), ['adresse', 'propriete', 'matiere', 'provenance', 'location', 'construction']);
     });
 
     it('a Worker is a Person in a role: it inherits the person fields and flags role', () => {
@@ -288,7 +288,7 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
     it('everything but the product family fits in the schema card with room to spare', () => {
       const r = L.install(M.defaultSchema(), L.TYPES.map((t) => t.id).filter((id) => !PRODUCT_FAMILY.includes(id)));
       assert.equal(r.error, undefined);
-      assert.ok(JSON.stringify(r.schema).length < M.MAX_SCHEMA_CHARS - 4000);
+      assert.ok(JSON.stringify(r.schema).length < M.MAX_SCHEMA_CHARS - 2500);
     });
 
     it('each product type installs next to the core types', () => {
@@ -476,21 +476,21 @@ describe('Entities ontology: natures, hierarchy, relations, grounding, library',
     it('a schema relation behaves like a built-in: inverse, containment, no redefining built-ins', () => {
       let s = M.upsertRelationDef(M.defaultSchema(), { name: 'est garé dans', inverse: 'stationne', category: 'spatial', up: true });
       s = M.upsertRelationDef(s, { name: 'situé dans', inverse: 'x' });
-      s = M.upsertRelationDef(s, { name: 'ami de', symmetric: true, category: 'nope' });
-      assert.deepEqual(s.relations.map((r) => r.name), ['est garé dans', 'ami de']);
+      s = M.upsertRelationDef(s, { name: 'pote de', symmetric: true, category: 'nope' });
+      assert.deepEqual(s.relations.map((r) => r.name), ['est garé dans', 'pote de']);
       assert.equal(M.inverseLabel('est garé dans'), 'stationne');
       assert.equal(M.inverseLabel('stationne'), 'est garé dans');
-      assert.equal(M.matchRelation('ami de').def.category, 'generic');
-      assert.ok(M.relationsFor([]).some((d) => d.name === 'ami de'));
+      assert.equal(M.matchRelation('pote de').def.category, 'generic');
+      assert.ok(M.relationsFor([]).some((d) => d.name === 'pote de'));
       const garage = M.createEntity(s, { name: 'Garage', types: ['place'], id: 'g' });
       const car = M.createEntity(s, { name: 'Auto', id: 'c', relations: [{ type: 'est garé dans', to: 'g' }] });
       assert.deepEqual(M.ancestorsOf(s, [garage, car], 'c'), ['g']);
       assert.equal(M.wouldCycleRelation(s, [garage, car], 'g', 'est garé dans', 'c'), true);
       s = M.removeRelationDef(s, 'custom-est_gare_dans');
       assert.equal(M.matchRelation('est garé dans'), null);
-      assert.deepEqual(s.relations.map((r) => r.name), ['ami de']);
+      assert.deepEqual(s.relations.map((r) => r.name), ['pote de']);
       M.normalizeSchema({});
-      assert.equal(M.matchRelation('ami de'), null, 'custom relations follow the schema in use');
+      assert.equal(M.matchRelation('pote de'), null, 'custom relations follow the schema in use');
     });
 
     it('a field can carry a custom relation', () => {

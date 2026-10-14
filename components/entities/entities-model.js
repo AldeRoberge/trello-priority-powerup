@@ -93,8 +93,11 @@
     return foldAccents(s).toLowerCase().replace(/['’]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
-  /** "plantes" -> "plante", "plants" -> "plant": crude FR/EN plural folding, applied to both sides. */
+  /** "plantes" -> "plante". A few words end in s without being plural ("dans", "fils"). */
   function singular(word) {
+    if (word === 'animaux') return 'animal';
+    if (word === 'travaux') return 'travail';
+    if (word === 'dans' || word === 'sans' || word === 'sous' || word === 'vers' || word === 'fils' || word === 'temps' || word === 'plus') return word;
     if (word.length > 3 && /(s|x)$/.test(word)) return word.slice(0, -1);
     return word;
   }
@@ -165,7 +168,11 @@
     if (kind === 'ref' || kind === 'refs') {
       out.refTypes = uniqueStrings(f.refTypes, MAX_TYPES, MAX_NAME).map(slug).filter(Boolean);
       // the field IS a relation of the vocabulary (e.g. a plant's place is "located in")
-      if (f.rel && relationById(f.rel)) out.rel = String(f.rel);
+      if (f.rel && relationById(f.rel)) {
+        out.rel = String(f.rel);
+        // "Bloqué par X" stores X as the subject of "bloque": X blocks this entity, not the reverse.
+        if (f.incoming) out.incoming = true;
+      }
     }
     return out;
   }
@@ -290,7 +297,7 @@
 
   // ---------------------------------------------------------------- 2a systems (declarative rules)
   var MAX_SYSTEMS = 20;
-  var SYSTEM_OPS = ['eq', 'ne', 'gt', 'lt', 'set', 'empty', 'in', 'contains', 'past', 'soon', 'ago'];
+  var SYSTEM_OPS = ['eq', 'ne', 'gt', 'lt', 'set', 'empty', 'in', 'contains', 'past', 'soon', 'ago', 'overdue'];
   var SYSTEM_LEVELS = ['info', 'warn', 'alert'];
 
   /**
@@ -319,6 +326,14 @@
       if (w.op === 'soon' || w.op === 'ago') {
         if (!isFinite(Number(c.value))) return;
         c.value = Math.max(0, Math.min(3650, Math.round(Number(c.value))));
+      }
+      // a date older than the number of days stored in a sibling field (last care vs frequency)
+      if (w.op === 'overdue') {
+        var other = String(c.value || '');
+        var oc = other.split('.');
+        if (oc.length !== 2 || on.indexOf(oc[0]) < 0) return;
+        if (schema && schema.components && !fieldOf(schema, other)) return;
+        c.value = other;
       }
       when.push(c);
     });
@@ -1258,13 +1273,19 @@
   var RELATIONS = [
     { id: 'located-in', name: 'situé dans', inverse: 'abrite', category: 'spatial', up: true, from: ['matter', 'living', 'agent', 'place', 'event', 'social'], to: ['place'], aliases: ['situé à', 'localisé dans', 'located in'], inverseAliases: ['héberge', 'houses'] },
     { id: 'part-of', name: 'fait partie de', inverse: 'contient', category: 'mereological', up: true, aliases: ['partie de', 'part of'], inverseAliases: ['comprend', 'has part', 'contains'] },
-    { id: 'lives-in', name: 'habite à', inverse: 'est habité par', category: 'spatial', from: ['agent', 'living'], to: ['place'], aliases: ['habite dans', 'lives in'] },
+    { id: 'lives-in', name: 'habite à', inverse: 'est habité par', category: 'spatial', up: true, from: ['agent', 'living'], to: ['place'], aliases: ['habite dans', 'habite au', 'habite aux', 'lives in'] },
     { id: 'made-of', name: 'fait de', inverse: 'compose', category: 'composition', from: ['matter', 'living'], to: ['matter', 'living'], aliases: ['composé de', 'made of', 'contient comme ingrédient'] },
     { id: 'made-by', name: 'fabriqué par', inverse: 'a fabriqué', category: 'production', to: ['agent', 'social'], aliases: ['créé par', 'produit par', 'made by'] },
     { id: 'owned-by', name: 'appartient à', inverse: 'possède', category: 'social', to: ['agent', 'social'], aliases: ['propriété de', 'owned by'] },
     { id: 'member-of', name: 'membre de', inverse: 'a pour membre', category: 'social', from: ['agent', 'social'], to: ['social', 'agent'], aliases: ['member of'] },
     { id: 'participates-in', name: 'participe à', inverse: 'a pour participant', category: 'social', from: ['agent', 'social'], to: ['event'], aliases: ['invité à', 'participates in'], inverseAliases: ['a pour invité', 'participants'] },
     { id: 'works-for', name: 'travaille pour', inverse: 'emploie', category: 'social', from: ['agent'], to: ['social', 'agent'], aliases: ['works for', 'travaille chez'], inverseAliases: ['employs'] },
+    { id: 'parent-of', name: 'parent de', inverse: 'enfant de', category: 'social', from: ['agent'], to: ['agent'], aliases: ['père de', 'mère de', 'parent of'], inverseAliases: ['fils de', 'fille de', 'child of'] },
+    { id: 'partner-of', name: 'conjoint de', category: 'social', symmetric: true, from: ['agent'], to: ['agent'], aliases: ['partenaire de', 'partner of', 'mari de', 'femme de', 'époux de', 'épouse de'] },
+    { id: 'sibling-of', name: 'frère ou sœur de', category: 'social', symmetric: true, from: ['agent'], to: ['agent'], aliases: ['frère de', 'sœur de', 'sibling of'] },
+    { id: 'friend-of', name: 'ami de', category: 'social', symmetric: true, from: ['agent'], to: ['agent'], aliases: ['amie de', 'friend of'] },
+    { id: 'colleague-of', name: 'collègue de', category: 'social', symmetric: true, from: ['agent'], to: ['agent'], aliases: ['coworker of'] },
+    { id: 'cares-for', name: 's’occupe de', inverse: 'est sous la garde de', category: 'social', from: ['agent'], to: ['living', 'agent'], aliases: ['prend soin de', 'cares for'] },
     { id: 'instance-of', name: 'instance de', inverse: 'a pour instance', category: 'taxonomic', to: ['abstract', 'social'], aliases: ['exemple de', 'instance of'], inverseAliases: ['a pour exemple'] },
     { id: 'grounded-in', name: 'ancré dans', inverse: 'ancre', category: 'grounding', from: ['abstract', 'social'], aliases: ['basé sur', 'grounded in'] },
     { id: 'expressed-by', name: 'exprimé par', inverse: 'exprime', category: 'grounding', from: ['abstract', 'social'], aliases: ['incarné par', 'illustré par', 'expressed by'] },
@@ -1283,6 +1304,7 @@
     { id: 'related', name: 'lié à', category: 'generic', symmetric: true, aliases: ['related to', 'relié à'] },
   ];
   var relIndex = null;
+  var relIndexed = -1;
 
   function relationById(id) {
     for (var i = 0; i < RELATIONS.length; i++) if (RELATIONS[i].id === id) return RELATIONS[i];
@@ -1290,8 +1312,10 @@
   }
 
   function relationIndex() {
-    if (relIndex) return relIndex;
+    // the work library pushes relations after this file loads; a longer list must be reindexed
+    if (relIndex && relIndexed === RELATIONS.length) return relIndex;
     relIndex = {};
+    relIndexed = RELATIONS.length;
     function put(label, def, dir) {
       var k = normKey(label);
       if (k && !relIndex[k]) relIndex[k] = { def: def, dir: dir };
@@ -1353,13 +1377,143 @@
     return null;
   }
 
-  /** Relations of an entity that peopleSpec lists (they are shown there, not in the general links). */
-  function peopleRelations(schema, entity) {
+  /**
+   * Relations of an entity that peopleSpec lists (they are shown there, not in the general links).
+   * Pass `entities` to also see the link stored on the other side ("Léa membre de la chorale").
+   */
+  function peopleRelations(schema, entity, entities) {
     var spec = peopleSpec(schema, entity);
     if (!spec) return [];
-    return (entity.relations || []).filter(function (r) {
-      return normKey(r.type) === normKey(spec.rel);
+    var out = [];
+    var seen = {};
+    function add(to, role, record) {
+      var k = to + '\n' + normKey(role || '');
+      if (!to || seen[k]) return;
+      seen[k] = true;
+      out.push(record);
+    }
+    (entity.relations || []).forEach(function (r) {
+      if (normKey(r.type) === normKey(spec.rel)) add(r.to, r.role, r);
     });
+    (entities || []).forEach(function (other) {
+      if (!other || other.id === entity.id) return;
+      (other.relations || []).forEach(function (r) {
+        if (r.to !== entity.id) return;
+        var inv = inverseLabel(r.type);
+        if (normKey(r.type) !== normKey(spec.rel) && normKey(inv) !== normKey(spec.rel)) return;
+        add(other.id, r.role, { type: spec.rel, to: other.id, role: r.role || '' });
+      });
+    });
+    return out;
+  }
+
+  /** The place a person lives in: the Habite à field, or a "habite à" link from either side. */
+  function homeId(schema, entities, entity) {
+    if (!entity) return '';
+    var v = effectiveValue(entities, entity, 'personne.residence', schema);
+    if (typeof v === 'string' && v) return v;
+    var home = '';
+    flatten(entities, schema).forEach(function (e) {
+      factsOf(schema, e).forEach(function (f) {
+        if (f.def && f.def.id === 'lives-in' && f.subject === entity.id) home = f.object;
+      });
+    });
+    return home;
+  }
+
+  /** The organisation a person works for: the Employeur field, or a "travaille pour" link. */
+  function employerId(schema, entities, entity) {
+    if (!entity) return '';
+    var v = effectiveValue(entities, entity, 'emploi.employeur', schema);
+    if (typeof v === 'string' && v) return v;
+    var emp = '';
+    flatten(entities, schema).forEach(function (e) {
+      factsOf(schema, e).forEach(function (f) {
+        if (f.def && f.def.id === 'works-for' && f.subject === entity.id) emp = f.object;
+      });
+    });
+    return emp;
+  }
+
+  /** People whose home is this place or somewhere inside it. */
+  function residentsOf(schema, entities, placeId) {
+    if (!placeId) return [];
+    var inside = {};
+    inside[placeId] = true;
+    descendantsOf(schema, entities, placeId).forEach(function (id) {
+      inside[id] = true;
+    });
+    return (entities || []).filter(function (e) {
+      var h = homeId(schema, entities, e);
+      return h && inside[h];
+    });
+  }
+
+  /**
+   * The other end of a vocabulary relation.
+   * dir 'fwd' (the phrase used the relation's name, "parent de Emma"): target is the object, return subjects.
+   * dir 'inv' ("enfant de Léa"): target is the subject, return objects.
+   * Symmetric relations return either end. Colleagues also include people with the same employer.
+   */
+  function relatedTo(schema, entities, targetId, def, dir) {
+    if (!def || !targetId) return [];
+    var ids = [];
+    function add(x) {
+      if (x && x !== targetId && ids.indexOf(x) < 0) ids.push(x);
+    }
+    if (def.id === 'lives-in') {
+      if (dir === 'inv') {
+        var who = findById(entities, targetId);
+        var h = who ? homeId(schema, entities, who) : '';
+        return h ? [findById(entities, h)].filter(Boolean) : [];
+      }
+      return residentsOf(schema, entities, targetId);
+    }
+    flatten(entities, schema).forEach(function (e) {
+      factsOf(schema, e).forEach(function (f) {
+        if (!f.def || f.def.id !== def.id) return;
+        if (def.symmetric || dir === 'sym') {
+          if (f.subject === targetId) add(f.object);
+          if (f.object === targetId) add(f.subject);
+        } else if (dir === 'inv') {
+          if (f.subject === targetId) add(f.object);
+        } else if (f.object === targetId) add(f.subject);
+      });
+    });
+    if (def.id === 'colleague-of') {
+      var self = findById(entities, targetId);
+      var emp = self ? employerId(schema, entities, self) : '';
+      if (emp) {
+        (entities || []).forEach(function (e) {
+          if (employerId(schema, entities, e) === emp) add(e.id);
+        });
+      }
+    }
+    return ids
+      .map(function (id) {
+        return findById(entities, id);
+      })
+      .filter(Boolean);
+  }
+
+  /** Partner, parents, children, siblings, friends, pets, colleagues and home of one person. */
+  function circleOf(schema, entities, id) {
+    var self = findById(entities, id);
+    if (!self) return null;
+    function list(defId, dir) {
+      var def = relationById(defId);
+      return def ? relatedTo(schema, entities, id, def, dir) : [];
+    }
+    return {
+      home: homeId(schema, entities, self),
+      partners: list('partner-of', 'sym'),
+      parents: list('parent-of', 'fwd'),
+      children: list('parent-of', 'inv'),
+      siblings: list('sibling-of', 'sym'),
+      friends: list('friend-of', 'sym'),
+      pets: list('cares-for', 'inv'),
+      colleagues: list('colleague-of', 'sym'),
+    };
   }
 
   /**
@@ -1384,7 +1538,8 @@
         var v = entity.data[cid][key];
         (Array.isArray(v) ? v : [v]).forEach(function (to) {
           if (typeof to !== 'string' || !to) return;
-          out.push({ subject: entity.id, def: def, object: to });
+          if (f.field.incoming) out.push({ subject: to, def: def, object: entity.id });
+          else out.push({ subject: entity.id, def: def, object: to });
           if (def.symmetric) out.push({ subject: to, def: def, object: entity.id });
         });
       });
@@ -1552,7 +1707,7 @@
     var out = [];
     var natures = naturesOf(schema, entity);
     if (ancestorsOf(schema, entities, entity.id).indexOf(entity.id) >= 0) {
-      out.push({ level: 'error', code: 'cycle', message: '« ' + entity.name + ' » finirait par se contenir lui-même : retirez un lien « situé dans » ou « fait partie de ».' });
+      out.push({ level: 'error', code: 'cycle', message: '« ' + entity.name + ' » finirait par se contenir : retirez un lien « situé dans », « fait partie de » ou « habite à ».' });
     }
     (entity.relations || []).forEach(function (r) {
       var m = matchRelation(r.type);
@@ -1808,6 +1963,30 @@
       });
   }
 
+  /** Kinship, care and residence: a phrase like "enfants de Léa" names the relation, not a type. */
+  var PHRASE_REL = ['parent-of', 'partner-of', 'sibling-of', 'friend-of', 'colleague-of', 'cares-for', 'lives-in'];
+
+  function relationPhrase(hay) {
+    var best = null;
+    PHRASE_REL.forEach(function (id) {
+      var d = relationById(id);
+      if (!d) return;
+      var labels = [d.name].concat(d.aliases || []);
+      if (d.inverse) labels.push(d.inverse);
+      (d.inverseAliases || []).forEach(function (a) {
+        labels.push(a);
+      });
+      labels.forEach(function (label) {
+        var k = stem(label);
+        if (k.length < 5 || !hasPhrase(hay, k)) return;
+        if (best && k.length <= best.len) return;
+        var m = matchRelation(label);
+        best = { def: d, dir: m ? m.dir : 'fwd', len: k.length, via: k, label: label };
+      });
+    });
+    return best;
+  }
+
   /**
    * Turns a free-text request into a filter: "arroser mes plantes au travail" with a type "plant" and
    * a place whose alias is "travail" gives { types:['plant'], refersTo:[<place id>] } and the
@@ -1816,8 +1995,10 @@
    * @returns {{recognized:boolean, filter:object, entities:object[], mentions:object[]}}
    */
   function resolveText(schema, entities, text) {
-    // French elisions ("l'eau", "d'ordinateur") must not hide the word: drop the clitic before matching
-    var hay = stem(text).replace(/(^|\s)(?:l|d|j|m|n|s|t|c|qu)'(?=\S)/g, '$1');
+    // French elisions ("l'eau", "d'ordinateur") must not hide the word: drop the clitic before matching.
+    // Keep the raw stem too: "s'occupe" is a reflexive verb, not an elision, and it is a relation name.
+    var raw = stem(text);
+    var hay = raw.replace(/(^|\s)(?:l|d|j|m|n|s|t|c|qu)'(?=\S)/g, '$1');
     var mentions = [];
     var types = [];
     (schema.types || []).forEach(function (t) {
@@ -1843,6 +2024,16 @@
     named = named.filter(function (n) {
       return !named.some(function (o) {
         return o !== n && o.via.length > n.via.length && o.via.indexOf(n.via) >= 0;
+      });
+    });
+    // A place named "bureau" wins over the type alias "bureau": the word is an anchor, not a second type.
+    types = types.filter(function (tid) {
+      var via = '';
+      mentions.forEach(function (m) {
+        if (m.kind === 'type' && m.id === tid) via = m.via;
+      });
+      return !named.some(function (n) {
+        return n.via === via && typeClosure(schema, n.entity.types).indexOf(tid) < 0;
       });
     });
     // A named entity that already has a queried type is a direct pick ("le ficus"); the others are
@@ -1905,6 +2096,47 @@
       found = named.map(function (n) {
         return n.entity;
       });
+      // "dans la cuisine" asks for what is inside, not for the room itself
+      if (!types.length && /(?:^|\s)dans(?:\s|$)/.test(hay)) {
+        var inside = [];
+        refs.forEach(function (id) {
+          descendantsOf(schema, entities, id).forEach(function (cid) {
+            var e = findById(entities, cid);
+            if (e && !inside.some(function (x) { return x.id === e.id; })) inside.push(e);
+          });
+        });
+        if (inside.length) found = inside;
+      }
+    }
+    var phrase = relationPhrase(raw) || relationPhrase(hay);
+    if (phrase && named.length) {
+      var agentQuery =
+        !types.length ||
+        types.every(function (tid) {
+          var n = natureOfType(schema, tid);
+          return n === 'agent' || n === 'social' || !n;
+        });
+      // "mes plantes qui habitent à la maison" stays a plant query; "qui habite à Montréal" does not
+      if (phrase.def.id !== 'lives-in' || agentQuery) {
+        var linked = [];
+        named.forEach(function (n) {
+          relatedTo(schema, entities, n.entity.id, phrase.def, phrase.dir).forEach(function (e) {
+            if (!linked.some(function (x) { return x.id === e.id; })) linked.push(e);
+          });
+        });
+        mentions.push({ kind: 'relation', id: phrase.def.id, name: phrase.label, via: phrase.via });
+        return {
+          recognized: true,
+          filter: {
+            relation: phrase.def.id,
+            refersTo: named.map(function (n) {
+              return n.entity.id;
+            }),
+          },
+          entities: linked,
+          mentions: mentions,
+        };
+      }
     }
     return { recognized: recognized, filter: filter, entities: found, mentions: mentions };
   }
@@ -1960,12 +2192,20 @@
   }
 
   /**
-   * Lines for the agent system prompt: the catalog by type, then, when the user's text names a type
-   * or an entity, the entities it resolves to. Bounded (MAX_PROMPT_CHARS).
+   * Lines for the agent system prompt. The entities the current sentence resolves to come first, so a long
+   * catalog cannot push them past the character budget. Bounded (MAX_PROMPT_CHARS).
    */
   function promptLines(schema, entities, userText) {
     if (!schema || !entities || !entities.length) return [];
     var lines = ['Entités de l’utilisateur (objets nommés avec propriétés ; « mes plantes au travail » = filtre type + lieu) :'];
+    var r = userText ? resolveText(schema, entities, userText) : null;
+    if (r && r.recognized) {
+      lines.push('Entités correspondant à la demande actuelle (filtre résolu, ne pas redemander) :');
+      if (!r.entities.length) lines.push('- aucune');
+      r.entities.slice(0, MAX_PROMPT_MATCHES).forEach(function (e) {
+        lines.push('- ' + describeEntity(schema, entities, e));
+      });
+    }
     (schema.types || []).forEach(function (t) {
       var list = entities.filter(function (e) {
         return e.types.indexOf(t.id) >= 0;
@@ -1976,14 +2216,6 @@
           list.slice(0, 15).map(function (e) { return e.name; }).join(', ') + (list.length > 15 ? ', …' : '')
       );
     });
-    var r = userText ? resolveText(schema, entities, userText) : null;
-    if (r && r.recognized) {
-      lines.push('Entités correspondant à la demande actuelle (filtre résolu, ne pas redemander) :');
-      if (!r.entities.length) lines.push('- aucune');
-      r.entities.slice(0, MAX_PROMPT_MATCHES).forEach(function (e) {
-        lines.push('- ' + describeEntity(schema, entities, e));
-      });
-    }
     var out = [];
     var total = 0;
     for (var i = 0; i < lines.length; i++) {
@@ -2019,6 +2251,11 @@
     componentFits: componentFits,
     peopleSpec: peopleSpec,
     peopleRelations: peopleRelations,
+    homeId: homeId,
+    employerId: employerId,
+    relatedTo: relatedTo,
+    residentsOf: residentsOf,
+    circleOf: circleOf,
     COMPONENT_NATURES: COMPONENT_NATURES,
     archetypeDefaults: archetypeDefaults,
     setComponents: setComponents,

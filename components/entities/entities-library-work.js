@@ -17,7 +17,7 @@
   // "A contribue à B" is the spine: task → project → objective → goal → mission → vision, any level may be skipped.
   var NATURES_OF_WORK = ['abstract', 'event', 'matter', 'agent', 'social'];
   var RELATIONS = [
-    { id: 'serves', name: 'contribue à', inverse: 'est servi par', category: 'purpose', from: NATURES_OF_WORK, aliases: ['sert', 'serves', 'au service de', 'contributes to'], inverseAliases: ['reçoit la contribution de', 'is served by'] },
+    { id: 'serves', name: 'contribue à', inverse: 'est servi par', category: 'purpose', up: true, from: NATURES_OF_WORK, aliases: ['sert', 'serves', 'au service de', 'contributes to'], inverseAliases: ['reçoit la contribution de', 'is served by'] },
     { id: 'measured-by', name: 'mesuré par', inverse: 'mesure', category: 'purpose', from: ['abstract', 'event'], to: ['abstract'], aliases: ['measured by', 'évalué par'], inverseAliases: ['measures'] },
     { id: 'delivers', name: 'livre', inverse: 'est livré par', category: 'production', from: ['event'], aliases: ['produit comme livrable', 'delivers'], inverseAliases: ['delivered by'] },
     { id: 'led-by', name: 'dirigé par', inverse: 'dirige', category: 'social', to: ['agent', 'social'], aliases: ['responsable', 'assigné à', 'led by', 'owner'], inverseAliases: ['est responsable de', 'leads'] },
@@ -79,7 +79,8 @@
         { key: 'effort', label: 'Effort estimé', kind: 'number', unit: 'h' },
         { key: 'accompli', label: 'Travail accompli', kind: 'number', unit: '%' },
         { key: 'fait', label: 'Définition de terminé', kind: 'longtext' },
-        { key: 'bloque_par', label: 'Bloqué par', kind: 'refs', refTypes: [], rel: 'blocks' },
+        { key: 'parent', label: 'Fait partie de', kind: 'ref', refTypes: ['tache', 'projet'], rel: 'part-of' },
+        { key: 'bloque_par', label: 'Bloqué par', kind: 'refs', refTypes: [], rel: 'blocks', incoming: true },
       ],
     },
     {
@@ -157,7 +158,7 @@
     { group: 'purpose', id: 'indicateur', name: 'Indicateur', nature: 'abstract', icon: 'chart-line', parents: ['concept'], aliases: ['kpi', 'metric', 'métrique', 'mesure'], components: ['mesure'], description: 'Ce qu’on mesure pour savoir si un objectif est atteint : valeur de départ, actuelle et cible.' },
     { group: 'purpose', id: 'risque', name: 'Risque', nature: 'abstract', icon: 'alert-triangle', parents: ['concept'], aliases: ['risk', 'menace', 'obstacle'], components: ['risque'], description: 'Ce qui pourrait empêcher un objectif ou un projet d’aboutir.' },
     { group: 'work', id: 'projet', name: 'Projet', nature: 'event', icon: 'stack-2', aliases: ['project', 'initiative', 'chantier'], components: ['temps', 'travail', 'projet', 'contribution'], description: 'Un ensemble organisé de travail vers un objectif. Le terminer ne prouve pas que l’objectif est atteint.' },
-    { group: 'work', id: 'tache', name: 'Tâche', nature: 'event', icon: 'checkbox', aliases: ['task', 'carte', 'card', 'tâches'], components: ['travail', 'contribution'], description: 'Une unité de travail qu’on peut terminer seule, avec un résultat clair. Elle se décompose en sous-tâches et en actions.' },
+    { group: 'work', id: 'tache', name: 'Tâche', nature: 'event', icon: 'checkbox', aliases: ['task', 'carte', 'card', 'tâches'], components: ['travail', 'contribution', 'location'], description: 'Une unité de travail qu’on peut terminer seule. Elle contribue à un projet et peut contenir une sous-tâche.' },
     { group: 'work', id: 'action', name: 'Action', nature: 'event', icon: 'bolt', aliases: ['action', 'verbe', 'activité'], components: ['action', 'temps', 'location', 'assignation'], description: 'Ce qui se fait : un verbe, sa cible, qui s’en charge, quand et où. Filmer, approuver, publier.' },
     { group: 'work', id: 'processus', name: 'Processus', nature: 'event', icon: 'git-merge', aliases: ['process', 'procédé', 'production'], components: ['processus', 'travail', 'contribution'], description: 'Un enchaînement d’étapes qui transforme des entrants en sortants : une production vidéo.' },
     { group: 'work', id: 'jalon', name: 'Jalon', nature: 'event', icon: 'milestone', aliases: ['milestone', 'étape clé'], components: ['travail', 'contribution'], description: 'Un point de contrôle daté dans un projet.' },

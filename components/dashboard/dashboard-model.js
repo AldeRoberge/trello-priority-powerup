@@ -710,7 +710,12 @@
     if (!days) return 180;
     var gaps = Math.max(0, (count || 1) - 1) * 4;
     var col = (Math.max(0, avail) - gaps) / Math.max(1, count || 1);
-    if (scale !== 'years') col = Math.max(ZOOM_MIN_COL, col);
+    if (scale !== 'years') {
+      col = Math.max(ZOOM_MIN_COL, col);
+      // Sitting on the minimum jumps to the next scale on the first zoom-out.
+      // Rest a bit above it so the columns can shrink before the scale changes.
+      if (col < ZOOM_MIN_COL * 1.2) col = ZOOM_MIN_COL * 1.45;
+    }
     var layout = zoomLayout(col / days);
     if (layout.scale !== scale && scale !== 'years') layout = zoomLayout(ZOOM_MIN_COL / days);
     return layout.pxPerDay;

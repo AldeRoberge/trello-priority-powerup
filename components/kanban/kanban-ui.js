@@ -2,10 +2,11 @@
  * Role: UI of the Kanban view — the board's lists as columns, cards as tiles, like Trello but in the
  * app's own look (kanban-ui.css). Same data and writes as the Table (TableTrello / TableModel):
  *  - drag a card to another column or to a new position (saved to Trello as list + pos)
- *  - "+ Ajouter une carte" at the bottom of each column; click a tile to open the card
+ *  - "+ Ajouter une carte" at the bottom of each column; click a tile to open it beside the board
  *  - urgency / due / progress chips open the shared CardFields editors; right-click: card menu
- *  - "Demander à l'IA…" input on every tile (and one for the board in the toolbar): free text → KanbanAI
- *    creates / defines tasks, updates progress, puts a card on hold
+ *  - a sparkle on a tile (and one field for the board in the toolbar) asks KanbanAI; the tile
+ *    field stays closed until asked, so a board does not prefetch one suggestion per card
+ *  - "En retard" and "Bloquées" filter the board; arrow keys move between cards
  * Icons: Tabler webfont.
  */
 (function (global) {
@@ -62,8 +63,12 @@
       rows: [],
       places: {},
       filter: '',
+      facets: { blocked: false, overdue: false },
       hideDone: HD.get(),
       authOk: true,
+      detailId: null,
+      quick: null,
+      quickId: null,
       dragId: null,
       dragListId: null, // list id of the column being dragged by its header
       composer: null, // list id with the open "add card" composer
@@ -80,8 +85,21 @@
       bar: h('div', { class: 'kb-bar' }),
       banner: h('div', { class: 'kb-banner', hidden: true }),
       board: h('div', { class: 'kb-board' }),
+      detailBody: h('div', { class: 'kb-detail-body' }),
     };
-    root.appendChild(h('div', { class: 'kb-root', tabindex: '-1' }, [els.bar, els.banner, els.board]));
+    els.detail = h('aside', { class: 'kb-detail', hidden: true, 'aria-label': 'Détail de la carte' }, [
+      h('button', {
+        class: 'kb-iconbtn kb-detail-close',
+        type: 'button',
+        title: 'Fermer',
+        'aria-label': 'Fermer',
+        onclick: function () { closeDetail(); },
+      }, [icon('x')]),
+      els.detailBody,
+    ]);
+    els.stage = h('div', { class: 'kb-stage' }, [els.board, els.detail]);
+    els.root = h('div', { class: 'kb-root', tabindex: '-1' }, [els.bar, els.banner, els.stage]);
+    root.appendChild(els.root);
 
     /* ── Status + errors ───────────────────────────────────────────── */
     function setStatus(msg, kind, keepMs, openHistory) {
@@ -177,7 +195,66 @@
       return state.lists.filter(function (l) { return l.id === id; })[0] || null;
     }
     function columns() {
-      return KM().buildColumns(state.rows, state.lists, { filter: state.filter, hideDone: state.hideDone });
+      return KM().buildColumns(state.rows, state.lists, {
+        filter: state.filter,
+        hideDone: state.hideDone,
+        blocked: state.facets.blocked,
+        overdue: state.facets.overdue,
+        today: todayIso(),
+      });
+    }
+
+    function closeDetail() {
+      state.detailId = null;
+      state.quickId = null;
+      if (state.quick) {
+        state.quick.destroy();
+        state.quick = null;
+      }
+      els.detail.hidden = true;
+      els.detailBody.textContent = '';
+      els.board.querySelectorAll('.kb-card.is-selected').forEach(function (n) {
+        n.classList.remove('is-selected');
+        n.setAttribute('aria-selected', 'false');
+      });
+    }
+
+    /** Card beside the board. The full editor stays on "Ouvrir la carte". */
+    function openDetail(row) {
+      if (!row) return;
+      state.detailId = row.id;
+      els.detail.hidden = false;
+      els.board.querySelectorAll('.kb-card').forEach(function (n) {
+        var on = n.getAttribute('data-id') === row.id;
+        n.classList.toggle('is-selected', on);
+        n.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      if (state.quick && state.quickId === row.id) return;
+      if (state.quick) state.quick.destroy();
+      state.quick = null;
+      state.quickId = row.id;
+      els.detailBody.textContent = '';
+      if (!global.CardQuick) {
+        els.detailBody.appendChild(h('div', { class: 'kb-title', text: row.name || 'Sans titre' }));
+        els.detailBody.appendChild(h('button', {
+          class: 'kb-btn kb-btn--primary',
+          type: 'button',
+          onclick: function () { openCard(findRow(row.id) || row); },
+        }, [icon('external-link'), h('span', { text: 'Ouvrir' })]));
+        return;
+      }
+      state.quick = global.CardQuick.mount(els.detailBody, {
+        t: t,
+        cardId: row.id,
+        name: row.name || '',
+        onOpen: function () { openCard(findRow(row.id) || row); },
+        onChange: function () { reload({ quiet: true }); },
+        onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
+        onGone: function () {
+          closeDetail();
+          reload({ quiet: true });
+        },
+      });
     }
 
     function openCard(row) {
@@ -240,8 +317,28 @@
         },
       });
       var done = state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
+      var viewed = KM().rowsInView(state.rows, state.lists, { filter: state.filter, hideDone: state.hideDone });
+      var counts = KM().facetCounts(viewed, todayIso());
+      function facetButton(key, iconName, label, count) {
+        if (!count && !state.facets[key]) return null;
+        return h('button', {
+          class: 'kb-facet' + (state.facets[key] ? ' is-active' : ''),
+          type: 'button',
+          'data-facet': key,
+          'aria-pressed': state.facets[key] ? 'true' : 'false',
+          title: label,
+          onclick: function () {
+            state.facets[key] = !state.facets[key];
+            renderBar();
+            renderBoard();
+            paintCount();
+          },
+        }, [icon(iconName), h('span', { text: label }), h('span', { class: 'kb-facet-n', text: String(count) })]);
+      }
       [
         h('label', { class: 'kb-search' }, [icon('search'), filter]),
+        facetButton('overdue', 'calendar-exclamation', 'En retard', counts.overdue),
+        facetButton('blocked', 'player-pause', 'Bloquées', counts.blocked),
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
         h('span', { class: 'kb-status' }),
         AI() ? boardAsk() : null,
@@ -311,24 +408,44 @@
       return input;
     }
 
+    /** Sparkle stays quiet until asked, then the same free-text field as the toolbar. */
     function askBox(row) {
-      var sug = AI().cachedSuggestion(row);
-      var input = askInput('kb-ai-input', sug || 'Demander à l’IA…', row, function () { return sug; });
-      var box = h('div', { class: 'kb-ai', onclick: function (e) { e.stopPropagation(); } }, [
-        icon('sparkles'),
-        input,
-      ]);
-      // A draggable ancestor would turn text selection in the input into a card drag.
-      input.addEventListener('focus', function () {
-        var c = box.closest('.kb-card');
-        if (c) c.draggable = false;
-      });
-      // The model writes the suggestion from the full card state (cached per state, queued across the board).
-      AI().suggest(t, row).then(function (better) {
-        if (better && better !== sug) { sug = better; input.placeholder = better; }
-      });
-      input.addEventListener('blur', function () { var c = box.closest('.kb-card'); if (c) c.draggable = true; });
-      return box;
+      var wrap = h('div', { class: 'kb-ask' });
+      var btn = h('button', {
+        class: 'kb-ai-toggle',
+        type: 'button',
+        title: 'Demander à l’IA',
+        'aria-label': 'Demander à l’IA',
+        onclick: function (e) {
+          e.stopPropagation();
+          if (wrap.classList.contains('is-open')) return;
+          wrap.classList.add('is-open');
+          btn.hidden = true;
+          var sug = AI().cachedSuggestion(row);
+          var input = askInput('kb-ai-input', sug || 'Demander à l’IA…', row, function () { return sug; });
+          var box = h('div', { class: 'kb-ai', onclick: function (ev) { ev.stopPropagation(); } }, [icon('sparkles'), input]);
+          wrap.appendChild(box);
+          var card = wrap.closest('.kb-card');
+          input.addEventListener('focus', function () { if (card) card.draggable = false; });
+          input.addEventListener('blur', function () {
+            if (card) card.draggable = true;
+            if (!input.value) {
+              wrap.classList.remove('is-open');
+              box.remove();
+              btn.hidden = false;
+            }
+          });
+          AI().suggest(t, row).then(function (better) {
+            if (better && better !== sug && document.body.contains(input) && !input.value) {
+              sug = better;
+              input.placeholder = better;
+            }
+          });
+          input.focus();
+        },
+      }, [icon('sparkles')]);
+      wrap.appendChild(btn);
+      return wrap;
     }
 
     function boardAsk() {
@@ -427,14 +544,18 @@
       // Blocked (flag or "Bloqué" status) yet complete: striped red/green accent instead of the plain status colour.
       var blockedDone = !!(row.blocked || row.statutKey === 'blocked') && typeof row.progress === 'number' && row.progress >= 100;
       var el = h('div', {
-        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : ''),
+        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : '') + (state.detailId === row.id ? ' is-selected' : ''),
         draggable: 'true',
         tabindex: '0',
         'data-id': row.id,
+        'aria-selected': state.detailId === row.id ? 'true' : 'false',
         style: '--kb-accent:' + accent + (blockedDone ? ';--kb-blocked:' + (row.statutKey === 'blocked' ? accent : '#e34935') : ''),
-        onclick: function () { if (!state.swallowClick) openCard(row); },
+        onclick: function () { if (!state.swallowClick) openDetail(row); },
         onkeydown: function (e) {
-          if (e.key === 'Enter' && e.target === el) openCard(row);
+          if (e.key === 'Enter' && e.target === el) {
+            e.preventDefault();
+            openDetail(row);
+          }
         },
         oncontextmenu: function (e) {
           e.preventDefault();
@@ -539,6 +660,7 @@
       TT().archiveCard(t, row.id).then(function () {
         record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
         state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
+        if (state.detailId === row.id) closeDetail();
         renderBoard();
         paintCount();
         setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok');
@@ -596,7 +718,7 @@
       var body = h('div', { class: 'kb-cards' });
       col.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
       // An empty column shows no placeholder: the "+ Ajouter une carte" button below is also a drop target (the whole column accepts drops).
-      if (!col.cards.length && (col.hidden || state.filter)) {
+      if (!col.cards.length && (col.hidden || state.filter || state.facets.blocked || state.facets.overdue)) {
         body.appendChild(h('div', { class: 'kb-empty', text: col.hidden ? col.total + ' masquée' + (col.total > 1 ? 's' : '') : 'Aucune carte' }));
       }
       var colEl = h('section', {
@@ -668,7 +790,7 @@
                 },
               });
             }
-            return h('span', { class: 'kb-col-count', text: String(col.total) });
+            return h('span', { class: 'kb-col-count', text: String((state.filter || state.facets.blocked || state.facets.overdue) ? col.cards.length : col.total) });
           })(),
           h('button', {
             class: 'kb-iconbtn',

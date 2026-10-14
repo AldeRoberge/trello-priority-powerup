@@ -25,10 +25,10 @@
       [/\s+(?:pour\s+)?apr[èe]s[- ]demain$/i, function () { return addDays(today, 2); }],
       [/\s+(?:pour\s+)?demain$/i, function () { return addDays(today, 1); }],
       [/\s+(?:pour\s+)?aujourd['’]hui$/i, function () { return today; }],
-      [/\s+dans\s+(\d{1,3})\s+(jours?|semaines?|mois)$/i, function (m) {
+      [/\s+dans\s+(\d{1,3})\s+(jours?|semaines?|mois?)$/i, function (m) {
         var n = +m[1];
         var u = m[2].toLowerCase();
-        if (u.indexOf('mois') === 0) return new Date(today.getFullYear(), today.getMonth() + n, today.getDate());
+        if (u.indexOf('moi') === 0) return new Date(today.getFullYear(), today.getMonth() + n, today.getDate());
         return addDays(today, u.indexOf('semaine') === 0 ? n * 7 : n);
       }],
       [/\s+(?:pour\s+)?(?:le\s+|ce\s+)?(1er|\d{1,2})\s+(janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre)$/i, function (m) {
@@ -67,6 +67,7 @@
   /* ── parseWhen: a date said in words, past or future, with how precise it is ───────────────
    * "15 octobre 2023" -> jour | "octobre 2023" -> mois | "2022", "l'an dernier" -> année |
    * "il y a 2 ans", "il y a quelques années", "cet été" -> approx (a best guess, shown as "vers 2024").
+   * "il y a deux mois" and "il y a deux moi" -> mois. "dans 3 jours" is the same span, ahead.
    * Returns { iso, precision: 'jour'|'mois'|'année'|'approx', label } or null. */
   var MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
   var MONTH_RE = 'janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre';
@@ -112,16 +113,18 @@
       if (/derni/.test(s) && yr === y) yr = y - 1;
       return whenResult(new Date(yr, sm, 1), 'approx');
     }
-    if ((m = /^il y a (quelques|\d{1,3}|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix) (jours?|semaines?|mois|ans?|ann[ée]es?)$/.exec(s))) {
-      var n = m[1] === 'quelques' ? 3 : /^\d/.test(m[1]) ? +m[1] : NUMBER_WORDS[m[1]];
-      var u = m[2];
+    if ((m = /^(il y a|dans) (quelques|\d{1,3}|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix) (jours?|semaines?|mois?|ans?|ann[ée]es?)$/.exec(s))) {
+      var past = m[1] === 'il y a';
+      var n = m[2] === 'quelques' ? 3 : /^\d/.test(m[2]) ? +m[2] : NUMBER_WORDS[m[2]];
+      var u = m[3];
+      var sign = past ? -1 : 1;
       var d1;
-      if (u.indexOf('jour') === 0) d1 = addDays(today, -n);
-      else if (u.indexOf('semaine') === 0) d1 = addDays(today, -7 * n);
-      else if (u === 'mois') d1 = new Date(y, today.getMonth() - n, today.getDate());
-      else d1 = new Date(y - n, today.getMonth(), today.getDate());
-      var exact = m[1] !== 'quelques' && (u.indexOf('jour') === 0);
-      return whenResult(d1, exact ? 'jour' : 'approx');
+      if (u.indexOf('jour') === 0) d1 = addDays(today, sign * n);
+      else if (u.indexOf('semaine') === 0) d1 = addDays(today, sign * 7 * n);
+      else if (u.indexOf('moi') === 0) d1 = new Date(y, today.getMonth() + sign * n, today.getDate());
+      else d1 = new Date(y + sign * n, today.getMonth(), today.getDate());
+      var precision = m[2] === 'quelques' || u.indexOf('an') === 0 ? 'approx' : (u.indexOf('moi') === 0 ? 'mois' : 'jour');
+      return whenResult(d1, precision);
     }
     if ((m = /^(?:le |en )?(1er|\d{1,2}) (janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre)(?: (\d{4}))?$/.exec(s))) {
       var day = m[1] === '1er' ? 1 : +m[1];

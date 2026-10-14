@@ -57,9 +57,9 @@ Texte libre toujours permis ; on peut aussi **définir ses propres relations** (
 
 | Catégorie | Relations (inverse) |
 | --- | --- |
-| spatiale / mérologique (hiérarchie) | situé dans (abrite), fait partie de (contient), habite à |
+| spatiale / mérologique (hiérarchie) | situé dans (abrite), fait partie de (contient), habite à (est habité par) |
 | composition, production | fait de (compose), fabriqué par (a fabriqué) |
-| sociale | appartient à (possède), membre de, travaille pour (emploie) |
+| sociale | appartient à (possède), membre de, travaille pour (emploie), parent de (enfant de), conjoint de, frère ou sœur de, ami de, collègue de, s’occupe de |
 | taxonomique | instance de (a pour instance), sorte de |
 | **ancrage** | ancré dans (ancre), exprimé par (exprime) |
 | causale, temporelle | cause, dépend de, précède |
