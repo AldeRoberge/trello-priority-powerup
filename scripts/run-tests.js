@@ -101,6 +101,7 @@ const UNIT_FILES = [
   'dashboard-model.test.js',
   'dashboard-menu.test.js',
   'dashboard-trello.test.js',
+  'journey-model.test.js',
 ];
 
 function listTests() {
