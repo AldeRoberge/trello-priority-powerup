@@ -210,6 +210,128 @@
       else block.setAttribute('data-align', dir);
     }
 
+    function isBlockEl(node) {
+      return node && node.nodeType === 1 && /^(P|DIV|H[1-6]|UL|OL|PRE|BLOCKQUOTE|TABLE|HR|FIGURE)$/.test(node.tagName);
+    }
+
+    function blankText(value) {
+      return !String(value || '').replace(/[\s\u00a0\u200b\ufeff]/g, '');
+    }
+
+    function ensureBlock(node) {
+      if (isBlockEl(node)) return node;
+      var p = api.doc.createElement('p');
+      if (node.parentNode) node.parentNode.insertBefore(p, node);
+      if (node) p.appendChild(node);
+      if (!p.firstChild) p.appendChild(api.doc.createElement('br'));
+      return p;
+    }
+
+    function quoteIsBlank(bq) {
+      return !bq.querySelector('img, hr, table, pre, ul, ol, figure') && blankText(bq.textContent);
+    }
+
+    function copyQuoteChrome(from, to) {
+      var kind = from.getAttribute('data-callout');
+      if (kind) {
+        to.className = from.className;
+        to.setAttribute('data-callout', kind);
+      }
+      var align = from.getAttribute('data-align');
+      if (align) to.setAttribute('data-align', align);
+    }
+
+    /** The quote's direct child that holds the caret. */
+    function quoteLine() {
+      var n = api.selNode();
+      var bq = n && api.closestIn(n, 'BLOCKQUOTE');
+      if (!bq) return null;
+      var el = n;
+      while (el && el.parentNode !== bq) el = el.parentNode;
+      if (!el || el === bq) return null;
+      return { bq: bq, line: el };
+    }
+
+    function atLineStart(el) {
+      var sel = global.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.rangeCount) return false;
+      if (sel.anchorNode !== el && !(el.contains && el.contains(sel.anchorNode))) return false;
+      var range = api.doc.createRange();
+      try {
+        range.selectNodeContents(el);
+        range.setEnd(sel.anchorNode, sel.anchorOffset);
+      } catch (err) {
+        return false;
+      }
+      return blankText(range.toString());
+    }
+
+    /**
+     * Drop the quote and keep every line as a normal block.
+     * execCommand('outdent') deletes a line or paints the quote color onto the words.
+     */
+    function unwrapQuote(bq) {
+      var parent = bq && bq.parentNode;
+      if (!parent) return null;
+      var sel = global.getSelection();
+      var anchor = sel && sel.rangeCount ? sel.anchorNode : null;
+      var kept = null;
+      Array.prototype.slice.call(bq.childNodes).forEach(function (node) {
+        if (node.nodeType === 3 && blankText(node.nodeValue)) return;
+        var block = ensureBlock(node);
+        if (anchor && (block === anchor || (block.contains && block.contains(anchor)))) kept = block;
+        else if (!kept) kept = block;
+        parent.insertBefore(block, bq);
+      });
+      if (!kept) {
+        kept = api.doc.createElement('p');
+        kept.appendChild(api.doc.createElement('br'));
+        parent.insertBefore(kept, bq);
+      }
+      parent.removeChild(bq);
+      return kept;
+    }
+
+    /** Pull one line out of the quote. The words stay; the other lines stay quoted. */
+    function splitQuoteAt(bq, line) {
+      var parent = bq.parentNode;
+      if (!parent) return null;
+      var tail = api.doc.createElement('blockquote');
+      copyQuoteChrome(bq, tail);
+      var next = line.nextSibling;
+      while (next) {
+        var follow = next.nextSibling;
+        tail.appendChild(next);
+        next = follow;
+      }
+      var block = ensureBlock(line);
+      parent.insertBefore(block, bq.nextSibling);
+      if (tail.childNodes.length && !quoteIsBlank(tail)) parent.insertBefore(tail, block.nextSibling);
+      if (quoteIsBlank(bq)) parent.removeChild(bq);
+      api.focusInside(block);
+      return block;
+    }
+
+    /** Backspace at the start of a quoted line turns it into normal text. */
+    function exitQuote() {
+      var hit = quoteLine();
+      if (!hit || !atLineStart(hit.line)) return false;
+      if (blankText(hit.line.textContent)) {
+        var empty = hit.line;
+        var kept = unwrapQuote(hit.bq);
+        api.focusInside(empty.isConnected ? empty : kept);
+        return true;
+      }
+      return !!splitQuoteAt(hit.bq, hit.line);
+    }
+
+    /** Enter on an empty quoted line leaves the quote. The lines above stay quoted. */
+    function leaveEmptyQuote() {
+      var hit = quoteLine();
+      if (!hit || !blankText(hit.line.textContent)) return false;
+      return !!splitQuoteAt(hit.bq, hit.line);
+    }
+
     function setCallout(kind) {
       leaveTable();
       var bq = api.closestIn(api.selNode(), 'BLOCKQUOTE');
@@ -365,6 +487,14 @@
     }
 
     function run(cmd) {
+      if (cmd === 'quote') {
+        var bq = api.closestIn(api.selNode(), 'BLOCKQUOTE');
+        if (bq) {
+          var kept = unwrapQuote(bq);
+          if (kept) api.focusInside(kept);
+        } else api.doc.execCommand('formatBlock', false, '<blockquote>');
+        return true;
+      }
       if (cmd === 'highlight') {
         applyRich('hi', api.closestIn(api.selNode(), 'MARK') ? '' : 'yellow');
         return true;
@@ -392,6 +522,9 @@
       insertTable: insertTable,
       setAlign: setAlign,
       setCallout: setCallout,
+      unwrapQuote: unwrapQuote,
+      exitQuote: exitQuote,
+      leaveEmptyQuote: leaveEmptyQuote,
       applyRich: applyRich,
       openChoiceMenu: openChoiceMenu,
       openColorPop: openColorPop,

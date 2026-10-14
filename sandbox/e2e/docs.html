@@ -13,10 +13,17 @@
   <link rel="stylesheet" href="/components/shared/card-fields.css" />
   <link rel="stylesheet" href="/components/shared/progress-ring.css" />
   <link rel="stylesheet" href="/components/shared/card-quick.css" />
-  <link rel="stylesheet" href="/components/docs/docs-ui.css" />
+  <link rel="stylesheet" href="/components/docs/docs-ui.css?v=iconscroll-1" />
   <link rel="stylesheet" href="/components/docs/docs-history.css" />
   <link rel="stylesheet" href="/components/docs/docs-rich.css" />
   <link rel="stylesheet" href="/components/docs/docs-live.css" />
+  <link rel="stylesheet" href="/components/docs/docs-entities.css?v=ent-1" />
+  <link rel="stylesheet" href="/components/agent/agent-ui.css" />
+  <link rel="stylesheet" href="/components/agent/agent-blocks.css" />
+  <link rel="stylesheet" href="/components/agent/memory-ui.css" />
+  <link rel="stylesheet" href="/components/agent/agent-stats.css" />
+  <link rel="stylesheet" href="/components/shared/markdown-dom.css" />
+  <link rel="stylesheet" href="/components/shared/assistant-dock.css" />
 </head>
 <body class="tp-page tp-page--docs">
   <div id="viewTabs"></div>
@@ -52,12 +59,23 @@
   <script src="/components/docs/docs-history.js"></script>
   <script src="/components/shared/history-panel.js"></script>
   <script src="/components/agent/agent.js"></script>
+  <script src="/components/places/places.js"></script>
+  <script src="/components/entities/entities-model.js"></script>
+  <script src="/components/entities/entities-trello.js"></script>
+  <script src="/components/agent/agent-blocks.js"></script>
+  <script src="/components/agent/agent-memory.js"></script>
+  <script src="/components/agent/memory-ui.js"></script>
+  <script src="/components/agent/agent-stats.js"></script>
+  <script src="/components/agent/agent-ui.js"></script>
+  <script src="/components/agent/assistant-mount.js"></script>
+  <script src="/components/shared/assistant-dock.js"></script>
   <script src="/components/shared/ai-complete.js?v=ai-complete-1"></script>
-  <script src="/components/docs/docs-rich.js"></script>
+  <script src="/components/docs/docs-rich.js?v=quote-2"></script>
   <script src="/components/docs/docs-live.js"></script>
   <script src="/components/shared/field-catalog.js?v=fields-1"></script>
   <script src="/components/docs/docs-pins.js?v=pins-1"></script>
-  <script src="/components/docs/docs-ui.js?v=pins-2"></script>
+  <script src="/components/docs/docs-entities.js?v=ent-2"></script>
+  <script src="/components/docs/docs-ui.js?v=ent-2"></script>
   <script src="/sandbox/e2e/fake-trello.js"></script>
   <script>
     // ---- an in-memory Trello behind the real DocsTrello / DocsUI (no network) ----

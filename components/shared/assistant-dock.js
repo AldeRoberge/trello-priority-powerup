@@ -1,5 +1,6 @@
 /*
- * Role: collapsible project-scope Assistant docked at the bottom of a view (Table, Gantt, Kanban, Mindmap, Dashboard).
+ * Role: collapsible project-scope Assistant docked at the bottom of a view
+ * (Table, Gantt, Kanban, Mindmap, Dashboard, Documents, Entités).
  * One bar ("Assistant"), a drag grip to resize, and the full AssistantMount chat inside when open.
  *
  *   AssistantDock.mount({ t, after: mountEl, onRefresh, isBusy })

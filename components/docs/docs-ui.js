@@ -5,9 +5,10 @@
  *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
  *  - typing ** * ~~ == ++ ` renders the mark; the signs show again while the caret is in the word. [[ links a document
  *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
+ *    a known entity is linked in place (faint until hover); the words stay as typed
  *    a task chip grows a pin when the pointer is close: parent (top), sibling (right), person (left)
  *    Backspace right after a person keeps the first name; another Backspace removes the mention
- *  - selecting text shows a bar (style, color, bold, italic, …) and "Créer une tâche"
+ *  - selecting text shows a bar (style, color, bold, italic, …), "Créer une tâche" and "Créer une entité"
  *  - autosave (debounced) with revision check, so two people editing the same document are warned
  * Data + writes: DocsTrello; pure helpers (Markdown <-> HTML, mention search): DocsModel. Icons: Tabler webfont.
  *
@@ -172,6 +173,7 @@
       authOk: true,
       sources: null,
       index: null,
+      entityPack: null,
       saveState: 'saved', // saved | dirty | saving | error | conflict
       saveMsg: '',
       conflict: null,
@@ -2234,6 +2236,7 @@
       lastMd = DM().domToMd(ed); // baseline = the normalized form, so opening never rewrites a document
       paintEmptyClass();
       refreshChips();
+      watchEntities(ed);
       paintOutline();
       paintMeta();
       paintToolbarState();
@@ -2791,6 +2794,12 @@
           paintLiveHot();
           return;
         }
+        if (docsRich() && docsRich().exitQuote()) {
+          e.preventDefault();
+          onEdit();
+          paintToolbarState();
+          return;
+        }
       }
       if (e.key === 'Delete' && !mod && !e.shiftKey && !e.altKey && unwrapLiveEdge('del')) {
         e.preventDefault();
@@ -2862,6 +2871,12 @@
         }
       }
       if (e.key === 'Enter' && !e.shiftKey && !mod) {
+        if (docsRich() && docsRich().leaveEmptyQuote()) {
+          e.preventDefault();
+          onEdit();
+          paintToolbarState();
+          return;
+        }
         var liEnter = closestIn(selNode(), 'LI');
         if (liEnter && !closestIn(selNode(), 'PRE')) {
           e.preventDefault();
@@ -2960,8 +2975,22 @@
       });
     }
 
+    function watchEntities(ed) {
+      if (!global.DocsEntities || typeof global.DocsEntities.watch !== 'function') return;
+      global.DocsEntities.watch(ed, {
+        t: t,
+        paused: function () { return !!sugg; },
+        onChange: function () { onEdit('text'); },
+        onCatalog: function (pack) {
+          state.entityPack = pack;
+          rebuildIndex();
+        },
+      });
+    }
+
     function rebuildIndex() {
       var src = state.sources || { members: [], contacts: [], cards: [], lists: [], failed: [] };
+      var pack = state.entityPack;
       state.index = DM().buildMentionIndex({
         members: src.members,
         contacts: src.contacts,
@@ -2971,6 +3000,7 @@
           return { id: d.id, title: d.title, sub: DM().relativeTime(d.updatedAt) };
         }),
         excludeDocId: state.current ? state.current.id : '',
+        entities: pack && pack.entities ? pack.entities : [],
       });
       refreshChips();
     }
@@ -3271,8 +3301,12 @@
         case 'ul': case 'ol': toggleList(cmd); break;
         case 'todo': toggleTodo(); break;
         case 'quote': {
-          var n = selNode();
-          if (n && closestIn(n, 'BLOCKQUOTE')) document.execCommand('outdent');
+          var quoted = selNode();
+          var host = quoted && closestIn(quoted, 'BLOCKQUOTE');
+          if (host && docsRich()) {
+            var turned = docsRich().unwrapQuote(host);
+            if (turned) focusInside(turned);
+          } else if (host) document.execCommand('formatBlock', false, '<p>');
           else document.execCommand('formatBlock', false, '<blockquote>');
           break;
         }
@@ -3885,6 +3919,15 @@
         openImagePopover(block, true);
         return;
       }
+      if (block.tagName === 'BLOCKQUOTE' && (cmd === 'p' || cmd === 'quote') && docsRich()) {
+        var turned = docsRich().unwrapQuote(block);
+        if (turned) {
+          focusInside(turned);
+          onEdit();
+          showBlockUi(currentRow() || turned);
+        }
+        return;
+      }
       var target = block;
       if (isImageBlock(block) || block.tagName === 'HR' || block.tagName === 'PRE') target = plainFrom(block);
       focusInside(target);
@@ -4352,7 +4395,10 @@
           var lead =
             it.type === 'person'
               ? h('span', { class: 'dc-sg-avatar', text: it.initials || '?' })
-              : icon(it.type === 'task' ? (it.done ? 'circle-check' : 'checkbox') : 'file-text', 'dc-sg-icon dc-sg-icon--' + it.type);
+              : icon(
+                  it.type === 'task' ? (it.done ? 'circle-check' : 'checkbox') : it.type === 'entity' ? 'stack-2' : 'file-text',
+                  'dc-sg-icon dc-sg-icon--' + it.type
+                );
           row = h('div', { class: 'dc-sg-row' }, [
             lead,
             h('span', { class: 'dc-sg-label', text: it.label }),
@@ -4458,7 +4504,7 @@
     }
     function fixChips() {
       if (!editor) return;
-      Array.prototype.forEach.call(editor.querySelectorAll('.dc-mention:not([contenteditable="false"])'), function (chip) {
+      Array.prototype.forEach.call(editor.querySelectorAll('.dc-mention:not([contenteditable="false"]), .dc-ent:not([contenteditable="false"])'), function (chip) {
         chip.setAttribute('contenteditable', 'false');
       });
     }
@@ -4645,7 +4691,7 @@
         return;
       }
       var lists = taskListPool();
-      var shape = (selectedDraft() ? '1' : '0') + (lists.length > 1 ? '1' : '0');
+      var shape = (selectedDraft() ? '1' : '0') + (lists.length > 1 ? '1' : '0') + (canCreateEntity() ? '1' : '0');
       if (selBar && selBar.parentNode && selBar.getAttribute('data-shape') === shape) {
         paintSelBarState();
         placeSelBar();
@@ -4723,6 +4769,14 @@
             onmousedown: keep,
             onclick: function (e) { openTaskListMenu(e.currentTarget); },
           }, [icon('chevron-down')]));
+        }
+        if (canCreateEntity()) {
+          parts.push(h('button', {
+            class: 'dc-selbar-btn',
+            type: 'button',
+            onmousedown: keep,
+            onclick: function () { createEntityFromSelection(); },
+          }, [icon('stack-2'), h('span', { text: 'Créer une entité' })]));
         }
       }
       hideSelBar();
@@ -5079,6 +5133,59 @@
       });
     }
 
+    function canCreateEntity() {
+      var EM = global.EntitiesModel;
+      var ET = global.EntitiesTrello;
+      var DE = global.DocsEntities;
+      return !!(EM && ET && DE && typeof EM.createEntity === 'function' && typeof ET.load === 'function' && typeof ET.commit === 'function' && typeof DE.nameFromSelection === 'function');
+    }
+
+    function createEntityFromSelection() {
+      var DE = global.DocsEntities;
+      var EM = global.EntitiesModel;
+      var ET = global.EntitiesTrello;
+      var range = liveSelectionRange() || (heldRange && editor && editor.contains(heldRange.startContainer) ? heldRange.cloneRange() : selectionRange());
+      heldRange = null;
+      var name = range && !rangeInOneMention(range) && DE ? DE.nameFromSelection(range.toString()) : '';
+      if (!name || !state.current || !canCreateEntity()) return;
+      var kept = range.cloneRange();
+      lastRange = kept;
+      hideSelBar();
+      closePop();
+      var known = state.entityPack;
+      var knownId = known ? DE.matchId(DE.catalogOf(known.schema, known.entities), name) : '';
+      setBusy(knownId ? '' : 'Création de l’entité…');
+      var ready = knownId
+        ? Promise.resolve({ id: knownId, created: false, pack: known })
+        : ET.load(t).then(function (pack) {
+            if (!pack) pack = { schema: EM.defaultSchema(), entities: [], cards: {} };
+            if (!pack.cards) pack.cards = {};
+            var schema = pack.schema || EM.defaultSchema();
+            var again = DE.matchId(DE.catalogOf(schema, pack.entities), name);
+            if (again) return { id: again, created: false, pack: pack };
+            var entity = EM.createEntity(schema, { name: name });
+            return ET.commit(t, pack, schema, (pack.entities || []).concat([entity])).then(function (next) {
+              return { id: entity.id, created: true, pack: next };
+            });
+          });
+      ready.then(function (res) {
+        setBusy('');
+        if (res.pack) {
+          state.entityPack = res.pack;
+          rebuildIndex();
+        }
+        if (!insertMentionAtRange(kept, { type: 'entity', id: res.id, label: name })) {
+          toast(res.created ? 'Entité créée, mais le lien n’a pas pu remplacer la sélection.' : 'Le lien n’a pas pu remplacer la sélection.', 'error');
+          return;
+        }
+        watchEntities(editor);
+        toast(res.created ? 'Entité créée.' : 'Lié à l’entité existante.', 'ok');
+      }, function (err) {
+        setBusy('');
+        failure(err);
+      });
+    }
+
     function onEditorContextMenu(e) {
       var CM = global.ContextMenu;
       if (!CM || typeof CM.show !== 'function' || typeof CM.buildGenericItems !== 'function') return;
@@ -5086,6 +5193,14 @@
       holdSelection();
       var items = CM.buildGenericItems(e.target, document) || [];
       items.unshift({ sep: true });
+      if (canCreateEntity()) {
+        items.unshift({
+          id: 'create-entity',
+          label: 'Créer une entité',
+          icon: 'stack-2',
+          action: function () { createEntityFromSelection(); },
+        });
+      }
       items.unshift({
         id: 'create-task',
         label: 'Créer une tâche',
@@ -6769,6 +6884,19 @@
     }
 
     boot();
+
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({
+        t: t,
+        after: root,
+        onRefresh: function () { refreshRemote(true); },
+        isBusy: function () {
+          var ae = document.activeElement;
+          var typing = ae && root.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+          return !!typing || saving || (global.CardFields && global.CardFields.isOpen());
+        },
+      });
+    }
 
     return {
       state: state,

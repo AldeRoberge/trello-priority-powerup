@@ -2152,7 +2152,7 @@
       if (!spec) return null;
       var order = [];
       var roles = {};
-      EM().peopleRelations(state.schema, e).forEach(function (r) {
+      EM().peopleRelations(state.schema, e, state.entities).forEach(function (r) {
         if (!roles[r.to]) {
           roles[r.to] = [];
           order.push(r.to);
@@ -2215,7 +2215,7 @@
     /** Free relations ("situé dans", "fait de"…) and the ones that point here, as a list with an inline "add". */
     function linksSection(e) {
       var rows = [];
-      var shownAsPeople = EM().peopleRelations(state.schema, e);
+      var shownAsPeople = EM().peopleRelations(state.schema, e, state.entities);
       e.relations.forEach(function (r) {
         if (shownAsPeople.indexOf(r) >= 0) return;
         var other = EM().findById(state.entities, r.to);
@@ -3101,11 +3101,38 @@
         });
     }
 
+    function refreshQuiet() {
+      if (!ET() || typeof ET().load !== 'function') return;
+      return ET().load(t, { force: true }).then(function (data) {
+        if (!data) return;
+        state.data = data;
+        state.schema = data.schema;
+        state.entities = data.entities.slice();
+        if (!state.entities.some(function (en) { return en.id === state.selId; })) {
+          state.selId = state.entities.length ? state.entities[0].id : null;
+        }
+        paintList();
+        paintMain();
+      }, function () {});
+    }
+
     global.addEventListener('pagehide', function () {
       saveNow();
     });
 
     boot();
+
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({
+        t: t,
+        after: root,
+        onRefresh: refreshQuiet,
+        isBusy: function () {
+          var ae = document.activeElement;
+          return !!(ae && root.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable));
+        },
+      });
+    }
 
     return { state: state, saveNow: saveNow, reload: boot, openComposer: openComposer };
   }
