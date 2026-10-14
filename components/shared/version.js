@@ -106,11 +106,86 @@
       probeUrl ? headLastModified(probeUrl) : Promise.resolve(NaN),
     ]);
     if (!buildRes.ok) throw new Error('build info not found');
-    const { builtAt, releases } = await buildRes.json();
+    const info = await buildRes.json();
+    const { builtAt, releases } = info;
     const resolved = resolveBuiltAt(builtAt, lastModifiedMs(buildRes), probeMs);
     global.BuildVersion.current = resolved;
+    global.BuildVersion.commit = info.commit || '';
     global.BuildVersion.releases = Array.isArray(releases) ? releases : [];
     return resolved;
+  }
+
+  /** True when the page HTML is an older deploy than build-info.json. */
+  function needsReload(running, remote, busy, alreadyTried) {
+    if (!running || !remote || running === remote) return false;
+    if (busy) return false;
+    if (alreadyTried && alreadyTried === remote) return false;
+    return true;
+  }
+
+  /** Page URL that misses the cached HTML. '' when it already carries this build. */
+  function urlWithBuild(href, commit) {
+    const u = new URL(href);
+    if (u.searchParams.get('v') === commit) return '';
+    u.searchParams.set('v', commit);
+    return u.href;
+  }
+
+  function pageBusy() {
+    const el = global.document && global.document.activeElement;
+    if (!el || el === global.document.body || el === global.document.documentElement) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  const RELOAD_KEY = 'cerveau-build-reload';
+  const POLL_MS = 30000;
+
+  function watchBuild() {
+    const doc = global.document;
+    if (!doc || typeof doc.querySelector !== 'function' || !global.location || typeof global.fetch !== 'function') {
+      return;
+    }
+    const meta = doc.querySelector('meta[name="cerveau-build"]');
+    const running = (meta && meta.getAttribute && meta.getAttribute('content')) || '';
+    if (!running) return;
+
+    function tick() {
+      const infoUrl = new URL('build-info.json', global.location.href);
+      infoUrl.searchParams.set('t', String(Date.now()));
+      global.fetch(infoUrl.href, { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((info) => {
+          const remote = (info && info.commit) || '';
+          let tried = '';
+          try {
+            tried = global.sessionStorage ? global.sessionStorage.getItem(RELOAD_KEY) || '' : '';
+          } catch (e) {
+            tried = '';
+          }
+          if (!needsReload(running, remote, pageBusy(), tried)) return;
+          const next = urlWithBuild(global.location.href, remote);
+          if (!next) return;
+          try {
+            if (global.sessionStorage) global.sessionStorage.setItem(RELOAD_KEY, remote);
+          } catch (e2) {
+            /* private mode */
+          }
+          global.location.replace(next);
+        })
+        .catch(() => {});
+    }
+
+    tick();
+    global.setInterval(tick, POLL_MS);
+    doc.addEventListener('visibilitychange', () => {
+      if (!doc.hidden) tick();
+    });
+    doc.addEventListener('focusout', () => {
+      global.setTimeout(tick, 400);
+    });
   }
 
   global.BuildVersion = {
@@ -120,5 +195,9 @@
     parseTimestampMs,
     resolveBuiltAt,
     fetchBuiltAt,
+    needsReload,
+    urlWithBuild,
   };
+
+  watchBuild();
 })(window);

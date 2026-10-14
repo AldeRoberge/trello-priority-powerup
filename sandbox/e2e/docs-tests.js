@@ -525,6 +525,21 @@
     eq(md(), '- [ ] a\n- [ ] b\n  - [ ] c');
   });
 
+  test('Enter in a subtask keeps it nested', async function () {
+    await freshDoc('Enter sous-tache', '- [ ] Lord jesus\n- [ ] Said be good\n  - [ ] of course!');
+    caretIn(ed().querySelector('ul.dc-todo > li > ul.dc-todo > li'), true);
+    press('Enter');
+    await sleep(30);
+    eq(md(), '- [ ] Lord jesus\n- [ ] Said be good\n  - [ ] of course!\n  - [ ]');
+    var sub = $$('ul.dc-todo > li > ul.dc-todo > li');
+    eq(sub.length, 2, 'new line stays under Said be good');
+    caretIn(sub[1], true);
+    press('Enter');
+    await sleep(30);
+    eq(md(), '- [ ] Lord jesus\n- [ ] Said be good\n  - [ ] of course!\n- [ ]');
+    eq(ed().querySelector('ul.dc-todo > li > ul.dc-todo > li').textContent, 'of course!');
+  });
+
   test('inline link via the popover; Ctrl+K opens it; invalid addresses are refused', async function () {
     await freshDoc('Liens', 'voir ici');
     var tn = ed().firstChild.firstChild;

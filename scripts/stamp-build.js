@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { commitToken } = require('./version-assets');
 
 const root = path.join(__dirname, '..');
 const target = path.join(root, 'build-info.json');
@@ -28,7 +29,7 @@ function parseChangelog(text, limit = 10) {
 function stamp() {
   const builtAt = new Date().toISOString();
   const info = { builtAt };
-  const commit = (process.env.GITHUB_SHA || '').slice(0, 7);
+  const commit = commitToken(process.env.GITHUB_SHA || '');
   if (commit) info.commit = commit;
   const text = fs.existsSync(changelog) ? fs.readFileSync(changelog, 'utf8') : '';
   info.releases = parseChangelog(text);

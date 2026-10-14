@@ -51,6 +51,7 @@ describe('DocsLive', () => {
       title: 'Plan de projet',
     });
     assert.equal(DL.wikiClose('[[Plan', 6), null);
+    assert.equal(DL.wikiClose('\u200b[[Plan]]', 9).start, 1);
   });
 
   it('detects pasted Markdown and ignores a plain paragraph', () => {

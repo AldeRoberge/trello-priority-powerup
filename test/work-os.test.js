@@ -114,4 +114,18 @@ describe('WorkOS', () => {
     assert.equal(WO.placeLabel(map.card), 'Page d’accueil · Lancer le site');
     assert.equal(map.missing, undefined);
   });
+
+  it('a measured result with no date, or an old date, is flagged immobile', () => {
+    const fresh = { metricLabel: '3 / 10', metricUpdated: '2026-10-12' };
+    const old = { metricLabel: '3 / 10', metricUpdated: '2026-09-01' };
+    const none = { metricLabel: '3 / 10', metricUpdated: '' };
+    const rep = WO.review([], { today: '2026-10-13', projects: [fresh, old, none] });
+    assert.equal(fresh.staleOutcome, false);
+    assert.equal(old.staleOutcome, true);
+    assert.equal(none.staleOutcome, true);
+    assert.equal(rep.flags.filter((f) => f.id === 'stale')[0].detail, '2');
+    assert.equal(WO.reviewDue('', '2026-10-13'), true);
+    assert.equal(WO.reviewDue('2026-10-10', '2026-10-13'), false);
+    assert.equal(WO.reviewDue('2026-10-01', '2026-10-13'), true);
+  });
 });

@@ -665,6 +665,7 @@
         class: 'dc-item dc-folder' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
         style: 'padding-left:' + (8 + r.depth * 16) + 'px',
         role: 'treeitem',
+        'aria-label': (r.doc && r.doc.title) || f.name,
         'aria-expanded': r.open ? 'true' : 'false',
         'aria-selected': on ? 'true' : 'false',
         tabindex: '0',
@@ -1627,20 +1628,20 @@
     function writePlace(cardId, value) {
       var PT = global.PriorityTrello;
       var UI = global.PriorityUI;
-      if (!PT || typeof PT.saveCardInputsById !== 'function' || !UI || typeof UI.createPlaceRef !== 'function') {
-        return DT().saveCardMeta(t, cardId, 'lieu', value);
+      var remembered = DT().saveCardMeta(t, cardId, 'lieu', value);
+      if (!PT || typeof PT.getCardInputsById !== 'function' || typeof PT.saveCardInputsById !== 'function' || !UI || typeof UI.createPlaceRef !== 'function') {
+        return remembered;
       }
       return PT.getCardInputsById(t, cardId).then(function (inputs) {
-        var places = Object.assign({}, (inputs && inputs.places) || {});
+        if (!inputs) return remembered;
+        var places = Object.assign({}, inputs.places || {});
         if (!value) delete places.at;
         else {
           var found = typeof UI.findPlaceCatalogByName === 'function' ? UI.findPlaceCatalogByName(value) : null;
           places.at = found || UI.createPlaceRef(value);
         }
-        return PT.saveCardInputsById(t, cardId, { places: places });
-      }).then(function () {
-        return DT().saveCardMeta(t, cardId, 'lieu', '');
-      });
+        return PT.saveCardInputsById(t, cardId, { places: places }).then(function () { return remembered; });
+      }, function () { return remembered; });
     }
 
     function writeCategory(cardId, value) {
@@ -2476,6 +2477,125 @@
       });
     }
 
+    function itemPlain(li) {
+      var text = '';
+      var i;
+      for (i = 0; i < li.childNodes.length; i++) {
+        var k = li.childNodes[i];
+        if (k.nodeType === 1 && (k.tagName === 'UL' || k.tagName === 'OL')) continue;
+        text += k.textContent || '';
+      }
+      return text.replace(/[\u00a0\u200b\ufeff]/g, '').replace(/\s+/g, '');
+    }
+
+    function itemHasNested(li) {
+      var i;
+      for (i = 0; i < li.children.length; i++) {
+        var tag = li.children[i].tagName;
+        if (tag === 'UL' || tag === 'OL') return true;
+      }
+      return false;
+    }
+
+    function padItem(li) {
+      if (itemPlain(li)) return;
+      var i;
+      for (i = 0; i < li.childNodes.length; i++) {
+        if (li.childNodes[i].nodeType === 1 && li.childNodes[i].tagName === 'BR') return;
+      }
+      li.insertBefore(document.createElement('br'), li.firstChild);
+    }
+
+    /** Enter on an empty nested item lifts only that item. Siblings stay put. */
+    function exitEmptyItem(li) {
+      var parent = listOfItem(li);
+      if (!parent) return false;
+      var owner = parent.parentNode;
+      if (owner && owner.tagName === 'LI' && listOfItem(owner)) {
+        var grand = listOfItem(owner);
+        grand.insertBefore(li, owner.nextSibling);
+        if (listKindOf(grand) === 'todo') {
+          if (!li.hasAttribute('data-checked')) li.setAttribute('data-checked', 'false');
+        } else li.removeAttribute('data-checked');
+        pruneEmpty(parent);
+        focusInside(li);
+        return true;
+      }
+      var p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      var next = li.nextSibling;
+      parent.removeChild(li);
+      var rest = null;
+      if (next) {
+        rest = createList(listKindOf(parent));
+        while (next) {
+          var n2 = next.nextSibling;
+          rest.appendChild(next);
+          next = n2;
+        }
+      }
+      var host = parent.parentNode;
+      if (!parent.querySelector('li')) {
+        host.insertBefore(p, parent);
+        host.removeChild(parent);
+      } else host.insertBefore(p, parent.nextSibling);
+      if (rest && rest.childNodes.length) host.insertBefore(rest, p.nextSibling);
+      focusInside(p);
+      return true;
+    }
+
+    /**
+     * A new item stays in the same list. Nested items are not pulled up to the root,
+     * which is what the browser does when it splits a parent item.
+     */
+    function splitListItem(li, range) {
+      var parent = listOfItem(li);
+      if (!parent) return false;
+      var tail = document.createRange();
+      try {
+        tail.setStart(range.startContainer, range.startOffset);
+        tail.setEnd(li, li.childNodes.length);
+      } catch (err) {
+        return false;
+      }
+      var frag = tail.extractContents();
+      var fresh = document.createElement('li');
+      if (listKindOf(parent) === 'todo') fresh.setAttribute('data-checked', 'false');
+      var lists = [];
+      var seenText = false;
+      while (frag.firstChild) {
+        var node = frag.firstChild;
+        frag.removeChild(node);
+        if (node.nodeType === 1 && (node.tagName === 'UL' || node.tagName === 'OL')) {
+          lists.push(node);
+          continue;
+        }
+        var blank = node.nodeType === 3
+          ? !/\S/.test((node.nodeValue || '').replace(/[\u00a0\u200b\ufeff]/g, ''))
+          : node.nodeType === 1 && node.tagName === 'BR';
+        if (!seenText && blank) continue;
+        fresh.appendChild(node);
+        if (!blank) seenText = true;
+      }
+      if (!seenText) lists.forEach(function (list) { li.appendChild(list); });
+      else lists.forEach(function (list) { fresh.appendChild(list); });
+      if (!fresh.firstChild) fresh.appendChild(document.createElement('br'));
+      padItem(li);
+      parent.insertBefore(fresh, li.nextSibling);
+      focusInside(fresh);
+      return true;
+    }
+
+    function enterListItem(li) {
+      var parent = listOfItem(li);
+      if (!parent) return false;
+      var sel = global.getSelection();
+      if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
+      if (sel.anchorNode !== li && !li.contains(sel.anchorNode)) return false;
+      if (!itemPlain(li) && !itemHasNested(li)) return exitEmptyItem(li);
+      return splitListItem(li, sel.getRangeAt(0));
+    }
+
     function onKeydown(e) {
       var mod = e.ctrlKey || e.metaKey;
       if (sugg && handleSuggestKey(e)) return;
@@ -2489,14 +2609,14 @@
         }
         if (unwrapLiveEdge('back')) {
           e.preventDefault();
-          onEdit();
+          onEdit('text');
           paintLiveHot();
           return;
         }
       }
       if (e.key === 'Delete' && !mod && !e.shiftKey && !e.altKey && unwrapLiveEdge('del')) {
         e.preventDefault();
-        onEdit();
+        onEdit('text');
         paintLiveHot();
         return;
       }
@@ -2564,6 +2684,12 @@
         }
       }
       if (e.key === 'Enter' && !e.shiftKey && !mod) {
+        var liEnter = closestIn(selNode(), 'LI');
+        if (liEnter && !closestIn(selNode(), 'PRE')) {
+          e.preventDefault();
+          if (enterListItem(liEnter)) onEdit();
+          return;
+        }
         var before = textBeforeCaret();
         var nn = selNode();
         var block = nn && closestIn(nn, 'P,DIV');

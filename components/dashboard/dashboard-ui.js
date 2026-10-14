@@ -350,13 +350,22 @@
       }, 2500);
     }
 
+    function revueSeen() {
+      try { return global.localStorage.getItem('tp-dashboard-revue') || ''; } catch (e) { return ''; }
+    }
+
+    function markRevue(day) {
+      try { global.localStorage.setItem('tp-dashboard-revue', day); } catch (e) { /* private mode */ }
+    }
+
     /* ── Sidebar ───────────────────────────────────────────────────── */
     function renderSide() {
       var c = DM().counts(state.rows, today);
       var rev = WO() ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] }) : { flags: [] };
+      var revueNudge = WO() && state.section !== 'review' && WO().reviewDue(revueSeen(), today) ? 1 : 0;
       els.side.textContent = '';
       SECTIONS.forEach(function (s) {
-        var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : s.key === 'review' ? rev.flags.length : 0;
+        var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : s.key === 'review' ? rev.flags.length + revueNudge : 0;
         els.side.appendChild(h('button', {
           class: 'db-nav' + (state.section === s.key ? ' is-on' : ''),
           type: 'button',
@@ -1687,6 +1696,48 @@
       render();
     }
 
+    function resultControl(p) {
+      if (!p.metricLabel) {
+        return p.missingMeasure ? h('span', { class: 'db-step is-missing', text: 'Sans mesure' }) : null;
+      }
+      var label = 'Résultat ' + p.metricLabel;
+      if (!p.metricId || !global.GoalsTrello || typeof global.GoalsTrello.updateMetric !== 'function') {
+        return h('span', { class: 'db-step' + (p.staleOutcome ? ' is-missing' : ''), text: label });
+      }
+      return h('button', {
+        class: 'db-result' + (p.staleOutcome ? ' is-missing' : ''),
+        type: 'button',
+        onclick: function (e) { editResult(p, e.currentTarget); },
+      }, [document.createTextNode(label)]);
+    }
+
+    function editResult(p, btn) {
+      var input = h('input', {
+        class: 'db-input',
+        type: 'number',
+        step: 'any',
+        'aria-label': 'Résultat',
+        value: p.metricValue == null ? '' : String(p.metricValue),
+      });
+      btn.replaceWith(input);
+      input.focus();
+      input.select();
+      var done = false;
+      function finish(save) {
+        if (done) return;
+        done = true;
+        var n = Number(String(input.value).replace(',', '.'));
+        if (!save || !isFinite(n)) { render(); return; }
+        write(global.GoalsTrello.updateMetric(t, p.metricId, { currentValue: n }));
+      }
+      input.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); done = true; render(); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+    }
+
     function renderReview() {
       var rep = WO()
         ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] })
@@ -1734,7 +1785,7 @@
           }),
           h('div', { class: 'db-project-nums' }, [
             p.work == null ? null : h('span', { text: 'Travail ' + p.work + ' %' }),
-            p.metricLabel ? h('span', { text: 'Résultat ' + p.metricLabel }) : (p.missingMeasure ? h('span', { class: 'db-step is-missing', text: 'Sans mesure' }) : null),
+            resultControl(p),
           ]),
         ]));
       });
@@ -1744,6 +1795,7 @@
     /* ── Render + keys ─────────────────────────────────────────────── */
     function render() {
       today = todayIso();
+      if (state.section === 'review') markRevue(today);
       var keepScroll = els.main.scrollTop;
       var colScroll = [];
       els.main.querySelectorAll('.db-col-body').forEach(function (b) { colScroll.push(b.scrollTop); });
@@ -1897,6 +1949,19 @@
       var entries = row ? menuEntries(row, menuCtx()) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
       CM.show(e, withActions(row, entries, anchor || cardEl));
     });
+
+    if (global.AssistantDock) {
+      global.AssistantDock.mount({
+        t: t,
+        after: root,
+        onRefresh: function () { reload({ quiet: true }); },
+        isBusy: function () {
+          var ae = document.activeElement;
+          var typing = ae && root.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+          return state.busy || !!state.composer || typing || (global.CardFields && global.CardFields.isOpen());
+        },
+      });
+    }
 
     reload();
   }

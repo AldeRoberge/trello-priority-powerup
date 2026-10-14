@@ -9,6 +9,8 @@
 
   var DEFAULT_WIP = 3;
   var WAITING_DAYS = 5;
+  var STALE_DAYS = 14;
+  var REVIEW_DAYS = 7;
   var RANK = { vision: 0, mission: 1, goal: 2, objective: 3, project: 4 };
 
   function isOpen(row) {
@@ -281,6 +283,9 @@
           work: work,
           outcomePct: outcomePct,
           metricLabel: metricLabel,
+          metricId: metric ? metric.id : '',
+          metricUpdated: metric && metric.updatedAt ? String(metric.updatedAt).slice(0, 10) : '',
+          metricValue: metric ? (num(metric.currentValue) == null ? 0 : num(metric.currentValue)) : null,
           missingMeasure: !!(objective && usesMetrics && !metric),
           openCount: open.length,
         };
@@ -334,12 +339,30 @@
     if (noStep.length) flags.push({ id: 'project-step', label: 'Projet sans action', detail: String(noStep.length) });
     var noMeasure = projects.filter(function (p) { return p.missingMeasure; });
     if (noMeasure.length) flags.push({ id: 'measure', label: 'Sans mesure', detail: String(noMeasure.length) });
+    var staleLimit = opts.staleDays > 0 ? opts.staleDays : STALE_DAYS;
+    projects.forEach(function (p) {
+      if (!p) return;
+      var quiet = !!(p.metricLabel && (!p.metricUpdated || (today && ageDays(p.metricUpdated, today) >= staleLimit)));
+      p.staleOutcome = quiet;
+    });
+    var stale = projects.filter(function (p) { return p.staleOutcome; });
+    if (stale.length) flags.push({ id: 'stale', label: 'Résultat immobile', detail: String(stale.length) });
     return { flags: flags, steps: steps, waiting: waiting, wip: load, projects: projects };
+  }
+
+  /** True when the revue was never opened, or last opened at least `days` ago. */
+  function reviewDue(lastIso, today, days) {
+    var limit = days > 0 ? days : REVIEW_DAYS;
+    if (!today) return false;
+    if (!lastIso) return true;
+    return ageDays(lastIso, today) >= limit;
   }
 
   global.WorkOS = {
     DEFAULT_WIP: DEFAULT_WIP,
     WAITING_DAYS: WAITING_DAYS,
+    STALE_DAYS: STALE_DAYS,
+    REVIEW_DAYS: REVIEW_DAYS,
     isOpen: isOpen,
     firstOpenStep: firstOpenStep,
     stepState: stepState,
@@ -351,5 +374,6 @@
     placeLabel: placeLabel,
     wip: wip,
     review: review,
+    reviewDue: reviewDue,
   };
 })(typeof window !== 'undefined' ? window : this);

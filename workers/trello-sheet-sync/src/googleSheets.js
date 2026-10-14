@@ -2,8 +2,9 @@
 // Crypto, no google-auth-library). Same approach as vvd-smart-dashboard's url-shortener worker.
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-// Sheets to read/write cells; Drive metadata (read-only) to learn who last edited the file.
-const SCOPE = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.metadata.readonly';
+// Sheets to read/write cells. Drive (not metadata-only) so the worker can also create and
+// update the document files, and still read who last edited the Sheet.
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 

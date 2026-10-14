@@ -129,19 +129,28 @@
     return { query: m[1], length: m[0].length };
   }
 
-  /** A just-typed `[[Title]]` ending at the caret, or null. */
+  /** A just-typed `[[Title]]` ending at the caret, or null. Indexes refer to `raw`. */
   function wikiClose(raw, caret) {
     var text = String(raw == null ? '' : raw);
     caret = caret | 0;
     if (caret < 5 || caret > text.length) return null;
-    var head = text.slice(0, caret).replace(/[\u200b\ufeff]/g, '');
-    var m = /\[\[([^\[\]\n|]{1,80})\]\]$/.exec(head);
+    var head = text.slice(0, caret);
+    var stripped = '';
+    var map = [];
+    var i;
+    for (i = 0; i < head.length; i++) {
+      var c = head.charAt(i);
+      if (c === '\u200b' || c === '\ufeff') continue;
+      map.push(i);
+      stripped += c;
+    }
+    var m = /\[\[([^\[\]\n|]{1,80})\]\]$/.exec(stripped);
     if (!m) return null;
     var title = m[1].replace(/\s+/g, ' ').trim();
     if (!title) return null;
-    var start = caret - (text.slice(0, caret).length - head.length + m[0].length);
-    if (start < 0) start = caret - m[0].length;
-    return { start: start, end: caret, title: title };
+    var at = stripped.length - m[0].length;
+    if (!map.length || at >= map.length) return null;
+    return { start: map[at], end: caret, title: title };
   }
 
   /**
