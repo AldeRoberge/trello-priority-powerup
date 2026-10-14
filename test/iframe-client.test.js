@@ -205,6 +205,7 @@ describe('view pages paint the saved theme before stylesheets', () => {
     'table.html',
     'kanban.html',
     'mindmap.html',
+    'journey.html',
     'docs.html',
     'entities.html',
     'dashboard.html',

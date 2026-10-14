@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parcours</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="/components/shared/context-menu.css" />
+  <link rel="stylesheet" href="/components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="/components/journey/journey-ui.css" />
+</head>
+<body class="tp-page tp-page--journey">
+  <div id="viewTabs"></div>
+  <div id="journeyMount"></div>
+  <script src="/components/shared/hide-done.js"></script>
+  <script src="/components/shared/context-menu.js"></script>
+  <script src="/components/shared/view-tabs.js"></script>
+  <script src="/components/journey/journey-model.js"></script>
+  <script src="/components/journey/journey-ui.js"></script>
+  <script>
+    var cards = [
+      { id: 'pick', name: "Choisir l'entrepreneur", category: 'started', blocked: false, progress: 0, dueDate: '2026-10-12', estimatedMinutes: 30, priorityScore: 6, inputs: { dependsOn: [], depTypes: {} }, items: [{ text: 'Demander trois soumissions', done: false }], assignees: [{ name: 'Ada' }] },
+      { id: 'order', name: 'Commander les armoires', category: 'started', blocked: false, progress: 0, dueDate: '2026-10-14', priorityScore: 5, inputs: { dependsOn: ['pick'], depTypes: { pick: 'needs' } }, items: [] },
+      { id: 'paint', name: 'Peindre', category: 'started', blocked: false, progress: 0, estimatedMinutes: 10, priorityScore: 2, inputs: { dependsOn: ['order'], depTypes: { order: 'after' } }, items: [] },
+      { id: 'call', name: "Appeler l'assureur", category: 'started', blocked: true, progress: 0, priorityScore: 8, inputs: { dependsOn: [], depTypes: {} }, items: [] },
+      { id: 'measure', name: 'Mesurer', category: 'started', blocked: false, progress: 0, priorityScore: 9, estimatedMinutes: 15, inputs: { dependsOn: [], depTypes: {} }, items: [] },
+      { id: 'done', name: 'Déjà fait', category: 'completed', blocked: false, progress: 100, inputs: { dependsOn: [], depTypes: {} }, items: [] },
+      { id: 'loose', name: 'Note libre', category: 'started', blocked: false, progress: 0, priorityScore: 1, inputs: { dependsOn: [], depTypes: {} }, items: [] }
+    ];
+    var goals = {
+      nodes: [
+        { id: 'g:mis', level: 'mission', name: 'Maison' },
+        { id: 'g:cui', level: 'project', name: 'Cuisine' },
+        { id: 'g:toit', level: 'project', name: 'Toit' }
+      ],
+      links: [
+        { from: 'g:cui', to: 'g:mis' },
+        { from: 'g:toit', to: 'g:mis' },
+        { from: 't:pick', to: 'g:cui' },
+        { from: 'order', to: 'g:cui' },
+        { from: 'paint', to: 'g:cui' },
+        { from: 'call', to: 'g:toit' },
+        { from: 'measure', to: 'g:toit' },
+        { from: 'measure', to: 'g:cui' }
+      ]
+    };
+    var lists = [
+      { id: 'l1', name: 'À faire' },
+      { id: 'l2', name: 'Terminé' }
+    ];
+    var settings = { listCategories: { l1: 'started', l2: 'completed' } };
+
+    CompletionTrello = {
+      getCardCompletionById: function (_t, id) {
+        var rec = cards.filter(function (c) { return c.id === id; })[0];
+        return Promise.resolve({ items: (rec && rec.items) || [], progress: rec ? rec.progress : 0 });
+      },
+      saveCardCompletionById: function (_t, id) {
+        var rec = cards.filter(function (c) { return c.id === id; })[0];
+        if (rec) { rec.progress = 100; rec.category = 'completed'; rec.dueComplete = true; }
+        return Promise.resolve();
+      },
+      markFullyComplete: function (data) { return data; }
+    };
+    PriorityTrello = {
+      pageUrl: function (u) { return u; },
+      restPutCard: function (_t, id, body) {
+        var rec = cards.filter(function (c) { return c.id === id; })[0];
+        if (rec && body) {
+          if (body.dueComplete != null) rec.dueComplete = !!body.dueComplete;
+          if (body.idList) rec.listId = body.idList;
+          if (body.idList === 'l2') rec.category = 'completed';
+          if (body.idList === 'l1') rec.category = 'started';
+        }
+        return Promise.resolve({ ok: true });
+      }
+    };
+    GanttTrello = {
+      ensureRestAuthorized: function () { return Promise.resolve({ ok: true }); },
+      setCardBlocked: function (_t, id, blocked) {
+        var rec = cards.filter(function (c) { return c.id === id; })[0];
+        if (rec) rec.blocked = !!blocked;
+        return Promise.resolve({ ok: true });
+      }
+    };
+    var t = {
+      modal: function (opts) {
+        var note = document.getElementById('opened');
+        if (note) note.textContent = 'Ouvert · ' + ((opts && opts.args && opts.args.cardName) || (opts && opts.title) || '');
+        return Promise.resolve();
+      }
+    };
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'journey' });
+    JourneyUI.mount(document.getElementById('journeyMount'), t, {
+      load: function () {
+        return Promise.resolve({ lists: lists, cards: cards, settings: settings, goals: goals });
+      }
+    });
+  </script>
+</body>
+</html>

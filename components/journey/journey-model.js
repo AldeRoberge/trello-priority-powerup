@@ -32,7 +32,6 @@
   var NODE_W = 208;
   var NODE_H = 56;
   var STEP_X = 248;
-  var STEP_Y = 72;
   var PAD = 28;
 
   function levelById(id) {
@@ -731,15 +730,24 @@
       if (n.kind === 'task') depthOf(n.id, Object.create(null));
     });
 
-    var origin = TASK_RANK;
+    var present = Object.create(null);
     graph.nodes.forEach(function (n) {
-      if (n.kind === 'goal') origin = Math.min(origin, rankOfLevel(n.level));
+      if (n.kind === 'goal') present[rankOfLevel(n.level)] = true;
     });
-    if (origin === TASK_RANK) origin = 4;
+    laid.forEach(function (n) {
+      if (n.kind === 'bucket') present[4] = true;
+    });
+    var rankOrder = Object.keys(present).map(function (k) { return +k; }).sort(function (a, b) { return a - b; });
+    var compact = Object.create(null);
+    rankOrder.forEach(function (rank, i) { compact[rank] = i; });
+    var taskCol0 = rankOrder.length;
 
     var byCol = Object.create(null);
     laid.forEach(function (n) {
-      var col = n.kind === 'task' ? TASK_RANK + (depth[n.id] || 0) : rankOfLevel(n.level);
+      var col = n.kind === 'task'
+        ? taskCol0 + (depth[n.id] || 0)
+        : compact[n.kind === 'bucket' ? 4 : rankOfLevel(n.level)];
+      if (col == null) col = 0;
       n.col = col;
       n.w = NODE_W;
       n.h = NODE_H;
@@ -791,9 +799,13 @@
         if (ideal[a.id] !== ideal[b.id]) return ideal[a.id] - ideal[b.id];
         return a.name.localeCompare(b.name, 'fr');
       });
-      list.forEach(function (n, i) {
-        n.x = PAD + (n.col - origin) * STEP_X;
-        n.y = PAD + i * STEP_Y;
+      var y = PAD;
+      list.forEach(function (n) {
+        var lines = Math.max(1, Math.ceil(String(n.name || '').length / 26));
+        n.h = 28 + lines * 16 + 18;
+        n.x = PAD + n.col * STEP_X;
+        n.y = y;
+        y += n.h + 16;
         width = Math.max(width, n.x + n.w + PAD);
         height = Math.max(height, n.y + n.h + PAD);
       });

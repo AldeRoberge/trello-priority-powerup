@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Parcours : la carte relie missions et projets, et propose quelques actions avec la raison, l'échéance et ce qui bloque.
 - Documents : sélectionner un nom propose « Créer une entité ». Le nom reste, lié à l'entité.
 - Entités : « il y a deux mois » donne le mois, même écrit « moi ». « dans deux mois » aussi.
 - Mindmap : l’icône Dépendances et l’icône Sélection s’affichent.

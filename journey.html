@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    (function () {
+      try {
+        var m = localStorage.getItem('trello-priority-powerup/color-mode');
+        if (m !== 'dark' && m !== 'light') return;
+        var root = document.documentElement;
+        root.setAttribute('data-color-mode', m);
+        root.style.colorScheme = m;
+        if (m === 'dark') root.style.backgroundColor = '#1d2125';
+        var meta = document.createElement('meta');
+        meta.name = 'color-scheme';
+        meta.content = m;
+        document.head.appendChild(meta);
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    html[data-color-mode="dark"] { background: #1d2125; color-scheme: dark; }
+    html[data-color-mode="light"] { color-scheme: light; }
+  </style>
+  <title>Parcours</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-6" />
+  <link rel="stylesheet" href="./components/priority/priority-ui.css" />
+  <link rel="stylesheet" href="./components/shared/view-tabs.css" />
+  <link rel="stylesheet" href="./components/shared/card-fields.css" />
+  <link rel="stylesheet" href="./components/shared/linear-pick.css" />
+  <link rel="stylesheet" href="./components/journey/journey-ui.css?v=journey-1" />
+  <script src="./components/shared/hide-done.js"></script>
+  <script src="./components/shared/rest-config.js"></script>
+  <script src="./components/shared/debug-log.js"></script>
+  <script src="./components/shared/context-menu.js?v=ctx-menu-6"></script>
+  <script src="./components/priority/priority-matrix.js"></script>
+  <script src="./components/priority/priority-ui.js?v=icon-meaning-1"></script>
+  <script src="./components/priority/priority-trello.js?v=gantt-mini-editors-1"></script>
+  <script src="./components/statut/statut-match.js"></script>
+  <script src="./components/statut/statut-trello.js"></script>
+  <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/completion/completion-ui.js?v=gantt-mini-editors-1"></script>
+  <script src="./components/gantt/gantt-model.js?v=gantt-span-1"></script>
+  <script src="./components/gantt/gantt-trello.js?v=gantt-filters-1"></script>
+  <script src="./components/table/table-model.js?v=est-1"></script>
+  <script src="./components/sheets/sheets-trello.js"></script>
+  <script src="./components/table/table-trello.js"></script>
+  <script src="./components/mindmap/mindmap-model.js"></script>
+  <script src="./components/mindmap/mindmap-goals-trello.js"></script>
+  <script src="./components/shared/view-tabs.js"></script>
+  <script src="./components/shared/card-fields.js?v=est-1"></script>
+  <script src="./components/shared/linear-pick.js"></script>
+  <script src="./components/shared/quick-parse.js"></script>
+  <script src="./components/shared/new-card.js"></script>
+  <script src="./components/journey/journey-model.js?v=journey-1"></script>
+  <script src="./components/journey/journey-ui.js?v=journey-1"></script>
+</head>
+<body class="tp-page tp-page--journey">
+  <div id="viewTabs"></div>
+  <div id="journeyMount"></div>
+  <script>
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'journey' });
+    PriorityTrello.initIframePage(function (t) {
+      JourneyUI.mount(document.getElementById('journeyMount'), t);
+      ViewTabs.highlightFromUrl(function (id) { return '.jy-node[data-id="' + id + '"]'; });
+    });
+  </script>
+</body>
+</html>
