@@ -60,13 +60,166 @@
       try { opts.onRefresh(); } catch (e) { /* view gone */ }
     }
 
+    /* The message box is often created a moment after the click (provider load).
+       A catcher takes the keystrokes in the meantime, then hands them over. */
+    var catcher = null;
+    var focusWatch = null;
+    dock.typing = false;
+
+    function composerInput() {
+      if (!dock.body) return null;
+      var input = dock.body.querySelector('textarea.agent-composer-input');
+      if (!input || input.disabled) return null;
+      var node = input;
+      while (node) {
+        if (node.hidden) return null;
+        node = node.parentElement;
+      }
+      return input;
+    }
+
+    function removeCatcher() {
+      if (catcher && catcher.parentNode) catcher.parentNode.removeChild(catcher);
+    }
+
+    function ensureCatcher() {
+      if (!dock.body || composerInput()) return null;
+      if (!catcher) {
+        catcher = el('textarea', 'ad-dock-catcher');
+        catcher.rows = 1;
+        catcher.setAttribute('aria-label', 'Message à l\'assistant');
+        catcher.placeholder = 'Demandez ce que vous voulez';
+      }
+      if (!catcher.isConnected) dock.body.appendChild(catcher);
+      return catcher;
+    }
+
+    function placeCaret(input) {
+      var len = (input.value || '').length;
+      try { input.setSelectionRange(len, len); } catch (e) { /* ignore */ }
+    }
+
+    function transferCatcher(input) {
+      if (!catcher) return;
+      var extra = catcher.value || '';
+      if (extra) {
+        var cur = input.value || '';
+        if (cur.slice(-extra.length) !== extra) {
+          input.value = cur + extra;
+          try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { /* ignore */ }
+        }
+        catcher.value = '';
+        placeCaret(input);
+      }
+      removeCatcher();
+    }
+
+    function focusBox(input) {
+      if (!input) return false;
+      try { input.focus({ preventScroll: true }); } catch (e) { try { input.focus(); } catch (e2) { /* ignore */ } }
+      return document.activeElement === input;
+    }
+
+    function tryFocus() {
+      if (!dock.open || !dock.typing) return;
+      var input = composerInput();
+      if (input) {
+        transferCatcher(input);
+        focusBox(input);
+        return;
+      }
+      focusBox(ensureCatcher());
+    }
+
+    function stopFocusWatch() {
+      if (focusWatch) clearInterval(focusWatch);
+      focusWatch = null;
+    }
+
+    function armTyping() {
+      dock.typing = true;
+      tryFocus();
+      stopFocusWatch();
+      var stableSince = 0;
+      focusWatch = setInterval(function () {
+        if (!dock.open || !dock.typing) { stopFocusWatch(); return; }
+        var input = composerInput();
+        if (input && document.activeElement === input && !(catcher && catcher.value)) {
+          removeCatcher();
+          if (!stableSince) stableSince = Date.now();
+          if (Date.now() - stableSince > 1500) stopFocusWatch();
+          return;
+        }
+        stableSince = 0;
+        if (!input && catcher && document.activeElement === catcher) return;
+        tryFocus();
+      }, 80);
+    }
+
+    function insertKey(input, e) {
+      var val = input.value || '';
+      var start = input.selectionStart != null ? input.selectionStart : val.length;
+      var end = input.selectionEnd != null ? input.selectionEnd : val.length;
+      if (e.key === 'Backspace') {
+        var cut = start === end ? Math.max(0, start - 1) : start;
+        input.value = val.slice(0, cut) + val.slice(end);
+        try { input.setSelectionRange(cut, cut); } catch (err) { /* ignore */ }
+      } else {
+        input.value = val.slice(0, start) + e.key + val.slice(end);
+        var pos = start + e.key.length;
+        try { input.setSelectionRange(pos, pos); } catch (err2) { /* ignore */ }
+      }
+      try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (err3) { /* ignore */ }
+    }
+
+    function onPointerDown(e) {
+      if (!dock.typing || !e.target || !e.target.closest) return;
+      if (e.target.closest('.agent-composer-input, .ad-dock-catcher, .ad-dock-bar')) return;
+      dock.typing = false;
+    }
+
+    function onKeyDown(e) {
+      if (!dock.open || !dock.typing) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      var typingKey = e.key.length === 1 || e.key === 'Backspace';
+      if (!typingKey && e.key !== 'Enter') return;
+      var input = composerInput();
+      var box = input || (catcher && catcher.isConnected ? catcher : null);
+      if (!box) return;
+      if (document.activeElement === box) return;
+      var ae = document.activeElement;
+      if (ae && ae !== document.body && ae !== document.documentElement &&
+          (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
+        dock.typing = false;
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (!input) return;
+        e.preventDefault();
+        focusBox(input);
+        try {
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        } catch (err) { /* ignore */ }
+        return;
+      }
+      e.preventDefault();
+      if (!input) box = ensureCatcher();
+      else box = input;
+      if (!box) return;
+      focusBox(box);
+      insertKey(box, e);
+    }
+
+    document.addEventListener('mousedown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+
     function toggle(force) {
       dock.open = typeof force === 'boolean' ? force : !dock.open;
       render();
       if (dock.open && !dock.mounted && global.AssistantMount) {
         dock.mounted = true;
         var mountEl = dock.body.querySelector('#assistantMount');
-        global.AssistantMount.mount(mountEl, opts.t, { resizeBody: false, focusComposer: true }).catch(function (err) {
+        global.AssistantMount.mount(mountEl, opts.t, { resizeBody: false, focusComposer: true, preferComposer: true }).catch(function (err) {
           dock.mounted = false;
           mountEl.textContent = '';
           mountEl.appendChild(el('div', 'ad-dock-error', 'Assistant indisponible : ' + (err && err.message)));
@@ -75,11 +228,17 @@
       clearInterval(dock.poll);
       dock.poll = null;
       if (dock.open) {
+        armTyping();
         dock.poll = setInterval(function () {
           if (typeof opts.isBusy === 'function' && opts.isBusy()) return;
           refresh();
         }, POLL_MS);
-      } else if (dock.mounted) refresh();
+      } else {
+        dock.typing = false;
+        stopFocusWatch();
+        removeCatcher();
+        if (dock.mounted) refresh();
+      }
     }
 
 
@@ -159,6 +318,10 @@
       bar.setAttribute('role', 'button');
       bar.tabIndex = 0;
       bar.setAttribute('aria-expanded', dock.open ? 'true' : 'false');
+      bar.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+      });
       bar.addEventListener('click', function () { toggle(); });
       bar.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }

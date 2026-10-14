@@ -52,6 +52,25 @@
   overflow: hidden;
   border-top: 1px solid var(--tp-border);
 }
+/* Stand-in message box, focused the instant the bar opens, until the real composer exists. */
+.ad-dock-catcher {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 5;
+  box-sizing: border-box;
+  height: 40px;
+  margin: 0;
+  padding: 8px 10px;
+  resize: none;
+  border: 1px solid var(--tp-border-strong, var(--tp-border));
+  border-radius: 8px;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  font: inherit;
+  line-height: 1.4;
+}
 .ad-dock-body #assistantMount {
   height: 100%;
 }

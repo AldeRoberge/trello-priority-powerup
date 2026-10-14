@@ -129,6 +129,7 @@
           standalone: true,
           initiallyOpen: true,
           focusComposer: options.focusComposer !== false,
+          preferComposer: !!options.preferComposer,
           openMemoryOnSettings: !!needsAlign,
           getScope: function () {
             return 'project';

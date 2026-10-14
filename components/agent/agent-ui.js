@@ -399,6 +399,7 @@
     var shouldFocusComposer = options.focusComposer != null
       ? !!options.focusComposer
       : initiallyOpen;
+    var preferComposer = !!options.preferComposer;
     var openMemoryOnSettings =
       options.openMemoryOnSettings != null
         ? !!options.openMemoryOnSettings
@@ -8824,13 +8825,17 @@
             skipApplySuggestions: true
           });
         }
-        if (openMemoryOnSettings || (isProjectScope && needsMemoryAlign())) {
+        var alignSettings = openMemoryOnSettings || (isProjectScope && needsMemoryAlign());
+        if (preferComposer && Agent.isConfigured(provider)) alignSettings = false;
+        if (alignSettings) {
           setSettingsOpen(true);
           memoryDetails.open = true;
           syncMemoryBadge();
           if (needsMemoryAlign()) {
             mountMemoryUi('onboarding');
           }
+        } else if (preferComposer) {
+          focusComposerInput();
         }
         dbgLog('agentUi', 'bootstrap.provider.end', {
           configured: Agent.isConfigured(provider),
