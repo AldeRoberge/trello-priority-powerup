@@ -1,0 +1,12 @@
+/* Signs of a mark, visible only while the caret is inside that word. */
+.dc-editor .dc-hot::before,
+.dc-editor .dc-hot::after {
+  content: attr(data-syn);
+  opacity: 0.4;
+  font-weight: 400;
+  font-style: normal;
+  text-decoration: none;
+  letter-spacing: 0;
+  pointer-events: none;
+  user-select: none;
+}

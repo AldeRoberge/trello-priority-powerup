@@ -108,4 +108,22 @@ describe('Gantt mini editors', () => {
     assert.ok(!next.dueDate);
     assert.ok(!next.dueTime);
   });
+
+  it('saveCardInputsById stores a place without dropping the score', async () => {
+    const store = Object.create(null);
+    const t = {
+      get: async function (scope, visibility, key) {
+        return store[scope + ':' + key] || null;
+      },
+      set: async function (scope, visibility, key, value) {
+        store[scope + ':' + key] = value;
+      },
+    };
+    store['card3:cardPriority'] = { urgency: 2, impact: 4, ease: 3, axesScaledTo10: true };
+    const next = await PriorityTrello.saveCardInputsById(t, 'card3', {
+      places: { at: { id: 'place-home-ab12', name: 'Home' } },
+    });
+    assert.equal(next.impact, 4);
+    assert.equal(next.places.at.name, 'Home');
+  });
 });

@@ -4,6 +4,11 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Documents : taper les signes autour d'un mot (gras, italique, barré, surligné, code) applique la mise en forme. Ils réapparaissent tant que le curseur est dans le mot. Deux crochets lient un autre document.
+- Assistant : le champ en bas n’a plus qu’un seul contour.
+- Vitesse : le pointeur ne remesure plus chaque ligne à chaque mouvement, et taper dans un document ne reparcourt plus les images et les tableaux.
+- Documents : couleurs, surlignage, tableaux, encadrés (note, conseil, attention) et alignement, dans la barre et avec `/`.
+- Documents : un dossier est lui-même un document. Un clic l’ouvre pour écrire dedans ; le chevron montre ce qu’il contient.
 - Entités : dans « quel genre », un mot cherche tous les genres. Un mot nouveau, comme Chat, crée le genre.
 - Saisie : la suggestion pendant la frappe continue la même phrase, au lieu d'une suite hors sujet.
 - Documents : l'aperçu d'une tâche s'agrandit par n'importe quel coin, et la molette zoome sous le curseur.

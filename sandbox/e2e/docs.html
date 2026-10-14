@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/components/docs/docs-ui.css" />
   <link rel="stylesheet" href="/components/docs/docs-history.css" />
   <link rel="stylesheet" href="/components/docs/docs-rich.css" />
+  <link rel="stylesheet" href="/components/docs/docs-live.css" />
 </head>
 <body class="tp-page tp-page--docs">
   <div id="viewTabs"></div>
@@ -53,6 +54,8 @@
   <script src="/components/agent/agent.js"></script>
   <script src="/components/shared/ai-complete.js?v=ai-complete-1"></script>
   <script src="/components/docs/docs-rich.js"></script>
+  <script src="/components/docs/docs-live.js"></script>
+  <script src="/components/shared/field-catalog.js?v=fields-1"></script>
   <script src="/components/docs/docs-ui.js?v=selbar-1"></script>
   <script src="/sandbox/e2e/fake-trello.js"></script>
   <script>
@@ -66,12 +69,27 @@
       { id: 'doc2', name: '📄 Plan de projet', closed: true, dateLastActivity: '2026-10-01T09:00:00Z',
         desc: DocsModel.packDesc('# Plan de projet\n\n1. Cadrage\n2. Maquettes\n3. Livraison', { rev: 1 }) },
     ];
+    var fieldMode = /[?&]fields\b/.test(q);
+    var boardLabels = fieldMode ? [
+      { id: 'p1', name: 'Priority-Low', color: 'green' },
+      { id: 'p2', name: 'Priority-VeryLow', color: 'blue' },
+      { id: 'p3', name: 'Priority-High', color: 'red' },
+      { id: 'l1', name: 'Location-Home', color: 'yellow' },
+      { id: 'l2', name: 'Location-Work', color: 'orange' },
+      { id: 'cat1', name: 'Category-Maintenance', color: 'purple' },
+      { id: 'm1', name: 'Money-Expense', color: 'pink' },
+    ] : [];
     window.fake = FakeTrello.create({
       authorized: !/[?&]unauth\b/.test(q),
+      labels: boardLabels,
       lists: [{ id: 'l1', name: 'À faire' }, { id: 'l2', name: 'En cours' }],
       cards: [
         { id: 'c1', name: 'Préparer la réunion de lancement', idList: 'l1' },
-        { id: 'c2', name: 'Refonte du tableau de bord', idList: 'l2' },
+        { id: 'c2', name: 'Refonte du tableau de bord', idList: 'l2', labels: fieldMode ? [
+          { id: 'p1', name: 'Priority-Low', color: 'green' },
+          { id: 'l1', name: 'Location-Home', color: 'yellow' },
+          { id: 'm1', name: 'Money-Expense', color: 'pink' },
+        ] : [] },
         { id: 'c3', name: 'Publier la version 2', idList: 'l2', dueComplete: true },
         { id: 'c4', name: 'Archiver les anciennes cartes', idList: 'l1' },
       ].concat(seedDocs),

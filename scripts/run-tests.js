@@ -74,6 +74,7 @@ const UNIT_FILES = [
   'field-catalog.test.js',
   'docs-model.test.js',
   'docs-rich.test.js',
+  'docs-live.test.js',
   'docs-trello.test.js',
   'docs-history.test.js',
   'card-quick.test.js',

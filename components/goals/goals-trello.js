@@ -144,6 +144,8 @@
       linkedGoalId: linkedGoalId,
       isPrimary: raw.isPrimary === true,
     };
+    var updated = typeof raw.updatedAt === 'string' ? raw.updatedAt.slice(0, 10) : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(updated)) metric.updatedAt = updated;
 
     var target = asNumber(raw.target);
     if (isFinite(target)) metric.target = target;
@@ -516,6 +518,7 @@
       ids
     );
     if (!metric) throw new Error('M\u00e9trique invalide');
+    metric.updatedAt = nowIso().slice(0, 10);
     list.push(metric);
     if (metric.isPrimary) {
       list = enforcePrimaryConstraint(list, metric.linkedGoalId, metric.id);
@@ -542,6 +545,7 @@
     var next = Object.assign({}, list[idx], patch || {}, { id: list[idx].id });
     var metric = normalizeMetric(next, ids);
     if (!metric) throw new Error('M\u00e9trique invalide');
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'currentValue')) metric.updatedAt = nowIso().slice(0, 10);
     list[idx] = metric;
     if (metric.isPrimary) {
       list = enforcePrimaryConstraint(list, metric.linkedGoalId, metric.id);

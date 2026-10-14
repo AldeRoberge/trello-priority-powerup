@@ -83,6 +83,41 @@ describe('DocsModel folders and nested documents', () => {
     assert.equal(order('date'), 'abc');
   });
 
+  it('a folder is its own document and does not also appear as a row', () => {
+    const raw = DM.parseFolderIndex(JSON.stringify({
+      folders: [
+        { id: 'f', name: 'Notes', parent: null, doc: 'a' },
+        { id: 'g', name: 'Autre', parent: null, doc: 'a' },
+        { id: 'h', name: 'Sous', parent: 'f', doc: 'c' },
+      ],
+      parents: { b: 'a' },
+    }));
+    assert.equal(raw.folders[0].doc, 'a');
+    assert.equal(raw.folders[1].doc, undefined);
+    assert.equal(DM.folderByDoc(raw, 'a').id, 'f');
+    const round = DM.parseFolderIndex(DM.packFolderIndex(raw));
+    assert.equal(round.folders.find((f) => f.id === 'f').doc, 'a');
+    const open = DM.folderRows(docs, raw, { f: 1, h: 1 }, '', 'name');
+    assert.equal(labels(open), 'folder0Notes,folder1Sous,doc1B,folder0Autre');
+    const notes = open.filter((r) => r.folder && r.folder.id === 'f')[0];
+    assert.equal(notes.doc.id, 'a');
+    assert.equal(notes.count, 1);
+    assert.equal(labels(DM.folderRows(docs, raw, {}, 'notes', 'name')), 'folder0Notes');
+    assert.equal(labels(DM.folderRows(docs, raw, {}, 'sous', 'name')), 'folder0Notes,folder1Sous');
+  });
+
+  it('archiving a folder archives the document it is', () => {
+    const idx = DM.emptyIndex();
+    idx.folders = [{ id: 'f', name: 'Notes', parent: null, doc: 'a' }];
+    idx.parents = { b: 'a' };
+    DM.archiveFolderIn(idx, 'f', false);
+    assert.equal(idx.archived.a, true);
+    assert.equal(idx.docs.b, undefined);
+    assert.equal(idx.parents.b, undefined);
+    DM.restoreFolderIn(idx, 'f');
+    assert.equal(idx.archived.a, undefined);
+  });
+
   it('removing a folder moves its content up', () => {
     const idx = DM.emptyIndex();
     idx.folders = [

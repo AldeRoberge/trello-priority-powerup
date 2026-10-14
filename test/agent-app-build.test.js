@@ -54,4 +54,33 @@ describe('PriorityAgent app build awareness', () => {
     const prompt = Agent.systemPrompt({ today: '2026-10-06', nowTime: '12:00' });
     assert.match(prompt, /pas pu .{1,3}tre charg/);
   });
+
+  it('systemPrompt knows the computer clock and answers in that time', () => {
+    const prompt = Agent.systemPrompt({
+      today: '2026-10-13',
+      nowTime: '20:04',
+      timeZone: 'America/Toronto',
+      utcOffset: 'UTC-4',
+      appBuiltAt: '2026-10-14T00:04:00.000Z'
+    });
+    assert.match(prompt, /il est 2026-10-13 20:04 \(America\/Toronto, UTC-4\)/);
+    assert.match(prompt, /INTERDIT de demander l'heure ou le fuseau/);
+    assert.match(prompt, /heure de son ordinateur/);
+    assert.doesNotMatch(prompt, /19 h 19 UTC/);
+  });
+
+  it('localClock matches the computer offset', () => {
+    const d = new Date('2026-10-14T00:04:00.000Z');
+    const c = Agent.localClock(d);
+    assert.equal(c.nowTime, Agent.nowTimeLocal(d));
+    assert.equal(c.today.length, 10);
+    const east = -d.getTimezoneOffset();
+    const sign = east >= 0 ? '+' : '-';
+    const abs = Math.abs(east);
+    const offH = Math.floor(abs / 60);
+    const offM = abs % 60;
+    const expected = 'UTC' + sign + offH + (offM ? ':' + String(offM).padStart(2, '0') : '');
+    assert.equal(c.utcOffset, expected);
+    assert.ok(c.timeZone);
+  });
 });

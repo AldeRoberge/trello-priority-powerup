@@ -4054,7 +4054,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
 .tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
   outline: none;
   outline-offset: 0;
-  box-shadow: 0 0 0 1px var(--tp-border-strong, rgba(255, 255, 255, 0.22));
+  box-shadow: none;
   border-radius: 6px;
 }
 
@@ -4093,8 +4093,12 @@ html[data-color-mode='dark'] .tp-page--priority .agent-debug-pre {
   box-shadow: 0 0 0 1px var(--tp-border-strong, rgba(255, 255, 255, 0.18));
 }
 
-.tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input:focus {
+.tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input:focus,
+.tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input:focus-visible {
   outline: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 .tp-page--priority .agent-send-btn {
@@ -4704,7 +4708,7 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
 .tp-page--priority .agent-composer .tp-tab-complete-wrap:focus-within {
   border-radius: var(--agent-radius);
   border-color: var(--tp-border-strong);
-  box-shadow: 0 0 0 1px var(--tp-border-strong);
+  box-shadow: none;
 }
 
 .tp-page--priority .agent-composer .tp-tab-complete-wrap .agent-composer-input {

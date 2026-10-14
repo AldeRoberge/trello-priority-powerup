@@ -1338,6 +1338,38 @@
     return hh + ':' + mm;
   }
 
+  /** The computer's clock: local date, time, IANA zone and UTC offset. */
+  function localClock(d) {
+    d = d || new Date();
+    var timeZone = 'UTC';
+    try {
+      var resolved = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (resolved) timeZone = resolved;
+    } catch (e) { /* keep UTC */ }
+    var east = -d.getTimezoneOffset();
+    var sign = east >= 0 ? '+' : '-';
+    var abs = Math.abs(east);
+    var offH = Math.floor(abs / 60);
+    var offM = abs % 60;
+    var utcOffset = 'UTC' + sign + offH + (offM ? ':' + String(offM).padStart(2, '0') : '');
+    return {
+      today: todayIsoLocal(d),
+      nowTime: nowTimeLocal(d),
+      timeZone: timeZone,
+      utcOffset: utcOffset
+    };
+  }
+
+  function clockFromContext(context) {
+    var live = localClock();
+    return {
+      today: (context && context.today) || live.today,
+      nowTime: (context && context.nowTime) || live.nowTime,
+      timeZone: (context && context.timeZone) || live.timeZone,
+      utcOffset: (context && context.utcOffset) || live.utcOffset
+    };
+  }
+
   /**
    * Resolve a due date/time from now + offset minutes (local clock).
    * Used for phrases like « dans 15 minutes ».
@@ -3010,9 +3042,12 @@
 
   function buildContext(bridge) {
     var appInfo = currentAppBuildInfo() || {};
+    var clock = localClock();
     var ctx = {
-      today: todayIsoLocal(),
-      nowTime: nowTimeLocal(),
+      today: clock.today,
+      nowTime: clock.nowTime,
+      timeZone: clock.timeZone,
+      utcOffset: clock.utcOffset,
       appBuiltAt: appInfo.builtAt || null,
       appReleases: appInfo.releases || [],
       /** 'task' = card popup; 'project' = board-wide assistant window. */
@@ -3975,8 +4010,9 @@
 
   function systemPrompt(context, options) {
     options = options || {};
-    var today = (context && context.today) || todayIsoLocal();
-    var nowTime = (context && context.nowTime) || nowTimeLocal();
+    var clock = clockFromContext(context);
+    var today = clock.today;
+    var nowTime = clock.nowTime;
     var replyLanguage =
       options.replyLanguage === 'en' || options.replyLanguage === 'fr'
         ? options.replyLanguage
@@ -4144,14 +4180,17 @@
         ];
     var builtAt = context && context.appBuiltAt;
     var recent = recentChangesText(context && context.appReleases);
+    var clockLine =
+      'Horloge de son ordinateur : il est ' + clock.today + ' ' + clock.nowTime +
+      ' (' + clock.timeZone + ', ' + clock.utcOffset + '). C\'est l\'heure actuelle chez lui. Tu la connais. INTERDIT de demander l\'heure ou le fuseau. « Dans mon heure », « relative to my time », « chez moi » : réponds dans cette horloge, pas en UTC.';
     var buildLine = builtAt
       ? 'App Cerveau : build en cours = ' + builtAt +
-        ' (UTC, dernier d\u00e9ploiement, ' + appBuildAgo(builtAt) + ').' +
-        ' Si on te demande quelle version tourne : donne la date du build en clair (ex. \u00ab\u00a06 oct. 2026, 19 h 19 UTC\u00a0\u00bb), dis depuis quand il est d\u00e9ploy\u00e9, puis liste les nouveaut\u00e9s r\u00e9centes ci-dessous. Il n\'y a pas de num\u00e9ro s\u00e9mantique. Ne dis JAMAIS que tu ne peux pas la voir.' +
-        ' Si on demande les nouveaut\u00e9s ou ce qui a chang\u00e9, r\u00e9ponds avec ce journal (les plus r\u00e9centes d\'abord), sans en inventer.' +
-        (recent ? '\nNouveaut\u00e9s r\u00e9centes (journal CHANGELOG.md) :\n' + recent : '')
-      : 'App Cerveau : l\'horodatage du build n\'a pas pu \u00eatre charg\u00e9 ; si on te demande la version, dis seulement que l\'info de build n\'est pas disponible pour l\'instant.';
-    return [identityLine, langLine, buildLine]
+        ' (UTC, dernier déploiement, ' + appBuildAgo(builtAt) + ').' +
+        ' Si on te demande quelle version tourne, ou quand le build a été exporté : donne cette date dans l\'heure de son ordinateur (horloge ci-dessus), pas seulement en UTC. Ex. « 13 oct. 2026, 20 h 04 ». Ajoute l\'UTC seulement s\'iel le demande. Ne demande JAMAIS son fuseau ni l\'heure qu\'il est. Dis depuis quand il est déployé, puis liste les nouveautés récentes ci-dessous. Il n\'y a pas de numéro sémantique. Ne dis JAMAIS que tu ne peux pas la voir.' +
+        ' Si on demande les nouveautés ou ce qui a changé, réponds avec ce journal (les plus récentes d\'abord), sans en inventer.' +
+        (recent ? '\nNouveautés récentes (journal CHANGELOG.md) :\n' + recent : '')
+      : 'App Cerveau : l\'horodatage du build n\'a pas pu être chargé ; si on te demande la version, dis seulement que l\'info de build n\'est pas disponible pour l\'instant.';
+    return [identityLine, langLine, clockLine, buildLine]
       .concat(voiceLines)
       .concat(profileLines)
       .concat(peopleLines)
@@ -18962,6 +19001,7 @@
     buildEaseExplanation: buildEaseExplanation,
     dueFromOffsetMinutes: dueFromOffsetMinutes,
     nowTimeLocal: nowTimeLocal,
+    localClock: localClock,
     parseRelativeDueOffset: parseRelativeDueOffset,
     resolveDueVagueArg: resolveDueVagueArg,
     matchBoardMember: matchBoardMember,

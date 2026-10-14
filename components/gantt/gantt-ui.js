@@ -1410,7 +1410,8 @@
           var cell = cells[c];
           if (cell && cell.classList.contains('gantt-col-head')) {
             var shift = Math.max(0, Math.min(scroll.scrollLeft - x0, x1 - x0 - 60));
-            cell.style.paddingLeft = shift + 8 + 'px';
+            var pad = shift + 8 + 'px';
+            if (cell.style.paddingLeft !== pad) cell.style.paddingLeft = pad;
           }
           if (reuseTicks || x1 < left || x0 > right) continue;
           var d = model.startOfWeek(cols[c].start);
@@ -1431,10 +1432,12 @@
             labelsFrag.appendChild(lab);
           }
         }
-        lines.textContent = '';
-        labels.textContent = '';
-        lines.appendChild(linesFrag);
-        labels.appendChild(labelsFrag);
+        if (!reuseTicks) {
+          lines.textContent = '';
+          labels.textContent = '';
+          lines.appendChild(linesFrag);
+          labels.appendChild(labelsFrag);
+        }
       }
 
       draw();
@@ -1456,6 +1459,8 @@
       headerTimeline.appendChild(labels);
       headerTimeline.classList.add('gantt-timeline-header--hours');
       var raf = 0;
+      var drawnLeft = -1e9;
+      var drawnRight = -1e9;
 
       function xOf(date) {
         return model.dateTimeToX(date, r, state.timelineWidth, mapOpts);
@@ -1475,6 +1480,11 @@
         raf = 0;
         var left = scroll.scrollLeft - 200;
         var right = scroll.scrollLeft + scroll.clientWidth + 200;
+        var reuseTicks = Math.abs(left - drawnLeft) < 64 && Math.abs(right - drawnRight) < 64;
+        if (!reuseTicks) {
+          drawnLeft = left;
+          drawnRight = right;
+        }
         var linesFrag = document.createDocumentFragment();
         var labelsFrag = document.createDocumentFragment();
         for (var d = 0; d < days; d++) {
@@ -1487,9 +1497,10 @@
               0,
               Math.min(scroll.scrollLeft - x0, x1 - x0 - 150)
             );
-            cell.style.paddingLeft = shift + 8 + 'px';
+            var pad = shift + 8 + 'px';
+            if (cell.style.paddingLeft !== pad) cell.style.paddingLeft = pad;
           }
-          if (x1 < left || x0 > right) continue;
+          if (reuseTicks || x1 < left || x0 > right) continue;
           var lastX = x0;
           for (var m = step; m < 1440; m += step) {
             var x = xOf(dayAt(d, m));
@@ -1508,10 +1519,12 @@
             }
           }
         }
-        lines.textContent = '';
-        labels.textContent = '';
-        lines.appendChild(linesFrag);
-        labels.appendChild(labelsFrag);
+        if (!reuseTicks) {
+          lines.textContent = '';
+          labels.textContent = '';
+          lines.appendChild(linesFrag);
+          labels.appendChild(labelsFrag);
+        }
       }
 
       draw();

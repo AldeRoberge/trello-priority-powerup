@@ -966,6 +966,32 @@
     assert(md().indexOf('Deux') < md().indexOf('Un'), 'dragged the first line below the second: ' + md());
   });
 
+  test('typing marks renders them, [[ links a document, Backspace on the sign clears the mark', async function () {
+    await freshDoc('Live', '');
+    caretIn(ed().firstChild);
+    type('**gras**');
+    await sleep(40);
+    var strong = ed().querySelector('strong');
+    assert(strong && strong.textContent === 'gras', 'bold: ' + ed().innerHTML);
+    eq(md(), '**gras**');
+    type(' *mot*');
+    await sleep(40);
+    assert(ed().querySelector('em'), 'italic: ' + ed().innerHTML);
+    type(' [[Plan');
+    await waitFor(function () { return suggest().open && suggest().title === 'Lier un document'; }, 'wiki menu');
+    press('Enter');
+    await waitFor(function () { return ed().querySelector('.dc-mention--doc'); }, 'doc chip');
+    strong = ed().querySelector('strong');
+    caretIn(strong, false);
+    document.dispatchEvent(new Event('selectionchange'));
+    await sleep(20);
+    assert(strong.classList.contains('dc-hot') && strong.getAttribute('data-syn') === '**', 'signs while the caret is inside');
+    press('Backspace');
+    await sleep(20);
+    assert(!ed().querySelector('strong'), 'the mark is gone: ' + ed().innerHTML);
+    assert(ed().textContent.indexOf('gras') >= 0, 'the word stays');
+  });
+
   /* ── without a Trello token ─────────────────────────────────────── */
 
   test.unauth('asks for the Trello authorization instead of showing an empty or broken view', async function () {

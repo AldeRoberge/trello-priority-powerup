@@ -3,6 +3,7 @@
  *  - left: the board's documents (search, new, duplicate, export, delete); right: outline of the headings
  *  - toolbar (marks, color, highlight, align) + keyboard shortcuts + Markdown shortcuts + "/" (tables, callouts)
  *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
+ *  - typing ** * ~~ == ++ ` renders the mark; the signs show again while the caret is in the word. [[ links a document
  *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
  *    Backspace right after a person keeps the first name; another Backspace removes the mention
  *  - selecting text shows a bar (style, color, bold, italic, …) and "Créer une tâche"
@@ -26,6 +27,9 @@
   };
   var DH = function () {
     return global.DocsHistory;
+  };
+  var DL = function () {
+    return global.DocsLive;
   };
 
   var SAVE_DELAY_MS = 1200;
@@ -1027,7 +1031,7 @@
           .sort(function (a, b) { return a.name.localeCompare(b.name); })
           .forEach(function (f) {
             if (excludeId && DM().isInsideFolder(idx, excludeId, f.id)) return;
-            opt(f.name, f.id, depth + 1);
+            opt(folderLabel(f), f.id, depth + 1);
             walk(f.id, depth + 1);
           });
       })('', 0);
@@ -1552,16 +1556,225 @@
       }));
     }
 
+    function FC() {
+      return global.FieldCatalog;
+    }
+
+    function ensureLabelCatalog() {
+      if (state.labelCatalog) return Promise.resolve(state.labelCatalog);
+      if (!t || typeof t.board !== 'function') {
+        state.labelCatalog = [];
+        return Promise.resolve(state.labelCatalog);
+      }
+      return t.board('labels').then(function (b) {
+        state.labelCatalog = ((b && b.labels) || []).map(function (l) {
+          return { id: String(l.id), name: l.name || '', color: l.color || '' };
+        });
+        return state.labelCatalog;
+      }, function () {
+        state.labelCatalog = [];
+        return state.labelCatalog;
+      });
+    }
+
+    function mergedLabels() {
+      var seen = Object.create(null);
+      var out = [];
+      (state.labelCatalog || []).concat((state.face && state.face.labels) || []).forEach(function (l) {
+        if (!l || l.id == null || seen[l.id]) return;
+        seen[l.id] = true;
+        out.push({ id: String(l.id), name: l.name || '', color: l.color || '' });
+      });
+      return out;
+    }
+
+    function nativeText(field) {
+      var tf = state.taskFields || {};
+      var inputs = tf.inputs || {};
+      var meta = (state.face && state.face.meta) || {};
+      if (field.kind === 'priority') {
+        if (!tf.inputs || !global.PriorityMatrix) return '';
+        var resolved = global.PriorityMatrix.resolveLabel(inputs);
+        return (resolved && resolved.label) || '';
+      }
+      if (field.kind === 'place') {
+        var at = inputs.places && inputs.places.at;
+        if (at && at.name) return at.name;
+        return meta.lieu || '';
+      }
+      if (field.kind === 'category') return tf.category || meta.categorie || '';
+      if (field.kind === 'money') return meta.money || '';
+      var key = FC().metaKey(field);
+      return (key && meta[key]) || '';
+    }
+
+    function fieldRaw(field) {
+      var native = nativeText(field);
+      if (native) return native;
+      var hit = FC().valueOn(field, (state.face && state.face.labels) || []);
+      return hit ? hit.value : '';
+    }
+
+    function stripField(fieldId) {
+      var fc = FC();
+      if (!fc || !state.current || !state.current.subject) return Promise.resolve();
+      var ids = ((state.face && state.face.labels) || []).map(function (l) { return l.id; });
+      var next = fc.without(mergedLabels(), ids, fieldId);
+      if (next.join(',') === ids.join(',')) return Promise.resolve();
+      return DT().setCardLabels(t, state.current.subject.id, next);
+    }
+
+    function writePlace(cardId, value) {
+      var PT = global.PriorityTrello;
+      var UI = global.PriorityUI;
+      if (!PT || typeof PT.saveCardInputsById !== 'function' || !UI || typeof UI.createPlaceRef !== 'function') {
+        return DT().saveCardMeta(t, cardId, 'lieu', value);
+      }
+      return PT.getCardInputsById(t, cardId).then(function (inputs) {
+        var places = Object.assign({}, (inputs && inputs.places) || {});
+        if (!value) delete places.at;
+        else {
+          var found = typeof UI.findPlaceCatalogByName === 'function' ? UI.findPlaceCatalogByName(value) : null;
+          places.at = found || UI.createPlaceRef(value);
+        }
+        return PT.saveCardInputsById(t, cardId, { places: places });
+      }).then(function () {
+        return DT().saveCardMeta(t, cardId, 'lieu', '');
+      });
+    }
+
+    function writeCategory(cardId, value) {
+      var TT = global.TableTrello;
+      var sheets = global.SheetsTrello;
+      var fieldId = state.taskFields && state.taskFields.categoryFieldId;
+      function viaMeta() {
+        return DT().saveCardMeta(t, cardId, 'categorie', value);
+      }
+      if (!TT || typeof TT.saveCategory !== 'function') return viaMeta();
+      var ensure = fieldId
+        ? Promise.resolve(fieldId)
+        : sheets && typeof sheets.ensureCategoryCustomField === 'function'
+          ? sheets.ensureCategoryCustomField(t).then(function (res) { return res && res.data && res.data.id; }, function () { return null; })
+          : Promise.resolve(null);
+      return ensure.then(function (id) {
+        if (!id) return viaMeta();
+        return TT.saveCategory(t, cardId, id, value).then(function () {
+          if (state.taskFields) {
+            state.taskFields.categoryFieldId = id;
+            state.taskFields.category = value || '';
+          }
+        }, viaMeta);
+      }, viaMeta);
+    }
+
+    function commitField(field, value) {
+      if (!state.current || !state.current.subject) return;
+      var cardId = state.current.subject.id;
+      var job;
+      if (field.kind === 'place') job = writePlace(cardId, value);
+      else if (field.kind === 'category') job = writeCategory(cardId, value);
+      else if (field.kind === 'priority') job = Promise.resolve();
+      else job = DT().saveCardMeta(t, cardId, FC().metaKey(field), value);
+      job.then(function () { return stripField(field.id); }).then(function () { loadFace(); }, failure);
+    }
+
+    function editPriority(anchor) {
+      if (!global.CardFields || !isTaskPage()) return;
+      global.CardFields.open('priority', {
+        t: t, cardId: state.current.subject.id, cardName: state.face.name, anchor: anchor,
+        onSaved: function () { stripField('priority').then(function () { loadFace(); }, failure); },
+      });
+    }
+
+    function openFieldPicker(anchor, field) {
+      var fc = FC();
+      var current = fieldRaw(field);
+      var rows = field.options.map(function (o) {
+        var label = fc.pretty(o.value);
+        return {
+          label: label,
+          icon: field.icon,
+          on: fc.fold(o.value) === fc.fold(current),
+          run: function () {
+            closePop();
+            commitField(field, fc.fold(o.value) === fc.fold(current) ? '' : o.value);
+          },
+        };
+      });
+      if (current && !rows.some(function (r) { return fc.fold(r.label) === fc.fold(current); })) {
+        rows.unshift({
+          label: fc.pretty(current),
+          icon: field.icon,
+          on: true,
+          run: function () { closePop(); commitField(field, ''); },
+        });
+      }
+      openPicker(anchor, rows, function (list, q) {
+        var typed = String(q || '').trim();
+        if (!typed || typed.length > 40) return;
+        var query = fc.fold(typed);
+        var exists = rows.some(function (r) { return fc.fold(r.label).indexOf(query) >= 0; });
+        if (exists) return;
+        list.appendChild(h('button', {
+          class: 'dc-menu-item',
+          type: 'button',
+          onclick: function () { closePop(); commitField(field, typed); },
+        }, [icon(field.icon), h('span', { text: typed })]));
+      });
+    }
+
+    function openField(field, anchor) {
+      if (field.kind === 'priority') editPriority(anchor);
+      else openFieldPicker(anchor, field);
+    }
+
+    function paintLabelBag(labels) {
+      els.props.appendChild(propRow('tags', 'Étiquettes', function (v) {
+        if (!labels.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openLabelPicker(e.currentTarget); }));
+        labels.forEach(function (l) {
+          v.appendChild(chip(l.name || 'Étiquette', {
+            color: l.color,
+            onClick: function (e) { openLabelPicker(e.currentTarget); },
+            onRemove: function () {
+              var ids = (state.face.labels || []).map(function (x) { return x.id; }).filter(function (id) { return id !== l.id; });
+              DT().setCardLabels(t, state.current.subject.id, ids).then(function () { loadFace(); }, failure);
+            },
+          }));
+        });
+      }));
+    }
+
+    function paintTaskFields() {
+      var fc = FC();
+      if (!fc || state.labelCatalog == null) {
+        paintLabelBag(state.face.labels || []);
+        return;
+      }
+      var fields = fc.catalog(mergedLabels());
+      fields.forEach(function (field) {
+        els.props.appendChild(propRow(field.icon, field.label, function (v) {
+          var raw = fieldRaw(field);
+          var text = raw ? fc.pretty(raw) : '';
+          var fromLabel = !nativeText(field) && fc.valueOn(field, state.face.labels || []);
+          if (!text) {
+            v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openField(field, e.currentTarget); }));
+            return;
+          }
+          v.appendChild(chip(text, {
+            onClick: function (e) { openField(field, e.currentTarget); },
+            onRemove: field.kind === 'priority' && !fromLabel ? null : function () { commitField(field, ''); },
+          }));
+        }));
+      });
+      var loose = fc.loose(state.face.labels || []);
+      if (!fields.length) paintLabelBag(state.face.labels || []);
+      else if (loose.length) paintLabelBag(loose);
+    }
+
     function openLabelPicker(anchor) {
-      var load = state.labelCatalog
-        ? Promise.resolve(state.labelCatalog)
-        : t.board('labels').then(function (b) {
-          state.labelCatalog = ((b && b.labels) || []).map(function (l) {
-            return { id: String(l.id), name: l.name || '', color: l.color || '' };
-          });
-          return state.labelCatalog;
-        }, function () { return []; });
-      load.then(function (labels) {
+      ensureLabelCatalog().then(function () {
+        var fc = FC();
+        var labels = fc ? fc.loose(mergedLabels()) : (state.labelCatalog || []);
         var on = ((state.face && state.face.labels) || []).map(function (l) { return l.id; });
         openPicker(anchor, labels.map(function (l) {
           return {
@@ -1656,13 +1869,24 @@
       var sub = cur && cur.subject;
       var token = ++faceToken;
       state.face = null;
+      state.taskFields = null;
       paintProps();
       if (!sub) return;
       var req = sub.k === 'task' ? DT().loadCardFace(t, sub.id) : DT().loadEntityFace(t, sub.id);
       req.then(function (face) {
         if (token !== faceToken || !state.current || !state.current.subject || state.current.subject.id !== sub.id) return;
         state.face = face;
-        paintProps();
+        var extra = sub.k === 'task'
+          ? Promise.all([
+            ensureLabelCatalog(),
+            DT().loadTaskFields ? DT().loadTaskFields(t, sub.id).catch(function () { return null; }) : Promise.resolve(null),
+          ])
+          : Promise.resolve(null);
+        return extra.then(function (pair) {
+          if (token !== faceToken) return;
+          if (pair && pair[1]) state.taskFields = pair[1];
+          paintProps();
+        });
       }, function () {
         if (token !== faceToken) return;
         state.face = { missing: true, id: sub.id };
@@ -1709,20 +1933,7 @@
             }));
           });
         }));
-        els.props.appendChild(propRow('tags', 'Étiquettes', function (v) {
-          var labels = state.face.labels || [];
-          if (!labels.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openLabelPicker(e.currentTarget); }));
-          labels.forEach(function (l) {
-            v.appendChild(chip(l.name || 'Étiquette', {
-              color: l.color,
-              onClick: function (e) { openLabelPicker(e.currentTarget); },
-              onRemove: function () {
-                DT().setCardLabels(t, cur.subject.id, labels.map(function (x) { return x.id; }).filter(function (id) { return id !== l.id; }))
-                  .then(function () { loadFace(); }, failure);
-              },
-            }));
-          });
-        }));
+        paintTaskFields();
         els.props.appendChild(propRow('calendar-event', 'Échéance', function (v) {
           var due = dueLabel(state.face.due);
           v.appendChild(due
@@ -1903,6 +2114,12 @@
         clearTimeout(previewTimer);
         if (!previewPinned) scheduleClosePreview();
       });
+      if (!attachEditor.hot) {
+        attachEditor.hot = true;
+        document.addEventListener('selectionchange', function () {
+          if (editor) paintLiveHot();
+        });
+      }
     }
 
     function onEditorClick(e) {
@@ -1938,6 +2155,13 @@
           onEdit();
         });
       }
+      if (!e.isComposing && type === 'insertText' && e.data && /[*~=`+\]]/.test(e.data)) {
+        Promise.resolve().then(function () {
+          if (!editor) return;
+          if (applyWikiClose() || applyInlineLive()) onEdit('text');
+          paintLiveHot();
+        });
+      }
       onEdit(type === 'insertText' || type === 'insertCompositionText' || type.indexOf('delete') === 0 ? 'text' : '');
       updateSuggest();
     }
@@ -1963,6 +2187,157 @@
       sel.addRange(r);
       document.execCommand('delete');
       runCommand(cmd, { silent: true });
+    }
+
+    /* Live Preview: a closing pair becomes the mark. Signs come back only inside the word. */
+
+    function liveTextNode() {
+      var sel = global.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.rangeCount || !editor || !editor.contains(sel.anchorNode)) return null;
+      var node = sel.anchorNode;
+      if (!node || node.nodeType !== 3) return null;
+      if (closestIn(node, 'PRE,CODE')) return null;
+      return node;
+    }
+
+    function placeCaretAfter(mark) {
+      var sel = global.getSelection();
+      if (!sel || !mark || !mark.parentNode) return;
+      var after = mark.nextSibling;
+      if (!after || after.nodeType !== 3) {
+        after = document.createTextNode('\u200b');
+        mark.parentNode.insertBefore(after, mark.nextSibling);
+      }
+      var r = document.createRange();
+      r.setStart(after, after.nodeValue.length);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+
+    function applyInlineLive() {
+      var live = DL();
+      if (!live) return false;
+      var node = liveTextNode();
+      if (!node || closestIn(node, 'A,.dc-mention,STRONG,B,EM,I,S,STRIKE,DEL,U,MARK')) return false;
+      var hit = live.closingMark(node.nodeValue, global.getSelection().anchorOffset);
+      if (!hit) return false;
+      var sel = global.getSelection();
+      var range = document.createRange();
+      range.setStart(node, hit.start);
+      range.setEnd(node, hit.end);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand('insertHTML', false, '<' + hit.tag + '>' + escHtml(hit.text) + '</' + hit.tag + '>\u200b');
+      var cur = global.getSelection();
+      var inside = cur && cur.anchorNode && closestIn(cur.anchorNode, hit.tag);
+      if (inside && editor.contains(inside)) placeCaretAfter(inside);
+      return true;
+    }
+
+    function applyWikiClose() {
+      var live = DL();
+      if (!live || !state.index) return false;
+      var node = liveTextNode();
+      if (!node) return false;
+      var hit = live.wikiClose(node.nodeValue, global.getSelection().anchorOffset);
+      if (!hit) return false;
+      var want = DM().fold(hit.title);
+      var docs = state.index.doc || [];
+      var found = null;
+      var i;
+      for (i = 0; i < docs.length; i++) {
+        if (DM().fold(docs[i].label) !== want) continue;
+        if (found) return false;
+        found = docs[i];
+      }
+      if (!found) return false;
+      var sel = global.getSelection();
+      var range = document.createRange();
+      range.setStart(node, hit.start);
+      range.setEnd(node, hit.end);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      insertMention({ type: 'doc', id: found.id, label: found.label });
+      return true;
+    }
+
+    function liveHotEl() {
+      var live = DL();
+      if (!live || !editor) return null;
+      var sel = global.getSelection();
+      if (!sel || !sel.rangeCount || !editor.contains(sel.anchorNode)) return null;
+      var el = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode;
+      while (el && el !== editor) {
+        if (el.nodeType === 1 && live.syntaxOf(el.tagName) && !closestIn(el, 'PRE')) {
+          if (el.tagName === 'MARK' && el.hasAttribute('data-c')) {
+            el = el.parentNode;
+            continue;
+          }
+          return el;
+        }
+        el = el.parentNode;
+      }
+      return null;
+    }
+
+    function paintLiveHot() {
+      if (!editor) return;
+      var next = liveHotEl();
+      var prev = editor.querySelectorAll('.dc-hot');
+      var i;
+      for (i = 0; i < prev.length; i++) {
+        if (prev[i] === next) continue;
+        prev[i].classList.remove('dc-hot');
+        prev[i].removeAttribute('data-syn');
+      }
+      if (!next) return;
+      var syn = DL().syntaxOf(next.tagName);
+      if (!syn) return;
+      next.setAttribute('data-syn', syn);
+      next.classList.add('dc-hot');
+    }
+
+    function atLiveEdge(mark, which) {
+      var sel = global.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.rangeCount) return false;
+      if (sel.anchorNode !== mark && !mark.contains(sel.anchorNode)) return false;
+      var r = document.createRange();
+      try {
+        r.selectNodeContents(mark);
+        if (which === 'back') r.setEnd(sel.anchorNode, sel.anchorOffset);
+        else r.setStart(sel.anchorNode, sel.anchorOffset);
+      } catch (err) {
+        return false;
+      }
+      return !r.toString().replace(/[\u200b\ufeff]/g, '');
+    }
+
+    /** Backspace or Delete on a visible sign removes the mark and leaves the word. */
+    function unwrapLiveEdge(which) {
+      var el = liveHotEl();
+      if (!el || !el.classList.contains('dc-hot') || el.children.length) return false;
+      if (!atLiveEdge(el, which)) return false;
+      var text = el.textContent.replace(/[\u200b\ufeff]/g, '');
+      var sel = global.getSelection();
+      var range = document.createRange();
+      range.selectNode(el);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand('insertText', false, text);
+      if (which === 'back' && text) {
+        var s2 = global.getSelection();
+        var n = s2 && s2.anchorNode;
+        var off = s2 ? s2.anchorOffset : 0;
+        if (n && n.nodeType === 3 && off >= text.length) {
+          var r2 = document.createRange();
+          r2.setStart(n, off - text.length);
+          r2.collapse(true);
+          s2.removeAllRanges();
+          s2.addRange(r2);
+        }
+      }
+      return true;
     }
 
     /** Skips empty and zero-width text nodes sitting between the caret and a chip. */
@@ -2112,6 +2487,18 @@
           onEdit();
           return;
         }
+        if (unwrapLiveEdge('back')) {
+          e.preventDefault();
+          onEdit();
+          paintLiveHot();
+          return;
+        }
+      }
+      if (e.key === 'Delete' && !mod && !e.shiftKey && !e.altKey && unwrapLiveEdge('del')) {
+        e.preventDefault();
+        onEdit();
+        paintLiveHot();
+        return;
       }
       if (mod && !e.shiftKey && !e.altKey) {
         var k = e.key.toLowerCase();
@@ -2228,6 +2615,8 @@
       if (html) {
         var parsed = new DOMParser().parseFromString(html, 'text/html');
         out = DM().mdToHtml(DM().domToMd(parsed.body));
+      } else if (DL() && DL().looksLikeMarkdown(text)) {
+        out = DM().mdToHtml(text);
       } else {
         out = text
           .replace(/\r\n?/g, '\n')
@@ -2239,6 +2628,7 @@
       document.execCommand('insertHTML', false, plainChips(single ? withCompanion(single[1]) : out));
       fixChips();
       refreshChips();
+      if (!html) applyWikiClose();
       onEdit();
     }
 
@@ -3569,6 +3959,28 @@
       if (!editor) return closeSuggest();
       var before = textBeforeCaret();
       if (before == null) return closeSuggest();
+      var live = DL();
+      if (live && !closestIn(selNode(), 'PRE,CODE')) {
+        var wiki = live.wikiQuery(before);
+        if (wiki) {
+          var wgroups = DM().searchMentions(state.index, 'doc', wiki.query);
+          var wentries = [];
+          wgroups.forEach(function (g) {
+            g.items.forEach(function (item) { wentries.push({ kind: 'item', item: item, group: g.label }); });
+          });
+          if (wiki.query.trim()) wentries.push({ kind: 'create', title: DM().cleanTitle(wiki.query) });
+          var wkeep = sugg && sugg.kind === 'wiki' && sugg.trig.query === wiki.query ? sugg.active : 0;
+          sugg = {
+            kind: 'wiki',
+            trig: { scope: 'doc', query: wiki.query, length: wiki.length },
+            entries: wentries,
+            groups: wgroups,
+            active: Math.min(wkeep, Math.max(0, wentries.length - 1)),
+          };
+          paintSuggest();
+          return;
+        }
+      }
       var trig = DM().detectTrigger(before);
       if (trig) {
         var groups = DM().searchMentions(state.index, trig.scope, trig.query);

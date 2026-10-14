@@ -117,7 +117,11 @@
       option.ids.push(String(label.id));
     });
     order.sort(function (a, b) {
-      var d = (KIND_ORDER[a.kind] || 4) - (KIND_ORDER[b.kind] || 4);
+      var ai = KIND_ORDER[a.kind];
+      var bi = KIND_ORDER[b.kind];
+      if (ai == null) ai = 4;
+      if (bi == null) bi = 4;
+      var d = ai - bi;
       if (d) return d;
       return a.label.localeCompare(b.label, 'fr');
     });

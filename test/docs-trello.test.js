@@ -222,4 +222,22 @@ describe('DocsTrello (against an in-memory Trello)', () => {
     delete global.PriorityTrello;
     delete global.People;
   });
+
+  it('gives each folder its own document and does not create a second one', async () => {
+    await DT.updateFolderIndex(fake.t, (idx) => {
+      idx.folders.push({ id: 'f1', name: 'Notes', parent: null });
+    });
+    const first = await DT.ensureFolderDocs(fake.t, await DT.listDocs(fake.t));
+    assert.equal(first.created.length, 1);
+    assert.equal(first.created[0].title, 'Notes');
+    assert.equal(first.idx.folders[0].doc, first.created[0].id);
+    const card = fake.cards.find((c) => c.id === first.created[0].id);
+    assert.equal(card.closed, true);
+    const again = await DT.ensureFolderDocs(fake.t, first.docs);
+    assert.equal(again.created.length, 0);
+    const rows = DM.folderRows(first.docs, first.idx, {}, '', 'name');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].type, 'folder');
+    assert.equal(rows[0].doc.id, first.created[0].id);
+  });
 });

@@ -2083,7 +2083,9 @@
       return linked ? linked.title : f.name;
     }
     function nameHit(f) {
-      return fold(titleOf(f)).indexOf(q) >= 0;
+      if (fold(f.name).indexOf(q) >= 0) return true;
+      var linked = f.doc && byId[f.doc];
+      return !!(linked && fold(linked.title).indexOf(q) >= 0);
     }
     function matchesIn(fid) {
       if ((byFolder[fid] || []).some(docMatches)) return true;

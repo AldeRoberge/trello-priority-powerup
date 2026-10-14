@@ -20,6 +20,7 @@
       return Object.assign({ desc: '', closed: false, idList: lists[0].id, dateLastActivity: new Date().toISOString() }, c);
     });
     var members = seed.members || [];
+    var labels = seed.labels || [];
     var storage = {};
     var seq = 100;
     var calls = [];
@@ -91,7 +92,10 @@
           }
           if (body && 'idLabels' in body) {
             found.labels = String(body.idLabels || '').split(',').filter(Boolean).map(function (id) {
-              return { id: id, name: id, color: '' };
+              var known = labels.filter(function (l) { return l.id === id; })[0];
+              return known
+                ? { id: known.id, name: known.name || '', color: known.color || '' }
+                : { id: id, name: id, color: '' };
             });
           }
           if (body && body.desc != null && body.desc.length > 16384) {
@@ -112,6 +116,7 @@
       board: function (field) {
         var all = { id: 'b1', members: members };
         if (field === 'members') return Promise.resolve({ members: members });
+        if (field === 'labels') return Promise.resolve({ id: all.id, labels: labels });
         return Promise.resolve(field ? { id: all.id } : all);
       },
       lists: function () {
