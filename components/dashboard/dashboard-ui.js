@@ -1214,11 +1214,9 @@
     }
 
     function stepLine(row) {
-      var s = WO() ? WO().stepState(row) : null;
-      if (!s) return null;
-      if (s.text) return h('span', { class: 'db-step', text: s.text });
-      if (s.missing) return h('span', { class: 'db-step is-missing', text: 'Sans prochaine action' });
-      return null;
+      var text = WO() && WO().stepText ? WO().stepText(row) : '';
+      if (!text) return null;
+      return h('span', { class: 'db-step', text: text });
     }
 
     function placeLine(row) {
@@ -1920,7 +1918,6 @@
         h('div', { class: 'db-now-name', text: actionText, onclick: function () { openCard(next.row); } }),
         nextStep && nextStep.text ? h('div', { class: 'db-now-card', text: next.row.name }) : null,
         placeLine(next.row),
-        nextStep && nextStep.missing ? h('div', { class: 'db-step is-missing', text: 'Sans prochaine action' }) : null,
         h('div', { class: 'db-now-meta' }, [
           next.row.due && next.row.due < today && DM().isOpen(next.row) ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
           prioBadge(next.row),
@@ -2031,10 +2028,7 @@
       });
       steps.forEach(function (r) {
         kids.push(h('div', { class: 'db-row', 'data-card': r.id }, [
-          h('span', { class: 'db-row-main' }, [
-            h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
-            h('span', { class: 'db-step is-missing', text: 'Sans prochaine action' }),
-          ]),
+          h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
         ]));
       });
       waiting.forEach(function (r) {
@@ -2044,19 +2038,19 @@
         ]));
       });
       projects.forEach(function (p) {
-        var stepText = p.step && p.step.text ? p.step.text : 'Sans prochaine action';
+        var stepText = p.step && p.step.text ? p.step.text : '';
         kids.push(h('div', { class: 'db-project' }, [
           h('div', { class: 'db-row-name', text: p.name }),
-          h('div', { class: 'db-step' + (p.missingOutcome ? ' is-missing' : ''), text: p.outcome || 'Sans résultat' }),
-          h('div', {
-            class: 'db-step' + (p.missingStep ? ' is-missing' : ''),
+          p.outcome ? h('div', { class: 'db-step', text: p.outcome }) : null,
+          stepText ? h('div', {
+            class: 'db-step',
             'data-card': p.step && p.step.cardId ? p.step.cardId : null,
             text: stepText,
             onclick: p.step && p.step.cardId ? function () {
               var card = state.rows.filter(function (r) { return r.id === p.step.cardId; })[0];
               if (card) openCard(card);
             } : null,
-          }),
+          }) : null,
           h('div', { class: 'db-project-nums' }, [
             p.work == null ? null : h('span', { text: 'Travail ' + p.work + ' %' }),
             resultControl(p),

@@ -20,6 +20,7 @@
  *   - bullets (nested by 2 spaces)   1. numbers   - [ ] / - [x] checklist   > quote   ``` fence   ---
  *   callout: > [!note] | [!tip] | [!warning]     GFM table     <!--align:center--> or <!--align:right--> on the next line
  *   mentions: [@Label](person:ID) [@Label](task:ID) [@Label](doc:ID) [@texte](entity:ID)
+ *   a link whose words stay: [texte](doc:ID)
  *   a person shown by first name only: [@Prénom](person:ID:short)
  *   a picture on its own line: ![alt](https://…) or ![alt](upload:cardId/attId/file.jpg)
  *   <!--blank-->  an intentionally empty paragraph
@@ -561,6 +562,12 @@
     return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : '';
   }
 
+  /** `doc:cardId` when the words of a link stay put. Empty for a web address. */
+  function docLinkId(href) {
+    var m = /^doc:([A-Za-z0-9_-]{1,64})$/.exec(String(href == null ? '' : href).trim());
+    return m ? m[1] : '';
+  }
+
   /** Only http(s) / mailto links survive; "example.com/x" gets https://. */
   function safeHref(url) {
     var u = String(url == null ? '' : url).trim();
@@ -723,6 +730,12 @@
     if (m && label.charAt(0) === '@') {
       return {
         html: mentionHtml(m[1], m[2], label.slice(1).replace(/\\(.)/g, '$1'), { short: m[3] === 'short' }),
+        end: k + 1,
+      };
+    }
+    if (m && m[1] === 'doc') {
+      return {
+        html: '<a class="dc-doclink" href="doc:' + m[2] + '" data-doc="' + m[2] + '">' + inlineToHtml(label) + '</a>',
         end: k + 1,
       };
     }
@@ -1378,9 +1391,13 @@
     if (tag === 'CODE' || tag === 'KBD' || tag === 'SAMP' || tag === 'TT') inner = codeSpan(textOf(node));
     else inner = inlineMd(kids(node));
     if (tag === 'A') {
-      var href = safeHref(attr(node, 'href'));
       var lbl = inner.replace(/\s*\n\s*/g, ' ');
-      if (href && lbl.trim()) inner = '[' + lbl + '](' + encodeHref(href) + ')';
+      var did = cleanId(attr(node, 'data-doc')) || docLinkId(attr(node, 'href'));
+      if (did && lbl.trim()) inner = '[' + lbl + '](doc:' + did + ')';
+      else {
+        var href = safeHref(attr(node, 'href'));
+        if (href && lbl.trim()) inner = '[' + lbl + '](' + encodeHref(href) + ')';
+      }
     }
     if (marks.underline) inner = wrapMark(inner, '++');
     if (marks.strike) inner = wrapMark(inner, '~~');
@@ -2364,6 +2381,7 @@
     searchGallery: searchGallery,
     randomCover: randomCover,
     cleanId: cleanId,
+    docLinkId: docLinkId,
     safeHref: safeHref,
     RICH_INKS: RICH_INKS,
     imageSrc: imageSrc,

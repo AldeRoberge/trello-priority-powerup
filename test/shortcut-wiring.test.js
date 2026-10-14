@@ -52,3 +52,11 @@ test('Entités and Documents do not attach card status keys (no status or urgenc
     assert.ok(!/LinearKeys\.attach\(/.test(read(rel)), `${rel} should not attach LinearKeys`);
   }
 });
+
+test('kanban opens a card in the shared side panel and loads it', () => {
+  const js = read('components/kanban/kanban-ui.js');
+  const html = read('kanban.html');
+  assert.match(js, /CardQuick\.mount\(/);
+  assert.ok(html.includes('card-quick.js'), 'kanban.html must load card-quick.js');
+  assert.ok(html.includes('card-quick.css'), 'kanban.html must load card-quick.css');
+});

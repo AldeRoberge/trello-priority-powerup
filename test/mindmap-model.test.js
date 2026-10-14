@@ -156,18 +156,18 @@ describe('MindmapModel', () => {
         assert.deepEqual(MM.ancestors(g.edges, 'g:v'), []);
       });
 
-      it('flags work with no project / objective / goal above it, without blocking', () => {
+      it('does not flag a task or a goal that has no parent level', () => {
         assert.deepEqual(MM.contextFlags(g, 't:a'), []);
-        assert.deepEqual(MM.contextFlags(g, 't:b').map((f) => f.id), ['no-project']);
-        assert.deepEqual(MM.contextFlags(g, 'g:p2').map((f) => f.id), ['no-objective']);
-        assert.deepEqual(MM.contextFlags(g, 'g:o2').map((f) => f.id), ['no-goal']);
+        assert.deepEqual(MM.contextFlags(g, 't:b'), []);
+        assert.deepEqual(MM.contextFlags(g, 'g:p2'), []);
+        assert.deepEqual(MM.contextFlags(g, 'g:o2'), []);
         assert.deepEqual(MM.contextFlags(g, 'g:o'), []);
         assert.deepEqual(MM.contextFlags(g, 'nope'), []);
       });
 
-      it('a task that serves an objective directly is still flagged as having no project', () => {
+      it('does not flag a task that serves an objective directly', () => {
         const x = MM.buildGraph(records, { goals: { nodes: chain.nodes, links: chain.links.concat([{ from: 't:b', to: 'g:o' }]) } });
-        assert.deepEqual(MM.contextFlags(x, 't:b').map((f) => f.id), ['no-project']);
+        assert.deepEqual(MM.contextFlags(x, 't:b'), []);
       });
     });
 
@@ -410,6 +410,84 @@ describe('MindmapModel', () => {
       assert.ok(!closed.hidden['t:a']);
       const unknown = MM.applyGroupEdits(project ? [project] : [], { 'grp:g:p': { extra: ['missing'] } }, { 't:a': { id: 't:a' } });
       assert.ok(!unknown[0].members.includes('missing'));
+    });
+  });
+
+  describe('orbit', () => {
+    function coverage(angles) {
+      const a = angles.slice().sort((x, y) => x - y);
+      let maxGap = 0;
+      for (let i = 0; i < a.length; i++) {
+        const next = i + 1 < a.length ? a[i + 1] : a[0] + Math.PI * 2;
+        maxGap = Math.max(maxGap, next - a[i]);
+      }
+      return Math.PI * 2 - maxGap;
+    }
+
+    it('keeps the focus and puts each kind of relation on its own side', () => {
+      const nodes = [
+        { id: 'task', kind: 'task', label: 'Peindre', x: 10, y: 20, w: 200, h: 50 },
+        { id: 'goal', kind: 'goal', label: 'Maison', x: 400, y: 400, w: 200, h: 50 },
+        { id: 'need', kind: 'task', label: 'Acheter', x: -300, y: 10, w: 200, h: 50 },
+        { id: 'who', kind: 'person', label: 'Alice', x: 0, y: 0, w: 160, h: 40 },
+        { id: 'where', kind: 'place', label: 'Atelier', x: 50, y: 80, w: 160, h: 40 },
+        { id: 'far', kind: 'task', label: 'Autre', x: 2000, y: 2000, w: 200, h: 50 },
+      ];
+      const edges = [
+        { from: 'task', to: 'goal', kind: 'serves' },
+        { from: 'task', to: 'need', kind: 'depends' },
+        { from: 'task', to: 'who', kind: 'by' },
+        { from: 'task', to: 'where', kind: 'at' },
+      ];
+      const pose = MM.orbit(nodes, edges, 'task');
+      assert.equal(pose.positions.task.x, 10);
+      assert.equal(pose.positions.task.y, 20);
+      assert.equal(pose.rings.goal, 1);
+      assert.ok(pose.positions.goal.y < 20, 'a goal sits above');
+      assert.ok(pose.positions.need.x > 10, 'a prerequisite sits to the right');
+      assert.ok(pose.positions.who.x < 10 && pose.positions.who.y > 20, 'a person sits lower left');
+      assert.ok(pose.positions.where.x > 10 && pose.positions.where.y > 20, 'a place sits lower right');
+      assert.equal(pose.positions.far.x, 2000);
+      assert.equal(pose.positions.far.y, 2000);
+      assert.equal(pose.rings.far, undefined);
+      assert.equal(nodes[1].x, 400, 'the input layout is left untouched');
+    });
+
+    it('opens a person into a ring of the tasks they do', () => {
+      const nodes = [
+        { id: 'p', kind: 'person', label: 'Alice', x: 0, y: 0, w: 160, h: 40 },
+        { id: 'a', kind: 'task', label: 'A', x: 10, y: 10, w: 200, h: 40 },
+        { id: 'b', kind: 'task', label: 'B', x: 20, y: 20, w: 200, h: 40 },
+        { id: 'c', kind: 'task', label: 'C', x: 30, y: 30, w: 200, h: 40 },
+        { id: 'd', kind: 'task', label: 'D', x: 40, y: 40, w: 200, h: 40 },
+      ];
+      const edges = ['a', 'b', 'c', 'd'].map((id) => ({ from: id, to: 'p', kind: 'by' }));
+      const pose = MM.orbit(nodes, edges, 'p');
+      const angles = ['a', 'b', 'c', 'd'].map((id) => Math.atan2(pose.positions[id].y, pose.positions[id].x));
+      assert.ok(coverage(angles) > Math.PI, 'tasks spread around the person');
+      ['a', 'b', 'c', 'd'].forEach((id) => assert.equal(pose.rings[id], 1));
+      assert.equal(pose.positions.p.x, 0);
+    });
+
+    it('tucks the next relation behind the first and steps aside a card in the way', () => {
+      const nodes = [
+        { id: 't', kind: 'task', label: 'T', x: 0, y: 0, w: 200, h: 40 },
+        { id: 'n', kind: 'task', label: 'N', x: 800, y: 0, w: 200, h: 40 },
+        { id: 'o', kind: 'task', label: 'O', x: 400, y: 0, w: 200, h: 40 },
+        { id: 'crowd', kind: 'task', label: 'C', x: 30, y: 20, w: 200, h: 40 },
+      ];
+      const edges = [
+        { from: 't', to: 'n', kind: 'depends' },
+        { from: 'n', to: 'o', kind: 'depends' },
+      ];
+      const pose = MM.orbit(nodes, edges, 't');
+      const dn = Math.hypot(pose.positions.n.x, pose.positions.n.y);
+      const dO = Math.hypot(pose.positions.o.x, pose.positions.o.y);
+      const dc = Math.hypot(pose.positions.crowd.x, pose.positions.crowd.y);
+      assert.equal(pose.rings.n, 1);
+      assert.equal(pose.rings.o, 2);
+      assert.ok(dO > dn);
+      assert.ok(dc > dn);
     });
   });
 });

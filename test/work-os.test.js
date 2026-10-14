@@ -31,6 +31,14 @@ describe('WorkOS', () => {
     assert.equal(WO.stepState(row('c', { statutKey: 'completed', items: [] })), null);
   });
 
+  it('the line under a title is the open step, never a missing-state label', () => {
+    assert.equal(WO.stepText(row('a', {
+      items: [{ text: 'Écrire le plan', done: false, progress: 0 }],
+    })), 'Écrire le plan');
+    assert.equal(WO.stepText(row('b', { items: [{ text: 'Fait', done: true, progress: 100 }] })), '');
+    assert.equal(WO.stepText(row('c')), '');
+  });
+
   it('a vague horizon is not a calendar day, a time or a lone due date is a deadline', () => {
     assert.equal(WO.dateKind(row('a', { dueVague: 'eventuellement', due: '2026-10-20', start: '2026-10-20' })), 'vague');
     assert.equal(WO.dateKind(row('b', { due: '2026-10-20', start: '2026-10-20', dueTime: '09:00' })), 'hard');
@@ -92,9 +100,10 @@ describe('WorkOS', () => {
     const docs = [
       { id: 'd1', title: 'Notes', body: 'Voir [@Homepage](task:card) et [@Autre](doc:d2).' },
       { id: 'd2', title: 'Autre', body: 'Retour à [@Notes](doc:d1).' },
+      { id: 'd3', title: 'Phrase', body: 'Voir [site](https://example.com) et [Lord Jesus said](doc:d1).' },
     ];
     assert.deepEqual(WO.backlinks(docs, 'task', 'card'), [{ id: 'd1', title: 'Notes' }]);
-    assert.deepEqual(WO.backlinks(docs, 'doc', 'd1'), [{ id: 'd2', title: 'Autre' }]);
+    assert.deepEqual(WO.backlinks(docs, 'doc', 'd1'), [{ id: 'd2', title: 'Autre' }, { id: 'd3', title: 'Phrase' }]);
   });
 
   it('a task linked under a project keeps that project and its objective', () => {

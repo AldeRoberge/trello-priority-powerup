@@ -563,6 +563,34 @@
     assert(!$('.dc-pop'), 'popover closed');
   });
 
+  test('the link button lists documents and keeps the selected words', async function () {
+    await freshDoc('Source', 'voir paix ici');
+    var tn = ed().firstChild.firstChild;
+    var r = document.createRange();
+    r.setStart(tn, 5);
+    r.setEnd(tn, 9);
+    ed().focus();
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    await sleep(30);
+    $('[data-cmd="link"]').click();
+    var input = await waitFor(function () { return $('.dc-pop--link input'); }, 'document link popover');
+    eq(input.value, 'paix');
+    input.value = 'Plan';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    var row = await waitFor(function () {
+      return $$('.dc-link-list .dc-sg-row').filter(function (el) {
+        var label = el.querySelector('.dc-sg-label');
+        return label && label.textContent === 'Plan de projet';
+      })[0];
+    }, 'Plan de projet in the list');
+    row.click();
+    await sleep(40);
+    eq(md(), 'voir [paix](doc:doc2) ici');
+    ed().querySelector('a.dc-doclink').click();
+    await waitFor(function () { return $('.dc-title').value === 'Plan de projet'; }, 'opens the linked document');
+  });
+
   test('pasting formatted HTML keeps the formatting and drops the rest', async function () {
     await freshDoc('Collage', '');
     caretIn(ed().firstChild);

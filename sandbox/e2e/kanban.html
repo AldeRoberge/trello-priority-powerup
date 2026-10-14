@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/components/agent/agent-stats.css" />
   <link rel="stylesheet" href="/components/shared/view-tabs.css" />
   <link rel="stylesheet" href="/components/shared/card-fields.css" />
+  <link rel="stylesheet" href="/components/shared/card-quick.css" />
   <link rel="stylesheet" href="/components/shared/linear-pick.css" />
   <link rel="stylesheet" href="/components/shared/history-panel.css" />
   <link rel="stylesheet" href="/components/shared/progress-ring.css" />
@@ -59,6 +60,7 @@
   <script src="/components/agent/assistant-mount.js"></script>
   <script src="/components/shared/view-tabs.js"></script>
   <script src="/components/shared/card-fields.js"></script>
+  <script src="/components/shared/card-quick.js"></script>
   <script src="/components/shared/linear-pick.js"></script>
   <script src="/components/shared/new-card.js"></script>
   <script src="/components/shared/linear-keys.js"></script>
@@ -79,7 +81,7 @@
       { id: 'c1', name: 'Préparer la réunion de lancement', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 1, progress: 0, priorityScore: 7.4, priorityLabel: 'Haute', inputs: { empressement: 'vite', impact: 8 }, dueDate: '2026-09-01', desc: 'Inviter **tout le monde**\n- ordre du jour\n- salle', url: 'https://trello.com/c/1' },
       { id: 'c2', name: 'Refonte du tableau de bord', listId: 'l2', listName: 'En cours', category: 'started', color: '#1d7afc', pos: 2, progress: 45, priorityScore: 5.1, priorityLabel: 'Moyenne', inputs: { empressement: 'assez-vite', impact: 6 }, dueDate: '2026-11-20', desc: 'Nouvelle maquette', url: 'https://trello.com/c/2' },
       { id: 'c3', name: 'Publier la version 2', listId: 'l2', listName: 'En cours', category: 'started', color: '#1d7afc', pos: 3, progress: 100, priorityScore: 9.2, priorityLabel: 'Critique', inputs: { empressement: 'au-plus-vite', impact: 9 }, dueDate: '2026-10-05', desc: '', url: 'https://trello.com/c/3' },
-      { id: 'c4', name: 'Archiver les anciennes cartes', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 4, progress: 10, priorityScore: 2.0, priorityLabel: 'Basse', inputs: { empressement: 'aucun', impact: 2 }, dueDate: '', desc: 'Rien de spécial', url: 'https://trello.com/c/4' },
+      { id: 'c4', name: 'Archiver les anciennes cartes', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 4, progress: 10, blocked: true, priorityScore: 2.0, priorityLabel: 'Basse', inputs: { empressement: 'aucun', impact: 2 }, dueDate: '', desc: 'Rien de spécial', url: 'https://trello.com/c/4' },
     ];
     var lists = [{ id: 'l0', name: 'Idées', category: 'backlog', color: '#8270db', icon: 'hourglass' }, { id: 'l1', name: 'À faire', category: 'unstarted', color: '#626f86', icon: 'circle' }, { id: 'l2', name: 'En cours', category: 'started', color: '#1d7afc', icon: 'player-play-filled' }, { id: 'l3', name: 'Terminé', category: 'completed', color: '#22a06b', icon: 'circle-check' }];
     TableTrello.load = function () {

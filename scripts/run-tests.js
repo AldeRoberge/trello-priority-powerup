@@ -94,6 +94,7 @@ const UNIT_FILES = [
   'entities-archetype.test.js',
   'entities-ontology.test.js',
   'entities-life.test.js',
+  'entities-work-life.test.js',
   'entities-systems.test.js',
   'entities-systems-ai.test.js',
   'agent-entities.test.js',

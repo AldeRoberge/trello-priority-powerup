@@ -215,11 +215,14 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-node--subtask .mm-check { color: var(--mm-accent); }
 .mm-edge.is-cycle { stroke: var(--tp-danger-text); }
 .mm-edge.is-dim { opacity: 0.12; }
+.mm-edge.is-context { opacity: 0.34; }
+.mm-arrow.is-context, .mm-edge-neck.is-context { opacity: 0.4; }
 .mm-edge-glow { fill: none; stroke-width: 7; stroke-linecap: round; opacity: 0.14; pointer-events: none; stroke: var(--tp-text-muted); }
 .mm-edge-glow--depends { stroke: var(--mm-depends); }
 .mm-edge-glow--by { stroke: var(--mm-person); }
 .mm-edge-glow--at { stroke: var(--mm-place); }
 .mm-edge-glow.is-dim { opacity: 0.03; }
+.mm-edge-glow.is-context { opacity: 0.08; }
 .mm-wire-group:hover .mm-edge-glow { opacity: 0.35; }
 .mm-edge-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
 .mm-arrow--depends { fill: var(--mm-depends); }
@@ -240,6 +243,8 @@ html[data-color-mode] .tp-page--mindmap {
 /* Nodes: cards with a tinted header, same look as the Assignés / Lieux node views */
 .mm-node { cursor: grab; outline: none; --mm-accent: #579dff; }
 .mm-node.is-dim { opacity: 0.22; }
+.mm-node.is-context { opacity: 0.62; }
+.mm-orbit-ring { fill: none; stroke: var(--tp-text); stroke-opacity: 0.16; stroke-width: 1; pointer-events: none; }
 .mm-node .mm-shape {
   fill: var(--tp-surface-subtle);
   stroke: color-mix(in srgb, var(--tp-text) 14%, transparent);

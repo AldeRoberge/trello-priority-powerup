@@ -5,6 +5,12 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-13
 - Parcours : la carte relie missions et projets, et propose quelques actions avec la raison, l'échéance et ce qui bloque.
+- Cartes : une liste terminée n’écrit plus « Sans prochaine action » sous le titre. La revue garde le nombre. La mindmap ne signale plus « Sans projet ».
+- Documents : le bouton lien propose d'abord les documents. Les mots sélectionnés restent et ouvrent le document choisi.
+- Mindmap : cliquer une carte la laisse en place et rassemble autour d'elle ce qui lui est lié. Un clic dans le vide remet la carte où elle était.
+- Kanban : un clic garde la carte à côté du tableau. Les colonnes remplissent la hauteur. En retard et Bloquées filtrent. L’IA d’une carte n’apparaît qu’au besoin.
+- Entités : une tâche remonte jusqu’à sa vision. On retrouve qui la dirige, qui la bloque, et qui travaille avec.
+- Assistant : ouvrir le chat place le curseur dans le message, prêt à écrire.
 - Documents : sélectionner un nom propose « Créer une entité ». Le nom reste, lié à l'entité.
 - Entités : « il y a deux mois » donne le mois, même écrit « moi ». « dans deux mois » aussi.
 - Mindmap : l’icône Dépendances et l’icône Sélection s’affichent.

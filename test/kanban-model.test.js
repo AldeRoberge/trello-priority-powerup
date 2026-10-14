@@ -75,4 +75,25 @@ describe('KanbanModel', () => {
     assert.deepEqual(KM.reorderLists(lists, 'zzz', 0).map((l) => l.id), ['a', 'b', 'c']);
     assert.deepEqual(lists.map((l) => l.id), ['a', 'b', 'c']);
   });
+
+  it('filters blocked and overdue independently, and ignores a past date on a closed list', () => {
+    const today = '2026-10-13';
+    const extra = rows.concat([
+      { id: 'e', listId: 'l1', pos: 2, name: 'Late', due: '2020-01-01', statutKey: 'unstarted', blocked: false },
+      { id: 'f', listId: 'l2', pos: 3, name: 'Hold', due: '2026-12-01', statutKey: 'started', blocked: true },
+      { id: 'g', listId: 'l3', pos: 2, name: 'Done late', due: '2020-01-01', statutKey: 'completed', blocked: true },
+    ]);
+    assert.equal(KM.isOverdueRow(extra[4], today), true);
+    assert.equal(KM.isOverdueRow(extra[6], today), false);
+    assert.equal(KM.isBlockedRow(extra[5]), true);
+    const late = KM.buildColumns(extra, lists, { overdue: true, today });
+    assert.deepEqual(late.map((c) => c.cards.map((r) => r.id)), [['e'], [], []]);
+    const held = KM.buildColumns(extra, lists, { blocked: true, today });
+    assert.deepEqual(held[1].cards.map((r) => r.id), ['f']);
+    assert.deepEqual(held[2].cards.map((r) => r.id), ['g']);
+    const both = KM.buildColumns(extra, lists, { blocked: true, overdue: true, today });
+    assert.deepEqual(both.map((c) => c.cards.length), [0, 0, 0]);
+    const counts = KM.facetCounts(KM.rowsInView(extra, lists, { hideDone: true }), today);
+    assert.deepEqual(counts, { blocked: 1, overdue: 1 });
+  });
 });

@@ -131,6 +131,8 @@
       graph: { nodes: [], edges: [] },
       cycles: {},
       selected: null,
+      rest: null, // home positions while a focus orbit is on screen
+      rings: null, // node id → 0 focus, 1 direct, 2 the relation just behind
       selectedEdge: null,
       selectedGroup: null,
       multi: {}, // node id → true: cards / goals picked with Ctrl+A or Ctrl/Maj+click
@@ -163,6 +165,10 @@
     var statusTimer = null;
     var nodeEls = Object.create(null);
     var edgeEls = Object.create(null);
+    var poseGen = 0;
+    var orbitFrame = 0;
+    var orbitRingEl = null;
+    var poseTargets = null;
 
     root.innerHTML = '';
     var els = {
@@ -403,6 +409,7 @@
     /* ── Graph build / layout ─────────────────────────────────────── */
     function rebuild(opts) {
       opts = opts || {};
+      parkOrbit();
       var prev = Object.create(null);
       state.graph.nodes.forEach(function (n) { if (isFinite(n.x)) prev[n.id] = { x: n.x, y: n.y }; });
       var g = MM().buildGraph(state.pending.length ? state.records.concat(state.pending) : state.records, { hideDone: state.hideDone, filter: state.filter, show: state.show, goals: state.goals });
@@ -433,6 +440,7 @@
       Object.keys(state.multi).forEach(function (id) { if (!nodeById(id)) delete state.multi[id]; });
       if (state.relink && !edgeById(state.relink)) state.relink = null;
       if (state.linkFrom && !nodeById(state.linkFrom)) state.linkFrom = null;
+      if (state.selected && nodeById(state.selected)) beginOrbit(false);
       renderBar();
       renderGraph();
       renderPanel();
@@ -602,6 +610,7 @@
       positionAll();
       applyFocus();
       applyLod(true);
+      syncOrbitRing();
       if (global.InsertGap) {
         global.InsertGap.watch(els.canvas, {
           item: '.mm-node--task',
@@ -627,8 +636,10 @@
       if (n.bodyH) g.setAttribute('data-body', '');
       var x0 = -n.w / 2;
       var y0 = -n.h / 2;
-      g.appendChild(s('rect', { class: 'mm-shape', x: x0, y: y0, width: n.w, height: n.h, rx: 9 }));
-      g.appendChild(s('path', { class: 'mm-head', d: topRounded(x0, y0, n.w, n.headH, 9) }));
+      var corner = n.kind === 'person' ? 16 : n.kind === 'place' ? 4 : n.kind === 'goal' ? 14 : 9;
+      if (n.headH && corner > n.headH / 2) corner = Math.max(4, n.headH / 2);
+      g.appendChild(s('rect', { class: 'mm-shape', x: x0, y: y0, width: n.w, height: n.h, rx: corner }));
+      g.appendChild(s('path', { class: 'mm-head', d: topRounded(x0, y0, n.w, n.headH, corner) }));
       g.appendChild(s('line', { class: 'mm-head-rule', x1: x0, x2: x0 + n.w, y1: y0 + n.headH, y2: y0 + n.headH }));
       var textX = x0 + 12;
       if (n.kind !== 'task') {
@@ -880,8 +891,11 @@
       state.graph.nodes.forEach(function (n) {
         var g = nodeEls[n.id];
         if (!g) return;
-        var lit = selEdge ? n.id === selEdge.from || n.id === selEdge.to : !focus || n.id === focus || near[n.id];
-        g.classList.toggle('is-dim', !lit);
+        var ring = state.rings && state.rings[n.id];
+        var context = !!(focus && !selEdge && ring === 2);
+        var lit = selEdge ? n.id === selEdge.from || n.id === selEdge.to : !focus || n.id === focus || near[n.id] || ring === 1;
+        g.classList.toggle('is-dim', !lit && !context);
+        g.classList.toggle('is-context', context);
         g.classList.toggle('is-selected', n.id === focus);
         g.classList.toggle('is-multi', !!state.multi[n.id]);
         g.classList.toggle('is-linking', n.id === state.linkFrom);
@@ -892,10 +906,18 @@
         if (!ref) return;
         var chosen = !!selEdge && e.id === selEdge.id;
         var lit = selEdge ? chosen : !focus || e.from === focus || e.to === focus;
-        ref.line.classList.toggle('is-dim', !lit);
-        ref.glow.classList.toggle('is-dim', !lit);
-        if (ref.arrow) ref.arrow.classList.toggle('is-dim', !lit);
-        if (ref.neck) ref.neck.classList.toggle('is-dim', !lit);
+        var contextEdge = !lit && !selEdge && !!focus && state.rings && (
+          (state.rings[e.from] === 1 && state.rings[e.to] === 2) ||
+          (state.rings[e.to] === 1 && state.rings[e.from] === 2)
+        );
+        ref.line.classList.toggle('is-dim', !lit && !contextEdge);
+        ref.glow.classList.toggle('is-dim', !lit && !contextEdge);
+        if (ref.arrow) ref.arrow.classList.toggle('is-dim', !lit && !contextEdge);
+        if (ref.neck) ref.neck.classList.toggle('is-dim', !lit && !contextEdge);
+        ref.line.classList.toggle('is-context', !!contextEdge);
+        ref.glow.classList.toggle('is-context', !!contextEdge);
+        if (ref.arrow) ref.arrow.classList.toggle('is-context', !!contextEdge);
+        if (ref.neck) ref.neck.classList.toggle('is-context', !!contextEdge);
         ref.line.classList.toggle('is-selected', chosen);
         ref.glow.classList.toggle('is-selected', chosen);
         ref.label.classList.toggle('is-shown', (!!focus || chosen) && lit);
@@ -910,6 +932,25 @@
      * `nodes` by the same amount, then redraws their wires and the selection box.
      */
     function dragGroup(nodes, lead) {
+      var dragging = {};
+      nodes.forEach(function (m) { dragging[m.id] = true; });
+      if (poseTargets) {
+        state.graph.nodes.forEach(function (m) {
+          if (dragging[m.id] || !poseTargets[m.id]) return;
+          m.x = poseTargets[m.id].x;
+          m.y = poseTargets[m.id].y;
+        });
+      }
+      poseGen++;
+      if (orbitFrame) clearInterval(orbitFrame);
+      var hold = null;
+      if (state.rest) {
+        hold = {};
+        nodes.forEach(function (m) {
+          var home = state.rest[m.id];
+          if (home) hold[m.id] = { dx: m.x - home.x, dy: m.y - home.y };
+        });
+      }
       var origin = nodes.map(function (m) { return { n: m, x: m.x, y: m.y }; });
       var x0 = lead.x, y0 = lead.y;
       var ids = {};
@@ -944,7 +985,16 @@
           if (gx) gGuides.appendChild(s('line', { class: 'mm-guide', x1: gx.at, x2: gx.at, y1: top, y2: bottom }));
           if (gy) gGuides.appendChild(s('line', { class: 'mm-guide', y1: gy.at, y2: gy.at, x1: left, x2: right }));
         }
-        origin.forEach(function (o) { o.n.x = o.x + dx; o.n.y = o.y + dy; positionNode(o.n); });
+        origin.forEach(function (o) {
+          o.n.x = o.x + dx;
+          o.n.y = o.y + dy;
+          positionNode(o.n);
+          if (hold && hold[o.n.id] && state.rest && state.rest[o.n.id]) {
+            state.rest[o.n.id].x = o.n.x - hold[o.n.id].dx;
+            state.rest[o.n.id].y = o.n.y - hold[o.n.id].dy;
+          }
+          if (poseTargets) poseTargets[o.n.id] = { x: o.n.x, y: o.n.y };
+        });
         state.graph.edges.forEach(function (e) { if (ids[e.from] || ids[e.to]) positionEdge(e); });
         drawSelectionBox();
         drawHulls();
@@ -1028,6 +1078,7 @@
         svg.removeEventListener('pointercancel', up);
         if (box.parentNode) box.parentNode.removeChild(box);
         if (!moved) { if (!additive) select(null); return; }
+        if (state.rest) endOrbit(true);
         renderPanel();
         var count = Object.keys(state.multi).length;
         setStatus(count + (count > 1 ? ' éléments sélectionnés' : ' élément sélectionné'), 'ok');
@@ -1176,6 +1227,191 @@
       }
     }
 
+    function syncOrbitRing() {
+      var focus = state.selected && nodeById(state.selected);
+      var rings = state.rings;
+      if (!focus || !rings || !gEdges) {
+        if (orbitRingEl && orbitRingEl.parentNode) orbitRingEl.parentNode.removeChild(orbitRingEl);
+        return;
+      }
+      var sum = 0;
+      var count = 0;
+      state.graph.nodes.forEach(function (n) {
+        if (rings[n.id] !== 1) return;
+        sum += Math.sqrt(Math.pow(n.x - focus.x, 2) + Math.pow(n.y - focus.y, 2));
+        count++;
+      });
+      if (!count) {
+        if (orbitRingEl && orbitRingEl.parentNode) orbitRingEl.parentNode.removeChild(orbitRingEl);
+        return;
+      }
+      if (!orbitRingEl) orbitRingEl = s('circle', { class: 'mm-orbit-ring' });
+      if (!orbitRingEl.parentNode) gEdges.insertBefore(orbitRingEl, gEdges.firstChild);
+      orbitRingEl.setAttribute('cx', focus.x.toFixed(1));
+      orbitRingEl.setAttribute('cy', focus.y.toFixed(1));
+      orbitRingEl.setAttribute('r', (sum / count).toFixed(1));
+    }
+
+    /** Slide every node toward `targets` (id → {x,y}). A newer move cancels this one. */
+    function moveTo(targets, animate, done) {
+      var gen = ++poseGen;
+      poseTargets = targets;
+      if (orbitFrame) clearInterval(orbitFrame);
+      orbitFrame = 0;
+      var from = {};
+      state.graph.nodes.forEach(function (n) { from[n.id] = { x: n.x, y: n.y }; });
+      function apply(t) {
+        state.graph.nodes.forEach(function (n) {
+          var a = from[n.id];
+          var b = targets[n.id];
+          if (!a || !b || !isFinite(b.x) || !isFinite(b.y)) return;
+          n.x = a.x + (b.x - a.x) * t;
+          n.y = a.y + (b.y - a.y) * t;
+        });
+        if (state.graph.nodes.some(function (n) { return nodeEls[n.id]; })) {
+          positionAll();
+          try { drawHulls(); } catch (e) { /* a hull must not freeze the move */ }
+          try { drawSelectionBox(); } catch (e) { /* ignore */ }
+          try { syncOrbitRing(); } catch (e) { /* ignore */ }
+        }
+      }
+      function finish() {
+        if (orbitFrame) clearInterval(orbitFrame);
+        orbitFrame = 0;
+        nudgeOrbitIntoView();
+        if (done) done(gen);
+      }
+      var reduce = false;
+      try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduce = false; }
+      if (!animate || reduce) {
+        apply(1);
+        finish();
+        return;
+      }
+      // One interval, started here. Chained timeouts stall in a background tab, so the gather never arrives.
+      var t0 = performance.now();
+      orbitFrame = setInterval(function () {
+        if (gen !== poseGen) { clearInterval(orbitFrame); orbitFrame = 0; return; }
+        var t = Math.min(1, (performance.now() - t0) / 480);
+        var e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        try { apply(e); } catch (err) { /* keep the interval alive */ }
+        if (t >= 1) finish();
+      }, 16);
+    }
+
+    /** Slide the canvas just enough that the gathered neighbourhood stays on screen. The focus stays inside. */
+    function nudgeOrbitIntoView() {
+      if (!state.rings) return;
+      var k = state.view.k || 1;
+      var w = els.canvas.clientWidth || 0;
+      var h = els.canvas.clientHeight || 0;
+      if (!w || !h) return;
+      var pad = 16;
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      state.graph.nodes.forEach(function (n) {
+        var ring = state.rings[n.id];
+        if (ring !== 0 && ring !== 1 && ring !== 2) return;
+        var hw = (n.w || 160) / 2;
+        var hh = (n.h || 40) / 2;
+        minX = Math.min(minX, n.x - hw);
+        maxX = Math.max(maxX, n.x + hw);
+        minY = Math.min(minY, n.y - hh);
+        maxY = Math.max(maxY, n.y + hh);
+      });
+      if (!isFinite(minX)) return;
+      var left = minX * k + state.view.x;
+      var right = maxX * k + state.view.x;
+      var top = minY * k + state.view.y;
+      var bottom = maxY * k + state.view.y;
+      var dx = 0;
+      var dy = 0;
+      if (top < pad) dy = pad - top;
+      else if (bottom > h - pad) dy = (h - pad) - bottom;
+      if (left < pad) dx = pad - left;
+      else if (right > w - pad) dx = (w - pad) - right;
+      if (bottom - top > h - pad * 2 || right - left > w - pad * 2) {
+        var focus = state.selected && nodeById(state.selected);
+        if (focus) {
+          var fx = focus.x * k + state.view.x + dx;
+          var fy = focus.y * k + state.view.y + dy;
+          var fw = ((focus.w || 160) * k) / 2;
+          var fh = ((focus.h || 40) * k) / 2;
+          if (fx - fw < pad) dx += pad - (fx - fw);
+          if (fx + fw > w - pad) dx -= (fx + fw) - (w - pad);
+          if (fy - fh < pad) dy += pad - (fy - fh);
+          if (fy + fh > h - pad) dy -= (fy + fh) - (h - pad);
+        }
+      }
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      state.view.x += dx;
+      state.view.y += dy;
+      applyView();
+    }
+
+    /** Put the resting layout back on the nodes and forget the orbit. Used before a rebuild. */
+    function parkOrbit() {
+      poseGen++;
+      poseTargets = null;
+      if (orbitFrame) clearInterval(orbitFrame);
+      orbitFrame = 0;
+      if (state.rest) {
+        state.graph.nodes.forEach(function (n) {
+          var home = state.rest[n.id];
+          if (home) { n.x = home.x; n.y = home.y; }
+        });
+      }
+      state.rest = null;
+      state.rings = null;
+    }
+
+    /**
+     * Gather the neighbourhood around the selected node. The node stays on screen;
+     * everyone else moves from the resting layout, or from where a previous orbit left them.
+     */
+    function beginOrbit(animate) {
+      var focus = state.selected && nodeById(state.selected);
+      if (!focus || !isFinite(focus.x) || !isFinite(focus.y)) return;
+      if (!state.rest) {
+        state.rest = {};
+        state.graph.nodes.forEach(function (n) {
+          state.rest[n.id] = { x: n.x, y: n.y };
+        });
+      }
+      var virtual = state.graph.nodes.map(function (n) {
+        var home = state.rest[n.id] || { x: n.x, y: n.y };
+        var here = n.id === focus.id;
+        return {
+          id: n.id, kind: n.kind, label: n.label, w: n.w, h: n.h,
+          x: here ? focus.x : home.x,
+          y: here ? focus.y : home.y,
+        };
+      });
+      var pose = MM().orbit(virtual, state.graph.edges, focus.id);
+      state.rings = pose.rings;
+      applyFocus();
+      moveTo(pose.positions, animate);
+    }
+
+    function endOrbit(animate) {
+      if (!state.rest) {
+        state.rings = null;
+        syncOrbitRing();
+        return;
+      }
+      var token = state.rest;
+      var back = {};
+      state.graph.nodes.forEach(function (n) {
+        if (token[n.id]) back[n.id] = { x: token[n.id].x, y: token[n.id].y };
+      });
+      state.rings = null;
+      applyFocus();
+      moveTo(back, animate, function (gen) {
+        if (gen !== poseGen) return;
+        if (state.rest === token) state.rest = null;
+        syncOrbitRing();
+      });
+    }
+
     function select(id) {
       state.multi = {};
       state.selected = id;
@@ -1185,6 +1421,8 @@
       applyFocus();
       renderPanel();
       applyLod();
+      if (id) beginOrbit(true);
+      else endOrbit(true);
       if (typeof paintGroupSelection === 'function') paintGroupSelection();
     }
 
@@ -1194,6 +1432,7 @@
       state.selected = null;
       state.selectedGroup = null;
       state.confirmDelete = null;
+      endOrbit(true);
       applyFocus();
       renderPanel();
       if (typeof paintGroupSelection === 'function') paintGroupSelection();
@@ -1213,6 +1452,7 @@
       state.selectedEdge = null;
       state.selectedGroup = null;
       if (state.multi[n.id]) delete state.multi[n.id]; else state.multi[n.id] = true;
+      endOrbit(false);
       applyFocus();
       renderPanel();
       if (typeof paintGroupSelection === 'function') paintGroupSelection();
@@ -1225,6 +1465,7 @@
       state.selectedEdge = null;
       state.selectedGroup = null;
       state.confirmDelete = null;
+      endOrbit(false);
       applyFocus();
       renderPanel();
       if (typeof paintGroupSelection === 'function') paintGroupSelection();

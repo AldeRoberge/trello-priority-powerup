@@ -16,7 +16,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Lier une tâche (carte) | `@@` |
 | Créer une tâche | sélectionner du texte, puis **Créer une tâche** (ou clic droit). Le texte devient une tâche du tableau, liée à la place de la sélection. La flèche choisit la liste |
 | Créer une entité | sélectionner le nom, puis **Créer une entité** (ou clic droit). Le nom reste, lié à la nouvelle entité. Un nom déjà connu est relié, pas recopié |
-| Lier un autre document | `@@@` |
+| Lier un autre document | `@@@`, `[[`, ou le bouton lien (Ctrl+K). Les mots sélectionnés restent et ouvrent le document. Une adresse collée reste un lien web |
 | Tout chercher d'un coup | `@` seul liste personnes, tâches et documents (3 de chaque) |
 | Commandes | `/` puis un mot (`/titre`, `/liste`, `/tableau`, `/note`, `/image`…) |
 | Bloc | survoler une ligne : **+** ajoute un bloc, la poignée la glisse ou ouvre le menu pour changer le type |
@@ -43,7 +43,7 @@ Les données de Power-Up sont limitées à 4096 caractères par portée, c'est t
 - la carte est classée dans la **première liste** du tableau (une carte archivée a besoin d'une liste) ;
 - un bloc caché `<!--cerveau-meta type: document, rev: N -->` en fin de description porte un compteur de révision : si quelqu'un d'autre enregistre entre-temps, la sauvegarde est refusée et une barre propose *Charger sa version* ou *Écraser avec la mienne*.
 
-Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `==surligné==`, `{c:red}texte{/c}` et `{h:green}texte{/h}` (gris, brun, orange, jaune, vert, bleu, violet, rose, rouge), `` `code` ``, `[texte](https://…)`, `![légende](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, encadrés `> [!note]` / `> [!tip]` / `> [!warning]`, tableaux, `<!--align:center-->` ou `<!--align:right-->` sur la ligne suivante, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`, `[@texte](entity:ID)`.
+Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `==surligné==`, `{c:red}texte{/c}` et `{h:green}texte{/h}` (gris, brun, orange, jaune, vert, bleu, violet, rose, rouge), `` `code` ``, `[texte](https://…)` ou `[texte](doc:ID)`, `![légende](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, encadrés `> [!note]` / `> [!tip]` / `> [!warning]`, tableaux, `<!--align:center-->` ou `<!--align:right-->` sur la ligne suivante, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`, `[@texte](entity:ID)`.
 
 ## Limites
 

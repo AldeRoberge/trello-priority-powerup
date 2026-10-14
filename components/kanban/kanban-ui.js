@@ -350,7 +350,7 @@
           onclick: function () { HD.set(!state.hideDone); },
         }),
         HP ? HP.button(document.body) : null,
-      ].forEach(function (c) { els.bar.appendChild(c); });
+      ].forEach(function (c) { if (c) els.bar.appendChild(c); });
       paintStatus();
       paintCount();
     }
@@ -499,9 +499,8 @@
       var kids = [];
       if (row.category) kids.push(h('div', { class: 'kb-cat', text: row.category }));
       kids.push(h('div', { class: 'kb-title', text: row.name || 'Sans titre' }));
-      var step = global.WorkOS && global.WorkOS.stepState(row);
-      if (step && step.text) kids.push(h('div', { class: 'kb-step', text: step.text }));
-      else if (step && step.missing) kids.push(h('div', { class: 'kb-step is-missing', text: 'Sans prochaine action' }));
+      var stepText = global.WorkOS && global.WorkOS.stepText(row);
+      if (stepText) kids.push(h('div', { class: 'kb-step', text: stepText }));
       var place = state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[row.id]) : '';
       if (place) kids.push(h('div', { class: 'kb-place', text: place }));
       if (badges.length) kids.push(h('div', { class: 'kb-badges' }, badges));
@@ -798,8 +797,7 @@
             onclick: function () { openComposer(list.id); },
           }, [icon('plus')]),
         ]),
-        body,
-        composer(list),
+        h('div', { class: 'kb-col-scroll' }, [body, composer(list)]),
       ]);
       if (global.InsertGap) {
         global.InsertGap.watch(body, {
@@ -822,7 +820,7 @@
       if (state.composer !== list.id) {
         return h('button', { class: 'kb-add', onclick: function () { openComposer(list.id); } }, [icon('plus'), h('span', { text: 'Ajouter une carte' })]);
       }
-      var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Titre de la carte… (ex. « Appeler Paul demain »)' });
+      var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Titre…' });
       var busy = false;
       function submit(fromBlur) {
         var name = input.value.trim();
@@ -872,8 +870,14 @@
     function renderBoard() {
       var scrollX = els.board.scrollLeft;
       var scrolls = {};
+      var focusId = '';
+      var active = document.activeElement;
+      if (active && active.closest && els.board.contains(active)) {
+        var focusedCard = active.closest('.kb-card');
+        if (focusedCard) focusId = focusedCard.getAttribute('data-id') || '';
+      }
       els.board.querySelectorAll('.kb-col').forEach(function (c) {
-        var b = c.querySelector('.kb-cards');
+        var b = c.querySelector('.kb-col-scroll');
         if (b) scrolls[c.getAttribute('data-list')] = b.scrollTop;
       });
       els.board.textContent = '';
@@ -885,10 +889,14 @@
       cols.forEach(function (c) { els.board.appendChild(column(c)); });
       els.board.scrollLeft = scrollX;
       els.board.querySelectorAll('.kb-col').forEach(function (c) {
-        var b = c.querySelector('.kb-cards');
+        var b = c.querySelector('.kb-col-scroll');
         var s = scrolls[c.getAttribute('data-list')];
         if (b && s) b.scrollTop = s;
       });
+      if (focusId) {
+        var again = els.board.querySelector('.kb-card[data-id="' + focusId + '"]');
+        if (again) again.focus({ preventScroll: true });
+      }
     }
 
     /* ── Writes ────────────────────────────────────────────────────── */
@@ -914,7 +922,7 @@
       moved.statutKey = list.category;
       moved.statutColor = list.color;
       // Dropped into a hidden (completed) column: dissolve the tile instead of making it vanish.
-      var tile = state.hideDone && !state.filter ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;
+      var tile = state.hideDone && !state.filter && !state.facets.blocked && !state.facets.overdue ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;
       var target = columns().filter(function (c) { return c.list.id === listId; })[0];
       if (tile && target && target.hidden) {
         tile.classList.remove('is-dragging');
@@ -1117,6 +1125,14 @@
         idOf: function (el) { return el.getAttribute('data-id'); },
         row: findRow,
         lists: function () { return state.lists; },
+        selectedId: function () {
+          var active = document.activeElement && document.activeElement.closest && document.activeElement.closest('.kb-card');
+          if (active && els.board.contains(active)) return active.getAttribute('data-id');
+          return state.detailId || '';
+        },
+        anchorFor: function (id) {
+          return els.board.querySelector('.kb-card[data-id="' + id + '"]') || els.detailBody;
+        },
         setStatus: function (row, list) { dropCard(row.id, list.id, null); },
         setUrgency: function (row, urgencyId) {
           setStatus('Enregistrement…', 'busy');
@@ -1129,6 +1145,52 @@
         newCard: openNewCard,
       });
     }
+    function typingTarget(node) {
+      if (!node || !node.tagName) return false;
+      var tag = node.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
+    }
+    function moveCardFocus(dx, dy) {
+      var cols = [].slice.call(els.board.querySelectorAll('.kb-col'));
+      var cur = document.activeElement && document.activeElement.closest ? document.activeElement.closest('.kb-card') : null;
+      if (!cur || !els.board.contains(cur)) {
+        var first = els.board.querySelector('.kb-card');
+        if (first) first.focus();
+        return;
+      }
+      var col = cur.closest('.kb-col');
+      var inCol = [].slice.call(col.querySelectorAll('.kb-card'));
+      var i = inCol.indexOf(cur);
+      var next = null;
+      if (dy) next = inCol[i + dy] || null;
+      else if (dx) {
+        var dest = cols[cols.indexOf(col) + dx];
+        if (!dest) return;
+        var there = [].slice.call(dest.querySelectorAll('.kb-card'));
+        next = there.length ? there[Math.min(i, there.length - 1)] : null;
+      }
+      if (!next) return;
+      next.focus({ preventScroll: true });
+      next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    document.addEventListener('keydown', function (e) {
+      if (!els.root || !document.body.contains(els.root)) return;
+      if (typingTarget(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('.kb-detail')) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if ((global.LinearPick && global.LinearPick.isOpen()) || (global.NewCard && global.NewCard.isOpen()) || (global.CardFields && global.CardFields.isOpen())) return;
+      if (document.querySelector('.tp-context-menu')) return;
+      if (e.key === 'Escape') {
+        if (!state.detailId) return;
+        e.preventDefault();
+        closeDetail();
+        return;
+      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveCardFocus(0, 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveCardFocus(0, -1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); moveCardFocus(1, 0); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); moveCardFocus(-1, 0); }
+    });
     renderBar();
     els.board.innerHTML = skeletonCols();
     if (global.AssistantDock) {

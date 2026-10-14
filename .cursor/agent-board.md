@@ -4,9 +4,11 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
+| journey | (released) `view-tabs.js` has the Parcours tab. Please keep that `VIEWS` entry. | Journey map and next-action queue are on main. |
+| link-doc | (released) | Link button searches documents; selected words stay |
 | orbit-map | `mindmap-model.js` (`orbit` only), `mindmap-ui.js` (focus orbit, node corners; not `renderBar` / `openMenu`), `mindmap-ui.css` (`.mm-node.is-context`, `.mm-edge.is-context`, `.mm-orbit-ring`; not `.mm-tool*`), `test/mindmap-model.test.js`, `mindmap.html` cache, `CHANGELOG.md` one line | Click gathers a neighbourhood; background click returns the map |
-| work-ladder | `entities-model.js` (purpose path, crew, phrase filter), `entities-library-work.js` (serves up, bloque incoming, parent task), `entities-systems.js` (3 presets), `test/entities-work-life.test.js`, `scripts/run-tests.js` one line, `docs/entities-ontologie.md` one row, `CHANGELOG.md` one line | Vision to task, who leads, who blocks |
-| board-face | `kanban-ui.js`, `kanban-ui.css`, `kanban-model.js`, `kanban.html`, `sandbox/e2e/kanban.html`, `test/kanban-model.test.js`, `test/shortcut-wiring.test.js` (one test), `CHANGELOG.md` one line | Side panel, full-height columns, overdue/blocked chips, AI on demand |
+| work-ladder | (released) | Vision to task, who leads, who blocks |
+| board-face | (released) | Kanban: side panel, full-height columns, overdue/blocked chips, AI on demand |
 | date-moi | (released) | « il y a deux moi » reads as a month |
 | orch-pan | (released) | Middle mouse pans the orchestrator like the Gantt |
 | doc-icon | (released) | Icon picker scrollbar sits beside the last column |
@@ -79,3 +81,4 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 | ghost-everywhere | (released) | Tab ghost on writing fields (`ai-complete.js` classify fallback). Assistant composer and Kanban « Demander à l'IA » left alone. |
 | genre-type | (released) | Typed genre searches the catalog; a new word creates the genre |
 | block-align | (done) `docs-ui.js` `firstLineCenter`/`showBlockUi`, `docs-ui.css` `.dc-block-ui` height, `docs.html` `?v=align-1`, changelog | Handle centered on the first line. Code block was ~10px high. |
+| quiet-gap | (done) `stepText` + painters in table, kanban, card-quick, dashboard; `contextFlags` empty | Missing structure is no longer painted on the item. Revue count stays. |

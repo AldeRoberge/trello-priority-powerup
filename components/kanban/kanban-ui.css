@@ -74,6 +74,30 @@ html[data-color-mode] .tp-page--kanban {
 .kb-btn--primary { background: var(--tp-primary); color: var(--tp-primary-text); box-shadow: none; }
 .kb-btn--primary:hover { background: var(--tp-primary-hover); }
 .kb-btn--icon { padding: 6px 8px; }
+.kb-facet {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kb-facet .ti { font-size: 14px; }
+.kb-facet-n { font-variant-numeric: tabular-nums; font-size: 11px; }
+.kb-facet:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.kb-facet.is-active {
+  color: var(--tp-danger-text);
+  background: color-mix(in srgb, var(--tp-danger-text) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tp-danger-text) 40%, transparent);
+}
+.kb-facet:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
 
 .kb-banner {
   padding: 8px 12px;
@@ -88,20 +112,30 @@ html[data-color-mode] .tp-page--kanban {
 /* ── Board + columns ────────────────────────────────────────────────── */
 .kb-board {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 12px;
   padding: 12px;
   overflow-x: auto;
   overflow-y: hidden;
   background: var(--tp-bg, var(--tp-surface));
 }
+.kb-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
 .kb-col {
   --kb-accent: #626f86;
   flex: 0 0 290px;
   width: 290px;
   max-height: 100%;
+  min-height: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   border-radius: 8px;
@@ -195,10 +229,17 @@ html[data-color-mode] .tp-page--kanban {
 }
 .kb-iconbtn:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
 
-.kb-cards {
+.kb-col-scroll {
   flex: 1 1 auto;
-  min-height: 24px;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.kb-cards {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
   padding: 2px 8px 4px;
   display: flex;
   flex-direction: column;
@@ -254,6 +295,9 @@ html[data-color-mode] .tp-page--kanban {
 }
 .kb-card:hover { box-shadow: inset 0 0 0 1px var(--tp-border-strong); background: var(--tp-surface); }
 .kb-card:focus-visible { box-shadow: inset 0 0 0 2px var(--tp-primary); }
+.kb-card.is-selected,
+.kb-card.is-selected:hover,
+.kb-card.is-selected:focus-visible { box-shadow: inset 0 0 0 2px var(--tp-primary); }
 .kb-card.is-dragging { opacity: 0.35; }
 .kb-card.is-dissolving { animation: kb-dissolve 0.45s ease-out forwards; pointer-events: none; }
 @keyframes kb-dissolve {
@@ -357,9 +401,9 @@ html[data-color-mode] .tp-page--kanban {
 /* ── Drop marker + add-card ─────────────────────────────────────────── */
 .kb-drop {
   flex: none;
-  height: 4px;
-  margin: -2px 0;
-  border-radius: 2px;
+  height: 6px;
+  margin: -1px 0;
+  border-radius: 3px;
   background: var(--tp-primary);
 }
 .kb-add {
@@ -455,5 +499,70 @@ html[data-color-mode] .tp-page--kanban {
   color: var(--tp-text-muted);
 }
 .kb-ai:focus-within .kb-ai-input:placeholder-shown ~ .kb-ai-hint { display: inline-block; }
-.kb-chip--empty { opacity: 0; }
-.kb-card:hover .kb-chip--empty, .kb-chip--empty:focus-visible { opacity: .6; }
+.kb-chip--empty { opacity: 0.55; }
+.kb-card:hover .kb-chip--empty,
+.kb-chip--empty:hover,
+.kb-chip--empty:focus-visible { opacity: 0.9; }
+
+.kb-detail {
+  flex: 0 0 320px;
+  width: 320px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--tp-border);
+  background: var(--tp-surface);
+}
+.kb-detail[hidden] { display: none; }
+.kb-detail-close { align-self: flex-end; margin: 6px 8px 0 0; flex: none; }
+.kb-detail-close:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
+.kb-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 14px 16px;
+}
+@media (max-width: 760px) {
+  .kb-detail {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+    width: min(100%, 360px);
+    flex-basis: auto;
+    box-shadow: -8px 0 24px color-mix(in srgb, var(--tp-text) 16%, transparent);
+  }
+}
+@media (max-width: 560px) {
+  .kb-detail { left: 0; width: auto; }
+}
+
+/* Sparkle on a card: out of the flow until the field is opened. */
+.kb-ask { display: contents; }
+.kb-ai-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.kb-card:hover .kb-ai-toggle,
+.kb-card:focus-within .kb-ai-toggle,
+.kb-ai-toggle:focus-visible { opacity: 0.75; }
+.kb-ai-toggle:hover,
+.kb-ai-toggle:focus-visible { opacity: 1; background: var(--tp-surface-hover); color: var(--tp-text); }
+.kb-ai-toggle:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
+.kb-ask.is-open { display: block; }
+.kb-ask.is-open .kb-ai { margin-top: 2px; }

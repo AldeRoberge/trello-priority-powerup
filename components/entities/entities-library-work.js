@@ -79,7 +79,7 @@
         { key: 'effort', label: 'Effort estimé', kind: 'number', unit: 'h' },
         { key: 'accompli', label: 'Travail accompli', kind: 'number', unit: '%' },
         { key: 'fait', label: 'Définition de terminé', kind: 'longtext' },
-        { key: 'parent', label: 'Fait partie de', kind: 'ref', refTypes: ['tache', 'projet'], rel: 'part-of' },
+        { key: 'parent', label: 'Fait partie de', kind: 'ref', refTypes: ['tache'], rel: 'part-of' },
         { key: 'bloque_par', label: 'Bloqué par', kind: 'refs', refTypes: [], rel: 'blocks', incoming: true },
       ],
     },

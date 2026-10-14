@@ -256,26 +256,10 @@
   }
 
   /**
-   * Context gaps of a node as [{ id, label }]. Never blocking, standalone work stays legitimate: a task
-   * should sit in a project, a project serve an objective, an objective a goal / mission / vision.
-   * `graph` is a buildGraph result with the goal nodes shown.
+   * Kept for callers. A task without a project, or a project without an objective, is ordinary
+   * work, so nothing is flagged on the node. The breadcrumb still shows the parents that exist.
    */
-  function contextFlags(graph, id) {
-    var byId = Object.create(null);
-    graph.nodes.forEach(function (n) {
-      byId[n.id] = n;
-    });
-    var node = byId[id];
-    if (!node) return [];
-    var rank = rankOf(node);
-    var above = ancestors(graph.edges, id).map(function (a) {
-      return rankOf(byId[a]);
-    });
-    var projectRank = levelRank('project');
-    var objectiveRank = levelRank('objective');
-    if (rank === TASK_RANK && above.indexOf(projectRank) < 0) return [{ id: 'no-project', label: 'Sans projet' }];
-    if (rank === projectRank && above.indexOf(objectiveRank) < 0) return [{ id: 'no-objective', label: 'Sans objectif' }];
-    if (rank === objectiveRank && !above.length) return [{ id: 'no-goal', label: 'Sans but ni mission' }];
+  function contextFlags() {
     return [];
   }
 
@@ -1139,10 +1123,10 @@
       });
     }
 
-    if (fullRing) placeIds(buckets.below, toRad(-90), toRad(270), 300);
+    if (fullRing) placeIds(buckets.below, toRad(-90), toRad(270), 280);
     else usedRoles.forEach(function (role) {
       var span = wedges[role];
-      placeIds(buckets[role], toRad(span[0]), toRad(span[1]), 300);
+      placeIds(buckets[role], toRad(span[0]), toRad(span[1]), 280);
     });
 
     var kindRank = { goal: 0, place: 1, person: 2, task: 3, subtask: 4 };
@@ -1171,9 +1155,9 @@
       extras = extras.slice(0, Math.min(5, contextLeft));
       if (!extras.length) return;
       var pa = Math.atan2(parent.y - cy, parent.x - cx);
-      var pr = Math.sqrt(Math.pow(parent.x - cx, 2) + Math.pow(parent.y - cy, 2)) || 300;
+      var pr = Math.sqrt(Math.pow(parent.x - cx, 2) + Math.pow(parent.y - cy, 2)) || 280;
       var fan = Math.min(0.7, 0.22 * extras.length);
-      var radius = pr + 250;
+      var radius = pr + 170;
       extras.forEach(function (id, i) {
         var t = extras.length === 1 ? 0 : (i / (extras.length - 1)) - 0.5;
         var a = pa + t * fan;
@@ -1185,37 +1169,25 @@
     });
 
     var moving = Object.keys(placed).filter(function (id) { return id !== focus.id; });
-    for (var it = 0; it < 18; it++) {
-      var moved = false;
-      for (var i = 0; i < moving.length; i++) {
-        for (var j = i + 1; j < moving.length; j++) {
-          var a = byId[moving[i]];
-          var b = byId[moving[j]];
-          var pa = positions[a.id];
-          var pb = positions[b.id];
-          var dx = pb.x - pa.x;
-          var dy = pb.y - pa.y;
-          var min = ((a.w || 200) + (b.w || 200)) / 2 + 28;
-          var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist >= min) continue;
-          moved = true;
-          if (dist < 1) { dx = 1; dy = 0; dist = 1; }
-          var push = (min - dist) / 2;
-          pa.x -= (dx / dist) * push;
-          pa.y -= (dy / dist) * push;
-          pb.x += (dx / dist) * push;
-          pb.y += (dy / dist) * push;
-        }
-      }
-      if (!moved) break;
-    }
+    moving.forEach(function (id) {
+      var near = positions[id];
+      var node = byId[id];
+      var fdx = near.x - cx;
+      var fdy = near.y - cy;
+      var minFocus = ((node.w || 200) + (focus.w || 200)) / 2 + 36;
+      var fd = Math.sqrt(fdx * fdx + fdy * fdy);
+      if (fd >= minFocus) return;
+      if (fd < 1) { fdx = 1; fdy = 0; fd = 1; }
+      near.x = cx + (fdx / fd) * minFocus;
+      near.y = cy + (fdy / fd) * minFocus;
+    });
 
     var bubble = 0;
     moving.forEach(function (id) {
       var p = positions[id];
       bubble = Math.max(bubble, Math.sqrt(Math.pow(p.x - cx, 2) + Math.pow(p.y - cy, 2)));
     });
-    bubble += 160;
+    bubble += 120;
     list.forEach(function (n) {
       if (!n || placed[n.id] || !isFinite(n.x) || !isFinite(n.y)) return;
       var dx = n.x - cx;
@@ -1366,6 +1338,7 @@
     applyGroupEdits: applyGroupEdits,
     scene: scene,
     facetsOf: facetsOf,
+    orbit: orbit,
     looseHull: looseHull,
   };
 })(typeof window !== 'undefined' ? window : this);

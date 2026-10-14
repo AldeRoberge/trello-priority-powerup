@@ -387,10 +387,9 @@
 
     function stepBlock(row) {
       var os = global.WorkOS;
-      if (!os || typeof os.stepState !== 'function') return null;
-      var step = os.stepState(row);
-      if (!step) return null;
-      return el('div', 'cq-step' + (step.missing ? ' is-missing' : ''), { text: step.text || 'Sans prochaine action' });
+      var text = os && typeof os.stepText === 'function' ? os.stepText(row) : '';
+      if (!text) return null;
+      return el('div', 'cq-step', { text: text });
     }
 
     function mentionBlock() {

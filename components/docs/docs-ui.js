@@ -4,6 +4,7 @@
  *  - toolbar (marks, color, highlight, align) + keyboard shortcuts + Markdown shortcuts + "/" (tables, callouts)
  *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
  *  - typing ** * ~~ == ++ ` renders the mark; the signs show again while the caret is in the word. [[ links a document
+ *  - the link button and Ctrl+K search documents; the selected words stay. A pasted address stays a web link
  *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
  *    a known entity is linked in place (faint until hover); the words stay as typed
  *    a task chip grows a pin when the pointer is close: parent (top), sibling (right), person (left)
@@ -2304,6 +2305,12 @@
       var a = e.target.closest && e.target.closest('a');
       if (a && editor.contains(a)) {
         e.preventDefault();
+        var docId = anchorDocId(a);
+        if (docId) {
+          if (state.docs.some(function (d) { return d.id === docId; }) || (state.current && state.current.id === docId)) openDoc(docId);
+          else toast('Ce document est introuvable.', 'error');
+          return;
+        }
         if (e.ctrlKey || e.metaKey) global.open(a.getAttribute('href'), '_blank', 'noopener');
         else openLinkPopover(a);
       }
@@ -4267,7 +4274,7 @@
         btn('underline', 'underline', 'Souligné (Ctrl+U)'),
         btn('strike', 'strikethrough', 'Barré (Ctrl+Maj+X)'),
         btn('code', 'code', 'Code (Ctrl+E)'),
-        btn('link', 'link', 'Lien (Ctrl+K)'),
+        btn('link', 'link', 'Lier un document (Ctrl+K)'),
         btn('highlight', 'highlight', 'Surligner (Ctrl+Maj+H)'),
         colorBtn,
         sep(),
@@ -4743,7 +4750,7 @@
         ibtn('underline', 'underline', 'Souligné'),
         ibtn('strike', 'strikethrough', 'Barré'),
         sep(),
-        ibtn('link', 'link', 'Lien'),
+        ibtn('link', 'link', 'Lier un document'),
         ibtn('ul', 'list', 'Liste à puces'),
         ibtn('ol', 'list-numbers', 'Liste numérotée'),
         h('button', {
@@ -5241,44 +5248,207 @@
       el.style.top = top + 'px';
     }
 
+    function anchorDocId(node) {
+      if (!node || typeof node.getAttribute !== 'function') return '';
+      var fromData = DM().cleanId(node.getAttribute('data-doc'));
+      if (fromData) return fromData;
+      return DM().docLinkId(node.getAttribute('href'));
+    }
+
+    /** A scheme the editor will not turn into a web link (`javascript:`, `doc:`, …). */
+    function rejectedAddress(q) {
+      var s = String(q || '').trim();
+      if (!s || DM().safeHref(s)) return false;
+      return /^[a-z][a-z0-9+.-]*:/i.test(s);
+    }
+
+    function docNamed(title) {
+      var folded = DM().fold(title);
+      var list = (state.index && state.index.doc) || [];
+      var i;
+      for (i = 0; i < list.length; i++) {
+        if (DM().fold(list[i].label) === folded) return true;
+      }
+      if (state.current) {
+        var self = DM().resolveMention(state.index, 'doc', state.current.id);
+        if (self && DM().fold(self.label) === folded) return true;
+      }
+      return false;
+    }
+
     function openLinkPopover(existing) {
       saveSel();
+      closeSuggest();
       closePop();
       var n = selNode();
-      var a = existing || (n && closestIn(n, 'A'));
+      var anchor = existing || (n && closestIn(n, 'A'));
       var sel = global.getSelection();
-      var rect = a ? a.getBoundingClientRect() : sel.rangeCount ? caretRect() : els.toolbar.getBoundingClientRect();
-      var input = h('input', { class: 'dc-input', type: 'text', placeholder: 'https://…', value: a ? a.getAttribute('href') || '' : '', 'aria-label': 'Adresse du lien', spellcheck: 'false' });
+      var rect = anchor ? anchor.getBoundingClientRect() : sel.rangeCount ? caretRect() : els.toolbar.getBoundingClientRect();
+      var seed = '';
+      if (anchor) {
+        var existingId = anchorDocId(anchor);
+        if (existingId) {
+          var known = DM().resolveMention(state.index, 'doc', existingId);
+          seed = (known && known.label) || '';
+        } else seed = anchor.getAttribute('href') || '';
+      } else {
+        var raw = '';
+        if (sel && !sel.isCollapsed && editor && editor.contains(sel.anchorNode)) raw = sel.toString();
+        else if (lastRange && !lastRange.collapsed) raw = lastRange.toString();
+        raw = String(raw).replace(/\s+/g, ' ').trim();
+        if (raw.length <= 80) seed = raw;
+      }
+      var input = h('input', {
+        class: 'dc-input',
+        type: 'text',
+        placeholder: 'Document…',
+        value: seed,
+        'aria-label': 'Document',
+        spellcheck: 'false',
+      });
       var err = h('div', { class: 'dc-pop-err', hidden: true });
-      function apply() {
-        var href = DM().safeHref(input.value);
-        if (!href) {
-          err.hidden = false;
-          err.textContent = 'Adresse non valide (http, https ou mailto).';
+      var list = h('div', { class: 'dc-link-list', role: 'listbox' });
+      var choices = [];
+      var active = 0;
+      var activeKey = anchorDocId(anchor);
+      activeKey = activeKey ? 'doc:' + activeKey : '';
+
+      function choiceKey(ch) {
+        if (!ch) return '';
+        if (ch.kind === 'doc') return 'doc:' + ch.item.id;
+        if (ch.kind === 'url') return 'url:' + ch.href;
+        return 'create:' + ch.title;
+      }
+      function choicesFor(raw) {
+        var trimmed = String(raw || '').trim();
+        if (rejectedAddress(trimmed)) return [];
+        var href = DM().safeHref(trimmed);
+        if (href) return [{ kind: 'url', href: href }];
+        var out = [];
+        function pushDocs(query) {
+          DM().searchMentions(state.index, 'doc', query).forEach(function (g) {
+            g.items.forEach(function (item) { out.push({ kind: 'doc', item: item }); });
+          });
+        }
+        pushDocs(trimmed);
+        var title = DM().cleanTitle(trimmed);
+        var create = title && !docNamed(title) ? { kind: 'create', title: title } : null;
+        if (!out.length && trimmed) {
+          if (create) out.push(create);
+          pushDocs('');
+          return out;
+        }
+        if (create) out.push(create);
+        return out;
+      }
+      function indexFor(rows) {
+        var i;
+        if (activeKey) {
+          for (i = 0; i < rows.length; i++) {
+            if (choiceKey(rows[i]) === activeKey) return i;
+          }
+        }
+        return 0;
+      }
+      function stampDoc(link, id) {
+        link.setAttribute('href', 'doc:' + id);
+        link.setAttribute('data-doc', id);
+        link.classList.add('dc-doclink');
+        link.removeAttribute('target');
+        link.removeAttribute('rel');
+      }
+      function docAnchorHtml(id, label) {
+        return '<a class="dc-doclink" href="doc:' + escHtml(id) + '" data-doc="' + escHtml(id) + '">' + escHtml(label) + '</a>';
+      }
+      function writeDocLink(linkNode, id) {
+        if (linkNode && linkNode.parentNode && editor && editor.contains(linkNode)) {
+          stampDoc(linkNode, id);
+          onEdit();
           return;
         }
-        closePop();
         restoreSel();
         var s = global.getSelection();
-        if (a) {
-          var r = document.createRange();
-          r.selectNodeContents(a);
-          s.removeAllRanges();
-          s.addRange(r);
-          document.execCommand('createLink', false, href);
-        } else if (s.isCollapsed) {
-          document.execCommand('insertHTML', false, '<a href="' + escHtml(href) + '">' + escHtml(input.value.trim()) + '</a>&nbsp;');
+        if (!s || !s.rangeCount) return;
+        if (s.isCollapsed) {
+          var item = DM().resolveMention(state.index, 'doc', id);
+          document.execCommand('insertHTML', false, withCompanion(docAnchorHtml(id, (item && item.label) || 'Document')));
+        } else {
+          document.execCommand('createLink', false, 'doc:' + id);
+          var link = closestIn(selNode(), 'A');
+          if (!link) {
+            document.execCommand('insertHTML', false, withCompanion(docAnchorHtml(id, s.toString())));
+            link = closestIn(selNode(), 'A');
+          }
+          if (link) stampDoc(link, id);
+        }
+        onEdit();
+      }
+      function applyDoc(id) {
+        var range = lastRange;
+        var linkNode = anchor;
+        closePop();
+        lastRange = range;
+        writeDocLink(linkNode, id);
+      }
+      function applyHref(href) {
+        var range = lastRange;
+        closePop();
+        lastRange = range;
+        if (anchor && anchor.parentNode && editor && editor.contains(anchor)) {
+          anchor.setAttribute('href', href);
+          anchor.removeAttribute('data-doc');
+          anchor.classList.remove('dc-doclink');
+          anchor.setAttribute('target', '_blank');
+          anchor.setAttribute('rel', 'noopener noreferrer');
+          onEdit();
+          return;
+        }
+        restoreSel();
+        var s = global.getSelection();
+        if (s && s.isCollapsed) {
+          document.execCommand('insertHTML', false, withCompanion('<a href="' + escHtml(href) + '" target="_blank" rel="noopener noreferrer">' + escHtml(href) + '</a>'));
         } else {
           document.execCommand('createLink', false, href);
         }
         onEdit();
       }
-      function removeLink() {
+      function applyCreate(title) {
+        var range = lastRange;
+        var linkNode = anchor;
         closePop();
+        setBusy('Création du document…');
+        DT().createDoc(t, title, '').then(
+          function (doc) {
+            setBusy('');
+            state.docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt });
+            sortDocs();
+            paintList();
+            rebuildIndex();
+            lastRange = range;
+            writeDocLink(linkNode, doc.id);
+            record({ type: 'create', targetId: doc.id, title: doc.title });
+            toast('Document « ' + doc.title + ' » créé.', 'ok');
+          },
+          function (err) {
+            setBusy('');
+            failure(err);
+          }
+        );
+      }
+      function applyChoice(ch) {
+        if (!ch) return;
+        if (ch.kind === 'url') applyHref(ch.href);
+        else if (ch.kind === 'doc') applyDoc(ch.item.id);
+        else if (ch.kind === 'create') applyCreate(ch.title);
+      }
+      function removeLink() {
+        var range = lastRange;
+        closePop();
+        lastRange = range;
         restoreSel();
-        if (a) {
+        if (anchor && anchor.parentNode) {
           var r = document.createRange();
-          r.selectNodeContents(a);
+          r.selectNodeContents(anchor);
           var s = global.getSelection();
           s.removeAllRanges();
           s.addRange(r);
@@ -5286,16 +5456,116 @@
         document.execCommand('unlink');
         onEdit();
       }
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); apply(); }
-        else if (e.key === 'Escape') { e.preventDefault(); closePop(); restoreSel(); }
-      });
-      var buttons = [h('button', { class: 'dc-btn dc-btn--primary', type: 'button', onclick: apply }, ['Appliquer'])];
-      if (a) {
-        buttons.push(h('button', { class: 'dc-btn', type: 'button', title: 'Ouvrir le lien', onclick: function () { global.open(a.getAttribute('href'), '_blank', 'noopener'); } }, [icon('external-link')]));
-        buttons.push(h('button', { class: 'dc-btn', type: 'button', title: 'Retirer le lien', onclick: removeLink }, [icon('unlink')]));
+      function markActive() {
+        Array.prototype.forEach.call(list.querySelectorAll('.dc-sg-row'), function (row) {
+          var on = Number(row.getAttribute('data-i')) === active;
+          row.classList.toggle('is-active', on);
+          if (on && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+        });
       }
-      pop = h('div', { class: 'dc-pop' }, [h('div', { class: 'dc-pop-row' }, [input]), err, h('div', { class: 'dc-pop-row' }, buttons)]);
+      function paintChoices() {
+        choices = choicesFor(input.value);
+        active = indexFor(choices);
+        if (choices[active]) activeKey = choiceKey(choices[active]);
+        list.textContent = '';
+        err.hidden = true;
+        if (rejectedAddress(input.value)) {
+          err.hidden = false;
+          err.textContent = 'Adresse non valide (http, https ou mailto).';
+        } else if (!choices.length) {
+          list.appendChild(h('div', { class: 'dc-sg-none', text: 'Aucun document' }));
+        }
+        choices.forEach(function (ch, i) {
+          var row;
+          if (ch.kind === 'doc') {
+            row = h('div', { class: 'dc-sg-row', title: ch.item.label }, [
+              icon('file-text', 'dc-sg-icon dc-sg-icon--doc'),
+              h('span', { class: 'dc-sg-label', text: ch.item.label }),
+              ch.item.sub ? h('span', { class: 'dc-sg-sub', text: ch.item.sub }) : null,
+            ]);
+          } else if (ch.kind === 'create') {
+            row = h('div', { class: 'dc-sg-row dc-sg-row--create', title: ch.title }, [
+              icon('plus', 'dc-sg-icon dc-sg-icon--doc'),
+              h('span', { class: 'dc-sg-label', text: 'Créer le document « ' + ch.title + ' »' }),
+            ]);
+          } else {
+            row = h('div', { class: 'dc-sg-row', title: ch.href }, [
+              icon('link', 'dc-sg-icon'),
+              h('span', { class: 'dc-sg-label', text: ch.href }),
+            ]);
+          }
+          row.setAttribute('role', 'option');
+          row.setAttribute('data-i', String(i));
+          if (i === active) row.classList.add('is-active');
+          row.addEventListener('mousedown', function (e) { e.preventDefault(); });
+          row.addEventListener('click', function () { applyChoice(ch); });
+          row.addEventListener('mousemove', function () {
+            if (active !== i) {
+              active = i;
+              activeKey = choiceKey(ch);
+              markActive();
+            }
+          });
+          list.appendChild(row);
+        });
+        if (pop && pop.parentNode) placePop(pop, rect);
+      }
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          if (!choices.length) return;
+          e.preventDefault();
+          active = (active + (e.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+          activeKey = choiceKey(choices[active]);
+          markActive();
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          var rows = choicesFor(input.value);
+          if (!rows.length) {
+            if (String(input.value || '').trim()) {
+              err.hidden = false;
+              err.textContent = 'Adresse non valide (http, https ou mailto).';
+            }
+            return;
+          }
+          applyChoice(rows[indexFor(rows)]);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          var range = lastRange;
+          closePop();
+          lastRange = range;
+          restoreSel();
+        }
+      });
+      input.addEventListener('input', paintChoices);
+      var tools = [];
+      if (anchor && !anchorDocId(anchor)) {
+        tools.push(h('button', {
+          class: 'dc-tb',
+          type: 'button',
+          title: 'Ouvrir le lien',
+          'aria-label': 'Ouvrir le lien',
+          onclick: function () { global.open(anchor.getAttribute('href'), '_blank', 'noopener'); },
+        }, [icon('external-link')]));
+      }
+      if (anchor) {
+        tools.push(h('button', {
+          class: 'dc-tb',
+          type: 'button',
+          title: 'Retirer le lien',
+          'aria-label': 'Retirer le lien',
+          onmousedown: function (e) { e.preventDefault(); },
+          onclick: removeLink,
+        }, [icon('unlink')]));
+      }
+      var field = h('div', { class: 'dc-pop-row' }, [input].concat(tools));
+      pop = h('div', { class: 'dc-pop dc-pop--link' }, [field, list, err]);
+      paintChoices();
       placePop(pop, rect);
       input.focus();
       input.select();

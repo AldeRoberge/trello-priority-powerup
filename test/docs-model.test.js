@@ -207,6 +207,16 @@ describe('DocsModel', () => {
         '<a href="https://a.com" target="_blank" rel="noopener noreferrer">site</a>'
       );
       assert.equal(DM.inlineToHtml('[x](javascript:alert(1))'), 'x');
+      assert.equal(DM.docLinkId('doc:abc123'), 'abc123');
+      assert.equal(DM.docLinkId('https://a.com'), '');
+      assert.equal(DM.safeHref('doc:abc123'), '');
+      assert.equal(
+        DM.inlineToHtml('[Lord Jesus said](doc:abc123)'),
+        '<a class="dc-doclink" href="doc:abc123" data-doc="abc123">Lord Jesus said</a>'
+      );
+      assert.equal(roundTrip('voir [Lord Jesus said](doc:abc123) ici'), 'voir [Lord Jesus said](doc:abc123) ici');
+      assert.equal(roundTrip('[**paix**](doc:abc123)'), '[**paix**](doc:abc123)');
+      assert.match(DM.inlineToHtml('[@Plan](doc:d1)'), /dc-mention--doc/);
       const chip = DM.inlineToHtml('[@Marie Tremblay](person:abc123)');
       assert.match(chip, /^<span class="dc-mention dc-mention--person" data-m="person" data-id="abc123" data-label="Marie Tremblay" contenteditable="false">/);
       assert.match(chip, /Marie Tremblay<\/span>$/);

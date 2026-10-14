@@ -1469,6 +1469,12 @@
       }
       return residentsOf(schema, entities, targetId);
     }
+    if (def.id === 'serves') {
+      if (dir === 'inv') return purposePath(schema, entities, targetId).slice(0, -1);
+      return descendantsOf(schema, entities, targetId)
+        .map(function (cid) { return findById(entities, cid); })
+        .filter(Boolean);
+    }
     flatten(entities, schema).forEach(function (e) {
       factsOf(schema, e).forEach(function (f) {
         if (!f.def || f.def.id !== def.id) return;
@@ -1600,15 +1606,38 @@
     return descendantsIn(hierarchy(schema, entities), id);
   }
 
-  /** The chain from the outermost container down to the entity (Canada, Montréal, Hôtel de Ville, Salon). */
+  /** Ids this entity points at through one vocabulary relation (flattened, so defaults count). */
+  function factObjects(schema, entity, relId) {
+    var out = [];
+    if (!entity) return out;
+    factsOf(schema, entity).forEach(function (f) {
+      if (!f.def || f.def.id !== relId || f.subject !== entity.id) return;
+      if (out.indexOf(f.object) < 0) out.push(f.object);
+    });
+    return out;
+  }
+
+  function flatMap(schema, entities) {
+    var map = {};
+    flatten(entities, schema).forEach(function (e) { map[e.id] = e; });
+    return map;
+  }
+
+  /** The chain from the outermost container down to the entity (Canada, Montréal, Hôtel de Ville, Salon).
+   * A place wins over the work ladder, so a task kept in a room still says where it is. */
   function pathOf(schema, entities, id) {
     var idx = hierarchy(schema, entities);
+    var byId = flatMap(schema, entities);
     var chain = [id];
     var seen = {};
     seen[id] = true;
     var cur = id;
     while (idx.parents[cur] && idx.parents[cur].length) {
-      var p = idx.parents[cur][0];
+      var options = idx.parents[cur];
+      var served = {};
+      factObjects(schema, byId[cur], 'serves').forEach(function (p) { served[p] = true; });
+      var spatial = options.filter(function (p) { return !served[p]; });
+      var p = (spatial.length ? spatial : options)[0];
       if (seen[p]) break;
       seen[p] = true;
       chain.unshift(p);
@@ -1619,6 +1648,71 @@
         return findById(entities, x);
       })
       .filter(Boolean);
+  }
+
+  /**
+   * Vision › mission › but › objectif › projet › tâche. Walks "contribue à", then a subtask's parent
+   * task. A place on the task does not replace this chain.
+   */
+  function purposePath(schema, entities, id) {
+    var byId = flatMap(schema, entities);
+    var chain = [];
+    var seen = {};
+    var cur = id;
+    while (cur && !seen[cur] && chain.length < 12) {
+      seen[cur] = true;
+      chain.unshift(cur);
+      var next = '';
+      var e = byId[cur];
+      if (e) {
+        var up = factObjects(schema, e, 'serves');
+        if (up.length) next = up[0];
+        else {
+          var parts = factObjects(schema, e, 'part-of');
+          for (var i = 0; i < parts.length && !next; i++) {
+            var parent = findById(entities, parts[i]);
+            if (parent && naturesOf(schema, parent).indexOf('event') >= 0) next = parts[i];
+          }
+        }
+      }
+      cur = next;
+    }
+    return chain
+      .map(function (x) {
+        return findById(entities, x);
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * People who lead the same work. From a person: whoever leads something on the ladder of what they lead.
+   * From a project (or any other entity): whoever leads it or what sits inside it.
+   */
+  function crewOf(schema, entities, id) {
+    var led = relationById('led-by');
+    var self = findById(entities, id);
+    if (!led || !self) return [];
+    var roots = [];
+    if (naturesOf(schema, self).indexOf('agent') >= 0) {
+      relatedTo(schema, entities, id, led, 'fwd').forEach(function (e) {
+        purposePath(schema, entities, e.id).forEach(function (n) {
+          if (roots.indexOf(n.id) < 0) roots.push(n.id);
+        });
+      });
+    } else roots.push(id);
+    var scope = {};
+    roots.forEach(function (rid) {
+      scope[rid] = true;
+      descendantsOf(schema, entities, rid).forEach(function (d) { scope[d] = true; });
+    });
+    var people = [];
+    Object.keys(scope).forEach(function (sid) {
+      relatedTo(schema, entities, sid, led, 'inv').forEach(function (p) {
+        if (p.id === id) return;
+        if (!people.some(function (x) { return x.id === p.id; })) people.push(p);
+      });
+    });
+    return people;
   }
 
   /** Would "id <type> toId" make something contain itself? Only containment relations can. */
@@ -1685,6 +1779,34 @@
         }
       }
       frontier = next;
+    }
+    var kids = {};
+    Object.keys(byId).forEach(function (eid) {
+      factObjects(schema, byId[eid], 'serves').forEach(function (parent) { addUnique(kids, parent, eid); });
+      if (naturesOf(schema, byId[eid]).indexOf('event') >= 0) {
+        factObjects(schema, byId[eid], 'part-of').forEach(function (parent) { addUnique(kids, parent, eid); });
+      }
+    });
+    var from2 = {};
+    from2[id] = '';
+    var front = [id];
+    for (var depth2 = 0; depth2 < 8; depth2++) {
+      var next2 = [];
+      for (var a = 0; a < front.length; a++) {
+        var list = kids[front[a]] || [];
+        for (var b = 0; b < list.length; b++) {
+          var m = list[b];
+          if (m in from2) continue;
+          from2[m] = front[a];
+          if (byId[m] && isMaterial(schema, byId[m])) {
+            var path2 = [m];
+            while (from2[path2[0]]) path2.unshift(from2[path2[0]]);
+            return { grounded: true, base: m, path: path2 };
+          }
+          next2.push(m);
+        }
+      }
+      front = next2;
     }
     return { grounded: false, base: '', path: [] };
   }
@@ -1964,7 +2086,7 @@
   }
 
   /** Kinship, care and residence: a phrase like "enfants de Léa" names the relation, not a type. */
-  var PHRASE_REL = ['parent-of', 'partner-of', 'sibling-of', 'friend-of', 'colleague-of', 'cares-for', 'lives-in'];
+  var PHRASE_REL = ['parent-of', 'partner-of', 'sibling-of', 'friend-of', 'colleague-of', 'cares-for', 'lives-in', 'serves', 'led-by', 'blocks', 'measured-by', 'delivers', 'threatens'];
 
   function relationPhrase(hay) {
     var best = null;
@@ -2124,6 +2246,22 @@
             if (!linked.some(function (x) { return x.id === e.id; })) linked.push(e);
           });
         });
+        if (types.length) {
+          var answerTypes = types.filter(function (tid) {
+            var via = '';
+            mentions.forEach(function (m) {
+              if (m.kind === 'type' && m.id === tid) via = m.via;
+            });
+            return via && phrase.via.indexOf(via) < 0;
+          });
+          if (answerTypes.length) {
+            linked = linked.filter(function (e) {
+              return typeClosure(schema, e.types).some(function (t) {
+                return answerTypes.indexOf(t) >= 0;
+              });
+            });
+          }
+        }
         mentions.push({ kind: 'relation', id: phrase.def.id, name: phrase.label, via: phrase.via });
         return {
           recognized: true,
@@ -2137,6 +2275,24 @@
           mentions: mentions,
         };
       }
+    }
+    if (/(?:^|\s)(?:travaille avec|equipe de|equipe du)(?:\s|$)/.test(hay) && named.length) {
+      var crew = [];
+      named.forEach(function (n) {
+        crewOf(schema, entities, n.entity.id).forEach(function (e) {
+          if (!crew.some(function (x) { return x.id === e.id; })) crew.push(e);
+        });
+      });
+      mentions.push({ kind: 'relation', id: 'crew', name: 'travaille avec', via: 'equipe' });
+      return {
+        recognized: true,
+        filter: {
+          crew: true,
+          refersTo: named.map(function (n) { return n.entity.id; }),
+        },
+        entities: crew,
+        mentions: mentions,
+      };
     }
     return { recognized: recognized, filter: filter, entities: found, mentions: mentions };
   }
@@ -2169,18 +2325,22 @@
       var o = findById(entities, r.to);
       parts.push(r.type + ': ' + (o ? o.name : '?') + (r.role ? ' (' + r.role + ')' : ''));
     });
-    var containers = pathOf(schema, entities, entity.id).slice(0, -1);
-    if (containers.length) {
-      parts.push(
-        'dans ' +
-          containers
-            .reverse()
-            .map(function (c) {
-              return c.name;
-            })
-            .join(' › ')
-      );
+    var ladder = purposePath(schema, entities, entity.id);
+    var containers = pathOf(schema, entities, entity.id);
+    function chainNames(list) {
+      return list
+        .slice(0, -1)
+        .reverse()
+        .map(function (c) { return c.name; })
+        .join(' › ');
     }
+    function sameChain(a, b) {
+      if (a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (a[i].id !== b[i].id) return false;
+      return true;
+    }
+    if (ladder.length > 1) parts.push('sert ' + chainNames(ladder));
+    if (containers.length > 1 && !sameChain(containers, ladder)) parts.push('dans ' + chainNames(containers));
     return (
       entity.name +
       (types ? ' [' + types + ']' : '') +
@@ -2280,6 +2440,8 @@
     ancestorsOf: ancestorsOf,
     descendantsOf: descendantsOf,
     pathOf: pathOf,
+    purposePath: purposePath,
+    crewOf: crewOf,
     wouldCycleRelation: wouldCycleRelation,
     groundingOf: groundingOf,
     ontologyIssues: ontologyIssues,

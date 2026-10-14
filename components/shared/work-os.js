@@ -60,6 +60,12 @@
     return null;
   }
 
+  /** Line under a title. Empty when the card has no open checklist item. */
+  function stepText(row) {
+    var s = stepState(row);
+    return s && s.text ? s.text : '';
+  }
+
   /**
    * hard: a time, an Outlook event, a due date with no start, or a range.
    * planned: start and due on the same day (what the orchestrator writes).
@@ -87,7 +93,7 @@
     (docs || []).forEach(function (d) {
       if (!d || !d.id || d.body == null) return;
       if (wantType === 'doc' && String(d.id) === wantId) return;
-      var re = /\[@[^\]]*\]\((task|doc|person):([^)\s:]+)(?::short)?\)/g;
+      var re = /\[@?[^\]]*\]\((task|doc|person):([^)\s:]+)(?::short)?\)/g;
       var m;
       var body = String(d.body);
       while ((m = re.exec(body))) {
@@ -366,6 +372,7 @@
     isOpen: isOpen,
     firstOpenStep: firstOpenStep,
     stepState: stepState,
+    stepText: stepText,
     dateKind: dateKind,
     ageDays: ageDays,
     backlinks: backlinks,

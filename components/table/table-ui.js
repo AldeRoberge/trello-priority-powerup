@@ -1085,10 +1085,8 @@
         td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
         td.title = row.name;
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
-        var step = global.WorkOS && global.WorkOS.stepState(row);
-        if (step && (step.text || step.missing)) {
-          td.appendChild(h('span', { class: 'tb-step' + (step.missing ? ' is-missing' : ''), text: step.text || 'Sans prochaine action' }));
-        }
+        var stepText = global.WorkOS && global.WorkOS.stepText(row);
+        if (stepText) td.appendChild(h('span', { class: 'tb-step', text: stepText }));
         var place = state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[row.id]) : '';
         if (place) td.appendChild(h('span', { class: 'tb-place', text: place }));
         td.addEventListener('click', function () {

@@ -1611,6 +1611,24 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 .dc-pop-err[hidden] {
   display: none;
 }
+.dc-pop--link {
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  gap: 4px;
+}
+.dc-pop--link .dc-input {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dc-link-list {
+  max-height: 260px;
+  overflow: auto;
+}
+.dc-link-list:empty {
+  display: none;
+}
 .dc-pop-name {
   font-weight: 600;
 }
