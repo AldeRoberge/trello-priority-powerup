@@ -1360,6 +1360,23 @@
     };
   }
 
+  /** A UTC instant written in the computer's local time (YYYY-MM-DD HH:MM). */
+  function localStamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function userTurnWithClock(text) {
+    var c = localClock();
+    var body = String(text || '').trim();
+    var note = '[Heure de cet ordinateur, maintenant : ' + c.today + ' ' + c.nowTime +
+      ' ' + c.timeZone + ' ' + c.utcOffset + '. Vrai pour toute la réponse. Ne cite pas cette ligne.]';
+    return body ? body + '\n' + note : note;
+  }
+
   function clockFromContext(context) {
     var live = localClock();
     return {
@@ -3049,6 +3066,7 @@
       timeZone: clock.timeZone,
       utcOffset: clock.utcOffset,
       appBuiltAt: appInfo.builtAt || null,
+      appBuiltLocal: appInfo.builtAt ? localStamp(appInfo.builtAt) : null,
       appReleases: appInfo.releases || [],
       /** 'task' = card popup; 'project' = board-wide assistant window. */
       scope: ASSISTANT_SCOPES.TASK,
@@ -4179,14 +4197,15 @@
           'Alignement souple\u00a0: tu es un ami avant d\'\u00eatre un outil. Tu peux aider sur la carte (priorit\u00e9, \u00e9ch\u00e9ance, blocage, progr\u00e8s) quand on te le demande, mais tu n\'es PAS limit\u00e9 \u00e0 Trello et tu ne pousses PAS le travail.'
         ];
     var builtAt = context && context.appBuiltAt;
+    var builtLocal = builtAt ? ((context && context.appBuiltLocal) || localStamp(builtAt)) : '';
     var recent = recentChangesText(context && context.appReleases);
     var clockLine =
-      'Horloge de son ordinateur : il est ' + clock.today + ' ' + clock.nowTime +
-      ' (' + clock.timeZone + ', ' + clock.utcOffset + '). C\'est l\'heure actuelle chez lui. Tu la connais. INTERDIT de demander l\'heure ou le fuseau. « Dans mon heure », « relative to my time », « chez moi » : réponds dans cette horloge, pas en UTC.';
+      'Horloge de son ordinateur, toujours : il est ' + clock.today + ' ' + clock.nowTime +
+      ' (' + clock.timeZone + ', ' + clock.utcOffset + '). Toute heure que tu dis (maintenant, un délai, une échéance, un build, « quelle heure ») est dans cette horloge. INTERDIT de demander l\'heure ou le fuseau. UTC seulement si on le demande explicitement.';
     var buildLine = builtAt
-      ? 'App Cerveau : build en cours = ' + builtAt +
-        ' (UTC, dernier déploiement, ' + appBuildAgo(builtAt) + ').' +
-        ' Si on te demande quelle version tourne, ou quand le build a été exporté : donne cette date dans l\'heure de son ordinateur (horloge ci-dessus), pas seulement en UTC. Ex. « 13 oct. 2026, 20 h 04 ». Ajoute l\'UTC seulement s\'iel le demande. Ne demande JAMAIS son fuseau ni l\'heure qu\'il est. Dis depuis quand il est déployé, puis liste les nouveautés récentes ci-dessous. Il n\'y a pas de numéro sémantique. Ne dis JAMAIS que tu ne peux pas la voir.' +
+      ? 'App Cerveau : build exporté le ' + builtLocal +
+        ' (heure de l\'ordinateur, ' + appBuildAgo(builtAt) + '). Instant UTC : ' + builtAt + '.' +
+        ' Si on te demande la version ou quand c\'est sorti : dis ' + builtLocal + ', heure de l\'ordinateur. Pas l\'UTC, sauf demande explicite. Ne demande JAMAIS son fuseau ni l\'heure qu\'il est. Dis depuis quand il est déployé, puis liste les nouveautés récentes ci-dessous. Il n\'y a pas de numéro sémantique. Ne dis JAMAIS que tu ne peux pas la voir.' +
         ' Si on demande les nouveautés ou ce qui a changé, réponds avec ce journal (les plus récentes d\'abord), sans en inventer.' +
         (recent ? '\nNouveautés récentes (journal CHANGELOG.md) :\n' + recent : '')
       : 'App Cerveau : l\'horodatage du build n\'a pas pu être chargé ; si on te demande la version, dis seulement que l\'info de build n\'est pas disponible pour l\'instant.';
@@ -4688,7 +4707,8 @@
           '. Utilise-le pour personnaliser (salutations, suggestions d\'impact / qui est touch\u00e9).'
         : '',
       'Contexte carte actuel (JSON)\u00a0:',
-      JSON.stringify(context)
+      JSON.stringify(context),
+      clockLine
     ].filter(Boolean))
     .join('\n');
   }
@@ -7209,7 +7229,7 @@
         });
       }
     });
-    messages.push({ role: 'user', content: String(userText || '').trim() });
+    messages.push({ role: 'user', content: userTurnWithClock(userText) });
 
     var t0 = Date.now();
     var response;
@@ -8130,7 +8150,7 @@
         });
       }
     });
-    messages.push({ role: 'user', content: String(userText || '').trim() });
+    messages.push({ role: 'user', content: userTurnWithClock(userText) });
 
     var debug = {
       id: 'interview-' + Date.now().toString(36),
@@ -10461,6 +10481,12 @@
       p = normalizeProvider(Object.assign({}, p, { model: resolvedModel }));
     }
     var context = buildContext(bridge);
+    var live = localClock();
+    context.today = live.today;
+    context.nowTime = live.nowTime;
+    context.timeZone = live.timeZone;
+    context.utcOffset = live.utcOffset;
+    if (context.appBuiltAt) context.appBuiltLocal = localStamp(context.appBuiltAt);
     var messages = [
       {
         role: 'system',
@@ -10479,7 +10505,7 @@
         });
       }
     });
-    messages.push({ role: 'user', content: String(userText || '').trim() });
+    messages.push({ role: 'user', content: userTurnWithClock(userText) });
 
     var debug = {
       id: 'chat-' + Date.now().toString(36),

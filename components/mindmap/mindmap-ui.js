@@ -2408,7 +2408,7 @@
         y0 = Math.min(y0, p.y - b.h / 2);
         y1 = Math.max(y1, p.y + b.h / 2);
       });
-      return { x0: x0 - 42, y0: y0 - 42, x1: x1 + 42, y1: y1 + 42 };
+      return { x0: x0 - 18, y0: y0 - 18, x1: x1 + 18, y1: y1 + 18 };
     }
     function groupAt(n) {
       var scene = state.scene;
@@ -2528,7 +2528,7 @@
           if (g.anchorId) add(byNode[g.anchorId]);
           g.members.forEach(function (id) { if (!scene.hidden[id]) add(byNode[id]); });
           if (!pts.length) return;
-          var d = MM().looseHull(pts, 42);
+          var d = MM().looseHull(pts, 18);
           var hull = s('path', { class: hullClass(g, false), d: d, 'data-group': g.id });
           hull.style.setProperty('--mm-hull', hue);
           var hit = s('path', { class: 'mm-hull-hit', d: d, 'data-group': g.id });

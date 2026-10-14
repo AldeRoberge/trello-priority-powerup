@@ -15,6 +15,17 @@
     iconPng: './assets/icon.png',
   };
 
+  function withBuild(url) {
+    var doc = typeof document !== 'undefined' ? document : null;
+    var meta = doc && doc.querySelector && doc.querySelector('meta[name="cerveau-build"]');
+    var v = meta && meta.getAttribute && meta.getAttribute('content');
+    if (!v || !url || /^[a-z][a-z0-9+.-]*:/i.test(url) || /[?&]v=/.test(url)) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'v=' + encodeURIComponent(v);
+  }
+
+  Brand.iconSvg = withBuild(Brand.iconSvg);
+  Brand.iconPng = withBuild(Brand.iconPng);
+
   Brand.getAppName = function () {
     var name = typeof Brand.appName === 'string' ? Brand.appName.trim() : '';
     return name || DEFAULT_APP_NAME;

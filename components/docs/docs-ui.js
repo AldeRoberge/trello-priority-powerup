@@ -5,6 +5,7 @@
  *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
  *  - typing ** * ~~ == ++ ` renders the mark; the signs show again while the caret is in the word. [[ links a document
  *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
+ *    a task chip grows a pin when the pointer is close: parent (top), sibling (right), person (left)
  *    Backspace right after a person keeps the first name; another Backspace removes the mention
  *  - selecting text shows a bar (style, color, bold, italic, …) and "Créer une tâche"
  *  - autosave (debounced) with revision check, so two people editing the same document are warned
@@ -272,6 +273,7 @@
       els.toast,
     ]);
     root.appendChild(shell);
+    wireChipPins();
 
     els.main.appendChild(els.head);
     els.main.appendChild(els.toolbar);
@@ -2326,6 +2328,16 @@
       sel.removeAllRanges();
       sel.addRange(range);
       document.execCommand('insertText', false, text);
+      if (el.isConnected && el.parentNode) {
+        var tn = document.createTextNode(text);
+        el.parentNode.replaceChild(tn, el);
+        var r3 = document.createRange();
+        r3.setStart(tn, which === 'back' ? 0 : tn.nodeValue.length);
+        r3.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r3);
+        return true;
+      }
       if (which === 'back' && text) {
         var s2 = global.getSelection();
         var n = s2 && s2.anchorNode;
@@ -6267,6 +6279,273 @@
         var d = res.data;
         if ((d.pulled || 0) + (d.imported || 0) > 0) return refreshRemote(true);
       }).catch(function () { /* Drive is optional */ });
+    }
+
+    /* Mindmap-style pins on a task mention. The dot exists only while the pointer is close to that edge. */
+    function wireChipPins() {
+      var Pins = global.DocsPins;
+      if (!Pins || shell._chipPins) return;
+      shell._chipPins = true;
+      var REACH = 30;
+      var HOT = 14;
+      var layer = h('div', { class: 'dc-pin-layer' });
+      var dots = {};
+      Pins.ROLES.forEach(function (r) {
+        var dot = h('button', {
+          type: 'button',
+          class: 'dc-pin dc-pin--' + r.id,
+          title: r.label,
+          'aria-label': r.label,
+          'data-role': r.id,
+        });
+        dot.hidden = true;
+        dots[r.id] = dot;
+        dot.addEventListener('pointerdown', function (e) { startDrag(e, r.id); });
+        layer.appendChild(dot);
+      });
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'dc-pin-wire');
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      svg.appendChild(path);
+      svg.hidden = true;
+      layer.appendChild(svg);
+      document.body.appendChild(layer);
+
+      var hoverChip = null;
+      var drag = null;
+      var pick = null;
+
+      function hideDots() {
+        Pins.ROLES.forEach(function (r) {
+          var dot = dots[r.id];
+          dot.hidden = true;
+          dot.classList.remove('is-near', 'is-hot');
+        });
+      }
+
+      function placeDot(role, x, y, hot) {
+        var dot = dots[role];
+        dot.hidden = false;
+        dot.style.left = x + 'px';
+        dot.style.top = y + 'px';
+        dot.classList.add('is-near');
+        dot.classList.toggle('is-hot', !!hot);
+      }
+
+      function showNear(x, y) {
+        hideDots();
+        hoverChip = null;
+        if (!editor) return;
+        var best = null;
+        Array.prototype.forEach.call(editor.querySelectorAll('.dc-mention--task'), function (chip) {
+          var rect = chip.getBoundingClientRect();
+          if (x < rect.left - 48 || x > rect.right + 48 || y < rect.top - 48 || y > rect.bottom + 48) return;
+          var n = Pins.nearest(rect, x, y, REACH, HOT);
+          if (n && (!best || n.d < best.d)) best = { chip: chip, rect: rect, d: n.d };
+        });
+        if (!best) return;
+        hoverChip = best.chip;
+        Pins.visible(best.rect, x, y, REACH, HOT).forEach(function (p) {
+          placeDot(p.role, p.x, p.y, p.hot);
+        });
+      }
+
+      function drawWire(x, y) {
+        var x1 = drag.x;
+        var y1 = drag.y;
+        var c1x = x1 + drag.nx * 36;
+        var c1y = y1 + drag.ny * 36;
+        path.setAttribute('d', 'M' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' C' + c1x.toFixed(1) + ',' + c1y.toFixed(1) + ' ' + x.toFixed(1) + ',' + y.toFixed(1) + ' ' + x.toFixed(1) + ',' + y.toFixed(1));
+        path.setAttribute('stroke', drag.role === 'person' ? 'var(--dc-person)' : 'var(--dc-task)');
+      }
+
+      function onMove(e) {
+        if (pick || !editor) return;
+        if (drag) { drawWire(e.clientX, e.clientY); return; }
+        showNear(e.clientX, e.clientY);
+      }
+
+      function startDrag(e, roleId) {
+        if (e.button !== 0 || !hoverChip) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearTimeout(previewTimer);
+        if (!previewPinned) closePop();
+        var role = Pins.roleById(roleId);
+        var dot = dots[roleId];
+        drag = {
+          role: roleId,
+          chip: hoverChip,
+          fromId: hoverChip.getAttribute('data-id'),
+          x: parseFloat(dot.style.left),
+          y: parseFloat(dot.style.top),
+          nx: role.nx,
+          ny: role.ny,
+          sx: e.clientX,
+          sy: e.clientY,
+        };
+        svg.hidden = false;
+        layer.classList.add('is-wiring');
+        try { dot.setPointerCapture(e.pointerId); } catch (err) {}
+        drawWire(e.clientX, e.clientY);
+      }
+
+      function endDrag(e) {
+        if (!drag) return;
+        var d = drag;
+        var moved = Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy);
+        drag = null;
+        svg.hidden = true;
+        layer.classList.remove('is-wiring');
+        hideDots();
+        if (moved < 8) return;
+        var hit = dropTarget(d, e.clientX, e.clientY);
+        if (hit) commit(d, hit);
+        else openPick(d, e.clientX, e.clientY);
+      }
+
+      function dropTarget(d, x, y) {
+        var stack = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+        var i;
+        for (i = 0; i < stack.length; i++) {
+          var el = stack[i];
+          if (!el || !el.closest || !editor.contains(el)) continue;
+          if (d.role === 'person') {
+            var person = el.closest('.dc-mention[data-m="person"]');
+            if (person) return { id: person.getAttribute('data-id') };
+          } else {
+            var task = el.closest('.dc-mention--task');
+            if (task && task !== d.chip) return { id: task.getAttribute('data-id') };
+          }
+        }
+        return null;
+      }
+
+      function commit(d, hit) {
+        if (d.role === 'person') linkPerson(d.fromId, hit.id);
+        else linkTasks(d.role, d.fromId, hit.id);
+      }
+
+      function linkTasks(role, fromId, toId) {
+        var spec = Pins.taskWrite(role, fromId, toId);
+        var PT = global.PriorityTrello;
+        if (!spec || !PT || typeof PT.getCardInputsById !== 'function' || typeof PT.saveCardInputsById !== 'function') {
+          toast('Lien impossible.', 'error');
+          return;
+        }
+        PT.getCardInputsById(t, spec.cardId).then(function (inputs) {
+          var next = Pins.appendDep(inputs && inputs.dependsOn, inputs && inputs.depTypes, spec.addId, spec.depType, spec.cardId);
+          if (!next) return;
+          if (!next.changed) { toast('Déjà lié.', 'ok'); return; }
+          return PT.saveCardInputsById(t, spec.cardId, { dependsOn: next.dependsOn, depTypes: next.depTypes }).then(function () {
+            toast(role === 'parent' ? 'Tâche parente liée.' : 'Tâche voisine liée.', 'ok');
+          });
+        }).catch(function (err) { failure(err); });
+      }
+
+      function linkPerson(cardId, personId) {
+        var item = state.index && DM().resolveMention(state.index, 'person', personId);
+        if (item && item.contact) { toast('Membre du tableau seulement.', 'error'); return; }
+        var api = DT();
+        if (!api || typeof api.loadCardFace !== 'function' || typeof api.setCardMembers !== 'function') {
+          toast('Lien impossible.', 'error');
+          return;
+        }
+        api.loadCardFace(t, cardId).then(function (face) {
+          var next = Pins.appendMember((face.members || []).map(function (m) { return m.id; }), personId);
+          if (!next) return;
+          if (!next.changed) { toast('Déjà responsable.', 'ok'); return; }
+          return api.setCardMembers(t, cardId, next.ids).then(function () {
+            toast('Responsable ajouté.', 'ok');
+          });
+        }).catch(function (err) { failure(err); });
+      }
+
+      function closePick() {
+        document.removeEventListener('mousedown', onPickOut, true);
+        if (pick && pick.parentNode) pick.parentNode.removeChild(pick);
+        pick = null;
+      }
+
+      function onPickOut(e) {
+        if (pick && !pick.contains(e.target)) closePick();
+      }
+
+      function openPick(d, x, y) {
+        closePick();
+        var role = Pins.roleById(d.role);
+        var box = h('div', { class: 'dc-suggest dc-pin-pick' });
+        var input = h('input', { class: 'dc-input', type: 'text', placeholder: role.label + '…', 'aria-label': role.label });
+        var list = h('div');
+        box.appendChild(input);
+        box.appendChild(list);
+        var matches = [];
+        var active = 0;
+        function pool() {
+          var idx = state.index;
+          if (!idx) return [];
+          var src = role.kind === 'person' ? (idx.person || []) : (idx.task || []);
+          return src.filter(function (it) {
+            if (role.kind === 'person' && it.contact) return false;
+            if (role.kind === 'task' && it.id === d.fromId) return false;
+            return true;
+          });
+        }
+        function paint() {
+          var q = input.value.trim().toLowerCase();
+          matches = pool().filter(function (it) {
+            return !q || String(it.label || '').toLowerCase().indexOf(q) >= 0;
+          }).slice(0, 8);
+          if (active >= matches.length) active = 0;
+          list.textContent = '';
+          matches.forEach(function (it, i) {
+            var row = h('div', { class: 'dc-sg-row' + (i === active ? ' is-active' : ''), role: 'option' });
+            row.appendChild(h('span', { class: 'dc-sg-label', text: it.label }));
+            row.addEventListener('mousedown', function (ev) {
+              ev.preventDefault();
+              choose(it);
+            });
+            list.appendChild(row);
+          });
+        }
+        function choose(it) {
+          var from = d.fromId;
+          var roleId = d.role;
+          closePick();
+          if (roleId === 'person') linkPerson(from, it.id);
+          else linkTasks(roleId, from, it.id);
+        }
+        input.addEventListener('input', paint);
+        input.addEventListener('keydown', function (ev) {
+          ev.stopPropagation();
+          if (ev.key === 'Escape') { ev.preventDefault(); closePick(); }
+          else if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && matches.length) {
+            ev.preventDefault();
+            active = ev.key === 'ArrowDown' ? (active + 1) % matches.length : (active - 1 + matches.length) % matches.length;
+            paint();
+          } else if (ev.key === 'Enter' && matches[active]) {
+            ev.preventDefault();
+            choose(matches[active]);
+          }
+        });
+        document.body.appendChild(box);
+        box.style.left = Math.max(8, Math.min(x, global.innerWidth - 268)) + 'px';
+        box.style.top = Math.max(8, Math.min(y + 8, global.innerHeight - 220)) + 'px';
+        pick = box;
+        paint();
+        input.focus();
+        setTimeout(function () { document.addEventListener('mousedown', onPickOut, true); }, 0);
+      }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', endDrag);
+      document.addEventListener('pointercancel', function () {
+        drag = null;
+        svg.hidden = true;
+        layer.classList.remove('is-wiring');
+        hideDots();
+      });
+      document.addEventListener('scroll', function () { if (!drag) hideDots(); }, true);
     }
 
     function boot() {

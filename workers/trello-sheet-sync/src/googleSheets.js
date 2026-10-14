@@ -28,6 +28,34 @@ function pemToBuffer(pem) {
 }
 
 let cached = null;
+let userCached = null;
+
+/**
+ * Personal Google accounts give a service account no storage, so document files are created as the
+ * user when these three secrets are set (Drive scope only). Sheets stay on the service account.
+ */
+async function userAccessToken(env) {
+  const refresh = env.GOOGLE_DRIVE_REFRESH_TOKEN;
+  const clientId = env.GOOGLE_DRIVE_CLIENT_ID;
+  const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET;
+  if (!refresh || !clientId || !clientSecret) return null;
+  if (userCached && userCached.expiresAt > Date.now() + 30_000) return userCached.value;
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refresh,
+    grant_type: 'refresh_token',
+  });
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) throw new Error(`Google user token failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const data = await res.json();
+  userCached = { value: data.access_token, expiresAt: Date.now() + (data.expires_in || 3600) * 1000 };
+  return userCached.value;
+}
 
 async function accessToken(env) {
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.value;
@@ -53,9 +81,9 @@ async function accessToken(env) {
   return cached.value;
 }
 
-/** Authenticated fetch for the Drive helpers in drive.js (same service-account token). */
+/** Drive calls. Uses the user's Drive token when configured, otherwise the service account. */
 export async function authedFetch(env, url, init = {}) {
-  const token = await accessToken(env);
+  const token = (await userAccessToken(env)) || (await accessToken(env));
   return fetch(url, { ...init, headers: { ...(init.headers || {}), authorization: `Bearer ${token}` } });
 }
 

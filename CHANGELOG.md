@@ -4,11 +4,16 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-13
+- Aujourd’hui : la revue (triage, prochaine action, attente, en cours, résultat) est sur la même page.
+- Saisie : après une question, la suggestion ne finit plus le mot « answer ».
+- Mindmap : le contour d'un groupe suit le bord des cartes qu'il contient.
+- Documents : approcher une tâche mentionnée fait apparaître un point pour relier une tâche parente, une tâche voisine ou un responsable.
+- Mise à jour : une nouvelle version recharge la page toute seule, sans rafraîchissement forcé.
 - Documents : Entrée dans une sous-tâche ajoute une ligne au même niveau. La ligne du dessus reste imbriquée.
 - Revue : un résultat qui n’a pas bougé depuis 14 jours est signalé. Cliquer le nombre le met à jour. Le badge revient chaque semaine.
 - Documents : Priorité, Lieu, Catégorie et Argent sont chacun un champ. Une étiquette du type Priority-Low n'est plus mélangée aux lieux et à l'argent.
 - Dashboard : le même assistant en bas de page que dans les autres vues.
-- Assistant : il connaît l'heure de l'ordinateur et donne le build dans cette heure-là, sans demander le fuseau.
+- Assistant : il est toujours à l'heure de l'ordinateur. Toute heure qu'il dit, y compris le build, est dans ce fuseau.
 - Documents : taper les signes autour d'un mot (gras, italique, barré, surligné, code) applique la mise en forme. Ils réapparaissent tant que le curseur est dans le mot. Deux crochets lient un autre document.
 - Assistant : le champ en bas n’a plus qu’un seul contour.
 - Vitesse : le pointeur ne remesure plus chaque ligne à chaque mouvement, et taper dans un document ne reparcourt plus les images et les tableaux.

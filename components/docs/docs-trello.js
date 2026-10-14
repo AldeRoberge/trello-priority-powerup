@@ -192,6 +192,7 @@
           body: u.body,
           subject: u.subject,
           props: u.props,
+          icon: u.icon,
         };
       })
       .sort(function (a, b) {
@@ -212,6 +213,7 @@
       cover: u.cover,
       subject: u.subject,
       props: u.props,
+      icon: u.icon,
       updatedAt: card.dateLastActivity || '',
     };
   }

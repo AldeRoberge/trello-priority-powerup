@@ -63,10 +63,17 @@ describe('PriorityAgent app build awareness', () => {
       utcOffset: 'UTC-4',
       appBuiltAt: '2026-10-14T00:04:00.000Z'
     });
-    assert.match(prompt, /il est 2026-10-13 20:04 \(America\/Toronto, UTC-4\)/);
+    assert.match(prompt, /toujours : il est 2026-10-13 20:04 \(America\/Toronto, UTC-4\)/);
+    assert.match(prompt, /Toute heure que tu dis/);
     assert.match(prompt, /INTERDIT de demander l'heure ou le fuseau/);
-    assert.match(prompt, /heure de son ordinateur/);
-    assert.doesNotMatch(prompt, /19 h 19 UTC/);
+    const built = new Date('2026-10-14T00:04:00.000Z');
+    const pad = (n) => String(n).padStart(2, '0');
+    const local = built.getFullYear() + '-' + pad(built.getMonth() + 1) + '-' + pad(built.getDate()) +
+      ' ' + pad(built.getHours()) + ':' + pad(built.getMinutes());
+    assert.match(prompt, new RegExp('build exporté le ' + local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.ok(prompt.indexOf('Horloge de son ordinateur, toujours') >= 0);
+    assert.ok(prompt.lastIndexOf('Horloge de son ordinateur, toujours') > prompt.indexOf('Horloge de son ordinateur, toujours'));
+    assert.ok(prompt.trim().endsWith('UTC seulement si on le demande explicitement.'));
   });
 
   it('localClock matches the computer offset', () => {

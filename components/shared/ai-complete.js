@@ -196,6 +196,27 @@
     return /\b(he|she|they|il|elle|ils|elles)\b/i.test(' ' + suggestion + ' ');
   }
 
+  /** The word the ghost would finish, including letters already typed. */
+  function formedWord(before, suggestion) {
+    var s = String(suggestion || '');
+    var tail = '';
+    if (s.charAt(0) !== ' ') {
+      var m = /([0-9A-Za-z\u00C0-\u024F\u1E00-\u1EFF]*)$/.exec(String(before || ''));
+      tail = m ? m[1] : '';
+    }
+    var first = s.trim().split(/[\s,.;:!?]+/)[0] || '';
+    return fold(tail + first);
+  }
+
+  /** "ans" + "wer" on a line that already asked something. */
+  function answersOnTheLine(before, suggestion) {
+    var line = String(before || '');
+    var nl = line.lastIndexOf('\n');
+    if (nl >= 0) line = line.slice(nl + 1);
+    if (line.indexOf('?') < 0) return false;
+    return /^(answers?|r[eé]ponses?)$/.test(formedWord(before, suggestion));
+  }
+
   function needsLeadingSpace(before, body) {
     if (!before || !body) return false;
     if (/\s$/.test(before)) return false;
@@ -253,6 +274,7 @@
     if (s.length > maxChars) s = s.slice(0, maxChars).replace(/\s+\S*$/, '');
     if (!s.trim()) return '';
     if (driftsOff(before, s)) return '';
+    if (answersOnTheLine(before, s)) return '';
     var fromTongue = tongue(before);
     var toTongue = tongue(s);
     if (fromTongue && toTongue && fromTongue !== toTongue) return '';

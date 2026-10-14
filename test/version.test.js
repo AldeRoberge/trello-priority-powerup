@@ -61,4 +61,24 @@ describe('BuildVersion', () => {
       /^Binaires de l'application Cerveau mis à jour /
     );
   });
+
+  it('reloads only when a newer build is waiting and the page is idle', () => {
+    assert.equal(BuildVersion.needsReload('oldsha1234', 'newsha1234', false, ''), true);
+    assert.equal(BuildVersion.needsReload('oldsha1234', 'newsha1234', true, ''), false);
+    assert.equal(BuildVersion.needsReload('samesha123', 'samesha123', false, ''), false);
+    assert.equal(BuildVersion.needsReload('', 'newsha1234', false, ''), false);
+    assert.equal(BuildVersion.needsReload('oldsha1234', 'newsha1234', false, 'newsha1234'), false);
+  });
+
+  it('adds a cache-busting v to the page URL', () => {
+    const next = BuildVersion.urlWithBuild('https://x.github.io/gantt.html?x=1#top', 'abc1234567');
+    const u = new URL(next);
+    assert.equal(u.searchParams.get('v'), 'abc1234567');
+    assert.equal(u.searchParams.get('x'), '1');
+    assert.equal(u.hash, '#top');
+    assert.equal(
+      BuildVersion.urlWithBuild('https://x.github.io/gantt.html?v=abc1234567', 'abc1234567'),
+      ''
+    );
+  });
 });

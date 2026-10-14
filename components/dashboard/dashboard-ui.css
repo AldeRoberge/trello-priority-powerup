@@ -578,6 +578,7 @@ button.db-result { border: 0; background: none; padding: 0; font: inherit; color
 button.db-result.is-missing { color: var(--tp-danger-text); }
 .db-now-card { margin: -4px 0 8px; font-size: 12px; color: var(--tp-text-muted); }
 .db-project { padding: 8px 0; border-top: 1px solid var(--tp-border); }
+.db-sugg .db-project { padding: 8px 12px; }
 .db-project-nums { display: flex; gap: 12px; font-size: 12px; color: var(--tp-text-muted); }
 .db-project .db-row-name { cursor: default; }
 

@@ -132,6 +132,8 @@ describe('AiComplete', () => {
     it('drops a reply that answers the sentence', () => {
       assert.equal(AI.parseCompletion(' answer?', 'What is 1+1? The', 'document'), '');
       assert.equal(AI.parseCompletion('réponse : 2', 'Combien font 1+1? ', 'document'), '');
+      assert.equal(AI.parseCompletion('wer', 'what is 1+1? the ans', 'document'), '');
+      assert.equal(AI.parseCompletion('wer the phone', 'I will ans', 'document'), 'wer the phone');
     });
 
     it('separates a new word and drops a different story', () => {

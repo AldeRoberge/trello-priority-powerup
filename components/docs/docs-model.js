@@ -7,6 +7,7 @@
  *   1. Constants + card naming / description packing
  *   1b. Covers (color, gradient, Unsplash, link, upload)
  *   1c. Page subject (task or entity) + document fields (tags, people)
+ *   1d. Sidebar icon (glyph + color)
  *   2. Markdown -> editor HTML   (mdToHtml, inlineToHtml)
  *   3. Editor DOM -> Markdown    (domToMd)
  *   4. @ mentions: trigger detection, index, search
@@ -59,7 +60,7 @@
     return NAME_PREFIX + (cleanTitle(title) || UNTITLED);
   }
 
-  /** Description text of a document card: the body, then a hidden `type: document` + `rev: N` block (cover, subject, tags, people). */
+  /** Description text of a document card: the body, then a hidden `type: document` + `rev: N` block (cover, icon, subject, tags, people). */
   function packDesc(body, meta) {
     var m = meta || {};
     var rev = Math.max(1, parseInt(m.rev, 10) || 1);
@@ -67,6 +68,8 @@
     var lines = ['type: document', 'rev: ' + rev];
     var cover = packCover(m.cover);
     if (cover) lines.push('cover: ' + cover);
+    var ic = iconLine(m.icon);
+    if (ic) lines.push('icon: ' + ic);
     var sub = subjectLine(m.subject);
     if (sub) lines.push('subject: ' + sub);
     propLines(m.props).forEach(function (line) { lines.push(line); });
@@ -77,7 +80,7 @@
   /**
    * The meta block is always the very last thing in the description, so only the last
    * `<!--cerveau-meta ... -->` that runs to the end counts: text typed in the body can never forge it.
-   * @returns {{body:string, rev:number, isDoc:boolean, cover:object|null, subject:object|null, props:object|null}}
+   * @returns {{body:string, rev:number, isDoc:boolean, cover:object|null, icon:object|null, subject:object|null, props:object|null}}
    */
   function unpackDesc(desc) {
     var full = String(desc == null ? '' : desc).replace(/\r\n?/g, '\n');
@@ -102,6 +105,7 @@
       rev: Math.max(1, parseInt(meta.rev, 10) || 1),
       isDoc: meta.type === 'document',
       cover: parseCover(meta.cover),
+      icon: normalizeIcon(meta.icon),
       subject: normalizeSubject(meta.subject),
       props: normalizeProps({ tags: meta.tags, people: meta.people }),
     };
@@ -183,6 +187,142 @@
       if (s && s.k === want.k && s.id === want.id) return list[i];
     }
     return null;
+  }
+
+  /* ── 1d. Sidebar icon (glyph + color) ────────────────────────────── */
+  /*
+   * One short line of the meta block: `icon: book|#0c66e4`. The name is a Tabler glyph from DOC_ICONS;
+   * the color is a cover swatch. Either half may be omitted (`icon: book`, `icon: |#0c66e4`).
+   * Empty means the row keeps its default glyph and the muted color.
+   */
+
+  var DOC_ICONS = [
+    { i: 'file-text', k: 'document page texte' },
+    { i: 'folder', k: 'dossier' },
+    { i: 'notebook', k: 'carnet notes' },
+    { i: 'book', k: 'livre' },
+    { i: 'bible', k: 'bible' },
+    { i: 'bookmark', k: 'signet' },
+    { i: 'notes', k: 'notes' },
+    { i: 'clipboard', k: 'presse-papier' },
+    { i: 'list', k: 'liste' },
+    { i: 'list-check', k: 'taches checklist' },
+    { i: 'checkbox', k: 'case tache' },
+    { i: 'stack-2', k: 'pile entite' },
+    { i: 'calendar', k: 'calendrier date' },
+    { i: 'clock', k: 'heure' },
+    { i: 'flag', k: 'drapeau' },
+    { i: 'star', k: 'etoile favori' },
+    { i: 'star-filled', k: 'etoile pleine' },
+    { i: 'heart', k: 'coeur' },
+    { i: 'heart-filled', k: 'coeur plein' },
+    { i: 'bulb', k: 'idee ampoule' },
+    { i: 'rocket', k: 'fusee' },
+    { i: 'target', k: 'cible' },
+    { i: 'map', k: 'carte' },
+    { i: 'home', k: 'maison' },
+    { i: 'user', k: 'personne' },
+    { i: 'users', k: 'equipe personnes' },
+    { i: 'briefcase', k: 'travail mallette' },
+    { i: 'school', k: 'ecole' },
+    { i: 'music', k: 'musique' },
+    { i: 'photo', k: 'photo image' },
+    { i: 'palette', k: 'couleur' },
+    { i: 'brush', k: 'pinceau dessin' },
+    { i: 'code', k: 'code' },
+    { i: 'database', k: 'donnees' },
+    { i: 'chart-bar', k: 'graphique' },
+    { i: 'coin', k: 'argent' },
+    { i: 'shopping-cart', k: 'courses achat' },
+    { i: 'car', k: 'voiture' },
+    { i: 'plane', k: 'avion voyage' },
+    { i: 'world', k: 'monde' },
+    { i: 'leaf', k: 'feuille nature' },
+    { i: 'flame', k: 'flamme feu' },
+    { i: 'bolt', k: 'eclair' },
+    { i: 'crown', k: 'couronne' },
+    { i: 'diamond', k: 'diamant' },
+    { i: 'puzzle', k: 'puzzle' },
+    { i: 'key', k: 'cle' },
+    { i: 'lock', k: 'cadenas' },
+    { i: 'mail', k: 'courriel' },
+    { i: 'phone', k: 'telephone' },
+    { i: 'bell', k: 'cloche' },
+    { i: 'map-pin', k: 'lieu epingle' },
+    { i: 'compass', k: 'boussole' },
+    { i: 'sun', k: 'soleil' },
+    { i: 'moon', k: 'lune' },
+    { i: 'cloud', k: 'nuage' },
+    { i: 'coffee', k: 'cafe' },
+    { i: 'gift', k: 'cadeau' },
+    { i: 'trophy', k: 'trophee' },
+    { i: 'sparkles', k: 'etoiles' },
+    { i: 'brain', k: 'cerveau' },
+    { i: 'building', k: 'immeuble' },
+    { i: 'building-church', k: 'eglise' },
+    { i: 'cross', k: 'croix' },
+    { i: 'heart-handshake', k: 'accord' },
+    { i: 'tool', k: 'outil' },
+    { i: 'stethoscope', k: 'sante' },
+    { i: 'ball-football', k: 'sport' },
+    { i: 'mountain', k: 'montagne' },
+    { i: 'anchor', k: 'ancre' },
+    { i: 'feather', k: 'plume' },
+    { i: 'pencil', k: 'crayon' },
+  ];
+
+  var docIconByName = Object.create(null);
+  DOC_ICONS.forEach(function (x) { docIconByName[x.i] = 1; });
+
+  function docIconColorOk(c) {
+    return COVER_COLORS.some(function (x) { return x.v === c; });
+  }
+
+  /** `{i?:name, c?:#rrggbb}` or null. Unknown names and colors are dropped. */
+  function normalizeIcon(raw) {
+    var name = '';
+    var color = '';
+    if (raw == null || raw === '') return null;
+    if (typeof raw === 'string') {
+      var s = String(raw).trim();
+      if (/^#[0-9a-f]{6}$/i.test(s)) color = s;
+      else {
+        var cut = s.indexOf('|');
+        name = cut < 0 ? s : s.slice(0, cut);
+        color = cut < 0 ? '' : s.slice(cut + 1);
+      }
+    } else if (typeof raw === 'object') {
+      name = raw.i != null ? raw.i : raw.icon;
+      color = raw.c != null ? raw.c : raw.color;
+    } else return null;
+    name = String(name == null ? '' : name).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
+    if (!docIconByName[name]) name = '';
+    color = String(color == null ? '' : color).trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/.test(color) || !docIconColorOk(color)) color = '';
+    if (!name && !color) return null;
+    var out = {};
+    if (name) out.i = name;
+    if (color) out.c = color;
+    return out;
+  }
+
+  /** Meta line value ('' when there is nothing to store). */
+  function iconLine(icon) {
+    var n = normalizeIcon(icon);
+    if (!n) return '';
+    return (n.i || '') + (n.c ? '|' + n.c : '');
+  }
+
+  function sameIcon(a, b) {
+    return iconLine(a) === iconLine(b);
+  }
+
+  function searchDocIcons(query) {
+    var q = fold(String(query || '').trim());
+    if (!q) return DOC_ICONS.slice();
+    return DOC_ICONS.filter(function (x) {
+      return x.i.indexOf(q) >= 0 || fold(x.k).indexOf(q) >= 0;
+    });
   }
 
   /* ── 1b. Covers (banner above the title) ─────────────────────────── */
@@ -2182,6 +2322,11 @@
     normalizeSubject: normalizeSubject,
     normalizeProps: normalizeProps,
     docForSubject: docForSubject,
+    DOC_ICONS: DOC_ICONS,
+    normalizeIcon: normalizeIcon,
+    iconLine: iconLine,
+    sameIcon: sameIcon,
+    searchDocIcons: searchDocIcons,
     COVER_COLORS: COVER_COLORS,
     COVER_GRADIENTS: COVER_GRADIENTS,
     COVER_GALLERY: COVER_GALLERY,

@@ -366,9 +366,23 @@ describe('MindmapModel', () => {
       const one = MM.looseHull([{ x: 0, y: 0, w: 100, h: 40 }]);
       assert.match(one, /^M/);
       assert.match(one, /Z$/);
+      assert.match(one, /-68\.0,-38\.0/);
+      assert.match(one, /68\.0,38\.0/);
       const many = MM.looseHull([{ x: 0, y: 0 }, { x: 80, y: 10 }, { x: 40, y: 90 }]);
       assert.match(many, /Q/);
+      assert.match(many, /L/);
       assert.equal(MM.looseHull([]), '');
+    });
+
+    it('follows each card edge instead of sitting on the centres', () => {
+      const path = MM.looseHull([
+        { x: 0, y: 0, w: 200, h: 40 },
+        { x: 400, y: 0, w: 80, h: 80 },
+      ], 16);
+      assert.match(path, /-116\.0,-36\.0/);
+      assert.match(path, /-116\.0,36\.0/);
+      assert.match(path, /456\.0,-56\.0/);
+      assert.match(path, /456\.0,56\.0/);
     });
 
     it('renames a boundary, pulls a card in and takes one out', () => {

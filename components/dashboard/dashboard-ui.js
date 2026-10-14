@@ -3,10 +3,9 @@
  *   Ingest        type tasks (one per line) → cards land in the triage list; optional "Demander à l'IA"
  *   Triage        what the item is, then priority / estimate / date: accept, backlog, reference, waiting, someday, cancel
  *   Orchestrateur zoom from minutes to hours, days, weeks, months, years, then Vague. Each column creates a task in place.
- *   Aujourd'hui   focus list + hour-by-hour timeline of the day. The next action is the first open checklist item.
- *   Revue         flags: triage, missing next step, waiting, work in progress, project outcome
+ *   Aujourd'hui   focus list, the hour-by-hour timeline, and the revue (triage, next step, waiting, work in progress, project outcome).
  * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel + WorkOS (pure).
- * Keys: 1-5 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
+ * Keys: 1-4 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
  * Right-click a card: triage exits, day, fields, open, move, archive (same menu in every section).
  * Icons: Tabler webfont.
  */
@@ -23,7 +22,6 @@
     { key: 'triage', label: 'Triage', icon: 'circle-arrow-down', hint: '2' },
     { key: 'orchestrator', label: 'Orchestrateur', icon: 'calendar-event', hint: '3' },
     { key: 'today', label: 'Aujourd’hui', icon: 'sun', hint: '4' },
-    { key: 'review', label: 'Revue', icon: 'list-check', hint: '5' },
   ];
   var URGENCIES = [
     ['aucun', 'Aucune'],
@@ -350,22 +348,12 @@
       }, 2500);
     }
 
-    function revueSeen() {
-      try { return global.localStorage.getItem('tp-dashboard-revue') || ''; } catch (e) { return ''; }
-    }
-
-    function markRevue(day) {
-      try { global.localStorage.setItem('tp-dashboard-revue', day); } catch (e) { /* private mode */ }
-    }
-
     /* ── Sidebar ───────────────────────────────────────────────────── */
     function renderSide() {
       var c = DM().counts(state.rows, today);
-      var rev = WO() ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] }) : { flags: [] };
-      var revueNudge = WO() && state.section !== 'review' && WO().reviewDue(revueSeen(), today) ? 1 : 0;
       els.side.textContent = '';
       SECTIONS.forEach(function (s) {
-        var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : s.key === 'review' ? rev.flags.length + revueNudge : 0;
+        var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : 0;
         els.side.appendChild(h('button', {
           class: 'db-nav' + (state.section === s.key ? ' is-on' : ''),
           type: 'button',
@@ -1682,6 +1670,7 @@
         ])),
         nowCard,
         h('div', { class: 'db-today' }, [h('div', { class: 'db-today-l' }, [focus]), h('div', { class: 'db-today-r' }, [grid])]),
+        reviewBlock(),
         suggBox,
       ]));
     }
@@ -1738,40 +1727,40 @@
       input.addEventListener('blur', function () { finish(true); });
     }
 
-    function renderReview() {
+    function reviewBlock() {
       var rep = WO()
         ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] })
-        : { flags: [], steps: [], waiting: [], wip: { over: false }, projects: state.projects || [] };
+        : { flags: [], steps: [], waiting: [], wip: { over: false }, projects: [] };
       var projects = rep.projects || [];
-      var body = [pageHead('Revue', null)];
-      if (!rep.flags.length && !projects.length) {
-        body.push(h('div', { class: 'db-empty' }, [icon('list-check'), h('p', { text: 'Rien à revoir.' })]));
-      }
+      var steps = rep.steps || [];
+      var waiting = rep.waiting || [];
+      if (!rep.flags.length && !steps.length && !waiting.length && !projects.length) return null;
+      var kids = [h('h3', { class: 'db-sugg-h' }, [icon('list-check'), document.createTextNode(' Revue')])];
       rep.flags.forEach(function (f) {
-        body.push(h('div', { class: 'db-row' }, [
+        kids.push(h('div', { class: 'db-row' }, [
           h('span', { class: 'db-row-name', text: f.label }),
           h('span', { class: 'db-chip', text: f.detail }),
           f.id === 'triage' ? h('button', { class: 'db-btn', type: 'button', onclick: function () { go('triage'); } }, [document.createTextNode('Ouvrir')]) : null,
           f.id === 'wip' && rep.wip && rep.wip.park ? h('button', { class: 'db-btn', type: 'button', title: 'Ranger la moins prioritaire', onclick: function () { parkStarted(rep.wip.park); } }, [document.createTextNode('Ranger')]) : null,
         ]));
       });
-      (rep.steps || []).forEach(function (r) {
-        body.push(h('div', { class: 'db-row', 'data-card': r.id }, [
+      steps.forEach(function (r) {
+        kids.push(h('div', { class: 'db-row', 'data-card': r.id }, [
           h('span', { class: 'db-row-main' }, [
             h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
             h('span', { class: 'db-step is-missing', text: 'Sans prochaine action' }),
           ]),
         ]));
       });
-      (rep.waiting || []).forEach(function (r) {
-        body.push(h('div', { class: 'db-row', 'data-card': r.id }, [
+      waiting.forEach(function (r) {
+        kids.push(h('div', { class: 'db-row', 'data-card': r.id }, [
           h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
           h('span', { class: 'db-chip', text: r.waiting }),
         ]));
       });
       projects.forEach(function (p) {
         var stepText = p.step && p.step.text ? p.step.text : 'Sans prochaine action';
-        body.push(h('div', { class: 'db-project' }, [
+        kids.push(h('div', { class: 'db-project' }, [
           h('div', { class: 'db-row-name', text: p.name }),
           h('div', { class: 'db-step' + (p.missingOutcome ? ' is-missing' : ''), text: p.outcome || 'Sans résultat' }),
           h('div', {
@@ -1789,13 +1778,13 @@
           ]),
         ]));
       });
-      els.main.appendChild(h('div', { class: 'db-page' }, body));
+      return h('section', { class: 'db-sugg' }, kids);
     }
 
     /* ── Render + keys ─────────────────────────────────────────────── */
     function render() {
       today = todayIso();
-      if (state.section === 'review') markRevue(today);
+      if (state.section === 'review') state.section = 'today';
       var keepScroll = els.main.scrollTop;
       var colScroll = [];
       els.main.querySelectorAll('.db-col-body').forEach(function (b) { colScroll.push(b.scrollTop); });
@@ -1804,7 +1793,6 @@
       if (state.section === 'ingest') renderIngest();
       else if (state.section === 'triage') renderTriage();
       else if (state.section === 'orchestrator') renderOrchestrator();
-      else if (state.section === 'review') renderReview();
       else renderToday();
       els.main.scrollTop = keepScroll;
       var bodies = els.main.querySelectorAll('.db-col-body');
@@ -1820,7 +1808,7 @@
       var tag = (e.target && e.target.tagName) || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var k = e.key.toLowerCase();
-      var idx = '12345'.indexOf(k);
+      var idx = '1234'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (k === 'c') { e.preventDefault(); return go('ingest'); }
       if (state.section !== 'triage') return;

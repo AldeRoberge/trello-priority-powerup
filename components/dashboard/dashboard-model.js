@@ -640,6 +640,82 @@
     };
   }
 
+  var ZOOM_MIN_COL = 148;
+  var ZOOM_VAGUE_COL = 106;
+
+  /** How long one column of this scale is, in days. Years share a year. */
+  function zoomSpanDays(scale) {
+    if (scale === 'minute') return 15 / 1440;
+    if (scale === 'hour') return 1 / 24;
+    if (scale === 'day') return 1;
+    if (scale === 'week') return 7;
+    if (scale === 'month') return 30.4375;
+    if (scale === 'year' || scale === 'years') return 365.25;
+    return 0;
+  }
+
+  function zoomBounds() {
+    return {
+      min: (ZOOM_VAGUE_COL / 365.25) * 0.45,
+      max: 360 / (15 / 1440),
+    };
+  }
+
+  /**
+   * Continuous zoom → the scale whose columns are at least ZOOM_MIN_COL wide,
+   * plus the pixel width of one column. Smaller than a skinny year becomes Vague.
+   * pxPerDay is clamped into zoomBounds.
+   */
+  function zoomLayout(pxPerDay) {
+    var bounds = zoomBounds();
+    var p = Number(pxPerDay);
+    if (!isFinite(p) || p <= 0) p = 180;
+    if (p < bounds.min) p = bounds.min;
+    if (p > bounds.max) p = bounds.max;
+    if (p * zoomSpanDays('year') < ZOOM_VAGUE_COL) {
+      return { scale: 'vague', colPx: 168, pxPerDay: p };
+    }
+    var order = ['minute', 'hour', 'day', 'week', 'month', 'year'];
+    var scale = 'years';
+    for (var i = 0; i < order.length; i++) {
+      if (p * zoomSpanDays(order[i]) >= ZOOM_MIN_COL) {
+        scale = order[i];
+        break;
+      }
+    }
+    var colPx = Math.round(p * zoomSpanDays(scale));
+    if (colPx < 1) colPx = 1;
+    return { scale: scale, colPx: colPx, pxPerDay: p };
+  }
+
+  function zoomSlider(pxPerDay) {
+    var bounds = zoomBounds();
+    var p = zoomLayout(pxPerDay).pxPerDay;
+    var t = (Math.log(p) - Math.log(bounds.min)) / (Math.log(bounds.max) - Math.log(bounds.min));
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    return Math.round(t * 1000);
+  }
+
+  function zoomFromSlider(value) {
+    var bounds = zoomBounds();
+    var t = Math.max(0, Math.min(1000, Number(value) || 0)) / 1000;
+    return Math.exp(Math.log(bounds.min) + t * (Math.log(bounds.max) - Math.log(bounds.min)));
+  }
+
+  /** Pixels per day so `count` columns of `scale` fill `avail`, without leaving that scale. */
+  function zoomFit(scale, avail, count) {
+    if (scale === 'vague') return zoomBounds().min;
+    var days = zoomSpanDays(scale);
+    if (!days) return 180;
+    var gaps = Math.max(0, (count || 1) - 1) * 4;
+    var col = (Math.max(0, avail) - gaps) / Math.max(1, count || 1);
+    if (scale !== 'years') col = Math.max(ZOOM_MIN_COL, col);
+    var layout = zoomLayout(col / days);
+    if (layout.scale !== scale && scale !== 'years') layout = zoomLayout(ZOOM_MIN_COL / days);
+    return layout.pxPerDay;
+  }
+
   global.DashboardModel = {
     DEFAULT_CAPACITY: DEFAULT_CAPACITY,
     DEFAULT_ESTIMATE: DEFAULT_ESTIMATE,
@@ -670,6 +746,12 @@
     untimed: untimed,
     horizonPlan: horizonPlan,
     placeAuto: placeAuto,
+    zoomSpanDays: zoomSpanDays,
+    zoomBounds: zoomBounds,
+    zoomLayout: zoomLayout,
+    zoomSlider: zoomSlider,
+    zoomFromSlider: zoomFromSlider,
+    zoomFit: zoomFit,
     todayList: todayList,
     nextAction: nextAction,
     suggestions: suggestions,

@@ -21,6 +21,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | En direct | `**gras**`, `*italique*`, `~~barré~~`, `==surligné==`, `++souligné++`, `` `code` `` se forment en tapant. Les signes reviennent tant que le curseur est dans le mot. `[[` lie un document (Entrée, ou `]]` si le titre est exact) |
 | Mise en forme | barre d'outils, ou la barre au-dessus d'une sélection (style, couleur, surlignage, gras, italique, lien, listes) ; tableau, encadré et alignement dans la barre ; Ctrl+B / I / U, Ctrl+Maj+H surlignage, Ctrl+Maj+X barré, Ctrl+E code, Ctrl+K lien, Ctrl+Maj+7/8/9 listes, Ctrl+Alt+0…3 styles, Tab / Maj+Tab pour imbriquer une sous-tâche (la puce ou la case ne change pas). Dans un tableau, Tab passe à la case suivante et Entrée à la ligne du dessous |
 | Ouvrir ce qui est mentionné | clic sur une tâche (ouvre la carte), un document (l'ouvre), une personne (fiche) |
+| Relier une tâche mentionnée | le point n'apparaît que tout près : en haut une tâche parente, à droite une tâche voisine, à gauche un responsable. Glisser vers une autre mention, ou lâcher et choisir |
 | Prénom seulement | Retour arrière juste après le nom ne garde que le prénom ; la mention reste |
 
 Les mentions affichent toujours le **nom actuel** de la carte, du document ou du membre ; une tâche terminée est barrée, une cible archivée ou supprimée est grisée et soulignée.

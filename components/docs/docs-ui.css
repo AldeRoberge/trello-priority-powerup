@@ -1879,3 +1879,57 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 .dc-editor mark[data-c="purple"] { background: #dfd8fd; }
 .dc-editor mark[data-c="pink"] { background: #fdd0ec; }
 .dc-editor mark[data-c="red"] { background: #ffd2d2; }
+
+/* Task-chip pins: a dot on an edge, visible only when the pointer is close. */
+.dc-pin-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+.dc-pin {
+  position: fixed;
+  width: 11px;
+  height: 11px;
+  margin: -5px 0 0 -5px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--dc-task);
+  background: var(--tp-surface);
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
+  cursor: crosshair;
+  transform: scale(0.65);
+  transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
+}
+.dc-pin.is-near {
+  opacity: 0.75;
+  pointer-events: auto;
+  transform: scale(1);
+}
+.dc-pin.is-hot,
+.dc-pin:hover {
+  opacity: 1;
+  background: var(--dc-task);
+  transform: scale(1.45);
+}
+.dc-pin--person { border-color: var(--dc-person); }
+.dc-pin--person.is-hot,
+.dc-pin--person:hover { background: var(--dc-person); }
+.dc-pin-layer.is-wiring .dc-pin { pointer-events: none; }
+.dc-pin-wire {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.dc-pin-wire path {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.dc-pin-pick { width: 260px; }
+.dc-pin-pick .dc-input { width: 100%; margin-bottom: 4px; }

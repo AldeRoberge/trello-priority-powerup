@@ -1067,71 +1067,74 @@
     return lower.concat(upper);
   }
 
-  function smoothClosed(pts) {
-    var n = pts.length;
-    if (!n) return '';
-    function mid(i) {
-      var a = pts[i];
-      var b = pts[(i + 1) % n];
-      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    }
-    var m0 = mid(n - 1);
-    var d = ['M' + m0.x.toFixed(1) + ',' + m0.y.toFixed(1)];
-    for (var i = 0; i < n; i++) {
-      var m = mid(i);
-      d.push('Q' + pts[i].x.toFixed(1) + ',' + pts[i].y.toFixed(1) + ' ' + m.x.toFixed(1) + ',' + m.y.toFixed(1));
-    }
-    d.push('Z');
-    return d.join(' ');
-  }
-
   /**
-   * Soft boundary around node centres ({x, y, w?, h?}). One point is an ellipse; several are a rounded hull.
-   * Conceptual edge, not a box.
+   * Soft boundary around the cards themselves. Each point is a centre {x, y, w?, h?}.
+   * The outline sits just outside every card edge, with only the corners rounded.
    */
   function looseHull(points, pad) {
-    pad = typeof pad === 'number' ? pad : 36;
+    pad = typeof pad === 'number' ? pad : 18;
     var pts = (points || []).filter(function (p) { return p && isFinite(p.x) && isFinite(p.y); });
     if (!pts.length) return '';
     if (pts.length === 1) {
       var only = pts[0];
-      return ellipsePath(only.x, only.y, (only.w || 160) / 2 + pad, (only.h || 48) / 2 + pad);
+      var hw = (only.w || 160) / 2 + pad;
+      var hh = (only.h || 48) / 2 + pad;
+      return roundedHull([
+        { x: only.x - hw, y: only.y - hh },
+        { x: only.x + hw, y: only.y - hh },
+        { x: only.x + hw, y: only.y + hh },
+        { x: only.x - hw, y: only.y + hh },
+      ], Math.min(16, pad + 4));
     }
-    var hull = convexHull(pts);
-    if (hull.length < 2) {
-      var one = hull[0] || pts[0];
-      return ellipsePath(one.x, one.y, (one.w || 160) / 2 + pad, (one.h || 48) / 2 + pad);
-    }
-    if (hull.length === 2) {
-      var a = hull[0];
-      var b = hull[1];
-      var dx = b.x - a.x;
-      var dy = b.y - a.y;
-      var len = Math.sqrt(dx * dx + dy * dy) || 1;
-      var px = -dy / len;
-      var py = dx / len;
-      var rad = pad + 24;
-      hull = [
-        { x: a.x + px * rad, y: a.y + py * rad },
-        { x: b.x + px * rad, y: b.y + py * rad },
-        { x: b.x - px * rad, y: b.y - py * rad },
-        { x: a.x - px * rad, y: a.y - py * rad },
-      ];
-    } else {
-      var cx = 0;
-      var cy = 0;
-      hull.forEach(function (p) { cx += p.x; cy += p.y; });
-      cx /= hull.length;
-      cy /= hull.length;
-      hull = hull.map(function (p) {
-        var ox = p.x - cx;
-        var oy = p.y - cy;
-        var dist = Math.sqrt(ox * ox + oy * oy) || 1;
-        var reach = Math.sqrt(Math.pow((p.w || 160) / 2, 2) + Math.pow((p.h || 48) / 2, 2)) * 0.65 + pad;
-        return { x: cx + (ox / dist) * (dist + reach), y: cy + (oy / dist) * (dist + reach) };
+    var corners = [];
+    pts.forEach(function (p) {
+      var hw = (p.w || 160) / 2 + pad;
+      var hh = (p.h || 48) / 2 + pad;
+      corners.push(
+        { x: p.x - hw, y: p.y - hh },
+        { x: p.x + hw, y: p.y - hh },
+        { x: p.x + hw, y: p.y + hh },
+        { x: p.x - hw, y: p.y + hh }
+      );
+    });
+    var hull = convexHull(corners);
+    if (hull.length < 3) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      corners.forEach(function (p) {
+        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+        y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
       });
+      return ellipsePath((x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2);
     }
-    return smoothClosed(hull);
+    return roundedHull(hull, Math.min(22, pad + 8));
+  }
+
+  /** Straight sides along the hull, a short curve only at each corner. */
+  function roundedHull(pts, radius) {
+    var n = pts.length;
+    radius = Math.max(4, radius || 0);
+    function fmt(v) { return v.toFixed(1); }
+    var d = [];
+    for (var i = 0; i < n; i++) {
+      var prev = pts[(i + n - 1) % n];
+      var cur = pts[i];
+      var next = pts[(i + 1) % n];
+      var v1x = cur.x - prev.x;
+      var v1y = cur.y - prev.y;
+      var v2x = next.x - cur.x;
+      var v2y = next.y - cur.y;
+      var l1 = Math.sqrt(v1x * v1x + v1y * v1y) || 1;
+      var l2 = Math.sqrt(v2x * v2x + v2y * v2y) || 1;
+      var trim = Math.min(radius, l1 / 2.5, l2 / 2.5);
+      var sx = cur.x - (v1x / l1) * trim;
+      var sy = cur.y - (v1y / l1) * trim;
+      var ex = cur.x + (v2x / l2) * trim;
+      var ey = cur.y + (v2y / l2) * trim;
+      d.push((i === 0 ? 'M' : 'L') + fmt(sx) + ',' + fmt(sy));
+      d.push('Q' + fmt(cur.x) + ',' + fmt(cur.y) + ' ' + fmt(ex) + ',' + fmt(ey));
+    }
+    d.push('Z');
+    return d.join(' ');
   }
 
   global.MindmapModel = {
