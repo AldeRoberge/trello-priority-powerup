@@ -114,7 +114,9 @@
       var s = scripts[i].getAttribute('src') || '';
       if (/insert-gap\.js/.test(s)) { src = s; break; }
     }
-    var href = src ? src.replace(/insert-gap\.js(\?[^#]*)?$/, 'insert-gap.css') : 'components/shared/insert-gap.css';
+    var href = src
+      ? src.replace(/insert-gap\.js(\?[^#]*)?$/, function (_m, q) { return 'insert-gap.css' + (q || ''); })
+      : 'components/shared/insert-gap.css';
     var link = global.document.createElement('link');
     link.id = 'insert-gap-css';
     link.rel = 'stylesheet';

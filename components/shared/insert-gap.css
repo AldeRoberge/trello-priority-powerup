@@ -16,6 +16,9 @@
   justify-content: center;
   cursor: pointer;
 }
+.ig-plus[hidden] {
+  display: none !important;
+}
 .ig-plus .ti { font-size: 14px; line-height: 1; }
 .ig-plus:hover,
 .ig-plus:focus-visible {

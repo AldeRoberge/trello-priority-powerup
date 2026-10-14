@@ -537,7 +537,7 @@
           },
         }, [
           docChev(r),
-          icon(d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text', 'dc-item-icon'),
+          itemIcon(d, d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text'),
           h('span', { class: 'dc-item-main' }, [
             h('span', { class: 'dc-item-title', text: d.title }),
             h('span', { class: 'dc-item-time', text: DM().relativeTime(d.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(d.size) : '') }),
@@ -642,6 +642,175 @@
       return chev;
     }
 
+    /* Click the sidebar glyph to pick another one and a color. Stored on the document. */
+
+    var iconTimer = null;
+    var iconSaveId = '';
+
+    function itemIcon(doc, fallback, whenMissing) {
+      var mark = DM().normalizeIcon(doc && doc.icon);
+      var name = (mark && mark.i) || fallback;
+      var btn = h('button', {
+        class: 'dc-item-icon' + (mark && mark.c ? ' has-color' : ''),
+        type: 'button',
+        tabindex: '-1',
+        draggable: 'false',
+        title: 'Icône',
+        'aria-label': 'Changer l’icône',
+      }, [icon(name)]);
+      if (mark && mark.c) btn.style.color = mark.c;
+      btn.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!doc || !doc.id) {
+          if (whenMissing) whenMissing();
+          return;
+        }
+        if (pop && pop.classList.contains('dc-iconpick') && pop._for === doc.id) {
+          closePop();
+          return;
+        }
+        openIconPicker(btn, doc, fallback);
+      });
+      return btn;
+    }
+
+    function scheduleIconSave(id) {
+      iconSaveId = id;
+      clearTimeout(iconTimer);
+      iconTimer = setTimeout(function () { persistIcon(id); }, 350);
+    }
+
+    function applyIcon(doc, next) {
+      var norm = DM().normalizeIcon(next);
+      doc.icon = norm;
+      if (state.current && state.current.id === doc.id) state.current.icon = norm;
+      touchListItem(doc.id, { icon: norm });
+      scheduleIconSave(doc.id);
+    }
+
+    function persistIcon(id) {
+      iconTimer = null;
+      var d = state.docs.filter(function (x) { return x.id === id; })[0];
+      if (!d) return;
+      if (saving) {
+        iconTimer = setTimeout(function () { persistIcon(id); }, 200);
+        return;
+      }
+      var cur = state.current && state.current.id === id ? state.current : null;
+      var sent = DM().iconLine(d.icon);
+      var pre = cur ? saveNow() : Promise.resolve(true);
+      pre.then(function (ok) {
+        if (!ok || iconSaveId !== id) return;
+        if (saving) {
+          iconTimer = setTimeout(function () { persistIcon(id); }, 200);
+          return;
+        }
+        saving = true;
+        if (cur && state.current === cur) setSave('saving');
+        DT().setIcon(t, { id: id, rev: cur ? cur.rev : (d.rev != null ? d.rev : null) }, d.icon || null).then(function (res) {
+          saving = false;
+          var newer = DM().iconLine(d.icon) !== sent;
+          if (cur) {
+            cur.rev = res.rev;
+            if (res.updatedAt) cur.updatedAt = res.updatedAt;
+            if (!newer) cur.icon = res.icon;
+          }
+          var patch = { rev: res.rev };
+          if (res.updatedAt) patch.updatedAt = res.updatedAt;
+          if (!newer) patch.icon = res.icon;
+          touchListItem(id, patch);
+          if (cur && state.current === cur) {
+            var dirty = editor && (DM().domToMd(editor) !== lastMd || (DM().cleanTitle(els.title.value) || DM().UNTITLED) !== savedTitle);
+            setSave(dirty ? 'dirty' : 'saved');
+          }
+          if (newer) scheduleIconSave(id);
+        }, function (err) {
+          saving = false;
+          if (cur && state.current === cur) failure(err);
+          else failure(err);
+        });
+      });
+    }
+
+    function openIconPicker(anchor, doc, fallback) {
+      closePop();
+      var current = DM().normalizeIcon(doc.icon);
+      var q = '';
+      var box = h('div', { class: 'dc-pop dc-iconpick', role: 'dialog', 'aria-label': 'Icône' });
+      box._for = doc.id;
+      var search = h('input', {
+        class: 'dc-input',
+        type: 'text',
+        placeholder: 'Icône',
+        'aria-label': 'Chercher une icône',
+        spellcheck: 'false',
+      });
+      var colors = h('div', { class: 'dc-iconpick-colors' });
+      var grid = h('div', { class: 'dc-iconpick-grid' });
+
+      function choose(next) {
+        applyIcon(doc, next);
+        current = DM().normalizeIcon(doc.icon);
+        paint();
+      }
+
+      function iconBtn(name, label, on, clear) {
+        var b = h('button', {
+          class: 'dc-iconpick-btn' + (on ? ' is-on' : ''),
+          type: 'button',
+          title: label,
+          'aria-label': label,
+          onclick: function () {
+            choose({ i: clear ? '' : name, c: current && current.c });
+          },
+        }, [icon(name)]);
+        if (current && current.c) b.style.color = current.c;
+        return b;
+      }
+
+      function paint() {
+        colors.textContent = '';
+        grid.textContent = '';
+        colors.appendChild(h('button', {
+          class: 'dc-iconpick-color dc-iconpick-color--none' + (!(current && current.c) ? ' is-on' : ''),
+          type: 'button',
+          title: 'Couleur d’origine',
+          'aria-label': 'Couleur d’origine',
+          onclick: function () { choose({ i: current && current.i, c: '' }); },
+        }));
+        DM().COVER_COLORS.forEach(function (c) {
+          colors.appendChild(h('button', {
+            class: 'dc-iconpick-color' + (current && current.c === c.v ? ' is-on' : ''),
+            type: 'button',
+            title: c.label,
+            'aria-label': c.label,
+            style: 'background:' + c.v,
+            onclick: function () { choose({ i: current && current.i, c: c.v }); },
+          }));
+        });
+        if (!q) grid.appendChild(iconBtn(fallback, 'Par défaut', !(current && current.i), true));
+        DM().searchDocIcons(q).forEach(function (x) {
+          if (!q && x.i === fallback) return;
+          grid.appendChild(iconBtn(x.i, x.i, !!(current && current.i === x.i), false));
+        });
+      }
+
+      search.addEventListener('input', function () { q = search.value; paint(); });
+      search.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Escape') { e.preventDefault(); closePop(); }
+      });
+      box.appendChild(search);
+      box.appendChild(colors);
+      box.appendChild(grid);
+      pop = box;
+      placePop(pop, anchor.getBoundingClientRect());
+      paint();
+      search.focus();
+    }
+
     function folderRow(r) {
       var f = r.folder;
       var on = !!(state.current && f.doc && state.current.id === f.doc);
@@ -685,7 +854,7 @@
         },
       }, [
         chev,
-        icon(r.open ? 'folder-open' : 'folder', 'dc-item-icon'),
+        itemIcon(r.doc, r.open ? 'folder-open' : 'folder', function () { openFolder(f.id); }),
         h('span', { class: 'dc-item-main' }, [
           h('span', { class: 'dc-item-title', text: (r.doc && r.doc.title) || f.name }),
           h('span', { class: 'dc-item-time', text: when }),

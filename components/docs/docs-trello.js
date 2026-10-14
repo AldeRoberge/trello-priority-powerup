@@ -224,6 +224,7 @@
     var cover = DM().normalizeCover(opts && opts.cover);
     var subject = DM().normalizeSubject(opts && opts.subject);
     var props = DM().normalizeProps(opts && opts.props);
+    var icon = DM().normalizeIcon(opts && opts.icon);
     if (DM().sizeInfo(text).over) throw fail('too-long');
     var listId = await homeListId(t);
     var name = DM().nameFromTitle(title);
@@ -236,7 +237,7 @@
     );
     if (!created || !created.id) throw fail('no-card');
     try {
-      need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true, desc: DM().packDesc(text, { rev: 1, cover: cover, subject: subject, props: props }) }));
+      need(await ST().trelloRest(t, '/cards/' + enc(created.id), 'PUT', { closed: true, desc: DM().packDesc(text, { rev: 1, cover: cover, subject: subject, props: props, icon: icon }) }));
     } catch (err) {
       // never leave a visible document card on the board
       await ST().trelloRest(t, '/cards/' + enc(created.id), 'DELETE').catch(function () {});
@@ -250,6 +251,7 @@
       cover: cover,
       subject: subject,
       props: props,
+      icon: icon,
       updatedAt: created.dateLastActivity || new Date().toISOString(),
     };
   }
@@ -279,16 +281,18 @@
     var cover = doc.cover;
     var subject = doc.subject;
     var props = doc.props;
-    // A body save that omits cover / subject / props keeps whatever is already stored.
-    if (!opts.force || cover === undefined || subject === undefined || props === undefined) {
+    var icon = doc.icon;
+    // A body save that omits cover / subject / props / icon keeps whatever is already stored.
+    if (!opts.force || cover === undefined || subject === undefined || props === undefined || icon === undefined) {
       var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
       var remote = DM().unpackDesc(cur && cur.desc);
       if (!opts.force && remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
       if (cover === undefined) cover = remote.cover;
       if (subject === undefined) subject = remote.subject;
       if (props === undefined) props = remote.props;
+      if (icon === undefined) icon = remote.icon;
     }
-    var desc = DM().packDesc(doc.body, { rev: nextRev, cover: cover, subject: subject, props: props });
+    var desc = DM().packDesc(doc.body, { rev: nextRev, cover: cover, subject: subject, props: props, icon: icon });
     if (desc.length > DM().MAX_DESC) throw fail('too-long');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
     return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString() };
@@ -305,10 +309,30 @@
     if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
     var next = DM().normalizeCover(cover);
     var nextRev = remote.rev + 1;
-    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: next, subject: remote.subject, props: remote.props });
+    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: next, subject: remote.subject, props: remote.props, icon: remote.icon });
     if (desc.length > DM().MAX_DESC) throw fail('too-long');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
     return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString(), cover: next };
+  }
+
+  /**
+   * Changes only the sidebar icon (null clears it). The remote body stays. `doc.rev` null means
+   * apply on the latest text (the list does not keep a revision).
+   * @returns {Promise<{rev:number, updatedAt:string, icon:object|null}>}
+   */
+  async function setIcon(t, doc, icon) {
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc,dateLastActivity'));
+    var remote = DM().unpackDesc(cur && cur.desc);
+    if (doc.rev != null && remote.rev !== doc.rev) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
+    var next = DM().normalizeIcon(icon);
+    if (DM().sameIcon(next, remote.icon)) {
+      return { rev: remote.rev, updatedAt: (cur && cur.dateLastActivity) || '', icon: next };
+    }
+    var nextRev = remote.rev + 1;
+    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: remote.cover, subject: remote.subject, props: remote.props, icon: next });
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
+    return { rev: nextRev, updatedAt: (card && card.dateLastActivity) || new Date().toISOString(), icon: next };
   }
 
   async function restCreds(t) {
@@ -612,7 +636,7 @@
     var nextRev = remote.rev + 1;
     var subject = patch.subject !== undefined ? DM().normalizeSubject(patch.subject) : remote.subject;
     var props = patch.props !== undefined ? DM().normalizeProps(patch.props) : remote.props;
-    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: remote.cover, subject: subject, props: props });
+    var desc = DM().packDesc(remote.body, { rev: nextRev, cover: remote.cover, subject: subject, props: props, icon: remote.icon });
     if (desc.length > DM().MAX_DESC) throw fail('too-long');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
     return {
@@ -663,6 +687,7 @@
     ensureDefaultDoc: ensureDefaultDoc,
     saveDoc: saveDoc,
     setCover: setCover,
+    setIcon: setIcon,
     uploadCover: uploadCover,
     coverBlobUrl: coverBlobUrl,
     searchUnsplash: searchUnsplash,

@@ -2,7 +2,7 @@
  * Role: UI of the Dashboard view, a Linear-style workspace:
  *   Ingest        type tasks (one per line) → cards land in the triage list; optional "Demander à l'IA"
  *   Triage        what the item is, then priority / estimate / date: accept, backlog, reference, waiting, someday, cancel
- *   Orchestrateur zoom from minutes to hours, days, weeks, months, years, then Vague. Each column creates a task in place.
+ *   Orchestrateur zoom glides from minutes to Vague (wheel eases, columns stretch, the instant under the cursor stays). Each column creates a task in place.
  *   Aujourd'hui   focus list, the hour-by-hour timeline, and the revue (triage, next step, waiting, work in progress, project outcome).
  * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel + WorkOS (pure).
  * Keys: 1-4 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
@@ -242,6 +242,11 @@
       selected: null, // triage selection (card id)
       capacity: DT().getCapacity(),
       scale: DT().getScale ? DT().getScale() : 'day',
+      zoomP: 0, // pixels per day; 0 means "fit the saved scale" until the user zooms
+      zoomColPx: 0,
+      zoomDay: '', // clock scales follow the day under the cursor
+      zoomFocalMs: null,
+      zoomFocalX: null,
       busy: false,
       status: '',
       statusKind: '',
@@ -1291,11 +1296,201 @@
       return opts.map(function (o) { return { id: o.id, label: o.label, days: o.days }; });
     }
 
+    /* Continuous zoom, same idea as the Gantt: a pixels-per-day value eased on
+       the wheel. Columns stretch; the scale changes only when a column of the
+       next level is wide enough, and the instant under the cursor stays put. */
+    var zoomAnim = { raf: 0, cur: 0, target: 0, x: 0 };
+    var ZOOM_COUNTS = { minute: 12, hour: 12, day: 7, week: 8, month: 12, year: 5, years: 12, vague: 8 };
+
+    function isoFromMs(ms) {
+      var d = new Date(ms);
+      return isFinite(d.getTime()) ? DM().isoOf(d) : today;
+    }
+
+    function bucketRange(b) {
+      if (!b || b.vague || !b.date) return null;
+      var start = Date.parse(b.date + 'T' + (b.time || '00:00') + ':00');
+      var end;
+      if (b.endTime === '24:00') end = Date.parse(DM().addDays(b.date, 1) + 'T00:00:00');
+      else if (b.endTime) end = Date.parse((b.end && b.end !== b.date ? b.end : b.date) + 'T' + b.endTime + ':00');
+      else if (b.end) end = Date.parse(b.end + 'T00:00:00');
+      if (!isFinite(start) || !isFinite(end) || end <= start) return null;
+      return { start: start, end: end };
+    }
+
+    function ensureZoom() {
+      if (!(state.zoomP > 0) && DM().zoomFit) {
+        var avail = Math.max(320, (els.main.clientWidth || 960) - 280);
+        state.zoomP = DM().zoomFit(state.scale || 'day', avail, ZOOM_COUNTS[state.scale] || 7);
+      }
+      var layout = DM().zoomLayout(state.zoomP || 180);
+      state.zoomP = layout.pxPerDay;
+      state.zoomColPx = layout.colPx;
+      if (layout.scale !== state.scale) {
+        state.scale = layout.scale;
+        if (DT().setScale) DT().setScale(state.scale);
+      }
+      return layout;
+    }
+
+    function pointerOnStrip(clientX, strip) {
+      if (!strip) return clientX;
+      var rect = strip.getBoundingClientRect();
+      if (clientX == null || clientX < rect.left || clientX > rect.right) return rect.left + rect.width / 2;
+      return clientX;
+    }
+
+    function readFocalMs(clientX, colPx) {
+      var strip = els.main.querySelector('.db-board-days');
+      if (!strip) return null;
+      var cols = strip.querySelectorAll('[data-zoom-start]');
+      if (!cols.length) return null;
+      var rect = strip.getBoundingClientRect();
+      var local = (clientX == null ? rect.left + rect.width / 2 : clientX) - rect.left;
+      var x = strip.scrollLeft + local;
+      var col = colPx > 0 ? colPx : (state.zoomColPx || 160);
+      var stride = col + 4;
+      var i = Math.floor(x / stride);
+      if (i < 0) i = 0;
+      if (i >= cols.length) i = cols.length - 1;
+      var frac = (x - i * stride) / col;
+      if (frac < 0) frac = 0;
+      if (frac > 1) frac = 1;
+      var a = +cols[i].getAttribute('data-zoom-start');
+      var b = +cols[i].getAttribute('data-zoom-end');
+      if (!isFinite(a) || !isFinite(b) || b <= a) return null;
+      return a + frac * (b - a);
+    }
+
+    function scrollStripTo(strip, ms, clientX) {
+      if (!strip || ms == null) return;
+      var cols = strip.querySelectorAll('[data-zoom-start]');
+      if (!cols.length) return;
+      var col = state.zoomColPx || 160;
+      var x = 0;
+      for (var i = 0; i < cols.length; i++) {
+        var a = +cols[i].getAttribute('data-zoom-start');
+        var b = +cols[i].getAttribute('data-zoom-end');
+        if (ms < b || i === cols.length - 1) {
+          var frac = b > a ? (ms - a) / (b - a) : 0;
+          if (frac < 0) frac = 0;
+          if (frac > 1) frac = 1;
+          x += frac * col;
+          break;
+        }
+        x += col + 4;
+      }
+      var rect = strip.getBoundingClientRect();
+      var local = clientX == null ? rect.width / 2 : clientX - rect.left;
+      if (local < 0) local = 0;
+      if (rect.width > 0 && local > rect.width) local = rect.width;
+      strip.scrollLeft = Math.max(0, x - local);
+    }
+
+    function anchorScroll(strip, clientX, oldCol, newCol) {
+      if (!strip || !(oldCol > 0) || !(newCol > 0)) return;
+      var rect = strip.getBoundingClientRect();
+      var local = (clientX == null ? rect.left + rect.width / 2 : clientX) - rect.left;
+      var x = strip.scrollLeft + local;
+      var i = Math.floor(x / (oldCol + 4));
+      var frac = (x - i * (oldCol + 4)) / oldCol;
+      if (frac < 0) frac = 0;
+      if (frac > 1) frac = 1;
+      strip.scrollLeft = Math.max(0, i * (newCol + 4) + frac * newCol - local);
+    }
+
+    function paintZoom(layout) {
+      var root = els.main.querySelector('.db-zoom');
+      if (!root || !layout) return;
+      var range = root.querySelector('.db-zoom-range');
+      if (range && document.activeElement !== range) range.value = String(DM().zoomSlider(layout.pxPerDay));
+      var bounds = DM().zoomBounds();
+      var btns = root.querySelectorAll('.db-zoom-btn');
+      if (btns[0]) btns[0].disabled = layout.pxPerDay >= bounds.max * 0.985;
+      if (btns[1]) btns[1].disabled = layout.scale === 'vague';
+    }
+
+    function applyZoom(px, clientX) {
+      if (!DM().zoomLayout) return;
+      var prevCol = state.zoomColPx;
+      var prevScale = state.scale;
+      var strip = els.main.querySelector('.db-board-days');
+      var x = pointerOnStrip(clientX, strip);
+      var focal = readFocalMs(x, prevCol);
+      var layout = DM().zoomLayout(px);
+      state.zoomP = layout.pxPerDay;
+      state.zoomColPx = layout.colPx;
+      if (layout.scale !== prevScale) {
+        state.zoomFocalMs = focal;
+        state.zoomFocalX = x;
+        if (focal != null) state.zoomDay = isoFromMs(focal);
+        state.scale = layout.scale;
+        if (DT().setScale) DT().setScale(state.scale);
+        render();
+        return;
+      }
+      if (strip && layout.scale !== 'vague' && prevCol > 0) {
+        strip.style.gridTemplateColumns = 'repeat(' + strip.children.length + ', ' + layout.colPx + 'px)';
+        anchorScroll(strip, x, prevCol, layout.colPx);
+      }
+      paintZoom(layout);
+    }
+
+    function zoomTick() {
+      zoomAnim.raf = 0;
+      var ratio = zoomAnim.target / zoomAnim.cur;
+      if (!isFinite(ratio) || ratio <= 0) return;
+      var done = Math.abs(Math.log(ratio)) < 0.004;
+      var next = done ? zoomAnim.target : zoomAnim.cur * Math.pow(ratio, 0.3);
+      applyZoom(next, zoomAnim.x);
+      var applied = state.zoomP;
+      if (Math.abs(applied - next) / Math.max(next, 1e-6) > 0.002) {
+        zoomAnim.target = applied;
+        done = true;
+      }
+      zoomAnim.cur = applied;
+      if (!done) zoomAnim.raf = requestAnimationFrame(zoomTick);
+    }
+
+    function easeZoom(target, clientX) {
+      var bounds = DM().zoomBounds ? DM().zoomBounds() : { min: 0.05, max: 30000 };
+      if (target < bounds.min) target = bounds.min;
+      if (target > bounds.max) target = bounds.max;
+      if (!zoomAnim.raf) zoomAnim.cur = state.zoomP > 0 ? state.zoomP : target;
+      zoomAnim.target = target;
+      zoomAnim.x = clientX;
+      if (!zoomAnim.raf) zoomAnim.raf = requestAnimationFrame(zoomTick);
+    }
+
+    els.main.addEventListener('wheel', function (e) {
+      if (state.section !== 'orchestrator') return;
+      if (e.ctrlKey || e.metaKey) return;
+      var node = e.target;
+      if (node && node.closest && node.closest('input, textarea, select, .db-zoom-range')) return;
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (!e.deltaY || !(state.zoomP > 0)) return;
+      e.preventDefault();
+      var unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 120 : 1;
+      var f = Math.exp(-e.deltaY * unit * 0.002);
+      if (f < 0.6) f = 0.6;
+      if (f > 1.6) f = 1.6;
+      easeZoom((zoomAnim.raf ? zoomAnim.target : state.zoomP) * f, e.clientX);
+    }, { passive: false });
+
     function renderOrchestrator() {
-      var scale = state.scale || 'day';
-      var nowM = (function () { var d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
+      var layout = ensureZoom();
+      var scale = layout.scale;
+      var nowM = (function () {
+        if (state.zoomFocalMs != null && state.zoomDay && state.zoomDay !== today) {
+          var at = new Date(state.zoomFocalMs);
+          return at.getHours() * 60 + at.getMinutes();
+        }
+        var d = new Date();
+        return d.getHours() * 60 + d.getMinutes();
+      })();
       var manual = scale === 'vague' || scale === 'hour' || scale === 'minute';
-      var buckets = DM().horizonPlan(state.rows, today, scale, state.capacity, vagueOptions(), nowM);
+      var planFrom = (scale === 'hour' || scale === 'minute') ? (state.zoomDay || today) : today;
+      var buckets = DM().horizonPlan(state.rows, planFrom, scale, state.capacity, vagueOptions(), nowM);
       var pool = DM().unplanned(state.rows);
       if (manual && scale !== 'vague' && DM().untimed) pool = pool.concat(DM().untimed(state.rows, today));
       var moves = manual ? [] : (scale === 'day'

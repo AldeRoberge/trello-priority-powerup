@@ -4,9 +4,10 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
+| plus-hide | `insert-gap.css` (hidden plus), `insert-gap.js` (hide, placeButton, prune disconnected watches; not `onMove` / `rectsOf`), `test/insert-gap.test.js`, `CHANGELOG.md` one line | Stray + circles stay hidden |
 | orch-glide | `dashboard-model.js` (zoomLayout only), `dashboard-ui.js` (orchestrator zoom glide only), `test/dashboard-model.test.js`, `dashboard.html` (model + ui cache), `CHANGELOG.md` one line | Smooth zoom like the Gantt |
 | ghost-ans | (released) | Don't finish "answer" on a question line |
-| hull-edge | `mindmap-model.js` (`looseHull` only), `mindmap-ui.js` (hull pad in `drawHulls` / `groupBox` only), `test/mindmap-model.test.js`, `mindmap.html` (cache query), `CHANGELOG.md` (one line) | Group boundary follows card edges |
+| hull-edge | (released) | Group boundary follows card edges |
 | chip-pins | NEW `components/docs/docs-pins.js`, `docs-ui.js` (`wireChipPins` only), `docs-ui.css` (`.dc-pin*` only), `docs.html` + `sandbox/e2e/docs.html` (one script each), `test/docs-pins.test.js`, `scripts/run-tests.js` (one line), `docs/documents.md` (one row), `CHANGELOG.md` one line | Task-chip pins: parent, sibling, person |
 | doc-icon | `docs-model.js` (icon line only), `docs-trello.js` (`setIcon` + keep icon on save/cover/meta), `docs-ui.js` (sidebar icon button + picker only), `docs-ui.css` (`.dc-item-icon` button + `.dc-iconpick*`), `test/docs-icon.test.js`, `scripts/run-tests.js` (one line), `docs.html` cache query, `docs/documents.md` (one row), `CHANGELOG.md` (one line) | Click a document or folder icon to change the glyph and its color |
 | asset-ver | (released) | Every asset is versioned; a new build reloads the page |
@@ -38,7 +39,7 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 | orch-add | sharing with orch-scale: `dashboard-ui.js` (scale icons + Planifier auto stays), `dashboard-ui.css` (`.db-scale` / `.db-btn.is-inert` only), `dashboard.html` cache query, `CLAUDE.md` (one UX rule), `CHANGELOG.md` one line | Scale icons; buttons do not move |
 | orch-add-prev | (released) sharing lines may still be in the working tree: `dashboard-ui.js` composer, `dashboard-ui.css` `.db-add*`, `dashboard-model.js` `taskDraft` | Nouvelle tâche dans chaque colonne de l’orchestrateur |
 | orch-scale | sharing with menu-rich (not the card menu), insert-gap (not `watch`), os-gap: `dashboard-model.js` (clock buckets only), `dashboard-trello.js` (`planAt` time), `dashboard-ui.js` (zoom control only), `dashboard-ui.css` (`.db-zoom` only), `test/dashboard-model.test.js`, `dashboard.html` cache query, `CHANGELOG.md` one line | Zoom minutes → years, plan on an hour |
-| os-gap | `dashboard-ui.js` (Revue folded into Aujourd’hui; not zoom, scale, or the card menu), `CHANGELOG.md` one line | Revue lives on Aujourd’hui |
+| os-gap | (released) | Revue is a block on Aujourd’hui. No separate nav item. |
 | sel-task | (released) | Select text in a document: « Créer une tâche » creates a linked board card |
 | ai-complete | (released) | Typing no longer copies the whole document or restyles the ghost every caret move |
 | doc-blocks | `docs-model.js` (image-line parser only; not subject/tags/people or covers), `docs-ui.js` (block gutter only; not the property strip or empty state), `docs-ui.css` (gutter + figures), `test/docs-model.test.js`, `sandbox/e2e/docs-tests.js`, `docs/documents.md` (image + handle sentence), `CHANGELOG.md` (one line). Not touching `docs-trello.js` (reuses `uploadCover`). | Notion block handle: drag, transform, add, pictures |
