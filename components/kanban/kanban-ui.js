@@ -350,7 +350,7 @@
           onclick: function () { HD.set(!state.hideDone); },
         }),
         HP ? HP.button(document.body) : null,
-      ].forEach(function (c) { els.bar.appendChild(c); });
+      ].forEach(function (c) { if (c) els.bar.appendChild(c); });
       paintStatus();
       paintCount();
     }

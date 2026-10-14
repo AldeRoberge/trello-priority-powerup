@@ -73,6 +73,8 @@ test('every ViewTabs view page uses the shared tab strip (no page can lose a tab
     const html = fs.readFileSync(file, 'utf8');
     assert.match(html, /components\/shared\/view-tabs\.js/, v.page + ' loads view-tabs.js');
     assert.match(html, /components\/shared\/view-tabs\.css/, v.page + ' loads view-tabs.css');
+    assert.match(html, /components\/shared\/view-shell\.js/, v.page + ' loads view-shell.js');
+    assert.match(html, /components\/shared\/view-shell\.css/, v.page + ' loads view-shell.css');
     assert.ok(html.includes("ViewTabs.mount(document.getElementById('viewTabs'), { active: '" + v.key + "' })"), v.page + ' mounts with its own key');
   }
 });

@@ -44,6 +44,9 @@
     else document.body.appendChild(root);
 
     function maxHeight() {
+      if (global.ViewShell && typeof global.ViewShell.dockMaxHeight === 'function') {
+        return global.ViewShell.dockMaxHeight();
+      }
       return Math.max(180, Math.round(global.innerHeight * 0.75));
     }
 

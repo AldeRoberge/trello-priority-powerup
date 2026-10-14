@@ -41,7 +41,7 @@
 }
 .vt-tab.is-on {
   color: var(--tp-text);
-  font-weight: 600;
+  font-weight: 500;
   border-bottom-color: var(--tp-primary);
   cursor: default;
 }

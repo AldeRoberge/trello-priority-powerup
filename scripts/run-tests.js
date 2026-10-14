@@ -20,6 +20,8 @@ const UNIT_FILES = [
   'version.test.js',
   'version-assets.test.js',
   'linear-pick.test.js',
+  'view-shell.test.js',
+  'card-fields.test.js',
   'shortcut-wiring.test.js',
   'priority-matrix.test.js',
   'priority-scoring.test.js',

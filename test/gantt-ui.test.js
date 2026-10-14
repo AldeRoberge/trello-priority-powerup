@@ -39,6 +39,17 @@ describe('GanttUI helpers', () => {
     );
   });
 
+  it('clampLabelsWidth leaves a timeline sliver on a phone-sized chart', () => {
+    const prev = global.ViewShell;
+    global.ViewShell = { labelsMin: (w) => (w < 640 ? Math.max(132, Math.round(w * 0.42)) : 280) };
+    try {
+      assert.equal(GanttUI.clampLabelsWidth(100, 375), 158);
+      assert.equal(GanttUI.clampLabelsWidth(560, 375), 255);
+    } finally {
+      global.ViewShell = prev;
+    }
+  });
+
   it('barTextColor picks the text colour that contrasts with the bar', () => {
     assert.equal(GanttUI.barTextColor('#0c66e4'), '#ffffff'); // saturated blue
     assert.equal(GanttUI.barTextColor('#626f86'), '#ffffff'); // grey

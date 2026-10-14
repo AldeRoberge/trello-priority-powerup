@@ -58,6 +58,17 @@
   }
 
   function place(root, anchor) {
+    var narrow = global.ViewShell && typeof global.ViewShell.isNarrow === 'function'
+      ? global.ViewShell.isNarrow()
+      : (window.innerWidth || 1024) <= 640;
+    if (narrow) {
+      root.classList.add('is-sheet');
+      root.style.left = '8px';
+      root.style.right = '8px';
+      root.style.top = 'auto';
+      root.style.bottom = '8px';
+      return;
+    }
     var r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: (anchor && anchor.x) || 0, bottom: (anchor && anchor.y) || 0, top: (anchor && anchor.y) || 0 };
     var w = root.offsetWidth;
     var h = root.offsetHeight;
