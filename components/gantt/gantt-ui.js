@@ -5521,6 +5521,22 @@
         newCard: openNewCard,
       });
     }
+    if (global.CommandPalette) {
+      global.CommandPalette.attach({
+        cards: function () {
+          return Object.keys(state.cardsById).map(function (id) {
+            var c = state.cardsById[id];
+            var l = (state.boardLists || []).filter(function (x) { return x.id === c.listId; })[0];
+            return { id: id, name: c.name, hint: l ? l.name : '' };
+          });
+        },
+        onCard: function (id) {
+          if (!global.CommandPalette.reveal('.gantt-row[data-card-id="' + id + '"]')) openCard(id, (state.cardsById[id] || {}).name);
+        },
+        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: openNewCard }]; },
+        isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
+      });
+    }
     // C: same composer as Tableau and Kanban; the card lands in the first "to do" list.
     function openNewCard() {
       var lists = state.boardLists || [];

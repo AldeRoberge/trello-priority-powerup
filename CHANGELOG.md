@@ -5,6 +5,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-15
 - Dashboard, Documents et Entités : le panneau de gauche a le même look (titre, + pour créer, recherche, lignes) et se redimensionne en glissant son bord (double-clic pour revenir à la taille d’origine). Le Dashboard peut aussi filtrer ses cartes avec la recherche.
+- Documents, Entités, Mindmap, Parcours : la même ligne discrète « Nouveau document… », « Nouvelle entité… » ou « Nouvelle carte… » en bas de la liste (ou en bas à gauche de la carte) crée directement, avec Entrée.
+- Toutes les vues : Ctrl+K ouvre la même recherche rapide partout (Tableau, Gantt, Tableau de bord, Mindmap, Parcours, Documents, Entités). On y trouve une carte, une vue, l’Assistant, les Paramètres, ou on crée une carte.
 
 ## 2026-10-14
 - Barre d’onglets : l’Assistant (chat complet) et les Paramètres du Cerveau s’ouvrent maintenant dans la même fenêtre, avec les icônes en haut à droite (bulle et roue dentée). La page d’une tâche a aussi la barre, avec un onglet « Tâche » : un clic ouvre Gantt, Tableau, Kanban… sur cette tâche.

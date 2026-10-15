@@ -1191,3 +1191,9 @@
 
   global.JourneyUI = { mount: mount };
 })(typeof window !== 'undefined' ? window : this);
+    if (global.CommandPalette) {
+      global.CommandPalette.attach({
+        cards: function () { return (state.board.cards || []).map(function (c) { return { id: c.id, name: c.name }; }); },
+        onCard: function (id) { selectNode(id, 'task'); },
+      });
+    }

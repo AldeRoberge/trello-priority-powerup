@@ -95,6 +95,9 @@
   <script src="./components/entities/entities-reality-ai.js"></script>
   <script src="./components/entities/entities-interview-ui.js"></script>
   <script src="./components/entities/entities-ui.js?v=narrow-1"></script>
+  <link rel="stylesheet" href="./components/shared/linear-pick.css" />
+  <script src="./components/shared/linear-pick.js"></script>
+  <script src="./components/shared/command-palette.js"></script>
 </head>
 <body class="tp-page tp-page--entities">
   <div id="viewTabs"></div>
@@ -105,5 +108,6 @@
       EntitiesUI.mount(document.getElementById('entitiesMount'), t);
     });
   </script>
+    CommandPalette.attach({});
 </body>
 </html>

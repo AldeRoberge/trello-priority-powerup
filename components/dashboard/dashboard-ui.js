@@ -1989,6 +1989,25 @@
             cardName: row.name,
             anchor: anchor,
             onSaved: function () { setStatus('Échéance enregistrée', 'ok'); reload({ quiet: true }); },
+    if (global.CommandPalette) {
+      global.CommandPalette.attach({
+        cards: function () {
+          return state.rows.map(function (r) {
+            var l = state.lists.filter(function (x) { return x.id === r.listId; })[0];
+            return { id: r.id, name: r.name, hint: l ? l.name : '' };
+          });
+        },
+        onCard: function (id) {
+          var row = state.rows.filter(function (r) { return r.id === id; })[0];
+          if (!row) return;
+          state.selected = id;
+          render();
+          global.CommandPalette.reveal('.db-row[data-id="' + id + '"]');
+        },
+        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: createCard }]; },
+        isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
+      });
+    }
             onError: function (m) { setStatus('Erreur échéance : ' + m, 'error'); },
           });
         },

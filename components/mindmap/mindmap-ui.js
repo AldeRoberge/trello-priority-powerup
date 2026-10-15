@@ -3645,3 +3645,11 @@
 
   global.MindmapUI = { mount: mount };
 })(typeof window !== 'undefined' ? window : this);
+    if (global.CommandPalette) {
+      global.CommandPalette.attach({
+        cards: function () { return state.records.map(function (r) { return { id: r.id, name: r.name }; }); },
+        onCard: function (id) { if (nodeById('t:' + id)) select('t:' + id); },
+        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: openNewCard }]; },
+        isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
+      });
+    }

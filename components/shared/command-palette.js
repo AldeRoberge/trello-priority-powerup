@@ -10,6 +10,8 @@
  *     isBusy() -> bool,                       // optional: an inline editor is open
  *   }) -> detach()
  *
+ * Every view mounts it; a view without cards (Documents, Entités) still gets the view / Assistant / settings jumps.
+ * reveal(selector) scrolls a row to the middle and pulses it, for views whose list is already on screen.
  * buildItems is exported for unit tests.
  */
 (function (global) {
@@ -39,13 +41,26 @@
     return m ? m[1] : '';
   }
 
+  /** Scroll the element to the middle of its scroller and pulse it (the view-tabs highlight). True when found. */
+  function reveal(selector) {
+    var el = null;
+    try { el = document.querySelector(selector); } catch (e) { el = null; }
+    if (!el) return false;
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    el.classList.remove('vt-highlight');
+    void el.offsetWidth;
+    el.classList.add('vt-highlight');
+    setTimeout(function () { el.classList.remove('vt-highlight'); }, 4000);
+    return true;
+  }
+
   function attach(o) {
     function open() {
       var LP = global.LinearPick;
       if (!LP || LP.isOpen()) return;
       if (typeof o.isBusy === 'function' && o.isBusy()) return;
       var VT = global.ViewTabs;
-      var views = (VT && VT.VIEWS) || [];
+      var views = ((VT && VT.VIEWS) || []).concat((VT && VT.UTILS) || []);
       var actions = typeof o.actions === 'function' ? o.actions() || [] : [];
       var items = buildItems(views, actions, typeof o.cards === 'function' ? o.cards() : [], activeViewKey(global.location));
       LP.open({
@@ -74,5 +89,5 @@
     return function detach() { document.removeEventListener('keydown', onKey); };
   }
 
-  global.CommandPalette = { attach: attach, buildItems: buildItems, activeViewKey: activeViewKey };
+  global.CommandPalette = { attach: attach, reveal: reveal, buildItems: buildItems, activeViewKey: activeViewKey };
 })(typeof window !== 'undefined' ? window : this);

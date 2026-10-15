@@ -101,6 +101,9 @@
   <script src="./components/docs/docs-pins.js?v=pins-1"></script>
   <script src="./components/docs/docs-entities.js?v=ent-2"></script>
   <script src="./components/docs/docs-ui.js?v=linkdoc-1"></script>
+  <link rel="stylesheet" href="./components/shared/linear-pick.css" />
+  <script src="./components/shared/linear-pick.js"></script>
+  <script src="./components/shared/command-palette.js"></script>
 </head>
 <body class="tp-page tp-page--docs">
   <div id="viewTabs"></div>
@@ -111,5 +114,6 @@
       DocsUI.mount(document.getElementById('docsMount'), t);
     });
   </script>
+    CommandPalette.attach({});
 </body>
 </html>

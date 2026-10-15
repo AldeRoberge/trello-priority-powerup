@@ -27,3 +27,10 @@ test('activeViewKey reads the page name', () => {
   assert.equal(CP.activeViewKey({ pathname: '/x/kanban.html' }), 'kanban');
   assert.equal(CP.activeViewKey({ pathname: '/' }), '');
 });
+
+test('buildItems offers the Assistant and settings pages like any view, and none for the page you are on', () => {
+  const utils = [{ key: 'assistant', label: 'Assistant', icon: 'message-chatbot' }, { key: 'settings', label: 'Paramètres du Cerveau', icon: 'settings' }];
+  const items = CP.buildItems(VIEWS.concat(utils), [], [], 'assistant');
+  assert.deepEqual(items.map((i) => i.id), ['view:gantt', 'view:kanban', 'view:settings']);
+});
+
