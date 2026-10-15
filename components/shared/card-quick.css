@@ -157,7 +157,7 @@
 .cq-chip:hover { background: var(--tp-surface-hover); }
 .cq-chip .ti { font-size: 14px; }
 .cq-chip.is-empty { opacity: 0.55; color: var(--tp-text-muted); }
-.cq-chip.is-empty:hover, .cq-chip.is-empty:focus-visible { opacity: 0.9; }
+.cq-chip.is-empty:hover, .cq-chip.is-empty:focus-visible { opacity: 0.85; }
 .cq-chip--u0 { color: var(--tp-text-muted); }
 .cq-chip--u1 { color: #b38600; }
 .cq-chip--u2 { color: #c25100; }
@@ -203,7 +203,7 @@
   opacity: 0.55;
   padding: 2px 0;
 }
-.cq-desc.is-empty:hover { opacity: 0.9; background: transparent; }
+.cq-desc.is-empty:hover { opacity: 0.85; background: transparent; }
 .cq-desc-body > :first-child { margin-top: 0; }
 .cq-desc-body > :last-child { margin-bottom: 0; }
 .cq-desc-body p { margin: 0 0 4px; }
