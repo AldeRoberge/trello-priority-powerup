@@ -306,9 +306,10 @@
     function renderBar() {
       els.bar.textContent = '';
       var filter = h('input', {
-        class: 'kb-filter',
+        class: 'kb-filter tp-search-input',
         type: 'search',
         placeholder: 'Filtrer…',
+        'aria-label': 'Filtrer',
         value: state.filter,
         oninput: function (e) {
           state.filter = e.target.value;
@@ -336,7 +337,7 @@
         }, [icon(iconName), h('span', { text: label }), h('span', { class: 'kb-facet-n', text: String(count) })]);
       }
       [
-        h('label', { class: 'kb-search' }, [icon('search'), filter]),
+        h('label', { class: 'kb-search tp-search' }, [icon('search'), filter]),
         facetButton('overdue', 'calendar-exclamation', 'En retard', counts.overdue),
         facetButton('blocked', 'player-pause', 'Bloquées', counts.blocked),
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),

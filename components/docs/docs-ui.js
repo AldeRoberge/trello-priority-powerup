@@ -248,7 +248,7 @@
       banner: h('div', { class: 'dc-banner', hidden: true }),
       side: h('aside', { class: 'dc-side', 'aria-label': 'Documents' }),
       sideList: h('div', { class: 'dc-list', role: 'listbox' }),
-      search: h('input', { class: 'dc-search-input', type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher un document' }),
+      search: h('input', { class: 'dc-search-input', type: 'search', placeholder: 'Filtrer…', 'aria-label': 'Filtrer les documents' }),
       main: h('section', { class: 'dc-doc' }),
       head: h('div', { class: 'dc-head' }),
       headTitle: h('span', { class: 'dc-head-title' }),

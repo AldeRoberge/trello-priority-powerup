@@ -40,23 +40,6 @@ html[data-color-mode] body.tp-page.tp-page--journey {
   background: var(--tp-surface);
 }
 
-.jy-search {
-  width: 180px;
-  height: 28px;
-  flex: none;
-  padding: 0 8px;
-  border: 1px solid var(--tp-border);
-  border-radius: 6px;
-  background: var(--tp-input-bg);
-  color: var(--tp-text);
-  font: inherit;
-  font-size: 13px;
-}
-
-.jy-search::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
-.jy-search:hover::placeholder { opacity: 0.8; }
-.jy-search:focus { outline: none; border-color: var(--tp-border-strong); }
-
 .jy-zoom { display: flex; flex: none; }
 .jy-zoom button {
   width: 72px;
@@ -159,31 +142,101 @@ html[data-color-mode] body.tp-page.tp-page--journey {
   flex: 1;
   min-height: 0;
   position: relative;
-  overflow: auto;
+  overflow: hidden;
   background-color: var(--tp-bg);
-  background-image: radial-gradient(var(--tp-border) 1px, transparent 1px);
-  background-size: 22px 22px;
-  cursor: grab;
 }
-.jy-map.is-panning { cursor: grabbing; }
 
-.jy-canvas { position: relative; }
-
-.jy-roads {
+.jy-zoomtools {
   position: absolute;
-  left: 0;
-  top: 0;
-  overflow: visible;
-  pointer-events: none;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 2px;
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  background: var(--tp-surface);
+  color: var(--tp-text-subtle);
+}
+.jy-zoomtools-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.jy-zoomtools-btn:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.jy-zoomtools-pct {
+  min-width: 46px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
-.jy-edge { fill: none; stroke: var(--tp-border-strong); stroke-width: 2; }
-.jy-edge.is-needs.is-open { stroke: var(--tp-danger-text); }
-.jy-edge.is-needs.is-met { stroke: var(--tp-success); opacity: 0.7; }
-.jy-edge.is-after { stroke-dasharray: 5 4; }
-.jy-edge.is-parts { stroke-width: 1.5; opacity: 0.7; }
-.jy-edge.is-sub { stroke-width: 1.5; opacity: 0.55; }
-.jy-edge.is-cross { stroke-dasharray: 1 4; }
+.jy-wire { --jy-wire: var(--tp-border-strong); }
+.jy-wire.is-needs.is-open { --jy-wire: var(--tp-danger-text); }
+.jy-wire.is-needs.is-met { --jy-wire: var(--tp-success); }
+.jy-wire.is-selected { --jy-wire: var(--tp-primary); }
+.jy-edge { fill: none; stroke: var(--jy-wire); stroke-width: 2; }
+.jy-arrow { fill: var(--jy-wire); stroke: none; }
+.jy-edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.jy-wire.is-needs.is-met .jy-edge,
+.jy-wire.is-needs.is-met .jy-arrow { opacity: 0.7; }
+.jy-wire.is-after .jy-edge { stroke-dasharray: 5 4; }
+.jy-wire.is-parts .jy-edge { stroke-width: 1.5; opacity: 0.7; }
+.jy-wire.is-parts .jy-arrow { opacity: 0.7; }
+.jy-wire.is-sub .jy-edge { stroke-width: 1.5; opacity: 0.55; }
+.jy-wire.is-sub .jy-arrow { opacity: 0.55; }
+.jy-wire.is-cross .jy-edge { stroke-dasharray: 1 4; }
+.jy-wire:hover .jy-edge { stroke: var(--tp-primary); }
+.jy-wire:hover .jy-arrow { fill: var(--tp-primary); }
+
+.jy-handle {
+  fill: var(--tp-surface);
+  stroke: var(--tp-primary);
+  stroke-width: 2;
+  pointer-events: all;
+  cursor: crosshair;
+}
+.jy-handle:hover { fill: var(--tp-primary); }
+
+.jy-pin {
+  position: absolute;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  cursor: crosshair;
+}
+.jy-pin::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tp-primary);
+  box-shadow: 0 0 0 2px var(--tp-surface);
+}
+.jy-pin:hover::after { background: var(--tp-primary-hover); }
+.jy-pin.is-top { left: 50%; top: -8px; margin-left: -8px; }
+.jy-pin.is-bottom { left: 50%; bottom: -8px; margin-left: -8px; }
+.jy-pin.is-left { top: 50%; left: -8px; margin-top: -8px; }
+.jy-pin.is-right { top: 50%; right: -8px; margin-top: -8px; }
+.jy-node:hover .jy-pin,
+.jy-node.is-on .jy-pin,
+.gc.is-wiring .jy-pin { opacity: 1; }
+.jy-node.is-drop-target { border-color: var(--tp-primary); background: var(--tp-surface-hover); }
+.jy-node.is-dragging { z-index: 4; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), inset 3px 0 0 var(--jy-mark, transparent); }
 
 .jy-node {
   position: absolute;

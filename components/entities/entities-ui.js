@@ -355,7 +355,7 @@
     var queryInput = h('input', {
       class: 'en-search-input',
       type: 'search',
-      placeholder: 'Rechercher ou décrire…',
+      placeholder: 'Filtrer…',
       title: 'Cherchez un nom, ou décrivez ce que vous voulez : « mes plantes au travail »',
       'aria-label': 'Filtrer les entités',
       autocomplete: 'off',

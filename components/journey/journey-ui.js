@@ -90,7 +90,13 @@
       gen: 0,
       didHl: false,
       scrollTo: null,
+      view: null,
+      fitNext: false,
+      selectedEdge: null,
+      pos: {},
     };
+    var live = null;
+    state.pos = loadPos();
 
     if (global.HideDone && global.HideDone.subscribe) {
       global.HideDone.subscribe(function (on) {
@@ -366,7 +372,13 @@
         if (box) box.focus();
         return;
       }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && state.selectedEdge) {
+        e.preventDefault();
+        removeSelectedEdge();
+        return;
+      }
       if (e.key === 'Escape' && !typing) {
+        if (state.selectedEdge) { state.selectedEdge = null; paint(); return; }
         if (state.query) { state.query = ''; paint(); return; }
         if (state.zoom !== 'overview' || state.focus || state.selected) {
           state.zoom = 'overview';
@@ -437,9 +449,7 @@
     }
 
     function paint() {
-      var map = container.querySelector('.jy-map');
-      var sl = map ? map.scrollLeft : 0;
-      var st = map ? map.scrollTop : 0;
+      live = null;
       var search = container.querySelector('.jy-search');
       var keepFocus = search && document.activeElement === search;
       var caret = keepFocus ? search.selectionStart : null;
@@ -462,7 +472,11 @@
         hereId: here,
       });
       var byPos = Object.create(null);
-      view.nodes.forEach(function (n) { byPos[n.id] = n; });
+      view.nodes.forEach(function (n) {
+        var p = state.pos[n.id];
+        if (p && isFinite(p.x) && isFinite(p.y)) { n.x = p.x; n.y = p.y; }
+        byPos[n.id] = n;
+      });
 
       var root = el('div', 'jy');
       root.appendChild(bar(graph));
@@ -482,36 +496,25 @@
           if (caret != null && again.setSelectionRange) again.setSelectionRange(caret, caret);
         }
       }
-      if (state.scrollTo) {
-        var target = container.querySelector('.jy-node[data-id="' + cssEscape(state.scrollTo) + '"]');
-        state.scrollTo = null;
-        if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center', inline: 'center' });
-      } else {
-        var nextMap = container.querySelector('.jy-map');
-        if (nextMap) {
-          nextMap.scrollLeft = sl;
-          nextMap.scrollTop = st;
-        }
-      }
-    }
-
-    function cssEscape(id) {
-      if (global.CSS && CSS.escape) return CSS.escape(String(id));
-      return String(id).replace(/"/g, '');
+      settleView();
     }
 
     function bar(graph) {
       var row = el('div', 'jy-bar');
-      var search = el('input', 'jy-search');
+      var search = el('input', 'jy-search tp-search-input');
       search.type = 'search';
-      search.placeholder = 'Chercher';
+      search.placeholder = 'Filtrer…';
       search.value = state.query;
-      search.setAttribute('aria-label', 'Chercher');
+      search.setAttribute('aria-label', 'Filtrer');
       search.addEventListener('input', function () {
         state.query = search.value;
+        state.fitNext = true;
         paint();
       });
-      row.appendChild(search);
+      var searchBox = el('label', 'tp-search');
+      searchBox.appendChild(icon('search'));
+      searchBox.appendChild(search);
+      row.appendChild(searchBox);
 
       var zoom = el('div', 'jy-zoom');
       zoom.setAttribute('role', 'group');
@@ -526,6 +529,7 @@
           if (z.id === 'task' && state.selected && graph.byId[state.selected] && graph.byId[state.selected].kind === 'task') {
             state.focus = state.selected;
           }
+          state.fitNext = true;
           paint();
         });
         zoom.appendChild(b);
@@ -541,6 +545,14 @@
         paint();
       });
       row.appendChild(eye);
+
+      var tidy = el('button', 'jy-iconbtn' + (Object.keys(state.pos).length ? '' : ' is-quiet'));
+      tidy.type = 'button';
+      tidy.title = 'Réorganiser';
+      tidy.setAttribute('aria-label', 'Réorganiser');
+      tidy.appendChild(icon('sitemap'));
+      tidy.addEventListener('click', function () { resetPos(); });
+      row.appendChild(tidy);
 
       if (state.authGoals === false) {
         var flag = el('button', 'jy-iconbtn is-quiet');
@@ -558,6 +570,7 @@
         state.zoom = 'overview';
         state.focus = null;
         state.selected = null;
+        state.fitNext = true;
         paint();
       });
       crumb.appendChild(home);
@@ -590,27 +603,179 @@
       return s;
     }
 
+    function GC() { return global.GraphCanvas; }
+
+    /* ── Map: shared GraphCanvas (pan, zoom, move boxes, drag links), same behaviour as the Mindmap ─────────── */
     function mapOf(graph, view, byPos) {
-      var scroller = el('div', 'jy-map');
-      var canvas = el('div', 'jy-canvas');
-      canvas.style.width = Math.max(view.width, 1) + 'px';
-      canvas.style.height = Math.max(view.height, 1) + 'px';
-      var svg = svgEl('svg');
-      svg.setAttribute('class', 'jy-roads');
-      svg.setAttribute('width', String(Math.max(view.width, 1)));
-      svg.setAttribute('height', String(Math.max(view.height, 1)));
-      view.edges.forEach(function (e) {
-        var a = byPos[e.from];
-        var b = byPos[e.to];
-        if (!a || !b) return;
-        var path = svgEl('path');
-        path.setAttribute('class', edgeClass(e, graph));
-        path.setAttribute('d', road(a, b));
-        svg.appendChild(path);
+      var gcm = GC();
+      var wrap = el('div', 'jy-map');
+      var pct = el('span', 'jy-zoomtools-pct', state.view ? Math.round(state.view.k * 100) + ' %' : '100 %');
+      var nodeEls = Object.create(null);
+      var refs = Object.create(null);
+      var handles = [];
+      var gc = gcm.create(wrap, {
+        view: state.view || undefined,
+        onView: function (v) {
+          state.view = v;
+          pct.textContent = Math.round(v.k * 100) + ' %';
+        },
+        onBackground: function (target) {
+          var w = target && target.closest && target.closest('.jy-wire');
+          if (w) selectEdge(w.getAttribute('data-id'));
+          else if (state.selectedEdge) selectEdge(null);
+        },
       });
-      canvas.appendChild(svg);
-      view.nodes.forEach(function (n) { canvas.appendChild(nodeEl(n, graph)); });
-      scroller.appendChild(canvas);
+
+      function nodeIds(e) { return [e.from, e.to]; }
+
+      function drawEdge(ref) {
+        var a = byPos[ref.e.from];
+        var b = byPos[ref.e.to];
+        if (!a || !b) return;
+        var w = gcm.wireBetween(a, b);
+        var dist = Math.sqrt(Math.pow(w.p2.x - w.p1.x, 2) + Math.pow(w.p2.y - w.p1.y, 2));
+        var j = gcm.arrowJoin(w.p2, dist);
+        ref.line.setAttribute('d', gcm.wirePath(w.p1, { x: j.base.x, y: j.base.y, nx: j.base.nx, ny: j.base.ny }));
+        ref.hit.setAttribute('d', w.d);
+        ref.arrow.setAttribute('d', j.d);
+        ref.ends = [w.p1, w.p2];
+      }
+
+      view.edges.forEach(function (e) {
+        if (!byPos[e.from] || !byPos[e.to]) return;
+        var g = svgEl('g');
+        g.setAttribute('class', edgeClass(e, graph) + (state.selectedEdge === e.id ? ' is-selected' : ''));
+        g.setAttribute('data-id', e.id);
+        var hit = svgEl('path');
+        hit.setAttribute('class', 'jy-edge-hit');
+        var line = svgEl('path');
+        line.setAttribute('class', 'jy-edge');
+        var arrow = svgEl('path');
+        arrow.setAttribute('class', 'jy-arrow');
+        g.appendChild(hit);
+        g.appendChild(line);
+        g.appendChild(arrow);
+        gc.svg.appendChild(g);
+        refs[e.id] = { e: e, g: g, hit: hit, line: line, arrow: arrow, ends: null };
+        drawEdge(refs[e.id]);
+      });
+
+      function redrawAround(id) {
+        Object.keys(refs).forEach(function (k) {
+          if (nodeIds(refs[k].e).indexOf(id) >= 0) drawEdge(refs[k]);
+        });
+        drawHandles();
+      }
+
+      function mark(id) {
+        Object.keys(nodeEls).forEach(function (k) { nodeEls[k].classList.toggle('is-drop-target', k === id); });
+      }
+
+      function targetFor(selfId) {
+        return function (elAt) {
+          var hit = elAt && elAt.closest && elAt.closest('.jy-node');
+          var id = hit && hit.getAttribute('data-id');
+          return id && id !== selfId && id !== JM().ORPHAN_ID ? id : null;
+        };
+      }
+
+      function pinWire(ev, n, side) {
+        gc.wire(ev, {
+          from: gcm.anchor(n, side),
+          targetAt: targetFor(n.id),
+          anchorFor: function (id) {
+            var tn = byPos[id];
+            return tn ? gcm.anchor(tn, gcm.facing(n, tn)[1]) : null;
+          },
+          onTarget: mark,
+          onDrop: function (id) { linkFromPin(graph, n, side, id); },
+        });
+      }
+
+      /** Two grab handles on the ends of the selected link: drag one onto another box to move that end. */
+      function drawHandles() {
+        handles.forEach(function (c) { if (c.parentNode) c.parentNode.removeChild(c); });
+        handles = [];
+        var ref = state.selectedEdge && refs[state.selectedEdge];
+        if (!ref || !ref.ends || (ref.e.kind !== 'depends' && ref.e.kind !== 'serves') || ref.e.to === JM().ORPHAN_ID) return;
+        ['from', 'to'].forEach(function (end, i) {
+          var c = svgEl('circle');
+          c.setAttribute('class', 'jy-handle');
+          c.setAttribute('r', '7');
+          c.setAttribute('cx', ref.ends[i].x.toFixed(1));
+          c.setAttribute('cy', ref.ends[i].y.toFixed(1));
+          var tip = svgEl('title');
+          tip.textContent = 'Glisser sur une autre boîte pour déplacer ce bout du lien';
+          c.appendChild(tip);
+          c.addEventListener('pointerdown', function (ev) {
+            var e = ref.e;
+            var fixed = byPos[end === 'to' ? e.from : e.to];
+            var other = byPos[end === 'to' ? e.to : e.from];
+            if (!fixed || !other) return;
+            gc.wire(ev, {
+              from: gcm.anchor(fixed, gcm.facing(fixed, other)[0]),
+              targetAt: targetFor(fixed.id),
+              anchorFor: function (id) {
+                var tn = byPos[id];
+                return tn ? gcm.anchor(tn, gcm.facing(fixed, tn)[1]) : null;
+              },
+              onTarget: mark,
+              onDrop: function (id) { moveEnd(graph, e, end, id); },
+            });
+          });
+          gc.svg.appendChild(c);
+          handles.push(c);
+        });
+      }
+
+      function selectEdge(id) {
+        state.selectedEdge = id || null;
+        Object.keys(refs).forEach(function (k) { refs[k].g.classList.toggle('is-selected', k === state.selectedEdge); });
+        drawHandles();
+      }
+
+      view.nodes.forEach(function (n) {
+        var node = nodeEl(n, graph);
+        nodeEls[n.id] = node;
+        ['top', 'right', 'bottom', 'left'].forEach(function (side) {
+          var pin = el('span', 'jy-pin gc-nodrag is-' + side);
+          pin.addEventListener('pointerdown', function (ev) { pinWire(ev, n, side); });
+          node.appendChild(pin);
+        });
+        gc.dragNode(node, {
+          node: n,
+          onMove: function (x, y) {
+            node.style.left = x + 'px';
+            node.style.top = y + 'px';
+            redrawAround(n.id);
+          },
+          onEnd: function (moved) {
+            if (!moved) return;
+            state.pos[n.id] = { x: n.x, y: n.y };
+            savePos();
+          },
+          onClick: function () { selectNode(n.id, n.kind === 'task' ? 'task' : 'project'); },
+        });
+        gc.world.appendChild(node);
+      });
+      drawHandles();
+
+      var tools = el('div', 'jy-zoomtools gc-nodrag');
+      function tool(name, title, fn) {
+        var b = el('button', 'jy-zoomtools-btn');
+        b.type = 'button';
+        b.title = title;
+        b.setAttribute('aria-label', title);
+        b.appendChild(icon(name));
+        b.addEventListener('click', fn);
+        tools.appendChild(b);
+      }
+      tool('zoom-out', 'Dézoomer', function () { gc.zoomBy(1 / 1.25); });
+      tools.appendChild(pct);
+      tool('zoom-in', 'Zoomer', function () { gc.zoomBy(1.25); });
+      tool('focus-2', 'Tout voir', function () { fitNow(); });
+      wrap.appendChild(tools);
+
       if (state.toast) {
         var tip = el('div', 'jy-toast');
         tip.appendChild(document.createTextNode(state.toast));
@@ -618,79 +783,203 @@
         back.type = 'button';
         back.addEventListener('click', function () { undo(); });
         tip.appendChild(back);
-        scroller.appendChild(tip);
+        wrap.appendChild(tip);
       }
+      live = { gc: gc, view: view, byPos: byPos };
+      return wrap;
+    }
 
-      var k = state.mapZoom || 1;
-      canvas.style.zoom = String(k);
-      var restore = state.mapScroll;
-      if (restore) {
-        scroller.addEventListener('scroll', function () {}, { passive: true });
-        setTimeout(function () { scroller.scrollLeft = restore.l; scroller.scrollTop = restore.t; }, 0);
-      }
-      scroller.addEventListener('scroll', function () {
-        state.mapScroll = { l: scroller.scrollLeft, t: scroller.scrollTop };
-      }, { passive: true });
-      scroller.addEventListener('wheel', function (e) {
-        e.preventDefault();
-        var next = Math.min(2.5, Math.max(0.25, k * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
-        if (next === k) return;
-        var rect = scroller.getBoundingClientRect();
-        var mx = e.clientX - rect.left;
-        var my = e.clientY - rect.top;
-        var cx = (scroller.scrollLeft + mx) / k;
-        var cy = (scroller.scrollTop + my) / k;
-        k = next;
-        state.mapZoom = k;
-        canvas.style.zoom = String(k);
-        scroller.scrollLeft = cx * k - mx;
-        scroller.scrollTop = cy * k - my;
-      }, { passive: false });
+    function fitNow() {
+      if (!live || !live.view.nodes.length) return;
+      var box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+      live.view.nodes.forEach(function (n) {
+        box.x0 = Math.min(box.x0, n.x); box.y0 = Math.min(box.y0, n.y);
+        box.x1 = Math.max(box.x1, n.x + n.w); box.y1 = Math.max(box.y1, n.y + n.h);
+      });
+      var s = live.gc.size();
+      live.gc.setView(GC().fitView(box, s.w, s.h, 40, 1, 0.3));
+    }
 
-      var drag = null;
-      scroller.addEventListener('pointerdown', function (e) {
-        if (e.button !== 0 && e.button !== 1) return;
-        if (e.target.closest && e.target.closest('.jy-node, .jy-plus, button, a')) return;
-        drag = { x: e.clientX, y: e.clientY, l: scroller.scrollLeft, t: scroller.scrollTop, id: e.pointerId };
-        scroller.classList.add('is-panning');
-        if (scroller.setPointerCapture) scroller.setPointerCapture(e.pointerId);
-      });
-      scroller.addEventListener('pointermove', function (e) {
-        if (!drag || drag.id !== e.pointerId) return;
-        scroller.scrollLeft = drag.l - (e.clientX - drag.x);
-        scroller.scrollTop = drag.t - (e.clientY - drag.y);
-      });
-      function endDrag(e) {
-        if (!drag || (e && drag.id !== e.pointerId)) return;
-        drag = null;
-        scroller.classList.remove('is-panning');
+    /** After the map is in the page (sizes are known): center the focused box, or fit everything the first time. */
+    function settleView() {
+      if (!live) return;
+      var gc = live.gc;
+      if (state.scrollTo) {
+        var n = live.byPos[state.scrollTo];
+        state.scrollTo = null;
+        if (n) {
+          var s = gc.size();
+          gc.setView(GC().centerOn(n.x + n.w / 2, n.y + n.h / 2, s.w, s.h, gc.view.k));
+          return;
+        }
       }
-      scroller.addEventListener('pointerup', endDrag);
-      scroller.addEventListener('pointercancel', endDrag);
-      scroller.addEventListener('mousedown', function (e) { if (e.button === 1) e.preventDefault(); });
-      return scroller;
+      if (!state.view || state.fitNext) {
+        state.fitNext = false;
+        fitNow();
+      }
+    }
+
+    function posKey() {
+      var board = '';
+      try { board = (t && typeof t.getContext === 'function' && t.getContext().board) || ''; } catch (e) { /* no context */ }
+      return 'tp-journey-pos' + (board ? ':' + board : '');
+    }
+
+    function loadPos() {
+      try {
+        var raw = global.localStorage && global.localStorage.getItem(posKey());
+        var o = raw ? JSON.parse(raw) : {};
+        return o && typeof o === 'object' ? o : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function savePos() {
+      try { if (global.localStorage) global.localStorage.setItem(posKey(), JSON.stringify(state.pos)); } catch (e) { /* storage unavailable */ }
+    }
+
+    function resetPos() {
+      if (!Object.keys(state.pos).length) return;
+      var before = state.pos;
+      state.pos = {};
+      savePos();
+      remember('Disposition', async function () { state.pos = before; savePos(); });
+      state.fitNext = true;
+      toast('Boîtes réorganisées');
     }
 
     function edgeClass(e, graph) {
-      if (e.kind === 'serves') return 'jy-edge is-serves' + (e.cross ? ' is-cross' : '');
-      if (e.kind === 'sub') return 'jy-edge is-sub';
-      if (e.dep === 'after') return 'jy-edge is-after';
-      if (e.dep === 'parts') return 'jy-edge is-parts';
+      var base = 'jy-wire';
+      if (e.kind === 'serves') return base + ' is-serves' + (e.cross ? ' is-cross' : '');
+      if (e.kind === 'sub') return base + ' is-sub';
+      if (e.dep === 'after') return base + ' is-after';
+      if (e.dep === 'parts') return base + ' is-parts';
       var open = graph.state[e.to] && graph.state[e.to] !== 'done';
-      return 'jy-edge is-needs' + (open ? ' is-open' : ' is-met');
+      return base + ' is-needs' + (open ? ' is-open' : ' is-met');
     }
 
-    function road(a, b) {
-      var x1 = a.x + a.w;
-      var y1 = a.y + a.h / 2;
-      var x2 = b.x;
-      var y2 = b.y + b.h / 2;
-      if (x2 < x1) {
-        var swap = x1; x1 = b.x + b.w; x2 = a.x; y1 = b.y + b.h / 2; y2 = a.y + a.h / 2;
-        void swap;
+    /* ── Editing links ──────────────────────────────────────────────── */
+    function refFor(graph, id) {
+      var n = graph.byId[id];
+      return n && n.kind === 'task' ? 't:' + id : id;
+    }
+
+    function sameRef(ref, id) { return ref === id || ref === 't:' + id; }
+
+    /** Why this link cannot be made, or '' when it can. `except` is the link being moved. */
+    function linkProblem(graph, kind, from, to, except) {
+      var a = graph.byId[from];
+      var b = graph.byId[to];
+      if (!a || !b || from === to) return 'Choisissez une autre boîte';
+      if (kind === 'depends') {
+        if (a.kind !== 'task' || b.kind !== 'task') return 'Seules deux tâches peuvent dépendre l’une de l’autre';
+        if (JM().wouldCycle(graph, from, to, except)) return 'Impossible : cela créerait une boucle de dépendances';
+        return '';
       }
-      var dx = Math.max(28, (x2 - x1) / 2);
-      return 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + dx) + ' ' + y1 + ', ' + (x2 - dx) + ' ' + y2 + ', ' + x2 + ' ' + y2;
+      if (JM().rankOfNode(a) <= JM().rankOfNode(b) || JM().rankOfNode(b) < 0) return 'Choisissez un élément d’un niveau supérieur';
+      if (state.authGoals === false) return 'Autorisez Trello pour modifier les objectifs';
+      return '';
+    }
+
+    /**
+     * Applies link changes in one go ({ op: 'add' | 'drop', kind: 'depends' | 'serves', from, to }) and offers undo.
+     * Dependencies live in the card (dependsOn), the hierarchy in the goals storage.
+     */
+    async function editLinks(label, changes) {
+      if (state.busy || !changes.length) return;
+      var pt = PT();
+      var gg = GG();
+      var graph = JM().prepare(state.board.cards, state.board.goals);
+      var cardPrev = Object.create(null);
+      var cardNext = Object.create(null);
+      var goalsPrev = state.board.goals || { nodes: [], links: [] };
+      var goalsNext = null;
+      changes.forEach(function (c) {
+        if (c.kind === 'depends') {
+          var rec = recOf(c.from);
+          if (!rec) return;
+          if (!cardNext[c.from]) {
+            var inputs = rec.inputs || {};
+            cardPrev[c.from] = { dependsOn: (inputs.dependsOn || []).slice(), depTypes: Object.assign({}, inputs.depTypes) };
+            cardNext[c.from] = { dependsOn: cardPrev[c.from].dependsOn.slice(), depTypes: Object.assign({}, inputs.depTypes) };
+          }
+          var next = cardNext[c.from];
+          var at = next.dependsOn.indexOf(c.to);
+          if (c.op === 'add' && at < 0) next.dependsOn.push(c.to);
+          if (c.op === 'drop' && at >= 0) { next.dependsOn.splice(at, 1); delete next.depTypes[c.to]; }
+        } else {
+          if (!goalsNext) goalsNext = { nodes: (goalsPrev.nodes || []).slice(), links: (goalsPrev.links || []).slice() };
+          goalsNext.links = goalsNext.links.filter(function (l) { return !(sameRef(l.from, c.from) && sameRef(l.to, c.to)); });
+          if (c.op === 'add') goalsNext.links.push({ from: refFor(graph, c.from), to: c.to });
+        }
+      });
+      var touched = Object.keys(cardNext);
+      if (!touched.length && !goalsNext) return;
+      state.busy = true;
+      try {
+        if (!(await authorize())) { toast('Autorisation requise'); state.busy = false; return; }
+        if (touched.length && (!pt || typeof pt.saveCardInputsById !== 'function')) throw new Error('save');
+        if (goalsNext && (!gg || typeof gg.save !== 'function')) throw new Error('save');
+        for (var i = 0; i < touched.length; i++) await pt.saveCardInputsById(t, touched[i], cardNext[touched[i]]);
+        if (goalsNext) await gg.save(t, goalsNext);
+        remember(label, async function () {
+          for (var j = 0; j < touched.length; j++) await pt.saveCardInputsById(t, touched[j], cardPrev[touched[j]]);
+          if (goalsNext) await gg.save(t, goalsPrev);
+        });
+        toast(label);
+        await reload();
+      } catch (e) {
+        toast('Pas enregistré');
+      }
+      state.busy = false;
+    }
+
+    /** Drag from a box's pin onto another box: two tasks → "dépend de" (left/top pin: this needs it; right/bottom: it needs this). */
+    function linkFromPin(graph, n, side, targetId) {
+      var a = graph.byId[n.id];
+      var b = graph.byId[targetId];
+      if (!a || !b) { toast('Choisissez une autre boîte'); return; }
+      var change;
+      if (a.kind === 'task' && b.kind === 'task') {
+        var needsThis = side === 'right' || side === 'bottom';
+        change = { op: 'add', kind: 'depends', from: needsThis ? targetId : n.id, to: needsThis ? n.id : targetId };
+      } else {
+        var ra = JM().rankOfNode(a);
+        var rb = JM().rankOfNode(b);
+        if (ra === rb || ra < 0 || rb < 0) { toast('Choisissez un niveau différent'); return; }
+        change = { op: 'add', kind: 'serves', from: ra > rb ? n.id : targetId, to: ra > rb ? targetId : n.id };
+      }
+      var exists = graph.edges.some(function (e) { return e.kind === change.kind && e.from === change.from && e.to === change.to; });
+      if (exists) { toast('Ce lien existe déjà'); return; }
+      var problem = linkProblem(graph, change.kind, change.from, change.to, null);
+      if (problem) { toast(problem); return; }
+      editLinks('Lien ajouté', [change]);
+    }
+
+    /** Moves one end of a link onto another box ('from' = the dependent / lower level, 'to' = what it needs / the parent). */
+    function moveEnd(graph, e, end, id) {
+      var from = end === 'from' ? id : e.from;
+      var to = end === 'to' ? id : e.to;
+      if (from === e.from && to === e.to) return;
+      var exists = graph.edges.some(function (x) { return x.kind === e.kind && x.from === from && x.to === to; });
+      if (exists) { toast('Ce lien existe déjà'); return; }
+      var problem = linkProblem(graph, e.kind, from, to, e.id);
+      if (problem) { toast(problem); return; }
+      state.selectedEdge = null;
+      editLinks('Lien déplacé', [{ op: 'drop', kind: e.kind, from: e.from, to: e.to }, { op: 'add', kind: e.kind, from: from, to: to }]);
+    }
+
+    function removeSelectedEdge() {
+      var id = state.selectedEdge;
+      if (!id) return;
+      var graph = JM().prepare(state.board.cards, state.board.goals);
+      var e = null;
+      graph.edges.forEach(function (x) { if (x.id === id) e = x; });
+      state.selectedEdge = null;
+      if (!e) { toast('Ce lien se règle dans la carte'); paint(); return; }
+      if (e.kind === 'sub') { toast('Ce lien vient de la liste de la carte'); paint(); return; }
+      editLinks('Lien retiré', [{ op: 'drop', kind: e.kind, from: e.from, to: e.to }]);
     }
 
     function nodeEl(n) {
@@ -721,10 +1010,6 @@
         });
         node.appendChild(plus);
       }
-      node.addEventListener('click', function () {
-        var zoom = n.kind === 'task' ? 'task' : 'project';
-        selectNode(n.id, zoom);
-      });
       node.addEventListener('dblclick', function () {
         if (n.kind === 'task') openCard(n.id);
       });

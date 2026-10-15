@@ -51,18 +51,6 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-status.is-ok { color: var(--tp-success); }
 .mm-status.is-error { color: var(--tp-danger-text); }
 
-.mm-search { position: relative; display: inline-flex; align-items: center; }
-.mm-search > .ti { position: absolute; left: 8px; color: var(--tp-text-muted); pointer-events: none; }
-.mm-filter {
-  font: inherit;
-  padding: 5px 9px 5px 28px;
-  min-width: 220px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--tp-surface-subtle);
-  color: var(--tp-text);
-  box-shadow: inset 0 0 0 1px var(--tp-border);
-}
 .mm-btn {
   font: inherit;
   display: inline-flex;

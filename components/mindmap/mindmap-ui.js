@@ -286,7 +286,7 @@
 
     function renderBar() {
       var filter = h('input', {
-        class: 'mm-filter', type: 'search', placeholder: 'Filtrer (tâche, personne, lieu)…', value: state.filter,
+        class: 'mm-filter tp-search-input', type: 'search', placeholder: 'Filtrer…', value: state.filter,
         'aria-label': 'Filtrer',
       });
       filter.addEventListener('input', function () {
@@ -296,7 +296,7 @@
       });
       var tasks = state.graph.nodes.filter(function (n) { return n.kind === 'task'; }).length;
       var kids = [
-        h('span', { class: 'mm-search' }, [icon('search'), filter]),
+        h('span', { class: 'mm-search tp-search' }, [icon('search'), filter]),
         h('div', { class: 'mm-tools', role: 'group', 'aria-label': 'Outils' }, [
           showTool('depends', 'arrow-curve-right', 'Dépendances'),
           showTool('by', 'user', 'Personnes'),

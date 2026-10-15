@@ -721,9 +721,9 @@
 
     var searchInput = el('input', 'gantt-search', {
       type: 'search',
-      placeholder: 'Rechercher… (titre, personne, liste, étiquette)',
+      placeholder: 'Filtrer…',
     });
-    searchInput.setAttribute('aria-label', 'Rechercher une tâche');
+    searchInput.setAttribute('aria-label', 'Filtrer les tâches');
     searchInput.autocomplete = 'off';
     var bodyEl = el('div', 'gantt-filter-body');
     var footCount = el('span', 'gantt-pop-count');

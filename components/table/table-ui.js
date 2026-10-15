@@ -285,9 +285,10 @@
       els.bar.innerHTML = '';
       var connected = SH().isConnected(state.sheet);
       var filter = h('input', {
-        class: 'tb-filter',
+        class: 'tb-filter tp-search-input',
         type: 'search',
         placeholder: 'Filtrer…',
+        'aria-label': 'Filtrer',
         value: state.filter,
         oninput: function (e) {
           state.filter = e.target.value;
@@ -295,7 +296,7 @@
         },
       });
       var kids = [
-        h('label', { class: 'tb-search' }, [icon('search'), filter]),
+        h('label', { class: 'tb-search tp-search' }, [icon('search'), filter]),
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
         btn('columns-3', 'Colonnes', {
           onclick: function (e) {

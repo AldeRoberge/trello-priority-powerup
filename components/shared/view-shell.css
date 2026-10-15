@@ -1,6 +1,30 @@
 /* Phone / narrow-iframe chrome. Loaded after each view's CSS so these rules win.
    Patterns: Sheets freeze, Trello snap-list, Docs overlay list, Linear list→page. */
 
+/* ── Search box: one look for every view (Tableau, Kanban, Mindmap, Parcours) ── */
+.tp-search { position: relative; display: inline-flex; align-items: center; flex: none; }
+.tp-search > .ti {
+  position: absolute;
+  left: 8px;
+  font-size: 15px;
+  color: var(--tp-text-muted);
+  pointer-events: none;
+}
+.tp-search-input {
+  font: inherit;
+  padding: 5px 9px 5px 28px;
+  width: 200px;
+  min-width: 180px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+}
+.tp-search-input::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
+.tp-search-input:hover::placeholder { opacity: 0.8; }
+.tp-search-input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--tp-border-strong); }
+
 /* ── Viewport: visual keyboard + notch ─────────────────────────────── */
 html {
   height: var(--vvh, 100dvh);
@@ -114,6 +138,14 @@ html:has(body.tp-page--journey) body {
     min-width: 0;
     width: auto;
     flex: 1 1 132px;
+  }
+  .jy-bar .tp-search {
+    flex: 1 1 132px;
+    min-width: 0;
+  }
+  .jy-bar .tp-search .jy-search {
+    flex: 1 1 auto;
+    width: 100%;
   }
   .tb-bar .tb-btn > span,
   .kb-bar .kb-btn > span,
@@ -444,9 +476,6 @@ html:has(body.tp-page--journey) body {
     max-width: none;
     max-height: 48%;
     border-radius: 16px;
-  }
-  .mm-filter {
-    min-width: 0;
   }
   .mm-tools {
     flex-wrap: wrap;

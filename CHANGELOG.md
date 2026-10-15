@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-14
+- Toutes les vues : la zone de recherche est la même partout (loupe, « Filtrer… », même taille), y compris dans le Parcours, la Mindmap, les Documents, les Entités et le Gantt.
 - Kanban et Documents : la carte rapide permet aussi de choisir personnes, lieux et étiquettes.
 - Mindmap : le panneau de droite d’une tâche permet maintenant de choisir les personnes (membres Trello ou hors Trello), les lieux (Où, De, Vers), les étiquettes et l’estimation, directement sur place.
 - Parcours : la molette zoome et dézoome sur le curseur, comme dans la Mindmap.
