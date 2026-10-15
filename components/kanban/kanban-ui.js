@@ -1145,6 +1145,22 @@
         newCard: openNewCard,
       });
     }
+    if (global.CommandPalette) {
+      global.CommandPalette.attach({
+        cards: function () {
+          return state.rows.map(function (r) { var l = listById(r.listId); return { id: r.id, name: r.name, hint: l ? l.name : '' }; });
+        },
+        onCard: function (id) {
+          var row = findRow(id);
+          if (!row) return;
+          openDetail(row);
+          var n = els.board.querySelector('.kb-card[data-id="' + id + '"]');
+          if (n) { n.scrollIntoView({ block: 'nearest', inline: 'nearest' }); n.focus({ preventScroll: true }); }
+        },
+        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: openNewCard }]; },
+        isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
+      });
+    }
     function typingTarget(node) {
       if (!node || !node.tagName) return false;
       var tag = node.tagName;

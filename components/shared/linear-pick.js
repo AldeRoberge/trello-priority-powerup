@@ -8,6 +8,8 @@
  *     placeholder,            // filter field text, e.g. 'Changer le statut…'
  *     items: [{ id, label, icon?, color?, hint? }],
  *     current,                // id of the checked item
+ *     digits,                 // false: no 1-9 shortcuts (a palette where digits are typed)
+ *     wide,                   // true: wider popover (command palette)
  *     onPick(item),           // called once, then the popover closes
  *     onClose(),              // optional
  *   })
@@ -83,7 +85,7 @@
     opts = opts || {};
     close();
     var items = opts.items || [];
-    var root = el('div', 'lp-pop');
+    var root = el('div', 'lp-pop' + (opts.wide ? ' lp-pop--wide' : ''));
     root.setAttribute('role', 'listbox');
     var input = el('input', 'lp-input');
     input.type = 'text';
@@ -123,7 +125,7 @@
         }
         row.appendChild(el('span', 'lp-label', it.label));
         if (it.id === opts.current) row.appendChild(el('i', 'ti ti-check lp-check'));
-        var hint = it.hint || (!input.value && i < 9 ? String(i + 1) : '');
+        var hint = it.hint || (opts.digits !== false && !input.value && i < 9 ? String(i + 1) : '');
         if (hint) row.appendChild(el('kbd', 'lp-key', hint));
         row.addEventListener('mouseenter', function () {
           active = i;
@@ -150,7 +152,7 @@
         e.preventDefault();
         e.stopPropagation();
         pick(shown[active]);
-      } else if (!input.value && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      } else if (opts.digits !== false && !input.value && !e.ctrlKey && !e.metaKey && !e.altKey) {
         var d = digitIndex(e.key);
         if (d >= 0 && d < shown.length) { e.preventDefault(); e.stopPropagation(); pick(shown[d]); }
       }
