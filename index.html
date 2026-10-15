@@ -369,7 +369,7 @@
     // Full-screen views live in a Trello modal, so a refresh drops them. Remember the open view
     // for this browser tab (sessionStorage survives a refresh) and reopen it when the board reloads.
     var VIEW_KEY = 'tp-open-view';
-    var VIEWS = { gantt: 'Gantt', table: 'Table', kanban: 'Kanban', mindmap: 'Mindmap', journey: 'Parcours', dashboard: 'Dashboard', docs: 'Documents' };
+    var VIEWS = { gantt: 'Gantt', table: 'Table', kanban: 'Kanban', mindmap: 'Mindmap', journey: 'Parcours', dashboard: 'Dashboard', docs: 'Documents', entities: 'Entités', assistant: 'Assistant', settings: 'Paramètres du Cerveau' };
     function rememberView(view, boardId) {
       try {
         if (view) sessionStorage.setItem(VIEW_KEY, JSON.stringify({ view: view, board: boardId }));
@@ -550,27 +550,15 @@
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/settings.svg',
             text: label,
             callback: function(t) {
-              // Popup width is fixed (narrow) by Trello; modal fits statut mapping + color schemes.
-              return t.modal({
-                title: 'Paramètres du Cerveau',
-                url: PriorityTrello.pageUrl('./settings.html'),
-                height: 720,
-                fullscreen: false,
-                accentColor: '#22272B',
-              });
+              // Same tabbed full-screen modal as the views (cogwheel at the top right of the strip).
+              return openView(t, 'settings', 'Paramètres du Cerveau');
             },
           },
           {
             icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/bot.svg',
             text: 'Assistant',
             callback: function(t) {
-              return t.boardBar({
-                url: PriorityTrello.pageUrl('./assistant.html'),
-                title: 'Assistant',
-                height: 560,
-                resizable: true,
-                accentColor: '#22272B',
-              });
+              return openView(t, 'assistant', 'Assistant');
             },
           },
           {

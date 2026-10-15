@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-14
+- Barre d’onglets : l’Assistant (chat complet) et les Paramètres du Cerveau s’ouvrent maintenant dans la même fenêtre, avec les icônes en haut à droite (bulle et roue dentée). La page d’une tâche a aussi la barre, avec un onglet « Tâche » : un clic ouvre Gantt, Tableau, Kanban… sur cette tâche.
 - Tableau, Gantt, Kanban, Tableau de bord : même ligne « Nouvelle carte » partout (plus discrète, même texte). Le Gantt a maintenant sa ligne en bas de la liste, comme le Tableau.
 - Parcours : comme dans la Mindmap, on déplace les boîtes, on tire un lien depuis un point d’accroche pour relier deux tâches ou une tâche à son objectif, on clique un lien pour le déplacer ou le retirer (Suppr), et la molette zoome. Le bouton Réorganiser remet la disposition automatique.
 - Assistant : la boîte en bas de chaque vue est toujours ouverte et remplace Capture. On y écrit, colle ou glisse du texte, des images et des fichiers; l’IA crée les tâches (dans Triage) et attache les fichiers.

@@ -3,7 +3,9 @@
  * Trello modal. Switching navigates the iframe to the sibling page and keeps the query/hash that
  * carry the Trello iframe context, so the handshake works on the new page.
  *
- *   ViewTabs.mount(el, { active: 'dashboard' | 'gantt' | 'table' | 'kanban' | 'mindmap' | 'journey' | 'docs' | 'entities' } — one list (VIEWS) for every page; add a view there only)
+ *   ViewTabs.mount(el, { active: 'dashboard' | 'gantt' | 'table' | 'kanban' | 'mindmap' | 'journey' | 'docs' | 'entities' | 'assistant' | 'settings' | 'task' } — one list (VIEWS) for every page; add a view there only)
+ *     UTILS are the icon-only buttons pinned top right (Assistant, settings). The task page (popup.html) passes
+ *     { active: 'task', task: true, fixed: true, resolveCardId }: a first "Tâche" tab, and the views open on (and highlight) that card.
  */
 (function (global) {
   'use strict';
@@ -18,6 +20,15 @@
     { key: 'docs', label: 'Documents', icon: 'file-text', page: './docs.html' },
     { key: 'entities', label: 'Entités', icon: 'stack-2', page: './entities.html' },
   ];
+
+  /** Icon-only pages pinned to the right of the strip (not views): the full AI chat and the settings. */
+  var UTILS = [
+    { key: 'assistant', label: 'Assistant', icon: 'message-chatbot', page: './assistant.html' },
+    { key: 'settings', label: 'Paramètres du Cerveau', icon: 'settings', page: './settings.html' },
+  ];
+
+  /** The open task (card): the first tab on the task page only, not a view. */
+  var TASK = { key: 'task', label: 'Tâche', icon: 'checkbox', page: './popup.html' };
 
   /** URL of a sibling page carrying over the current search + hash (pure; used by tests). */
   function hrefFor(page, loc) {
@@ -35,17 +46,23 @@
     var nav = document.createElement('nav');
     nav.className = 'vt-tabs';
     nav.setAttribute('role', 'tablist');
-    VIEWS.forEach(function (v) {
+    var utils = document.createElement('div');
+    utils.className = 'vt-utils';
+    var resolveCardId = opts && typeof opts.resolveCardId === 'function' ? opts.resolveCardId : null;
+    if (opts && opts.fixed) container.classList.add('vt-bar--fixed');
+
+    function link(v, cls, withLabel) {
       var a = document.createElement('a');
-      a.className = 'vt-tab' + (v.key === active ? ' is-on' : '');
+      a.className = cls + (v.key === active ? ' is-on' : '');
       a.setAttribute('role', 'tab');
       a.setAttribute('aria-selected', v.key === active ? 'true' : 'false');
       a.title = v.label;
+      a.setAttribute('aria-label', v.label);
       a.href = hrefFor(v.page, global.location);
       var i = document.createElement('i');
       i.className = 'ti ti-' + v.icon;
       a.appendChild(i);
-      a.appendChild(document.createTextNode(v.label));
+      if (withLabel) a.appendChild(document.createTextNode(v.label));
       a.addEventListener('click', function (e) {
         if (v.key === active) return e.preventDefault();
         if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
@@ -62,12 +79,32 @@
           /* storage unavailable */
         }
         container.classList.add('is-leaving');
-        global.location.assign(a.href);
+        if (!resolveCardId || VIEWS.indexOf(v) < 0) return global.location.assign(a.href);
+        // From the task page: open the view on this card.
+        Promise.resolve()
+          .then(resolveCardId)
+          .then(
+            function (id) {
+              global.location.assign(id ? hrefForCard(v.page, global.location, id) : a.href);
+            },
+            function () {
+              global.location.assign(a.href);
+            }
+          );
       });
-      nav.appendChild(a);
+      return a;
+    }
+
+    if (opts && opts.task) nav.appendChild(link(TASK, 'vt-tab', true));
+    VIEWS.forEach(function (v) {
+      nav.appendChild(link(v, 'vt-tab', true));
+    });
+    UTILS.forEach(function (v) {
+      utils.appendChild(link(v, 'vt-util', false));
     });
     container.appendChild(nav);
-    var on = nav.querySelector('.is-on');
+    container.appendChild(utils);
+    var on = container.querySelector('.is-on');
     if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     return nav;
   }
@@ -160,5 +197,7 @@
     OPEN_IN: OPEN_IN,
     highlightFromUrl: highlightFromUrl,
     VIEWS: VIEWS,
+    UTILS: UTILS,
+    TASK: TASK,
   };
 })(typeof window !== 'undefined' ? window : this);

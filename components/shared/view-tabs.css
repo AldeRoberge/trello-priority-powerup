@@ -7,6 +7,20 @@
   background: var(--tp-surface);
   border-bottom: 1px solid var(--tp-border);
 }
+/* Task page (popup.html): the page keeps its own height math, so the strip is pinned and the body leaves room for it. */
+.vt-bar--fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  height: 38px;
+  box-sizing: border-box;
+}
+html body.tp-page--has-tabs {
+  padding-top: 38px;
+  box-sizing: border-box;
+}
 .vt-bar.is-leaving {
   opacity: 0.6;
   pointer-events: none;
@@ -47,6 +61,39 @@
 }
 .vt-tab .ti {
   font-size: 16px;
+}
+/* Icon-only pages pinned top right: full AI chat, settings (and the open task). Same box as a tab, color-only states. */
+.vt-utils {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 8px;
+  flex: none;
+  align-self: center;
+}
+.vt-util {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: var(--tp-text-muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+.vt-util:hover {
+  color: var(--tp-text);
+  background: var(--tp-surface-hover);
+}
+.vt-util.is-on {
+  color: var(--tp-text);
+  background: var(--tp-surface-hover);
+  cursor: default;
+}
+.vt-util .ti {
+  font-size: 18px;
 }
 /* Narrow modal: inactive tabs collapse to their icon so every view stays reachable. */
 @media (max-width: 640px) {

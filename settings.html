@@ -2,7 +2,19 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    (function () {
+      try {
+        var m = localStorage.getItem('trello-priority-powerup/color-mode');
+        if (m !== 'dark' && m !== 'light') return;
+        var root = document.documentElement;
+        root.setAttribute('data-color-mode', m);
+        root.style.colorScheme = m;
+        if (m === 'dark') root.style.backgroundColor = '#1d2125';
+      } catch (e) {}
+    })();
+  </script>
   <title>Paramètres du Cerveau</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
@@ -32,8 +44,12 @@
   <script src="./components/agent/agent-memory.js"></script>
   <script src="./components/profile/user-profile.js"></script>
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="./components/shared/view-tabs.css" />
+  <script src="./components/shared/view-tabs.js"></script>
 </head>
 <body class="tp-page tp-page--settings">
+  <div id="viewTabs"></div>
+  <main class="tp-settings-main">
   <div class="tp-settings-search">
     <input
       type="search"
@@ -338,7 +354,10 @@
     <div class="tp-build-info" id="buildInfo">Build : chargement…</div>
   </div>
 
+  </main>
+
   <script>
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'settings' });
     PriorityTrello.initIframePage(function (t) {
     let buildStampTimer;
 
@@ -403,9 +422,7 @@
     }
 
     function resizeSettingsPopup() {
-      if (typeof t.sizeTo === 'function') {
-        t.sizeTo(document.body);
-      }
+      // Full-screen page inside the tabbed modal: nothing to resize.
     }
 
     var goalsSettingsMounted = false;

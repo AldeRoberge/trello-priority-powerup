@@ -384,15 +384,33 @@ html[data-color-mode] .tp-page--welcome {
   margin: 0 0 16px;
 }
 
-.tp-page--settings {
+/* Settings page: tab strip on top, the sections scroll in a centered column under it. */
+.tp-page--settings,
+html[data-color-mode] .tp-page--settings {
+  display: flex;
+  flex-direction: column;
+  height: var(--vvh, 100dvh);
+  padding: 0;
+  overflow: hidden;
+}
+
+.tp-settings-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
   padding: 14px 14px 16px;
+  box-sizing: border-box;
 }
 
-html[data-color-mode] .tp-page--settings {
-  padding: 14px 14px 16px;
+/* Sections keep their height and the column scrolls (they used to shrink, overflow hidden). */
+.tp-settings-main > * {
+  flex: none;
 }
 
 .tp-settings-search {

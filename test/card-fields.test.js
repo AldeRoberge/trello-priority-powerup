@@ -78,3 +78,23 @@ test('every ViewTabs view page uses the shared tab strip (no page can lose a tab
     assert.ok(html.includes("ViewTabs.mount(document.getElementById('viewTabs'), { active: '" + v.key + "' })"), v.page + ' mounts with its own key');
   }
 });
+
+test('ViewTabs pins the Assistant and settings icons top right, and the task page gets its own first tab', () => {
+  assert.deepEqual([...VT.UTILS.map((v) => v.key)], ['assistant', 'settings']);
+  assert.equal(VT.TASK.key, 'task');
+  assert.ok(!VT.VIEWS.some((v) => v.key === 'task'), 'the task is a tab of the task page only, not a view');
+  const root = path.join(__dirname, '..');
+  const pages = [
+    ['assistant.html', "{ active: 'assistant' }"],
+    ['settings.html', "{ active: 'settings' }"],
+  ];
+  for (const [page, opts] of pages) {
+    const html = fs.readFileSync(path.join(root, page), 'utf8');
+    assert.match(html, /components\/shared\/view-tabs\.js/, page + ' loads view-tabs.js');
+    assert.match(html, /components\/shared\/view-tabs\.css/, page + ' loads view-tabs.css');
+    assert.ok(html.includes("ViewTabs.mount(document.getElementById('viewTabs'), " + opts + ')'), page + ' mounts with its own key');
+  }
+  const popup = fs.readFileSync(path.join(root, 'popup.html'), 'utf8');
+  assert.match(popup, /ViewTabs\.mount\(document\.getElementById\('viewTabs'\), \{\s*active: 'task'/, 'popup.html mounts the strip on the task');
+  assert.match(popup, /__tpResolveCardId/, 'popup.html resolves the card id for the tabs');
+});

@@ -2,7 +2,19 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    (function () {
+      try {
+        var m = localStorage.getItem('trello-priority-powerup/color-mode');
+        if (m !== 'dark' && m !== 'light') return;
+        var root = document.documentElement;
+        root.setAttribute('data-color-mode', m);
+        root.style.colorScheme = m;
+        if (m === 'dark') root.style.backgroundColor = '#1d2125';
+      } catch (e) {}
+    })();
+  </script>
   <title>Assistant</title>
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
@@ -16,6 +28,8 @@
   <link rel="stylesheet" href="./components/agent/memory-ui.css" />
   <link rel="stylesheet" href="./components/agent/agent-stats.css?v=stats-1" />
   <link rel="stylesheet" href="./components/shared/trello-polish.css?v=polish-3" />
+  <link rel="stylesheet" href="./components/shared/view-tabs.css" />
+  <script src="./components/shared/view-tabs.js"></script>
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
@@ -41,15 +55,17 @@
   <script src="./components/agent/assistant-mount.js"></script>
 </head>
 <body class="tp-page tp-page--priority tp-page--assistant">
+  <div id="viewTabs"></div>
   <div id="assistantMount"></div>
   <script>
+    ViewTabs.mount(document.getElementById('viewTabs'), { active: 'assistant' });
     PriorityTrello.initIframePage(function (t) {
       if (window.TpDebug && typeof TpDebug.configureFromProfile === 'function') {
         TpDebug.configureFromProfile(t).then(function (on) {
           if (on) TpDebug.log('assistant', 'page.init');
         });
       }
-      return AssistantMount.mount(document.getElementById('assistantMount'), t);
+      return AssistantMount.mount(document.getElementById('assistantMount'), t, { resizeBody: false });
     }).catch(function (err) {
       console.error('assistant init failed', err);
     });

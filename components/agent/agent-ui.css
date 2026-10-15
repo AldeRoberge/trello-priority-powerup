@@ -552,9 +552,17 @@ body.tp-page--priority.tp-page--assistant {
   overflow: hidden;
 }
 
+/* Tab strip on top, the chat fills what is left. */
+body.tp-page--priority.tp-page--assistant {
+  display: flex;
+  flex-direction: column;
+  height: var(--vvh, 100dvh);
+}
+
 .tp-page--assistant #assistantMount {
-  height: 100%;
-  min-height: inherit;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
   width: 100%;
   max-width: none;
   box-sizing: border-box;
