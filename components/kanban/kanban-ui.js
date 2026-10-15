@@ -883,6 +883,7 @@
         return;
       }
       cols.forEach(function (c) { els.board.appendChild(column(c)); });
+      global.Skeleton.remember('kanban', { cols: cols.map(function (c) { return c.cards.length; }) });
       els.board.scrollLeft = scrollX;
       els.board.querySelectorAll('.kb-col').forEach(function (c) {
         var b = c.querySelector('.kb-col-scroll');

@@ -486,6 +486,7 @@
         return;
       }
       var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter, state.sort, state.showArchived);
+      global.Skeleton.remember('docs', { items: rows.length });
       var pend = state.pendingFolder;
       if (pend && pend.parent && !rows.some(function (r) { return r.type === 'folder' && r.folder.id === pend.parent; })) pend = state.pendingFolder = null;
       if (pend && !pend.parent) list.appendChild(newFolderRow(0));

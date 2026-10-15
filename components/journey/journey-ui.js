@@ -497,6 +497,7 @@
       body.appendChild(queue(full, here));
       root.appendChild(body);
       container.appendChild(root);
+      global.Skeleton.remember('journey', { nodes: view.nodes.length, now: Math.min(full.now.length, 10), blocked: Math.min(full.blocked.length, 6) });
 
       if (keepFocus) {
         var again = container.querySelector('.jy-search');

@@ -2098,6 +2098,7 @@
           state.landed = true;
           if (DM().todayList(state.rows, today).length) state.section = 'today';
         }
+        global.Skeleton.remember('dashboard', { rows: DM().todayList(state.rows, today).length });
         render();
       }).catch(function (err) {
         root.innerHTML = '';

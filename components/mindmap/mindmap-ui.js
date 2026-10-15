@@ -3596,6 +3596,7 @@
         state.lists = board.lists || state.lists || [];
         showSkeleton(false);
         rebuild({ relayout: !quiet });
+        global.Skeleton.remember('mindmap', { nodes: state.graph.nodes.length });
       }).catch(function (err) {
         showSkeleton(false);
         gNodes.textContent = '';

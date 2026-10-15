@@ -5421,6 +5421,7 @@
           renderBulkBar();
           if (quiet) renderChart();
           else render();
+          global.Skeleton.remember('gantt', { groups: (state.tree || []).map(function (s) { return (s.children || []).length; }) });
           refreshFilterUi();
           return Promise.all([refreshOutlookConnected(), refreshRestAuthorized()]).then(function (res) {
             var connected = res[0];

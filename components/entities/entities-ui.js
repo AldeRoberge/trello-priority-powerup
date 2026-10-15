@@ -545,6 +545,7 @@
         if (!a || !b) return a ? -1 : 1; // "Sans type" last
         return typeName(a).localeCompare(typeName(b), 'fr', { sensitivity: 'base' });
       });
+      global.Skeleton.remember('entities', { groups: order.map(function (k) { return groups[k].length; }) });
       order.forEach(function (key) {
         listBox.appendChild(h('div', { class: 'sp-group en-group' }, [h('span', { text: key ? typeName(key) : 'Sans type' }), h('span', { class: 'sp-count', text: String(groups[key].length) })]));
         groups[key]

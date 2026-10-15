@@ -8,6 +8,9 @@
  *   Skeleton.mount(el, 'gantt')    el.innerHTML = Skeleton.html('gantt')
  *   Skeleton.VIEWS                 one name per tab (ViewTabs.VIEWS keys)
  *
+ * Sizes: a view calls Skeleton.remember('table', { rows: 12 }) once it has loaded; the next skeleton of that view
+ * is drawn with the same number of rows / columns / cards (see COUNTS below for the shape per view).
+ *
  * Styles: components/shared/skeleton.css (the page also loads its own view CSS for the shell classes).
  */
 (function (global) {
@@ -15,6 +18,49 @@
 
   var LABELS_W_KEY = 'tp-gantt-labels-width';
   var WID = [62, 84, 48, 72, 56, 90, 44, 68];
+
+  var STORE_KEY = 'tp-skeleton-counts';
+
+  function readAll() {
+    try {
+      var raw = global.localStorage && global.localStorage.getItem(STORE_KEY);
+      var all = raw ? JSON.parse(raw) : null;
+      return all && typeof all === 'object' ? all : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function num(v, min, max, fallback) {
+    var n = Number(v);
+    if (!isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(n)));
+  }
+
+  /** Array of small counts, each clamped; anything else gives the fallback. */
+  function nums(v, min, max, maxLen, fallback) {
+    if (!Array.isArray(v) || !v.length) return fallback;
+    return v.slice(0, maxLen).map(function (n) { return num(n, min, max, min); });
+  }
+
+  /** Remember what a view showed (counts), so its next skeleton can look like it. */
+  function remember(view, counts) {
+    try {
+      if (!global.localStorage || !view || !counts) return;
+      var all = readAll();
+      var next = JSON.stringify(counts);
+      if (JSON.stringify(all[view]) === next) return;
+      all[view] = counts;
+      global.localStorage.setItem(STORE_KEY, JSON.stringify(all));
+    } catch (e) {
+      /* storage unavailable: the skeleton keeps its default size */
+    }
+  }
+
+  function recall(view) {
+    var c = readAll()[view];
+    return c && typeof c === 'object' ? c : {};
+  }
 
   function px(v) {
     return typeof v === 'number' ? v + 'px' : String(v);
@@ -90,7 +136,7 @@
   }
 
   function tableGrid() {
-    var rows = times(28, function (r) {
+    var rows = times(num(recall('table').rows, 1, 60, 27) + 1, function (r) {
       var head = r === 0;
       function cell(inner, end) {
         return div('sk-grid-cell' + (end ? ' sk-grid-cell--end' : ''), inner);
@@ -135,7 +181,7 @@
   }
 
   function kanbanCols() {
-    return [3, 2, 4, 2, 3].map(function (n, c) {
+    return nums(recall('kanban').cols, 0, 8, 8, [3, 2, 4, 2, 3]).map(function (n, c) {
       var head = div('sk-colhead', dot(16) + sk(cyc([46, 58, 40, 52, 44], c) + '%', 12) + spacer() + sk(18, 12));
       var cards = times(n, function (i) { return kanbanCard(c * 2 + i); });
       return div('kb-col', head + div('sk-colbody', cards), '--kb-accent:var(--tp-border-strong)');
@@ -168,7 +214,17 @@
   }
 
   /** Rows of the chart: H header, S section (accent), T task. Both panes read the same list. */
-  var GANTT_ROWS = ['S', 'T', 'T', 'T', 'S', 'T', 'T', 'T', 'S', 'T', 'S', 'T', 'T', 'T', 'T', 'T', 'T', 'T'];
+  var GANTT_DEFAULT_GROUPS = [3, 3, 1, 7];
+
+  /** Rows of the chart from the number of tasks in each section: S section, T task. */
+  function ganttRows() {
+    var rows = [];
+    nums(recall('gantt').groups, 0, 30, 10, GANTT_DEFAULT_GROUPS).forEach(function (n) {
+      rows.push('S');
+      for (var i = 0; i < n; i++) rows.push('T');
+    });
+    return rows.slice(0, 60);
+  }
   var GANTT_ACCENTS = ['var(--tp-border-strong)'];
   var BAR_AT = [30, 168, 250, 96, 330, 140, 60, 210];
   var BAR_W = [120, 210, 96, 168, 260, 84];
@@ -192,7 +248,7 @@
       'sk-glabels-row sk-glabels-row--head',
       div('sk-gl-check', sk(14, 14)) + div('sk-gl-name', sk(48, 10)) + div('sk-gl-score', dot(8) + sk(14, 8))
     );
-    var rows = GANTT_ROWS.map(function (kind, i) {
+    var rows = ganttRows().map(function (kind, i) {
       if (kind === 'S') {
         var accent = cyc(GANTT_ACCENTS, sec);
         sec += 1;
@@ -220,7 +276,7 @@
     var days = 9;
     var head = '<div class="sk-thead">' + times(days, function (d) { return '<span>' + sk(cyc([46, 38, 52], d), 8) + '</span>'; }) + '</div>';
     var task = 0;
-    var rows = GANTT_ROWS.map(function (kind) {
+    var rows = ganttRows().map(function (kind) {
       if (kind === 'S') return '<div class="sk-trow sk-trow--sec"></div>';
       var t = task++;
       return '<div class="sk-trow">' + (t % 4 === 3 ? '' : '<span class="sk sk--bar" style="--w:' + cyc(BAR_W, t) + 'px;left:' + cyc(BAR_AT, t) + 'px"></span>') + '</div>';
@@ -283,7 +339,8 @@
   ];
 
   function mindmapCanvas() {
-    return graph(MM_NODES, MM_EDGES, MM_BLOBS);
+    var n = num(recall('mindmap').nodes, 1, MM_NODES.length, MM_NODES.length);
+    return graph(MM_NODES.slice(0, n), MM_EDGES.filter(function (e) { return e[0] < n && e[1] < n; }), n > 2 ? MM_BLOBS : []);
   }
 
   function mindmapBar() {
@@ -326,9 +383,12 @@
   }
 
   function journeyQueue() {
+    var c = recall('journey');
+    var now = num(c.now, 1, 10, 5);
+    var blocked = num(c.blocked, 0, 6, 3);
     return div(
       'jy-queue',
-      div('sk-jhead', sk(76, 10)) + times(5, journeyRow) + div('sk-jhead', sk(60, 10)) + times(3, function (i) { return journeyRow(i + 5); })
+      div('sk-jhead', sk(76, 10)) + times(now, journeyRow) + (blocked ? div('sk-jhead', sk(60, 10)) + times(blocked, function (i) { return journeyRow(i + now); }) : '')
     );
   }
 
@@ -336,8 +396,13 @@
     return div('sk-jdetail', sk('34%', 14) + sk('52%', 10, 'sk--soft') + '<span class="sk-row-flex">' + box(76, 28, '50%', 'sk-box--accent') + box(76, 28, '50%') + box(76, 28, '50%') + '</span>');
   }
 
+  function journeyGraph() {
+    var n = num(recall('journey').nodes, 1, JY_NODES.length, JY_NODES.length);
+    return graph(JY_NODES.slice(0, n), JY_EDGES.filter(function (e) { return e[0] < n && e[1] < n; }));
+  }
+
   function journeyBody() {
-    return div('jy-body', div('jy-stage', div('jy-map', graph(JY_NODES, JY_EDGES)) + journeyDetail()) + journeyQueue());
+    return div('jy-body', div('jy-stage', div('jy-map', journeyGraph()) + journeyDetail()) + journeyQueue());
   }
 
   function journey() {
@@ -359,7 +424,7 @@
   /* ── Documents ─────────────────────────────────────────────────────── */
 
   function docsList() {
-    return times(9, function (i) {
+    return times(num(recall('docs').items, 1, 16, 9), function (i) {
       return div('sk-drow' + (i === 0 ? ' sk-drow--on' : ''), sk(16, 16) + div('sk-col-flex', sk(cyc([72, 58, 80, 64], i) + '%', 10) + sk(cyc([30, 38, 26], i) + '%', 8, 'sk--soft'), 'flex:1;gap:5px'));
     });
   }
@@ -422,8 +487,10 @@
 
   function entitiesList() {
     return (
-      div('sk-egroup', sk(70, 9) + sk(14, 9, 'sk--soft')) + entityRows(4, 0) +
-      div('sk-egroup', sk(56, 9) + sk(14, 9, 'sk--soft')) + entityRows(3, 4)
+      nums(recall('entities').groups, 1, 6, 4, [4, 3]).map(function (n, g, all) {
+        var before = all.slice(0, g).reduce(function (a, b) { return a + b; }, 0);
+        return div('sk-egroup', sk(cyc([70, 56, 62, 48], g), 9) + sk(14, 9, 'sk--soft')) + entityRows(n, before);
+      }).join('')
     );
   }
 
@@ -472,7 +539,7 @@
         '<span class="sk-row-flex">' + pill(78, 18) + pill(44, 18) + pill(56, 18) + pill(70, 18) + '</span>' +
         '<span class="sk-row-flex" style="margin-top:4px">' + box(96, 30, '56%') + box(86, 30, '56%') + '</span>'
     );
-    var list = div('sk-list', times(4, function (i) {
+    var list = div('sk-list', times(num(recall('dashboard').rows, 1, 8, 4), function (i) {
       return div('sk-list-row', div('sk-col-flex', sk(cyc([64, 78, 52, 70], i) + '%', 11) + sk(cyc([40, 30, 46], i) + '%', 8, 'sk--soft'), 'flex:1;gap:6px') + pill(34, 18) + sk(38, 9) + sk(cyc([56, 48, 62], i), 9, 'sk--soft'));
     }));
     var day = div('sk-day', times(5, function (i) {
@@ -519,5 +586,5 @@
     return el;
   }
 
-  global.Skeleton = { html: html, mount: mount, VIEWS: VIEWS, names: function () { return Object.keys(BUILDERS); } };
+  global.Skeleton = { html: html, mount: mount, remember: remember, recall: recall, VIEWS: VIEWS, names: function () { return Object.keys(BUILDERS); } };
 })(typeof window !== 'undefined' ? window : this);

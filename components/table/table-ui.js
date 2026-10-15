@@ -1745,6 +1745,7 @@
           state.places = res[4] || {};
           renderBanner();
           renderGrid();
+          global.Skeleton.remember('table', { rows: visibleRows().length });
           schedulePush();
           loadAlerts();
         })
