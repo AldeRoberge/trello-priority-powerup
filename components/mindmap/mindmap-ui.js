@@ -2275,8 +2275,24 @@
         cardId: rec.id,
         cardName: rec.name,
         anchor: anchor,
+        minutes: kind === 'estimate' ? rec.estimatedMinutes || 0 : undefined,
         value: kind === 'desc' ? visibleDesc(rec) : undefined,
         save: kind === 'desc' ? function (text) { return TT.saveDesc(t, { id: rec.id, fullDesc: rec.desc || '' }, text); } : undefined,
+        onSaved: function () { setStatus('Enregistré', 'ok'); },
+        onError: function (m) { setStatus(m, 'error'); },
+        onClose: function (changed) { if (changed) refreshAfterEdit(); },
+      });
+    }
+
+    /** People, places and labels of a card: the shared picker; the board reloads once it closes. */
+    function openEntityPicker(rec, kind, anchor, slot) {
+      var CE = global.CardEntities;
+      if (!CE) return setStatus('Éditeur indisponible', 'error');
+      CE.open(kind, {
+        t: t,
+        rec: rec,
+        anchor: anchor,
+        slot: slot,
         onSaved: function () { setStatus('Enregistré', 'ok'); },
         onError: function (m) { setStatus(m, 'error'); },
         onClose: function (changed) { if (changed) refreshAfterEdit(); },
@@ -2370,8 +2386,30 @@
       var TMod = global.TableModel;
       var due = rec.dueDate ? 'Échéance ' + (TMod && TMod.formatDay ? TMod.formatDay(rec.dueDate) : rec.dueDate) : 'Échéance…';
 
-      var tags = (rec.labels || []).map(function (l) { return h('span', { class: 'mm-chip', text: l.name || l.color || '·' }); })
-        .concat((rec.assignees || []).map(function (a) { return h('span', { class: 'mm-chip', title: a.name }, [icon('user'), a.name]); }));
+      var CF = global.CardFields;
+      var est = rec.estimatedMinutes > 0 && CF && CF.formatMinutes ? CF.formatMinutes(rec.estimatedMinutes) : '';
+
+      /** One property row: its chips (or a quiet "Cliquer pour ajouter…"), the whole row opens the picker. */
+      function entityRow(label, kind, chips, slot) {
+        var open = h('button', {
+          class: 'mm-ent',
+          type: 'button',
+          title: label,
+          onclick: function (ev) { openEntityPicker(rec, kind, ev.currentTarget, slot); },
+        }, chips.length ? chips : [h('span', { class: 'mm-empty', text: 'Cliquer pour ajouter…' })]);
+        return h('div', { class: 'mm-field' }, [h('span', { text: label }), open]);
+      }
+      var CE = global.CardEntities;
+      var peopleChips = (rec.assignees || []).map(function (a) {
+        return h('span', { class: 'mm-chip', title: a.custom ? a.name + ' (hors Trello)' : a.name }, [icon('user'), a.name]);
+      });
+      var placeChips = (CE ? CE.placeChips(rec.inputs && rec.inputs.places) : []).map(function (p) {
+        return h('span', { class: 'mm-chip', title: p.label }, [icon('map-pin'), (p.slot === 'at' ? '' : p.label + ' ') + p.name]);
+      });
+      var labelChips = (rec.labels || []).map(function (l) {
+        var dot = CE && CE.COLORS[l.color] ? h('span', { class: 'mm-dot', style: 'background:' + CE.COLORS[l.color] }) : null;
+        return h('span', { class: 'mm-chip' }, [dot, l.name || l.color || '·']);
+      });
 
       var descBody = visible.trim()
         ? h('div', { class: 'mm-card-desc', text: visible, title: 'Cliquer pour modifier', onclick: function (ev) { if (!String(global.getSelection()).length) openFieldEditor(rec, 'desc', ev.currentTarget); } })
@@ -2385,9 +2423,12 @@
         h('div', { class: 'mm-actions' }, [
           fieldBtn('priority', 'flag', urgency),
           fieldBtn('due', 'calendar-event', due),
+          fieldBtn('estimate', 'clock', est || 'Estimer…'),
           fieldBtn('blocked', 'ban', rec.blocked ? 'Bloqué' : 'Bloquer…', rec.blocked ? ' mm-btn--danger' : ''),
         ]),
-        tags.length ? h('div', { class: 'mm-panel-meta' }, tags) : null,
+        entityRow('Personnes', 'people', peopleChips),
+        entityRow('Lieux', 'places', placeChips),
+        entityRow('Étiquettes', 'labels', labelChips),
         h('h4', { class: 'mm-card-h', text: 'Description' }),
         descBody,
       ]));

@@ -3552,6 +3552,14 @@
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(patch, 'customAssignees')) {
+      if (Array.isArray(patch.customAssignees) && patch.customAssignees.length) {
+        base.customAssignees = patch.customAssignees;
+      } else {
+        delete base.customAssignees;
+      }
+    }
+
     var normalized = normalizeInputs(base);
     if (!normalized) {
       throw new Error('saveCardInputsById: invalid inputs');

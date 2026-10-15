@@ -519,3 +519,10 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-head.is-dim { opacity: .35; }
 .mm-groups, .mm-heads { transition: opacity .3s ease; }
 .is-persp .mm-groups { opacity: 0; pointer-events: none; }
+
+/* Entity rows in the card panel (people, places, labels): the whole row is the button */
+.mm-ent { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; min-height: 28px; padding: 3px 6px; margin: 0 0 0 -6px; box-sizing: content-box; align-items: center; text-align: left; font: inherit; color: var(--tp-text); background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.mm-ent:hover, .mm-ent:focus-visible { background: var(--tp-surface-hover); outline: none; }
+.mm-empty { color: var(--tp-text-muted); opacity: 0.55; font-size: 12px; }
+.mm-ent:hover .mm-empty { opacity: 0.8; }
+.mm-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
