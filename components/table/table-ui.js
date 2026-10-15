@@ -1809,14 +1809,6 @@
         selectedId: function () { return state.selected ? state.selected.rowId : ''; },
         row: findRow,
         lists: function () { return state.lists; },
-    if (global.CommandPalette) {
-      global.CommandPalette.attach({
-        cards: function () { return state.rows.map(function (r) { var l = listById(r.listId); return { id: r.id, name: r.name, hint: l ? l.name : '' }; }); },
-        onCard: function (id) { if (!global.CommandPalette.reveal('tr[data-id="' + id + '"]')) openCard(findRow(id)); },
-        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: newCardComposer }]; },
-        isBusy: function () { return !!state.editing || (global.CardFields && global.CardFields.isOpen()); },
-      });
-    }
         isBusy: function () { return !!state.editing; },
         anchorFor: function (id) { return els.wrap.querySelector('tr[data-id="' + id + '"] .tb-pill') || els.wrap.querySelector('td[data-row="' + id + '"]'); },
         setStatus: function (row, list) { commitEdit(row, 'statut', list.id); },
@@ -1830,6 +1822,14 @@
         },
         openDue: function (row, anchor) { openEditor(row, 'due', els.wrap.querySelector('td[data-row="' + row.id + '"].tb-cell--due') || anchor); },
         newCard: newCardComposer,
+      });
+    }
+    if (global.CommandPalette) {
+      global.CommandPalette.attach({
+        cards: function () { return state.rows.map(function (r) { var l = listById(r.listId); return { id: r.id, name: r.name, hint: l ? l.name : '' }; }); },
+        onCard: function (id) { if (!global.CommandPalette.reveal('tr[data-id="' + id + '"]')) openCard(findRow(id)); },
+        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: newCardComposer }]; },
+        isBusy: function () { return !!state.editing || (global.CardFields && global.CardFields.isOpen()); },
       });
     }
     return reload();

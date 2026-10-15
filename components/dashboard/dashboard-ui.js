@@ -1983,6 +1983,12 @@
             cardName: row.name,
             anchor: anchor,
             onSaved: function () { setStatus('Échéance enregistrée', 'ok'); reload({ quiet: true }); },
+            onError: function (m) { setStatus('Erreur échéance : ' + m, 'error'); },
+          });
+        },
+        newCard: function () { createCard(); },
+      });
+    }
     if (global.CommandPalette) {
       global.CommandPalette.attach({
         cards: function () {
@@ -2000,12 +2006,6 @@
         },
         actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: createCard }]; },
         isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
-      });
-    }
-            onError: function (m) { setStatus('Erreur échéance : ' + m, 'error'); },
-          });
-        },
-        newCard: function () { createCard(); },
       });
     }
 
