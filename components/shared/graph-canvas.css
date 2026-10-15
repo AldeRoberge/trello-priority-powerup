@@ -1,0 +1,36 @@
+/* Shared node-graph canvas (Parcours, and any view built on GraphCanvas). */
+.gc {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: var(--tp-bg);
+  background-image: radial-gradient(var(--tp-border) 1px, transparent 1px);
+  background-size: 18px 18px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.gc.is-panning { cursor: grabbing; }
+.gc-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+.gc-wires {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.gc-wire-temp {
+  fill: none;
+  stroke: var(--tp-primary);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  pointer-events: none;
+}
+.gc.is-wiring { cursor: crosshair; }

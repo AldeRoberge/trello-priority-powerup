@@ -833,7 +833,40 @@
     };
   }
 
+  /** Hierarchy rank of a graph node: goals by level (0 = vision), tasks last, -1 for anything else. */
+  function rankOfNode(n) {
+    if (!n) return -1;
+    if (n.kind === 'task') return TASK_RANK;
+    if (n.kind === 'goal') return rankOfLevel(n.level);
+    return -1;
+  }
+
+  /**
+   * True when making `from` depend on `to` would close a dependency loop (`to` already depends on `from`, directly
+   * or not). A link whose id is `exceptId` is ignored, so moving one end of a link is judged without that link.
+   */
+  function wouldCycle(graph, from, to, exceptId) {
+    if (from === to) return true;
+    var adj = Object.create(null);
+    ((graph && graph.edges) || []).forEach(function (e) {
+      if (e.kind !== 'depends' || e.id === exceptId) return;
+      (adj[e.from] = adj[e.from] || []).push(e.to);
+    });
+    var seen = Object.create(null);
+    var todo = [to];
+    while (todo.length) {
+      var n = todo.pop();
+      if (n === from) return true;
+      if (seen[n]) continue;
+      seen[n] = true;
+      (adj[n] || []).forEach(function (m) { todo.push(m); });
+    }
+    return false;
+  }
+
   global.JourneyModel = {
+    rankOfNode: rankOfNode,
+    wouldCycle: wouldCycle,
     LEVELS: LEVELS,
     CAP: CAP,
     ORPHAN_ID: ORPHAN,

@@ -268,4 +268,16 @@ describe('JourneyModel', () => {
     const order = JM.linksOf(g, 'order');
     assert.equal(order.prereqs[0].name, "Choisir l'entrepreneur");
   });
+  it('ranks goals above tasks and spots dependency loops', () => {
+    const g = JM.prepare(records(), goals);
+    assert.ok(JM.rankOfNode(g.byId.pick) > JM.rankOfNode(g.byId['g:p']));
+    assert.equal(JM.rankOfNode({ kind: 'bucket' }), -1);
+    // order depends on pick: making pick depend on order would close a loop, the reverse is a duplicate not a loop
+    assert.equal(JM.wouldCycle(g, 'pick', 'order'), true);
+    assert.equal(JM.wouldCycle(g, 'order', 'measure'), false);
+    assert.equal(JM.wouldCycle(g, 'pick', 'pick'), true);
+    // moving the pick -> order link out of the way lifts the loop
+    const link = g.edges.find((e) => e.kind === 'depends' && e.from === 'order' && e.to === 'pick');
+    assert.equal(JM.wouldCycle(g, 'pick', 'order', link.id), false);
+  });
 });

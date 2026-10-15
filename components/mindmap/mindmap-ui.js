@@ -554,36 +554,14 @@
       return dy >= 0 ? ['bottom', 'top'] : ['top', 'bottom'];
     }
 
-    function wirePath(p1, p2) {
-      // handle length follows the gap along each pin's own axis, so a wide sideways gap
-      // with a small vertical one no longer produces a loopy S-curve
-      var gap = function (p) { return p.nx ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y); };
-      var off1 = Math.max(18, Math.min(110, gap(p1) * 0.45));
-      var off2 = Math.max(18, Math.min(110, gap(p2) * 0.45));
-      return 'M' + p1.x.toFixed(1) + ',' + p1.y.toFixed(1) +
-        ' C' + (p1.x + p1.nx * off1).toFixed(1) + ',' + (p1.y + p1.ny * off1).toFixed(1) +
-        ' ' + (p2.x + p2.nx * off2).toFixed(1) + ',' + (p2.y + p2.ny * off2).toFixed(1) +
-        ' ' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1);
-    }
+    /** Wire curve between two pins (shared with the Parcours: components/shared/graph-canvas.js). */
+    function wirePath(p1, p2) { return global.GraphCanvas.wirePath(p1, p2); }
 
     /**
      * Filled head whose base sits on the end of the wire. The wire stops at that base,
      * so the shaft and the head share one point instead of a gap (the marker used to).
      */
-    function arrowJoin(p2, dist) {
-      var len = !dist || dist > 36 ? 11 : Math.max(7, dist * 0.34);
-      var hw = len * 0.42;
-      var bx = p2.x + p2.nx * len;
-      var by = p2.y + p2.ny * len;
-      var px = -p2.ny;
-      var py = p2.nx;
-      return {
-        base: { x: bx, y: by, nx: p2.nx, ny: p2.ny },
-        d: 'M' + p2.x.toFixed(1) + ',' + p2.y.toFixed(1) +
-          ' L' + (bx + px * hw).toFixed(1) + ',' + (by + py * hw).toFixed(1) +
-          ' L' + (bx - px * hw).toFixed(1) + ',' + (by - py * hw).toFixed(1) + ' Z',
-      };
-    }
+    function arrowJoin(p2, dist) { return global.GraphCanvas.arrowJoin(p2, dist); }
 
     /** A dashed wire must end on ink, or the last gap opens a hole in front of the head. */
     function seatDash(path) {
@@ -3204,10 +3182,8 @@
 
     /** Zooms around the centre of the canvas and keeps the percentage in the toolbar current. */
     function zoomBy(f) {
-      var v = state.view;
-      var k = Math.max(0.1, Math.min(3, v.k * f));
       var cx = (els.canvas.clientWidth || 800) / 2, cy = (els.canvas.clientHeight || 500) / 2;
-      state.view = { k: k, x: cx - (cx - v.x) * (k / v.k), y: cy - (cy - v.y) * (k / v.k) };
+      state.view = global.GraphCanvas.zoomAt(state.view, cx, cy, f, 0.1, 3);
       applyView();
     }
 
@@ -3222,10 +3198,7 @@
         x0 = Math.min(x0, n.x - b.w / 2); x1 = Math.max(x1, n.x + b.w / 2);
         y0 = Math.min(y0, n.y - b.h / 2); y1 = Math.max(y1, n.y + b.h / 2 + 16);
       });
-      var pad = 40;
-      var k = Math.min(1.2, (w - pad * 2) / Math.max(1, x1 - x0), (hgt - pad * 2) / Math.max(1, y1 - y0));
-      k = Math.max(0.15, k);
-      state.view = { k: k, x: w / 2 - ((x0 + x1) / 2) * k, y: hgt / 2 - ((y0 + y1) / 2) * k };
+      state.view = global.GraphCanvas.fitView({ x0: x0, y0: y0, x1: x1, y1: y1 }, w, hgt, 40, 1.2, 0.15);
       applyView();
     }
 
@@ -3315,11 +3288,7 @@
       var r = svg.getBoundingClientRect();
       var px = ev.clientX - r.left;
       var py = ev.clientY - r.top;
-      var v = state.view;
-      var k = Math.max(0.15, Math.min(3, v.k * (ev.deltaY < 0 ? 1.12 : 1 / 1.12)));
-      v.x = px - ((px - v.x) / v.k) * k;
-      v.y = py - ((py - v.y) / v.k) * k;
-      v.k = k;
+      state.view = global.GraphCanvas.zoomAt(state.view, px, py, ev.deltaY < 0 ? 1.12 : 1 / 1.12, 0.15, 3);
       applyView();
     }, { passive: false });
     root.addEventListener('keydown', function (ev) {

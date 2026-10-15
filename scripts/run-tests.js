@@ -105,6 +105,7 @@ const UNIT_FILES = [
   'dashboard-menu.test.js',
   'dashboard-trello.test.js',
   'journey-model.test.js',
+  'graph-canvas.test.js',
 ];
 
 function listTests() {
