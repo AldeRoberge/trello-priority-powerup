@@ -210,29 +210,17 @@ html[data-color-mode='dark'] .en-root {
 
 /* ── 3. Sidebar ──────────────────────────────────────────────────────── */
 .en-side {
-  flex: 0 0 288px;
-  display: flex;
-  flex-direction: column;
+  /* size, background, border and header come from the shared .sp panel (view-shell.css) */
   min-height: 0;
-  border-right: 1px solid var(--en-line);
-  background: var(--en-side);
 }
 .en-side-head {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px 14px 6px;
+  padding: 2px 12px 6px;
 }
-.en-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.en-title-text {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.en-side-head:empty {
+  display: none;
 }
 .en-status {
   margin-left: auto;
@@ -274,20 +262,6 @@ html[data-color-mode='dark'] .en-root {
 .en-search-input::-webkit-search-decoration {
   -webkit-appearance: none;
   display: none;
-}
-.en-search-clear {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--en-fill-2);
-  color: var(--tp-text-subtle);
-  font-size: 10px;
-  cursor: pointer;
 }
 .en-filters {
   display: flex;
@@ -355,38 +329,8 @@ html[data-color-mode='dark'] .en-root {
   overflow-y: auto;
   padding: 2px 8px 12px;
 }
-.en-group {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 14px 8px 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tp-text-muted);
-}
-.en-group-n {
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
 .en-row {
-  font: inherit;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-align: left;
-  cursor: pointer;
-  border: 0;
-  background: none;
   color: var(--tp-text);
-  border-radius: 10px;
-  padding: 6px 8px;
-}
-.en-row:hover {
-  background: var(--en-fill);
-}
-.en-row.is-on {
-  background: var(--en-accent-soft);
 }
 .en-row:focus-visible {
   outline-offset: -2px;
@@ -416,31 +360,8 @@ html[data-color-mode='dark'] .en-root {
   font-size: 13px;
   color: var(--tp-text-muted);
 }
-.en-side-foot {
-  padding: 8px;
-  border-top: 1px solid var(--en-line);
-}
 .en-side-link {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--tp-text-subtle);
-  font: inherit;
   font-size: 13px;
-  cursor: pointer;
-}
-.en-side-link:hover {
-  background: var(--en-fill);
-  color: var(--tp-text);
-}
-.en-side-link.is-on {
-  background: var(--en-accent-soft);
-  color: var(--en-accent);
 }
 
 /* The colored tile every entity and type wears (iOS-style app icon). */

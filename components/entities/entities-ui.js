@@ -166,7 +166,7 @@
     root.classList.add('en-root');
     var els = {
       banner: h('div', { class: 'en-banner', hidden: true }),
-      side: h('aside', { class: 'en-side' }),
+      side: h('aside', { class: 'sp en-side' }),
       main: h('main', { class: 'en-main' }),
       toast: h('div', { class: 'en-toast', hidden: true, role: 'status' }),
       status: h('span', { class: 'en-status' }),
@@ -341,7 +341,7 @@
     var clearBtn = h(
       'button',
       {
-        class: 'en-search-clear',
+        class: 'sp-search-clear',
         type: 'button',
         hidden: true,
         'aria-label': 'Effacer la recherche',
@@ -523,10 +523,12 @@
       }
       if (!state.entities.length) {
         listBox.appendChild(h('p', { class: 'en-list-hint', text: 'Aucune entité pour l’instant.' }));
+        appendAddRow();
         return;
       }
       if (!vis.list.length) {
         listBox.appendChild(h('p', { class: 'en-list-hint', text: 'Aucune entité ne correspond.' }));
+        appendAddRow();
         return;
       }
       var groups = {};
@@ -544,7 +546,7 @@
         return typeName(a).localeCompare(typeName(b), 'fr', { sensitivity: 'base' });
       });
       order.forEach(function (key) {
-        listBox.appendChild(h('div', { class: 'en-group' }, [h('span', { text: key ? typeName(key) : 'Sans type' }), h('span', { class: 'en-group-n', text: String(groups[key].length) })]));
+        listBox.appendChild(h('div', { class: 'sp-group en-group' }, [h('span', { text: key ? typeName(key) : 'Sans type' }), h('span', { class: 'sp-count', text: String(groups[key].length) })]));
         groups[key]
           .slice()
           .sort(function (a, b) {
@@ -557,7 +559,7 @@
               h(
                 'button',
                 {
-                  class: 'en-row' + (on ? ' is-on' : ''),
+                  class: 'sp-row en-row' + (on ? ' is-on' : ''),
                   type: 'button',
                   'data-id': e.id,
                   'aria-current': on ? 'true' : null,
@@ -570,6 +572,7 @@
             );
           });
       });
+      appendAddRow();
       var sel = listBox.querySelector('.en-row.is-on');
       if (sel && opts && opts.reveal) sel.scrollIntoView({ block: 'nearest' });
       if (sel && opts && opts.focus) sel.focus();
@@ -581,18 +584,35 @@
           onCreate: function (title, info) {
             var src = info.anchor === 'below' ? (info.below || info.above) : (info.above || info.below);
             var id = src && src.getAttribute('data-id');
-            var near = id && state.entities.filter(function (e) { return e.id === id; })[0];
-            var types = near && near.types && near.types.length ? near.types.slice(0, 1) : (state.typeFilter ? [state.typeFilter] : []);
-            var created = EM().createEntity(state.schema, { name: title, types: types });
-            state.entities = state.entities.concat([created]);
-            state.selId = created.id;
-            state.mode = 'entity';
-            scheduleSave();
-            paintList({ reveal: true });
-            paintMain();
+            createNamed(title, id && state.entities.filter(function (e) { return e.id === id; })[0]);
           },
         });
       }
+    }
+
+    /** Creates an entity from a typed name, typed like the neighbour it was added next to (or the active type filter). */
+    function createNamed(title, near) {
+      var types = near && near.types && near.types.length ? near.types.slice(0, 1) : (state.typeFilter ? [state.typeFilter] : []);
+      var created = EM().createEntity(state.schema, { name: title, types: types });
+      state.entities = state.entities.concat([created]);
+      state.selId = created.id;
+      state.mode = 'entity';
+      scheduleSave();
+      paintList({ reveal: true });
+      paintMain();
+    }
+
+    /** The "Nouvelle entité…" line that closes the list, same as the Tableau's "Nouvelle carte…". */
+    function appendAddRow() {
+      if (!global.AddRow) return;
+      listBox.appendChild(global.AddRow.line({
+        label: 'Nouvelle entité',
+        onSubmit: function (title) {
+          createNamed(title, null);
+          var next = listBox.querySelector('.ar-input');
+          if (next) next.focus({ preventScroll: true });
+        },
+      }));
     }
 
     function rowSummary(e) {
@@ -612,7 +632,7 @@
     var schemaLink = h(
       'button',
       {
-        class: 'en-side-link',
+        class: 'sp-row en-side-link',
         type: 'button',
         onclick: function () {
           state.mode = 'schema';
@@ -726,7 +746,7 @@
       var newBtn = h(
         'button',
         {
-          class: 'en-icon-btn en-icon-btn--accent',
+          class: 'sp-btn sp-btn--accent',
           type: 'button',
           title: 'Nouvelle entité',
           'aria-label': 'Nouvelle entité',
@@ -736,17 +756,14 @@
         },
         [icon('plus')]
       );
-      els.side.appendChild(
-        h('div', { class: 'en-side-head' }, [
-          h('div', { class: 'en-title' }, [h('h1', { class: 'en-title-text', text: 'Entités' }), els.status, newBtn]),
-          h('div', { class: 'en-search' }, [icon('search'), queryInput, clearBtn]),
-          typeBar,
-          chipBox,
-        ])
-      );
+      els.side.appendChild(global.SidePanel.head({ title: 'Entités', extra: [els.status], actions: [] }));
+      els.side.lastChild.appendChild(newBtn);
+      els.side.appendChild(global.SidePanel.search(queryInput, { clear: clearBtn }));
+      els.side.appendChild(h('div', { class: 'en-side-head' }, [typeBar, chipBox]));
       els.side.appendChild(watchBox);
       els.side.appendChild(listBox);
-      els.side.appendChild(h('div', { class: 'en-side-foot' }, [observeBox, schemaLink]));
+      els.side.appendChild(h('div', { class: 'en-side-foot sp-foot' }, [observeBox, schemaLink]));
+      global.SidePanel.resizable(els.side, 'entities');
       bindMenus();
     }
 

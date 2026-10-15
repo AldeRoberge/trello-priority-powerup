@@ -283,6 +283,7 @@ html[data-color-mode] .tp-page--mindmap {
   left: 12px;
   bottom: 12px;
   display: flex;
+.mm-canvas .ar-line--float { bottom: 54px; }
   gap: 12px;
   padding: 6px 10px;
   border-radius: 6px;

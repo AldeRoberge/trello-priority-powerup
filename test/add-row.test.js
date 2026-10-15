@@ -10,9 +10,11 @@ function fakeElement() {
   return {
     value: '',
     attrs: {},
+    children: [],
     blurred: false,
     setAttribute(k, v) { this.attrs[k] = v; },
     addEventListener(type, fn) { listeners[type] = fn; },
+    appendChild(c) { this.children.push(c); return c; },
     blur() { this.blurred = true; },
     fire(type, e) { listeners[type](e); },
   };
@@ -53,6 +55,16 @@ describe('AddRow', () => {
     input.value = '   ';
     input.fire('keydown', key('Enter'));
     assert.deepEqual(got, ['Faire les courses']);
+  });
+
+  it('builds a line with a plus and a labelled input, floating on request', () => {
+    const line = AR.line({ label: 'Nouveau document', float: true });
+    assert.match(line.className, /ar-line ar-line--float/);
+    assert.equal(line.children.length, 2);
+    assert.match(line.children[0].className, /ar-plus/);
+    assert.equal(line.children[1].placeholder, 'Nouveau document…');
+    assert.equal(line.children[1].attrs['aria-label'], 'Nouveau document');
+    assert.doesNotMatch(AR.line({}).className, /float/);
   });
 
   it('Escape clears and leaves the field', () => {

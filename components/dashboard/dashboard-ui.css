@@ -34,44 +34,14 @@ html[data-color-mode] .tp-page--dashboard {
 
 /* ── Sidebar ─────────────────────────────────────────────────────────── */
 .db-side {
-  flex: none;
-  width: 200px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 8px;
-  background: var(--tp-surface-subtle);
-  border-right: 1px solid var(--tp-border);
+  /* size, background, border and header come from the shared .sp panel (view-shell.css) */
+  min-height: 0;
 }
+.db-nav-list { display: flex; flex-direction: column; gap: 2px; padding: 2px 8px; }
 .db-brand { display: flex; align-items: center; gap: 8px; padding: 4px 8px 12px; font-weight: 600; }
-.db-nav {
-  font: inherit;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--tp-text-subtle);
-  cursor: pointer;
-  text-align: left;
-}
-.db-nav:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
-.db-nav.is-on { background: var(--tp-surface-active); color: var(--tp-text); }
 .db-nav-label { flex: 1; }
-.db-badge {
-  min-width: 18px;
-  padding: 0 6px;
-  border-radius: 9px;
-  background: var(--tp-surface-hover);
-  color: var(--tp-text-muted);
-  font-size: 11px;
-  text-align: center;
-}
-.db-side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding: 8px; font-size: 12px; color: var(--tp-text-muted); }
+.db-side-foot { display: flex; flex-direction: column; gap: 4px; }
+.db-side-cap { display: flex; flex-direction: column; gap: 4px; }
 
 /* ── Main column ─────────────────────────────────────────────────────── */
 .db-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
@@ -485,8 +455,8 @@ button.db-meter-hit:hover .db-meter { background: var(--tp-border-strong); }
 @keyframes db-pulse { 50% { opacity: 0.5; } }
 
 @media (max-width: 760px) {
-  .db-side { width: 56px; }
-  .db-nav-label, .db-brand span, .db-side-foot { display: none; }
+  .db-side.sp { width: 56px; }
+  .db-side .sp-head, .db-side .sp-search, .db-nav-label, .db-brand span, .db-side-foot, .db-badge { display: none; }
   .db-board, .db-today, .db-page--split { flex-direction: column; }
   .db-col-card--pool {
     flex: none;

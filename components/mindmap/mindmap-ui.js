@@ -203,6 +203,20 @@
     els.canvas.appendChild(svg);
     els.canvas.appendChild(els.panel);
     els.canvas.appendChild(els.composer);
+    if (global.AddRow) {
+      // New tasks land in the middle of what is on screen, fanned out so several do not stack.
+      var added = 0;
+      els.canvas.appendChild(global.AddRow.line({
+        float: true,
+        onSubmit: function (title, input) {
+          var r = els.canvas.getBoundingClientRect();
+          var k = state.view.k || 1;
+          var fan = (added++ % 6) * 28;
+          createTaskAt(null, '', { x: (r.width / 2 - state.view.x) / k + fan, y: (r.height / 2 - state.view.y) / k + fan }, title);
+          input.value = '';
+        },
+      }));
+    }
     els.canvas.appendChild(h('div', { class: 'mm-legend' }, [
       legendItem('serves', 'Contribue à'),
       legendItem('depends', 'Dépend de'),

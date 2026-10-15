@@ -264,6 +264,7 @@
       landed: false, // first load decides the landing section once
       composer: null, // orchestrator column open for a new task ('pool', 'cal:ISO', 'vague:id')
       composerText: '',
+      filter: '', // side-panel search: narrows every section
     };
     var statusTimer = null;
     var reloadTimer = null;
@@ -271,11 +272,25 @@
 
     root.innerHTML = '';
     var els = {
-      side: h('nav', { class: 'db-side', 'aria-label': 'Dashboard' }),
+      side: h('nav', { class: 'sp db-side', 'aria-label': 'Dashboard' }),
+      nav: h('div', { class: 'db-nav-list' }),
+      filter: h('input', { type: 'search', placeholder: 'Filtrer…', 'aria-label': 'Filtrer les cartes', autocomplete: 'off' }),
       main: h('main', { class: 'db-main' }),
       status: h('div', { class: 'db-status' }),
     };
     var shell = h('div', { class: 'db-root', tabindex: '-1' }, [els.side, h('div', { class: 'db-col' }, [els.main, els.status])]);
+    var filterTimer = null;
+    els.filter.addEventListener('input', function () {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(function () {
+        state.filter = els.filter.value;
+        render();
+      }, 120);
+    });
+    /** The cards the sections show: everything, or only what the side-panel search matches. */
+    function viewRows() {
+      return state.filter && TM() ? TM().filterRows(state.rows, state.filter) : state.rows;
+    }
     root.appendChild(shell);
 
     /* ── Status ────────────────────────────────────────────────────── */
@@ -363,36 +378,50 @@
 
     /* ── Sidebar ───────────────────────────────────────────────────── */
     function renderSide() {
-      var c = DM().counts(state.rows, today);
-      els.side.textContent = '';
+      var c = DM().counts(viewRows(), today);
+      els.nav.textContent = '';
       SECTIONS.forEach(function (s) {
         var n = s.key === 'triage' ? c.triage : s.key === 'orchestrator' ? c.orchestrator : s.key === 'today' ? c.today : 0;
-        els.side.appendChild(h('button', {
-          class: 'db-nav' + (state.section === s.key ? ' is-on' : ''),
+        els.nav.appendChild(h('button', {
+          class: 'sp-row db-nav' + (state.section === s.key ? ' is-on' : ''),
           type: 'button',
           title: s.label + ' (' + s.hint + ')',
           onclick: function () { go(s.key); },
         }, [
           icon(s.icon),
           h('span', { class: 'db-nav-label', text: s.label }),
-          n ? h('span', { class: 'db-badge', text: String(n) }) : null,
+          n ? h('span', { class: 'sp-count db-badge', text: String(n) }) : null,
         ]));
       });
-      els.side.appendChild(h('div', { class: 'db-side-foot' }, [
-        h('span', { text: 'Capacité / jour' }),
-        h('select', {
-          class: 'db-select',
-          'aria-label': 'Capacité par jour',
-          onchange: function (e) {
-            state.capacity = Number(e.target.value);
-            DT().setCapacity(state.capacity);
-            render();
-          },
-        }, [3, 4, 5, 6, 7, 8].map(function (hrs) {
-          return h('option', { value: String(hrs * 60), selected: state.capacity === hrs * 60, text: hrs + ' h' });
-        })),
-      ]));
     }
+
+    /** The panel frame is built once, so the search box keeps focus while the list under it repaints. */
+    function buildSide() {
+      els.side.appendChild(global.SidePanel.head({
+        title: 'Dashboard',
+        actions: [{ icon: 'plus', title: 'Nouvelle carte', accent: true, onclick: function () { createCard(); } }],
+      }));
+      els.side.appendChild(global.SidePanel.search(els.filter));
+      els.side.appendChild(els.nav);
+      els.side.appendChild(h('div', { class: 'db-side-foot sp-foot' }, [
+        h('label', { class: 'db-side-cap' }, [
+          h('span', { text: 'Capacité / jour' }),
+          h('select', {
+            class: 'db-select',
+            'aria-label': 'Capacité par jour',
+            onchange: function (e) {
+              state.capacity = Number(e.target.value);
+              DT().setCapacity(state.capacity);
+              render();
+            },
+          }, [3, 4, 5, 6, 7, 8].map(function (hrs) {
+            return h('option', { value: String(hrs * 60), selected: state.capacity === hrs * 60, text: hrs + ' h' });
+          })),
+        ]),
+      ]));
+      global.SidePanel.resizable(els.side, 'dashboard');
+    }
+    buildSide();
 
     function go(key) {
       state.section = key;
@@ -574,7 +603,7 @@
 
     function advanceSelection(row) {
       if (!row || state.selected !== row.id) return;
-      var q = DM().triageQueue(state.rows);
+      var q = DM().triageQueue(viewRows());
       var i = -1;
       for (var n = 0; n < q.length; n++) if (q[n].id === row.id) i = n;
       var nxt = i >= 0 ? (q[i + 1] || q[i - 1]) : null;
@@ -816,7 +845,7 @@
 
     /* ── 2. Triage ─────────────────────────────────────────────────── */
     function renderTriage() {
-      var q = DM().triageQueue(state.rows);
+      var q = DM().triageQueue(viewRows());
       if (!q.length) {
         els.main.appendChild(h('div', { class: 'db-page' }, [
           pageHead('Triage', 'Rien à trier.'),
@@ -1321,12 +1350,12 @@
       })();
       var manual = scale === 'vague' || scale === 'hour' || scale === 'minute';
       var planFrom = (scale === 'hour' || scale === 'minute') ? (state.zoomDay || today) : today;
-      var buckets = DM().horizonPlan(state.rows, planFrom, scale, state.capacity, vagueOptions(), nowM);
-      var pool = DM().unplanned(state.rows);
-      if (manual && scale !== 'vague' && DM().untimed) pool = pool.concat(DM().untimed(state.rows, today));
+      var buckets = DM().horizonPlan(viewRows(), planFrom, scale, state.capacity, vagueOptions(), nowM);
+      var pool = DM().unplanned(viewRows());
+      if (manual && scale !== 'vague' && DM().untimed) pool = pool.concat(DM().untimed(viewRows(), today));
       var moves = manual ? [] : (scale === 'day'
-        ? DM().autoPlan(state.rows, today, HORIZON, state.capacity)
-        : DM().placeAuto(state.rows, today, scale, state.capacity, vagueOptions()));
+        ? DM().autoPlan(viewRows(), today, HORIZON, state.capacity)
+        : DM().placeAuto(viewRows(), today, scale, state.capacity, vagueOptions()));
       var autoBtn = moves.length ? h('button', {
         class: 'db-btn db-btn--primary db-auto',
         type: 'button',
@@ -1615,7 +1644,7 @@
 
     /* ── 4. Today ──────────────────────────────────────────────────── */
     function renderToday() {
-      var tasks = DM().todayList(state.rows, today);
+      var tasks = DM().todayList(viewRows(), today);
       var used = DM().minutesOf(tasks);
       var blocks = DM().timeline(tasks);
       var byId = {};
@@ -1691,8 +1720,8 @@
         }, [h('b', { text: (function () { var s = WO() && WO().stepState(r); return s && s.text ? s.text : r.name; })() }), h('span', { text: when })]));
       });
       var pct = Math.min(100, Math.round((used / state.capacity) * 100));
-      var next = DM().nextAction(state.rows, today);
-      var sugg = DM().suggestions(state.rows, today, 5);
+      var next = DM().nextAction(viewRows(), today);
+      var sugg = DM().suggestions(viewRows(), today, 5);
       var nextStep = next ? (WO() && WO().stepState(next.row)) : null;
       var actionText = nextStep && nextStep.text ? nextStep.text : (next ? next.row.name : '');
       var nowCard = next ? h('section', { class: 'db-now', 'data-card': next.row.id }, [
@@ -1793,7 +1822,7 @@
 
     function reviewBlock() {
       var rep = WO()
-        ? WO().review(state.rows, { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] })
+        ? WO().review(viewRows(), { today: today, wipCap: WO().DEFAULT_WIP, projects: state.projects || [] })
         : { flags: [], steps: [], waiting: [], wip: { over: false }, projects: [] };
       var projects = rep.projects || [];
       var steps = rep.steps || [];
@@ -1877,7 +1906,7 @@
       var idx = '123'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (state.section !== 'triage') return;
-      var q = DM().triageQueue(state.rows);
+      var q = DM().triageQueue(viewRows());
       var i = q.map(function (r) { return r.id; }).indexOf(state.selected);
       if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); if (q[i + 1]) { state.selected = q[i + 1].id; render(); } }
       else if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); if (q[i - 1]) { state.selected = q[i - 1].id; render(); } }

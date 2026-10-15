@@ -139,52 +139,11 @@ html[data-color-mode="dark"] .dc-root {
 
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 .dc-side {
-  flex: none;
-  width: 264px;
-  display: flex;
-  flex-direction: column;
+  /* size, background and border come from the shared .sp panel (view-shell.css) */
   min-height: 0;
-  background: var(--tp-surface-subtle);
-  border-right: 1px solid var(--tp-border);
 }
 .dc-root.is-side-collapsed .dc-side {
   display: none;
-}
-.dc-side-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 12px 8px;
-}
-.dc-side-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-.dc-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  margin: 0 12px 8px;
-}
-.dc-search .ti {
-  position: absolute;
-  left: 8px;
-  font-size: 15px;
-  color: var(--tp-text-muted);
-  pointer-events: none;
-}
-.dc-search-input {
-  font: inherit;
-  width: 100%;
-  padding: 6px 8px 6px 28px;
-  border: 1px solid var(--tp-border-strong);
-  border-radius: 4px;
-  background: var(--tp-input-bg);
-  color: var(--tp-text);
-}
-.dc-search-input:focus {
-  outline: 2px solid var(--tp-primary);
-  outline-offset: -1px;
 }
 .dc-list {
   flex: 1 1 auto;
@@ -198,18 +157,6 @@ html[data-color-mode="dark"] .dc-root {
 }
 .dc-item {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.dc-item:hover {
-  background: var(--tp-surface-hover);
-}
-.dc-item.is-on {
-  background: var(--tp-surface-active);
 }
 .dc-item-icon {
   flex: none;
@@ -342,7 +289,8 @@ button.dc-item-icon:hover {
   font-size: 14px;
   color: var(--tp-text-muted);
 }
-.dc-item.is-drop {
+.dc-item.is-drop,
+.dc-item.is-drop:hover {
   background: color-mix(in srgb, var(--tp-primary) 22%, transparent);
   outline: 2px dashed var(--tp-primary);
   outline-offset: -2px;
@@ -359,9 +307,6 @@ button.dc-item-icon:hover {
 }
 .dc-list {
   min-height: 80px;
-}
-.dc-new-folder {
-  padding: 5px 7px;
 }
 .dc-dialog-input {
   font: inherit;

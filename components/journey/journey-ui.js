@@ -794,10 +794,38 @@
       var box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
       live.view.nodes.forEach(function (n) {
         box.x0 = Math.min(box.x0, n.x); box.y0 = Math.min(box.y0, n.y);
+      if (global.AddRow && openListId()) {
+        wrap.appendChild(global.AddRow.line({
+          float: true,
+          onSubmit: function (title, input) { addTask(title, input); },
+        }));
+      }
         box.x1 = Math.max(box.x1, n.x + n.w); box.y1 = Math.max(box.y1, n.y + n.h);
       });
       var s = live.gc.size();
       live.gc.setView(GC().fitView(box, s.w, s.h, 40, 1, 0.3));
+    /** "Nouvelle carte…" on the map: a task in the first open list, left without a goal until it is linked. */
+    async function addTask(title, input) {
+      var tt = global.TableTrello;
+      var listId = openListId();
+      if (!tt || typeof tt.createRow !== 'function' || !listId) return;
+      input.disabled = true;
+      var QP = global.QuickParse;
+      var q = QP && QP.parse ? QP.parse(title) : { name: title, dueDate: '' };
+      try {
+        var res = await tt.createRow(t, q.name || title, listId);
+        if (res && res.cardId && q.dueDate && global.GanttTrello) {
+          try { await global.GanttTrello.saveCardDates(t, res.cardId, { dueDate: q.dueDate }); } catch (e) { /* the card exists; set the date by hand */ }
+        }
+        await reload();
+        var next = document.querySelector('.jy-map .ar-input');
+        if (next) next.focus({ preventScroll: true });
+      } catch (e) {
+        input.disabled = false;
+        toast('Pas créée');
+      }
+    }
+
     }
 
     /** After the map is in the page (sizes are known): center the focused box, or fit everything the first time. */

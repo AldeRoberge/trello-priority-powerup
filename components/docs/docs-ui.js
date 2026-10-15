@@ -22,6 +22,9 @@
 (function (global) {
   'use strict';
 
+  var SP = function () {
+    return global.SidePanel;
+  };
   var DM = function () {
     return global.DocsModel;
   };
@@ -248,7 +251,7 @@
       banner: h('div', { class: 'dc-banner', hidden: true }),
       side: h('aside', { class: 'dc-side', 'aria-label': 'Documents' }),
       sideList: h('div', { class: 'dc-list', role: 'listbox' }),
-      search: h('input', { class: 'dc-search-input', type: 'search', placeholder: 'Filtrer…', 'aria-label': 'Filtrer les documents' }),
+      search: h('input', { class: 'dc-search-input', type: 'search', placeholder: 'Filtrer…', 'aria-label': 'Filtrer les documents', autocomplete: 'off' }),
       main: h('section', { class: 'dc-doc' }),
       head: h('div', { class: 'dc-head' }),
       headTitle: h('span', { class: 'dc-head-title' }),
@@ -397,32 +400,20 @@
     function buildSide() {
       els.side.textContent = '';
       els.side.appendChild(
-        h('div', { class: 'dc-side-head' }, [
-          h('span', { class: 'dc-side-title', text: 'Documents' }),
-          h('button', {
-            class: 'dc-btn dc-new-folder',
-            title: 'Trier',
-            'aria-label': 'Trier les documents',
-            onclick: function (e) { openListMenu(e.currentTarget.getBoundingClientRect(), true); },
-          }, [icon('arrows-sort')]),
-          h('button', {
-            class: 'dc-btn dc-new-folder',
-            title: 'Nouveau dossier',
-            'aria-label': 'Nouveau dossier',
-            onclick: function () { newFolder(''); },
-          }, [icon('folder-plus')]),
-          h('button', {
-            class: 'dc-btn dc-btn--primary dc-new',
-            title: 'Nouveau document',
-            onclick: function () { newDoc(); },
-          }, [icon('plus'), h('span', { text: 'Nouveau' })]),
-        ])
+        SP().head({
+          title: 'Documents',
+          actions: [
+            { icon: 'arrows-sort', title: 'Trier', ariaLabel: 'Trier les documents', onclick: function (e) { openListMenu(e.currentTarget.getBoundingClientRect(), true); } },
+            { icon: 'folder-plus', title: 'Nouveau dossier', onclick: function () { newFolder(''); } },
+            { icon: 'plus', title: 'Nouveau document', accent: true, className: 'dc-new', onclick: function () { newDoc(); } },
+          ],
+        })
       );
       els.search.addEventListener('input', function () {
         state.filter = els.search.value;
         paintList();
       });
-      els.side.appendChild(h('label', { class: 'dc-search' }, [icon('search'), els.search]));
+      els.side.appendChild(SP().search(els.search));
       els.side.appendChild(els.sideList);
       // empty area of the list: drop = move to the root, right-click = create / sort menu
       els.sideList.addEventListener('dragover', function (e) {
@@ -443,6 +434,7 @@
         e.preventDefault();
         openListMenu({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY });
       });
+      SP().resizable(els.side, 'docs');
     }
 
     function setSort(mode) {
@@ -504,6 +496,7 @@
         return;
       }
       rows.forEach(function (r) {
+        appendAddRow(list);
         if (r.type === 'folder') {
           list.appendChild(folderRow(r));
           if (pend && pend.parent === r.folder.id) list.appendChild(newFolderRow(r.depth + 1));
@@ -521,7 +514,7 @@
           },
         }, [icon('dots')]);
         var row = h('div', {
-          class: 'dc-item' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
+          class: 'sp-row dc-item' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
           style: 'padding-left:' + (8 + r.depth * 16) + 'px',
           role: 'option',
           'aria-selected': on ? 'true' : 'false',
@@ -553,9 +546,19 @@
       bindDocInsert();
     }
 
+      appendAddRow(list);
     /** + in the seam under a document (or a folder) creates one there. */
     function bindDocInsert() {
       if (!global.InsertGap) return;
+    /** The "Nouveau document…" line that closes the list, same as the Tableau's "Nouvelle carte…". */
+    function appendAddRow(list) {
+      if (!global.AddRow || !state.authOk) return;
+      list.appendChild(global.AddRow.line({
+        label: 'Nouveau document',
+        onSubmit: function (title) { newDoc(title); },
+      }));
+    }
+
       global.InsertGap.watch(els.sideList, {
         item: '.dc-item',
         placeholder: 'Titre…',
@@ -833,7 +836,7 @@
         ? DM().relativeTime(r.doc.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(r.doc.size) : '')
         : String(r.count);
       var row = h('div', {
-        class: 'dc-item dc-folder' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
+        class: 'sp-row dc-item dc-folder' + (on ? ' is-on' : '') + (r.archived ? ' is-archived' : ''),
         style: 'padding-left:' + (8 + r.depth * 16) + 'px',
         role: 'treeitem',
         'aria-label': (r.doc && r.doc.title) || f.name,
