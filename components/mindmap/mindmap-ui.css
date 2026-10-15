@@ -509,3 +509,13 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-node--facet .mm-shape { filter: none; }
 .mm-facet-label { font-size: 12px; font-weight: 600; fill: var(--tp-text); pointer-events: none; }
 .mm-menu-item.is-active { color: var(--tp-primary); }
+
+/* Perspectives: column titles, and the groups step aside */
+.mm-lens .mm-menu-item .ti { opacity: .7; }
+.mm-lens .mm-menu-item .mm-menu-label { margin-right: auto; margin-left: -8px; }
+.mm-head { pointer-events: none; }
+.mm-head-label { font-size: 13px; font-weight: 600; fill: var(--tp-text); }
+.mm-head-count { font-size: 11px; fill: var(--tp-text-muted, var(--tp-text)); opacity: .6; }
+.mm-head.is-dim { opacity: .35; }
+.mm-groups, .mm-heads { transition: opacity .3s ease; }
+.is-persp .mm-groups { opacity: 0; pointer-events: none; }

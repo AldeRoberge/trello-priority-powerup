@@ -131,7 +131,8 @@
       graph: { nodes: [], edges: [] },
       cycles: {},
       selected: null,
-      rest: null, // home positions while a focus orbit is on screen
+      rest: null, // home positions while a focus orbit or a perspective is on screen
+      persp: null, // { id, dim, heads } while a perspective (people, places, time) rearranges the map
       rings: null, // node id → 0 focus, 1 direct, 2 the relation just behind
       selectedEdge: null,
       selectedGroup: null,
@@ -181,6 +182,7 @@
     var svg = s('svg', { class: 'mm-svg', width: '100%', height: '100%' });
     var gView = s('g', { class: 'mm-view' });
     var gGroups = s('g', { class: 'mm-groups' });
+    var gHeads = s('g', { class: 'mm-heads' }); // column titles of a perspective
     var gEdges = s('g', { class: 'mm-edges' });
     var gNodes = s('g', { class: 'mm-nodes' });
     var gFacets = s('g', { class: 'mm-facets' });
@@ -189,6 +191,7 @@
     var gGuides = s('g', { class: 'mm-guides' }); // alignment guides shown while dragging cards
     var gHandles = s('g', { class: 'mm-handles' }); // grab handles on the two ends of the selected link
     gView.appendChild(gGroups);
+    gView.appendChild(gHeads);
     gView.appendChild(gBox);
     gView.appendChild(gEdges);
     gView.appendChild(gNodes);
@@ -321,6 +324,13 @@
             title: 'Hiérarchie',
             onclick: function () { state.layout = state.layout === 'tree' ? 'free' : 'tree'; rebuild({ relayout: true, fresh: true }); },
           }),
+          tool((MM().perspectiveById(state.persp ? state.persp.id : 'network') || {}).icon || 'topology-star-3', 'Perspective', {
+            pressed: !!state.persp,
+            menu: true,
+            extra: 'mm-persp-btn',
+            title: 'Perspective',
+            onclick: function (ev) { openPerspMenu(ev.currentTarget); },
+          }),
           tool('circle-dashed', 'Groupes', {
             pressed: !!state.groupsOn,
             menu: true,
@@ -440,6 +450,15 @@
       Object.keys(state.multi).forEach(function (id) { if (!nodeById(id)) delete state.multi[id]; });
       if (state.relink && !edgeById(state.relink)) state.relink = null;
       if (state.linkFrom && !nodeById(state.linkFrom)) state.linkFrom = null;
+      if (state.persp) {
+        var again = state.persp.id;
+        state.persp = null;
+        renderBar();
+        renderGraph();
+        renderPanel();
+        showPerspective(again, false);
+        return;
+      }
       if (state.selected && nodeById(state.selected)) beginOrbit(false);
       renderBar();
       renderGraph();
@@ -894,7 +913,8 @@
         var ring = state.rings && state.rings[n.id];
         var context = !!(focus && !selEdge && ring === 2);
         var lit = selEdge ? n.id === selEdge.from || n.id === selEdge.to : !focus || n.id === focus || near[n.id] || ring === 1;
-        g.classList.toggle('is-dim', !lit && !context);
+        var receded = !!(state.persp && state.persp.dim[n.id] && n.id !== focus);
+        g.classList.toggle('is-dim', (!lit && !context) || receded);
         g.classList.toggle('is-context', context);
         g.classList.toggle('is-selected', n.id === focus);
         g.classList.toggle('is-multi', !!state.multi[n.id]);
@@ -910,10 +930,12 @@
           (state.rings[e.from] === 1 && state.rings[e.to] === 2) ||
           (state.rings[e.to] === 1 && state.rings[e.from] === 2)
         );
-        ref.line.classList.toggle('is-dim', !lit && !contextEdge);
-        ref.glow.classList.toggle('is-dim', !lit && !contextEdge);
-        if (ref.arrow) ref.arrow.classList.toggle('is-dim', !lit && !contextEdge);
-        if (ref.neck) ref.neck.classList.toggle('is-dim', !lit && !contextEdge);
+        var gone = !!(state.persp && (state.persp.dim[e.from] || state.persp.dim[e.to]) && e.from !== focus && e.to !== focus);
+        var dimEdge = (!lit && !contextEdge) || gone;
+        ref.line.classList.toggle('is-dim', dimEdge);
+        ref.glow.classList.toggle('is-dim', dimEdge);
+        if (ref.arrow) ref.arrow.classList.toggle('is-dim', dimEdge);
+        if (ref.neck) ref.neck.classList.toggle('is-dim', dimEdge);
         ref.line.classList.toggle('is-context', !!contextEdge);
         ref.glow.classList.toggle('is-context', !!contextEdge);
         if (ref.arrow) ref.arrow.classList.toggle('is-context', !!contextEdge);
@@ -1369,6 +1391,7 @@
      * everyone else moves from the resting layout, or from where a previous orbit left them.
      */
     function beginOrbit(animate) {
+      if (state.persp) { state.rings = null; applyFocus(); return; }
       var focus = state.selected && nodeById(state.selected);
       if (!focus || !isFinite(focus.x) || !isFinite(focus.y)) return;
       if (!state.rest) {
@@ -1393,6 +1416,7 @@
     }
 
     function endOrbit(animate) {
+      if (state.persp) { state.rings = null; applyFocus(); return; }
       if (!state.rest) {
         state.rings = null;
         syncOrbitRing();
@@ -2528,7 +2552,7 @@
     function lodSignature() {
       var force = state.groupForce || {};
       var fk = Object.keys(force).sort().map(function (id) { return id + '=' + force[id]; }).join(',');
-      return [state.groupsOn ? 1 : 0, state.lens, MM().zoomBand(state.view.k), state.selected || '', fk, state.manual.length, editsSig(), state.graph.nodes.length, state.graph.edges.length].join('|');
+      return [groupsShown() ? 1 : 0, state.lens, MM().zoomBand(state.view.k), state.selected || '', fk, state.manual.length, editsSig(), state.graph.nodes.length, state.graph.edges.length].join('|');
     }
     function applyLod(forceRebuild) {
       if (!state.graph || !gGroups) return;
@@ -2547,7 +2571,7 @@
           force: state.groupForce,
           focusId: state.selected,
         });
-        var hide = state.groupsOn ? state.scene.hidden : {};
+        var hide = groupsShown() ? state.scene.hidden : {};
         state.graph.nodes.forEach(function (n) {
           var el = nodeEls[n.id];
           if (el) el.setAttribute('display', hide[n.id] ? 'none' : '');
@@ -2555,7 +2579,7 @@
         state.graph.edges.forEach(function (e) {
           var ref = edgeEls[e.id];
           if (!ref || !ref.line || !ref.line.parentNode) return;
-          ref.line.parentNode.setAttribute('display', state.groupsOn && (hide[e.from] || hide[e.to]) ? 'none' : '');
+          ref.line.parentNode.setAttribute('display', groupsShown() && (hide[e.from] || hide[e.to]) ? 'none' : '');
         });
       }
       drawHulls();
@@ -2801,7 +2825,7 @@
       for (var i = oldLabels.length - 1; i >= 0; i--) oldLabels[i].parentNode.removeChild(oldLabels[i]);
       gGroups.textContent = '';
       var scene = state.scene;
-      if (!state.groupsOn || !scene) return;
+      if (!groupsShown() || !scene) return;
       var byNode = Object.create(null);
       state.graph.nodes.forEach(function (n) { byNode[n.id] = n; });
       var k = state.view.k || 1;
@@ -2906,6 +2930,83 @@
         else if (f.facet === 'due') openFieldEditor(rec, 'due', anchor);
       });
       return g;
+    }
+    /* ── Perspectives: the same map regrouped by who, where or when ───── */
+    var perspMenuEl = null;
+    function groupsShown() { return !!state.groupsOn && !state.persp; }
+    function drawHeads() {
+      while (gHeads.firstChild) gHeads.removeChild(gHeads.firstChild);
+      if (!state.persp) return;
+      state.persp.heads.forEach(function (hd) {
+        var g = s('g', { class: 'mm-head' + (hd.dim ? ' is-dim' : ''), transform: 'translate(' + hd.x.toFixed(1) + ',' + hd.y.toFixed(1) + ')' });
+        g.appendChild(s('text', { class: 'mm-head-label', 'text-anchor': 'middle', y: 0 }, [hd.label]));
+        g.appendChild(s('text', { class: 'mm-head-count', 'text-anchor': 'middle', y: 16 }, [String(hd.count)]));
+        gHeads.appendChild(g);
+      });
+    }
+    /** Glide every node into the columns of perspective id; 'network' glides them back. */
+    function showPerspective(id, animate) {
+      closePerspMenu();
+      var p = MM().perspectiveById(id);
+      if (!p || id === 'network') {
+        if (!state.persp) return;
+        var back = {};
+        var home = state.rest || {};
+        state.graph.nodes.forEach(function (n) { if (home[n.id]) back[n.id] = { x: home[n.id].x, y: home[n.id].y }; });
+        state.persp = null;
+        root.classList.remove('is-persp');
+        drawHeads();
+        applyFocus();
+        renderBar();
+        applyLod(true);
+        var token = state.rest;
+        moveTo(back, animate !== false, function (gen) {
+          if (gen !== poseGen) return;
+          if (state.rest === token) state.rest = null;
+          if (state.selected && nodeById(state.selected)) beginOrbit(true); else fit();
+        });
+        return;
+      }
+      if (!state.rest) {
+        state.rest = {};
+        state.graph.nodes.forEach(function (n) { state.rest[n.id] = { x: n.x, y: n.y }; });
+      }
+      state.rings = null;
+      var pose = MM().perspective(state.graph.nodes, state.graph.edges, id);
+      state.persp = { id: id, dim: pose.dim, heads: pose.heads };
+      root.classList.add('is-persp');
+      drawHeads();
+      applyFocus();
+      renderBar();
+      applyLod(true);
+      moveTo(pose.positions, animate !== false, function (gen) {
+        if (gen !== poseGen) return;
+        fit();
+      });
+    }
+    function closePerspMenu() {
+      if (perspMenuEl && perspMenuEl.parentNode) perspMenuEl.parentNode.removeChild(perspMenuEl);
+      perspMenuEl = null;
+    }
+    function openPerspMenu(btn) {
+      if (perspMenuEl) { closePerspMenu(); return; }
+      var menu = h('div', { class: 'mm-menu mm-lens', role: 'menu' });
+      var current = state.persp ? state.persp.id : 'network';
+      MM().PERSPECTIVES.forEach(function (p) {
+        var b = h('button', { class: 'mm-menu-item' + (p.id === current ? ' is-active' : ''), type: 'button' }, [
+          icon(p.icon),
+          h('span', { class: 'mm-menu-label', text: p.label }),
+          h('kbd', { text: p.id === current ? '\u2713' : '' }),
+        ]);
+        b.addEventListener('click', function () { showPerspective(p.id, true); });
+        menu.appendChild(b);
+      });
+      var br = btn.getBoundingClientRect();
+      var rr = root.getBoundingClientRect();
+      menu.style.left = Math.max(4, br.left - rr.left) + 'px';
+      menu.style.top = (br.bottom - rr.top + 4) + 'px';
+      root.appendChild(menu);
+      perspMenuEl = menu;
     }
     function closeLensMenu() {
       if (lensMenuEl && lensMenuEl.parentNode) lensMenuEl.parentNode.removeChild(lensMenuEl);
@@ -3443,9 +3544,10 @@
     svg.addEventListener('contextmenu', openMenu);
     document.addEventListener('pointerdown', function (ev) {
       if (menuEl && !menuEl.contains(ev.target) && !(subEl && subEl.contains(ev.target))) closeMenu();
+      if (perspMenuEl && !perspMenuEl.contains(ev.target) && !(ev.target.closest && ev.target.closest('.mm-persp-btn'))) closePerspMenu();
       if (lensMenuEl && !lensMenuEl.contains(ev.target) && !(ev.target.closest && ev.target.closest('.mm-lens-btn'))) closeLensMenu();
     }, true);
-    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeMenu(); closeLensMenu(); } });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeMenu(); closeLensMenu(); closePerspMenu(); } });
     global.addEventListener('resize', function () { if (!state.graph.nodes.length) fit(); });
 
     /* ── Loading ───────────────────────────────────────────────────── */

@@ -490,4 +490,52 @@ describe('MindmapModel', () => {
       assert.ok(dc > dn);
     });
   });
+  describe('perspective', () => {
+    const now = new Date(2026, 9, 14);
+    const task = (id, due) => ({ id, kind: 'task', label: id, w: 210, h: 52, rec: { due } });
+    const nodes = [
+      task('t1', '2026-10-10'), task('t2', '2026-10-16'), task('t3', ''), task('t4', '2027-03-01'),
+      { id: 'pa', kind: 'person', label: 'Alice', w: 180, h: 40 },
+      { id: 'pb', kind: 'person', label: 'Bob', w: 180, h: 40 },
+      { id: 'pl', kind: 'place', label: 'Maison', w: 170, h: 40 },
+      { id: 'g', kind: 'goal', label: 'But', w: 210, h: 50 },
+    ];
+    const edges = [
+      { id: 'e1', kind: 'by', from: 't1', to: 'pa' },
+      { id: 'e2', kind: 'by', from: 't2', to: 'pa' },
+      { id: 'e3', kind: 'by', from: 't2', to: 'pb' },
+      { id: 'e4', kind: 'at', from: 't4', to: 'pl' },
+    ];
+
+    it('buckets due dates around today', () => {
+      assert.equal(MM.dueBucket('2026-10-10', now), 'late');
+      assert.equal(MM.dueBucket('2026-10-14', now), 'week');
+      assert.equal(MM.dueBucket('2026-10-25', now), 'month');
+      assert.equal(MM.dueBucket('2027-03-01', now), 'later');
+      assert.equal(MM.dueBucket('', now), 'none');
+    });
+
+    it('stacks tasks under their person; an unassigned task gets its own column', () => {
+      const p = MM.perspective(nodes, edges, 'people', { now });
+      assert.equal(p.positions.t1.x, p.positions.pa.x);
+      assert.equal(p.positions.t2.x, p.positions.pa.x); // first person wins
+      assert.ok(p.positions.t1.y > p.positions.pa.y);
+      assert.ok(p.positions.t1.y < p.positions.t2.y); // sooner first
+      assert.notEqual(p.positions.t3.x, p.positions.pa.x);
+      assert.ok(p.heads.some((h) => h.label === 'Sans responsable'));
+      assert.ok(p.dim.g && p.dim.pl && !p.dim.t1);
+    });
+
+    it('groups by due-date bucket and skips empty ones', () => {
+      const p = MM.perspective(nodes, edges, 'time', { now });
+      const labels = p.heads.map((h) => h.label);
+      assert.deepEqual(labels.slice(0, 4), ['En retard', 'Cette semaine', 'Plus tard', 'Sans échéance']);
+      assert.ok(p.positions.t1.x < p.positions.t2.x);
+    });
+
+    it('returns nothing for the network or an unknown perspective', () => {
+      assert.deepEqual(MM.perspective(nodes, edges, 'network').positions, {});
+      assert.deepEqual(MM.perspective(nodes, edges, 'nope').positions, {});
+    });
+  });
 });

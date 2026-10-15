@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-14
+- Mindmap : le bouton Perspective range la même carte par personne, par lieu ou par échéance. Les cartes glissent dans leurs colonnes, le reste s’estompe, et Réseau les ramène à leur place.
 - Kanban : Ctrl+K ouvre une recherche rapide pour trouver une carte, changer de vue ou créer une carte.
 - Les champs vides (« Cliquer pour ajouter… ») ont le même aspect discret partout : carte rapide, fiche et documents.
 - Téléphone : les onglets tiennent, le tableau garde le nom, le Kanban se feuille liste par liste, Documents et Entités passent en plein écran.

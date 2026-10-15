@@ -1203,6 +1203,125 @@
     return { positions: positions, rings: rings };
   }
 
+  var PERSPECTIVES = [
+    { id: 'network', label: 'Réseau', icon: 'topology-star-3' },
+    { id: 'people', label: 'Personnes', icon: 'users' },
+    { id: 'places', label: 'Lieux', icon: 'map-pin' },
+    { id: 'time', label: 'Échéances', icon: 'calendar-event' },
+  ];
+
+  function perspectiveById(id) {
+    for (var i = 0; i < PERSPECTIVES.length; i++) if (PERSPECTIVES[i].id === id) return PERSPECTIVES[i];
+    return null;
+  }
+
+  var TIME_COLUMNS = [
+    { key: 'late', label: 'En retard' },
+    { key: 'week', label: 'Cette semaine' },
+    { key: 'month', label: 'Ce mois-ci' },
+    { key: 'later', label: 'Plus tard' },
+    { key: 'none', label: 'Sans échéance' },
+  ];
+
+  /** Which TIME_COLUMNS bucket a due date (ISO text) falls in, relative to `now`. */
+  function dueBucket(due, now) {
+    if (!due) return 'none';
+    var m = /^(d{4})-(d{2})-(d{2})/.exec(String(due));
+    var d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(due);
+    if (isNaN(d.getTime())) return 'none';
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var days = Math.floor((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today) / 86400000);
+    if (days < 0) return 'late';
+    if (days < 7) return 'week';
+    if (days < 31) return 'month';
+    return 'later';
+  }
+
+  /**
+   * The same nodes regrouped around one question: who ('people'), where ('places') or when ('time').
+   * Tasks stack in a column under their person, place or due-date bucket (a task with several people
+   * sits under the first; its other wires stay). Everything that does not answer the question goes in
+   * a last, receded column. Does not mutate `nodes`.
+   * Returns { positions: {id:{x,y}}, dim: {id:true}, heads: [{key,label,x,y,count}] }; heads are the
+   * column titles (a person or place card is its own title, so it has no head).
+   */
+  function perspective(nodes, edges, id, opts) {
+    var list = nodes || [];
+    var now = (opts && opts.now) || new Date();
+    var out = { positions: {}, dim: {}, heads: [] };
+    if (!perspectiveById(id) || id === 'network') return out;
+    var byId = Object.create(null);
+    list.forEach(function (n) { if (n && n.id != null) byId[n.id] = n; });
+
+    var cols = [];
+    var colOf = Object.create(null); // task id → column index
+    var headKind = id === 'people' ? 'person' : id === 'places' ? 'place' : '';
+    if (headKind) {
+      list.filter(function (n) { return n.kind === headKind; }).forEach(function (n) {
+        colOf['col:' + n.id] = cols.length;
+        cols.push({ key: n.id, head: n, items: [] });
+      });
+      (edges || []).forEach(function (e) {
+        if (!e || !byId[e.from] || byId[e.from].kind !== 'task' || colOf[e.from] != null) return;
+        var ok = headKind === 'person' ? e.kind === 'by' : PLACE_EDGES.indexOf(e.kind) >= 0;
+        var at = ok ? colOf['col:' + e.to] : null;
+        if (at != null) { colOf[e.from] = at; cols[at].items.push(byId[e.from]); }
+      });
+      cols.sort(function (a, b) { return b.items.length - a.items.length || String(a.head.label).localeCompare(String(b.head.label), 'fr'); });
+      var loose = { key: '', label: headKind === 'person' ? 'Sans responsable' : 'Sans lieu', items: [] };
+      list.forEach(function (n) { if (n.kind === 'task' && colOf[n.id] == null) loose.items.push(n); });
+      if (loose.items.length) cols.push(loose);
+    } else {
+      TIME_COLUMNS.forEach(function (c) { cols.push({ key: c.key, label: c.label, items: [] }); });
+      list.forEach(function (n) {
+        if (n.kind !== 'task') return;
+        var b = dueBucket(n.rec && n.rec.due, now);
+        for (var i = 0; i < cols.length; i++) if (cols[i].key === b) cols[i].items.push(n);
+      });
+      cols = cols.filter(function (c) { return c.items.length; });
+    }
+
+    function byDue(a, b) {
+      var da = a.rec && a.rec.due ? String(a.rec.due) : '\uffff';
+      var db = b.rec && b.rec.due ? String(b.rec.due) : '\uffff';
+      return da < db ? -1 : da > db ? 1 : String(a.label).localeCompare(String(b.label), 'fr');
+    }
+    var GAP = 14;
+    var colW = 0;
+    list.forEach(function (n) { colW = Math.max(colW, n.w || 200); });
+    colW += 46;
+    // The receded column: whatever is not a task and not already a column title.
+    var rest = list.filter(function (n) { return n.kind !== 'task' && !(headKind && n.kind === headKind); });
+    var all = cols.length + (rest.length ? 1 : 0);
+    var x0 = -((all - 1) * colW) / 2;
+    cols.forEach(function (c, ci) {
+      var x = x0 + ci * colW;
+      var y = 0;
+      if (c.head) {
+        out.positions[c.head.id] = { x: x, y: y + (c.head.h || 40) / 2 };
+        y += (c.head.h || 40) + GAP * 1.5;
+      } else {
+        out.heads.push({ key: c.key, label: c.label, x: x, y: y + 12, count: c.items.length });
+        y += 34;
+      }
+      c.items.sort(byDue).forEach(function (n) {
+        out.positions[n.id] = { x: x, y: y + (n.h || 60) / 2 };
+        y += (n.h || 60) + GAP;
+      });
+    });
+    if (rest.length) {
+      var rx = x0 + cols.length * colW;
+      var ry = 34;
+      out.heads.push({ key: 'context', label: 'Contexte', x: rx, y: 12, count: rest.length, dim: true });
+      rest.forEach(function (n) {
+        out.positions[n.id] = { x: rx, y: ry + (n.h || 40) / 2 };
+        out.dim[n.id] = true;
+        ry += (n.h || 40) + GAP;
+      });
+    }
+    return out;
+  }
+
   function ellipsePath(cx, cy, rx, ry) {
     rx = Math.max(8, rx);
     ry = Math.max(8, ry);
@@ -1339,6 +1458,10 @@
     scene: scene,
     facetsOf: facetsOf,
     orbit: orbit,
+    PERSPECTIVES: PERSPECTIVES,
+    perspectiveById: perspectiveById,
+    perspective: perspective,
+    dueBucket: dueBucket,
     looseHull: looseHull,
   };
 })(typeof window !== 'undefined' ? window : this);
