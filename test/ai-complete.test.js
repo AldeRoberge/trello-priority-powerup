@@ -62,6 +62,7 @@ describe('AiComplete', () => {
       assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['cf-textarea'] })), 'text');
       assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['kb-add-input'] })), 'task-name');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['tb-add'] })), 'task-name');
+      assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['ar-input'] })), 'task-name');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['db-add-input'], attrs: { 'aria-label': 'Nouvelle tâche' } })), 'task-name');
       assert.equal(AI.classifyField(el({ tag: 'INPUT', classes: ['blocked-reason-input'] })), 'text');
       assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['tb-input'], closest: { 'td[data-key="desc"]': {} } })), 'text');

@@ -1435,8 +1435,8 @@
           var input = h('input', {
             class: 'db-add-input',
             type: 'text',
-            placeholder: 'Nouvelle tâche…',
-            'aria-label': 'Nouvelle tâche',
+            placeholder: 'Nouvelle carte…',
+            'aria-label': 'Nouvelle carte',
             autocomplete: 'off',
             value: state.composerText || '',
           });
@@ -1482,7 +1482,7 @@
             state.composer = key;
             render();
           },
-        }, [icon('plus'), h('span', { text: 'Nouvelle tâche' })]);
+        }, [icon('plus'), h('span', { text: 'Nouvelle carte' })]);
       }
       function column(extra, head, bar, body, spec) {
         var cards = (body || []).slice();

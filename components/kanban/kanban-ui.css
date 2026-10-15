@@ -405,11 +405,12 @@ html[data-color-mode] .tp-page--kanban {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--tp-text-subtle);
+  color: var(--tp-text-muted);
+  opacity: 0.55;
   cursor: pointer;
   text-align: left;
 }
-.kb-add:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.kb-add:hover { opacity: 1; background: var(--tp-surface-hover); color: var(--tp-text); }
 .kb-composer { flex: none; padding: 4px 8px 8px; }
 .kb-add-input {
   display: block;

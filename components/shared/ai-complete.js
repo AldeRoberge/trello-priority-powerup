@@ -446,6 +446,7 @@
       classHas(el, 'kb-add-input') ||
       classHas(el, 'db-add-input') ||
       classHas(el, 'tb-add') ||
+      classHas(el, 'ar-input') ||
       classHas(el, 'mm-card-title')
     ) {
       return 'task-name';

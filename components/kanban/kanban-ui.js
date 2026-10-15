@@ -800,7 +800,7 @@
           })(),
           h('button', {
             class: 'kb-iconbtn',
-            title: 'Ajouter une carte',
+            title: 'Nouvelle carte',
             onclick: function () { openComposer(list.id); },
           }, [icon('plus')]),
         ]),
@@ -825,9 +825,9 @@
 
     function composer(list) {
       if (state.composer !== list.id) {
-        return h('button', { class: 'kb-add', onclick: function () { openComposer(list.id); } }, [icon('plus'), h('span', { text: 'Ajouter une carte' })]);
+        return h('button', { class: 'kb-add', onclick: function () { openComposer(list.id); } }, [icon('plus'), h('span', { text: 'Nouvelle carte' })]);
       }
-      var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Titre…' });
+      var input = h('textarea', { class: 'kb-add-input', rows: '2', placeholder: 'Nouvelle carte…' });
       var busy = false;
       function submit(fromBlur) {
         var name = input.value.trim();
