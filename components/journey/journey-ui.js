@@ -621,6 +621,32 @@
         scroller.appendChild(tip);
       }
 
+      var k = state.mapZoom || 1;
+      canvas.style.zoom = String(k);
+      var restore = state.mapScroll;
+      if (restore) {
+        scroller.addEventListener('scroll', function () {}, { passive: true });
+        setTimeout(function () { scroller.scrollLeft = restore.l; scroller.scrollTop = restore.t; }, 0);
+      }
+      scroller.addEventListener('scroll', function () {
+        state.mapScroll = { l: scroller.scrollLeft, t: scroller.scrollTop };
+      }, { passive: true });
+      scroller.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        var next = Math.min(2.5, Math.max(0.25, k * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
+        if (next === k) return;
+        var rect = scroller.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+        var cx = (scroller.scrollLeft + mx) / k;
+        var cy = (scroller.scrollTop + my) / k;
+        k = next;
+        state.mapZoom = k;
+        canvas.style.zoom = String(k);
+        scroller.scrollLeft = cx * k - mx;
+        scroller.scrollTop = cy * k - my;
+      }, { passive: false });
+
       var drag = null;
       scroller.addEventListener('pointerdown', function (e) {
         if (e.button !== 0 && e.button !== 1) return;
