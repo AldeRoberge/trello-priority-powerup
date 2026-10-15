@@ -211,3 +211,13 @@
 .cq-desc-body h1, .cq-desc-body h2, .cq-desc-body h3 { font-size: 13px; margin: 0 0 4px; }
 .cq-desc-body a { color: var(--tp-link); }
 .cq-desc-body code { font-size: 12px; }
+
+/* People, places, labels: one quiet row each, the whole row opens the picker */
+.cq-ents { display: flex; flex-direction: column; gap: 2px; }
+.cq-ent { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 26px; padding: 2px 4px; margin: 0 -4px; font: inherit; font-size: 12px; text-align: left; color: var(--tp-text); background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.cq-ent:hover, .cq-ent:focus-visible { background: var(--tp-surface-hover); outline: none; }
+.cq-ent.is-empty { opacity: 0.55; color: var(--tp-text-muted); }
+.cq-ent.is-empty:hover, .cq-ent.is-empty:focus-visible { opacity: 0.85; }
+.cq-tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; line-height: 20px; border-radius: 999px; background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 1px var(--tp-border); }
+.cq-tag .ti { font-size: 13px; }
+.cq-dot { width: 8px; height: 8px; border-radius: 2px; }

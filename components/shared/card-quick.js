@@ -504,6 +504,41 @@
       return el('div', 'cq-chips', null, chips);
     }
 
+    /* People, places, labels: chips that open the shared picker (same as the Mindmap panel) */
+    function entitiesBlock(row) {
+      var CE = global.CardEntities;
+      if (!CE) return null;
+      function entity(kind, icon, title, chips) {
+        var b = el('button', 'cq-ent' + (chips.length ? '' : ' is-empty'), { type: 'button', title: title }, chips.length ? chips : [ico(icon), el('span', null, { text: title })]);
+        b.addEventListener('click', function () {
+          hold(true);
+          CE.open(kind, {
+            t: t,
+            rec: row,
+            anchor: b,
+            onError: failed,
+            onClose: function (changed) {
+              hold(false);
+              if (changed) saved();
+            },
+          });
+        });
+        return b;
+      }
+      var people = (row.assignees || []).map(function (a) { return el('span', 'cq-tag', null, [ico('user'), a.name]); });
+      var places = CE.placeChips(row.inputs && row.inputs.places).map(function (p) {
+        return el('span', 'cq-tag', null, [ico('map-pin'), (p.slot === 'at' ? '' : p.label + ' ') + p.name]);
+      });
+      var labels = (row.labels || []).map(function (l) {
+        return el('span', 'cq-tag', null, [CE.COLORS[l.color] ? el('i', 'cq-dot', { style: 'background:' + CE.COLORS[l.color] }) : null, l.name || l.color || '·']);
+      });
+      return el('div', 'cq-ents', null, [
+        entity('people', 'user', 'Personnes', people),
+        entity('places', 'map-pin', 'Lieux', places),
+        entity('labels', 'tag', 'Étiquettes', labels),
+      ]);
+    }
+
     /* Description: rendered; click to edit in the shared rich editor */
     function descBlock(row, info) {
       var box = el('button', 'cq-desc' + (info.hasDesc ? '' : ' is-empty'), { type: 'button', title: info.hasDesc ? 'Modifier la description' : 'Ajouter une description' });
@@ -542,6 +577,8 @@
       if (mentions) root.appendChild(mentions);
       root.appendChild(progressBlock(row, info));
       root.appendChild(chipsBlock(row, info));
+      var ents = entitiesBlock(row);
+      if (ents) root.appendChild(ents);
       root.appendChild(descBlock(row, info));
     }
 

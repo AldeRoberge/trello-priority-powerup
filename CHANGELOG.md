@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-14
+- Kanban et Documents : la carte rapide permet aussi de choisir personnes, lieux et étiquettes.
 - Mindmap : le panneau de droite d’une tâche permet maintenant de choisir les personnes (membres Trello ou hors Trello), les lieux (Où, De, Vers), les étiquettes et l’estimation, directement sur place.
 - Parcours : la molette zoome et dézoome sur le curseur, comme dans la Mindmap.
 - Mindmap : la Perspective peut aussi ranger les cartes par statut ou par urgence.
