@@ -641,7 +641,13 @@
       MENU().show({ x: x, y: y }, [
         { title: row.name || 'Carte' },
         { icon: 'external-link', label: 'Ouvrir la carte', action: function () { openCard(row); } },
-        { icon: 'file-text', label: 'Document', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id); } },
+        {
+          icon: 'external-link',
+          label: 'Ouvrir dans',
+          children: (global.ViewTabs ? global.ViewTabs.OPEN_IN : []).map(function (v) {
+            return { icon: v.icon, label: v.label, action: function () { global.ViewTabs.openIn(v.key, row.id); } };
+          }),
+        },
         { sep: true },
         {
           icon: (current && current.icon) || 'progress-check',

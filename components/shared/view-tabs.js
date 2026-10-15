@@ -109,6 +109,21 @@
     global.location.assign(hrefForSubject('./docs.html', global.location, kind, id));
   }
 
+  /** "Ouvrir dans" targets: view key, label, icon. Documents opens the task's document. */
+  var OPEN_IN = [
+    { key: 'mindmap', label: 'Mindmap', icon: 'hierarchy-2' },
+    { key: 'gantt', label: 'Gantt', icon: 'timeline' },
+    { key: 'docs', label: 'Documents', icon: 'file-text' },
+  ];
+
+  /** Leave the current view for another one, centred on a card. */
+  function openIn(key, cardId) {
+    if (!cardId || !global.location) return;
+    if (key === 'docs') return openSubject('task', cardId);
+    var view = VIEWS.filter(function (v) { return v.key === key; })[0];
+    if (view) global.location.assign(hrefForCard(view.page, global.location, cardId));
+  }
+
   /**
    * Highlight the card named by ?hl= : scroll its row into view and pulse it.
    * rowSelector(cardId) returns a CSS selector; the grid re-renders as data loads, so poll for a while.
@@ -141,6 +156,8 @@
     hrefForCard: hrefForCard,
     hrefForSubject: hrefForSubject,
     openSubject: openSubject,
+    openIn: openIn,
+    OPEN_IN: OPEN_IN,
     highlightFromUrl: highlightFromUrl,
     VIEWS: VIEWS,
   };

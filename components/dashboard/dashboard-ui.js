@@ -192,7 +192,17 @@
     });
 
     items.push({ id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', group: 'Ouvrir' });
-    items.push({ id: 'open-document', label: 'Document', icon: 'file-text', group: 'Ouvrir' });
+    items.push({
+      id: 'open-in',
+      label: 'Ouvrir dans',
+      icon: 'external-link',
+      group: 'Ouvrir',
+      children: [
+        { id: 'open-in:mindmap', label: 'Mindmap', icon: 'hierarchy-2' },
+        { id: 'open-in:gantt', label: 'Gantt', icon: 'timeline' },
+        { id: 'open-document', label: 'Documents', icon: 'file-text' },
+      ],
+    });
     items.push({ id: 'open-trello', label: 'Ouvrir dans Trello', icon: 'brand-trello', group: 'Ouvrir', disabled: !row.link });
     items.push({ id: 'copy-link', label: 'Copier le lien', icon: 'link', group: 'Ouvrir', disabled: !row.link });
 
@@ -736,6 +746,10 @@
       if (id === 'open-card') return openCard(row);
       if (id === 'open-document') {
         if (global.ViewTabs && typeof global.ViewTabs.openSubject === 'function') global.ViewTabs.openSubject('task', row.id);
+        return;
+      }
+      if (id.indexOf('open-in:') === 0) {
+        if (global.ViewTabs && typeof global.ViewTabs.openIn === 'function') global.ViewTabs.openIn(id.slice(8), row.id);
         return;
       }
       if (id === 'open-trello') {
