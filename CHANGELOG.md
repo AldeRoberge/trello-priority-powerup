@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-15
+- Documents : survoler ou cliquer une tâche liée ouvre un panneau d’actions rapides (liste, progrès, bloquée, priorité, échéance, estimation, description, renommer, archiver).
 - Toutes les vues : pendant le chargement, chaque onglet (Dashboard, Gantt, Tableau, Kanban, Mindmap, Parcours, Documents, Entités) affiche un squelette gris animé à l’image de sa page (barre d’outils, colonnes, lignes, panneaux, barre de l’Assistant), avec le même nombre de lignes, colonnes et cartes que la dernière fois.
 - Dashboard, Documents et Entités : le panneau de gauche a le même look (titre, + pour créer, recherche, lignes) et se redimensionne en glissant son bord (double-clic pour revenir à la taille d’origine). Le Dashboard peut aussi filtrer ses cartes avec la recherche.
 - Documents, Entités, Mindmap, Parcours : la même ligne discrète « Nouveau document… », « Nouvelle entité… » ou « Nouvelle carte… » en bas de la liste (ou en bas à gauche de la carte) crée directement, avec Entrée.
