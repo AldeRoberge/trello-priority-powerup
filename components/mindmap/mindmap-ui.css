@@ -169,15 +169,6 @@ html[data-color-mode] .tp-page--mindmap {
   min-height: 0;
   overflow: hidden;
 }
-.mm-canvas.is-loading::after {
-  content: 'Chargement…';
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--tp-text-muted);
-}
 .mm-svg { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; user-select: none; }
 .mm-svg:active { cursor: grabbing; }
 .is-linking .mm-svg { cursor: crosshair; }

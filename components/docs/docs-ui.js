@@ -272,7 +272,7 @@
       toast: h('div', { class: 'dc-toast', hidden: true, role: 'status', 'aria-live': 'polite' }),
       status: h('span', { class: 'dc-status' }),
     };
-    var shell = h('div', { class: 'dc-root', tabindex: '-1' }, [
+    var shell = h('div', { class: 'dc-root is-booting', tabindex: '-1' }, [
       els.banner,
       h('div', { class: 'dc-main' }, [els.side, els.main, els.outline]),
       els.suggest,
@@ -286,6 +286,9 @@
     els.main.appendChild(els.conflict);
     els.main.appendChild(els.scroll);
     els.main.appendChild(els.empty);
+    els.boot = h('div', { class: 'dc-boot', 'aria-hidden': 'true' });
+    els.boot.innerHTML = global.Skeleton.html('docs.main');
+    els.main.appendChild(els.boot);
     els.scroll.appendChild(els.page);
     els.page.appendChild(els.cover);
     els.page.appendChild(els.coverAdd);
@@ -479,7 +482,7 @@
       var list = els.sideList;
       list.textContent = '';
       if (!state.docsLoaded) {
-        for (var i = 0; i < 5; i++) list.appendChild(h('div', { class: 'dc-skel' }, [h('span', { class: 'dc-skel-bar' })]));
+        list.innerHTML = global.Skeleton.html('docs.list');
         return;
       }
       var rows = DM().folderRows(state.docs, state.idx, state.openFolders, state.filter, state.sort, state.showArchived);
@@ -7156,7 +7159,12 @@
             failure(err);
           }
         );
-      });
+      }).then(endBoot, endBoot);
+    }
+
+    /** The page placeholder stays until the first document is open (or the load failed). */
+    function endBoot() {
+      shell.classList.remove('is-booting');
     }
 
     boot();

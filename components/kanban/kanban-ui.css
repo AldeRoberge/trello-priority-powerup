@@ -431,18 +431,8 @@ html[data-color-mode] .tp-page--kanban {
 
 /* ── Loading ────────────────────────────────────────────────────────── */
 .kb-loading { padding: 24px; color: var(--tp-text-muted); }
-.kb-col--skel { padding: 12px 8px; gap: 8px; }
-.kb-skel {
-  border-radius: 6px;
-  background: linear-gradient(90deg, var(--tp-surface-active) 25%, var(--tp-surface-hover) 50%, var(--tp-surface-active) 75%);
-  background-size: 200% 100%;
-  animation: kb-shimmer 1.4s linear infinite;
-}
-.kb-skel--head { height: 18px; width: 55%; margin: 0 4px 4px; }
-.kb-skel--card { height: 64px; }
-@keyframes kb-shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .kb-skel, .kb-spin { animation: none; }
+  .kb-spin { animation: none; }
 }
 
 /* ── Ask the AI ─────────────────────────────────────────────────────── */

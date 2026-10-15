@@ -101,13 +101,17 @@
   <script src="./components/docs/docs-pins.js?v=pins-1"></script>
   <script src="./components/docs/docs-entities.js?v=ent-2"></script>
   <script src="./components/docs/docs-ui.js?v=linkdoc-1"></script>
+  <link rel="stylesheet" href="./components/shared/skeleton.css" />
+  <script src="./components/shared/skeleton.js"></script>
   <link rel="stylesheet" href="./components/shared/linear-pick.css" />
   <script src="./components/shared/linear-pick.js"></script>
   <script src="./components/shared/command-palette.js"></script>
 </head>
 <body class="tp-page tp-page--docs">
   <div id="viewTabs"></div>
-  <div id="docsMount"></div>
+  <div id="docsMount">
+    <script>document.currentScript.parentNode.innerHTML = Skeleton.html('docs');</script>
+  </div>
   <script>
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'docs' });
     PriorityTrello.initIframePage(function (t) {

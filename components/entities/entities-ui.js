@@ -518,7 +518,7 @@
       }
       listBox.textContent = '';
       if (!state.loaded) {
-        listBox.appendChild(h('p', { class: 'en-list-hint', text: 'Chargement…' }));
+        listBox.innerHTML = global.Skeleton.html('entities.list');
         return;
       }
       if (!state.entities.length) {
@@ -1928,6 +1928,10 @@
 
     function paintEntity(page) {
       var e = selected();
+      if (!state.loaded) {
+        page.innerHTML = global.Skeleton.html('entities.main');
+        return;
+      }
       if (!e) {
         page.classList.add('en-page--empty');
         page.appendChild(emptyState());
@@ -2418,7 +2422,6 @@
     }
 
     function emptyState() {
-      if (!state.loaded) return h('div', { class: 'en-empty' }, [h('p', { class: 'en-empty-text', text: 'Chargement…' })]);
       var has = state.entities.length > 0;
       var box = h('div', { class: 'en-empty' }, [
         h('span', { class: 'en-empty-ic' }, [icon('stack-2')]),

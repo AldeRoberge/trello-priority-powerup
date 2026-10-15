@@ -101,11 +101,13 @@
   <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-menu-6" />
   <link rel="stylesheet" href="./components/shared/view-shell.css?v=narrow-2" />
   <script src="./components/shared/context-menu.js?v=ctx-menu-7"></script>
+  <link rel="stylesheet" href="./components/shared/skeleton.css" />
+  <script src="./components/shared/skeleton.js"></script>
 </head>
 <body class="tp-page tp-page--kanban">
   <div id="viewTabs"></div>
   <div id="kanbanMount">
-    <div class="kb-root" aria-busy="true"><div class="kb-board"><script>document.currentScript.parentNode.innerHTML = KanbanUI.skeletonCols();</script></div></div>
+    <script>document.currentScript.parentNode.innerHTML = Skeleton.html('kanban');</script>
   </div>
   <script>
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'kanban' });

@@ -4531,7 +4531,7 @@
 
       body.innerHTML = '';
       if (state.loading) {
-        body.appendChild(el('div', 'gantt-empty', { text: 'Chargement\u2026' }));
+        body.innerHTML = global.Skeleton.html('gantt.body');
         return;
       }
       if (state.error) {

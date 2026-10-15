@@ -3575,16 +3575,29 @@
     global.addEventListener('resize', function () { if (!state.graph.nodes.length) fit(); });
 
     /* ── Loading ───────────────────────────────────────────────────── */
+    /** Placeholder cards and wires over the canvas while the board loads. */
+    function showSkeleton(on) {
+      els.canvas.classList.toggle('is-loading', on);
+      if (on && !els.skel) {
+        els.skel = h('div', { class: 'sk-canvas-wrap', 'aria-hidden': 'true' });
+        els.skel.innerHTML = global.Skeleton.html('mindmap.canvas');
+        els.canvas.appendChild(els.skel);
+      } else if (!on && els.skel) {
+        els.skel.remove();
+        els.skel = null;
+      }
+    }
+
     function reload(opts) {
       var quiet = !!(opts && opts.quiet);
-      if (!quiet) els.canvas.classList.add('is-loading');
+      if (!quiet) showSkeleton(true);
       return global.GanttTrello.loadBoard(t).then(function (board) {
         state.records = board.cards || [];
         state.lists = board.lists || state.lists || [];
-        els.canvas.classList.remove('is-loading');
+        showSkeleton(false);
         rebuild({ relayout: !quiet });
       }).catch(function (err) {
-        els.canvas.classList.remove('is-loading');
+        showSkeleton(false);
         gNodes.textContent = '';
         gEdges.textContent = '';
         els.hint.hidden = false;

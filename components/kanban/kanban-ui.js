@@ -45,17 +45,6 @@
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
 
-  /* Placeholder columns shown while data loads. */
-  function skeletonCols() {
-    var out = '';
-    [3, 2, 4, 2].forEach(function (n) {
-      out += '<div class="kb-col kb-col--skel"><div class="kb-skel kb-skel--head"></div>';
-      for (var i = 0; i < n; i++) out += '<div class="kb-skel kb-skel--card"></div>';
-      out += '</div>';
-    });
-    return out;
-  }
-
   function mount(root, t) {
     var HD = global.HideDone;
     var state = {
@@ -1079,7 +1068,7 @@
     }
 
     function reload(opts) {
-      if (!opts || !opts.quiet) els.board.innerHTML = skeletonCols();
+      if (!opts || !opts.quiet) els.board.innerHTML = global.Skeleton.html('kanban.cols');
       return Promise.all([
         TT().load(t),
         global.PriorityTrello.isRestAuthorized(t).catch(function () { return false; }),
@@ -1215,12 +1204,12 @@
       else if (e.key === 'ArrowLeft') { e.preventDefault(); moveCardFocus(-1, 0); }
     });
     renderBar();
-    els.board.innerHTML = skeletonCols();
+    els.board.innerHTML = global.Skeleton.html('kanban.cols');
     if (global.AssistantDock) {
       global.AssistantDock.mount({ t: t, after: root, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return global.CardFields && global.CardFields.isOpen(); } });
     }
     return reload({ quiet: true });
   }
 
-  global.KanbanUI = { mount: mount, skeletonCols: skeletonCols };
+  global.KanbanUI = { mount: mount };
 })(typeof window !== 'undefined' ? window : this);

@@ -85,7 +85,8 @@
       toastToken: 0,
       undo: [],
       busy: false,
-      status: 'Chargement…',
+      loading: true,
+      status: '',
       authGoals: null,
       gen: 0,
       didHl: false,
@@ -144,7 +145,10 @@
         if (mine !== state.gen) return;
         state.status = 'Impossible de charger';
       }
-      if (mine === state.gen) paint();
+      if (mine === state.gen) {
+        state.loading = false;
+        paint();
+      }
     }
 
     async function loadBoard() {
@@ -454,7 +458,12 @@
       var keepFocus = search && document.activeElement === search;
       var caret = keepFocus ? search.selectionStart : null;
       container.textContent = '';
-      if (state.status && !(state.board.cards && state.board.cards.length)) {
+      var empty = !(state.board.cards && state.board.cards.length);
+      if (state.loading && empty) {
+        container.innerHTML = global.Skeleton.html('journey');
+        return;
+      }
+      if (state.status && empty) {
         container.appendChild(el('div', 'jy-status', state.status));
         return;
       }

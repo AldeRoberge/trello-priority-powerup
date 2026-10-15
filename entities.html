@@ -95,13 +95,17 @@
   <script src="./components/entities/entities-reality-ai.js"></script>
   <script src="./components/entities/entities-interview-ui.js"></script>
   <script src="./components/entities/entities-ui.js?v=narrow-1"></script>
+  <link rel="stylesheet" href="./components/shared/skeleton.css" />
+  <script src="./components/shared/skeleton.js"></script>
   <link rel="stylesheet" href="./components/shared/linear-pick.css" />
   <script src="./components/shared/linear-pick.js"></script>
   <script src="./components/shared/command-palette.js"></script>
 </head>
 <body class="tp-page tp-page--entities">
   <div id="viewTabs"></div>
-  <div id="entitiesMount"></div>
+  <div id="entitiesMount">
+    <script>document.currentScript.parentNode.innerHTML = Skeleton.html('entities');</script>
+  </div>
   <script>
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'entities' });
     PriorityTrello.initIframePage(function (t) {

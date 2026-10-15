@@ -55,21 +55,6 @@
     );
   }
 
-  /* Placeholder grid (header + rows) shown while data loads. */
-  function skeletonRows() {
-    var widths = [40, 75, 55, 65, 45, 70, 50];
-    var out = '';
-    for (var r = 0; r < 14; r++) {
-      out += '<div class="tb-skel-row">';
-      for (var c = 0; c < 6; c++) {
-        var w = r === 0 ? 45 : widths[(r * 3 + c * 2) % widths.length];
-        out += '<div class="tb-skel-cell"><span class="tb-skel-block" style="--w:' + w + '%"></span></div>';
-      }
-      out += '</div>';
-    }
-    return out;
-  }
-
   function mount(root, t) {
     var HD = global.HideDone;
     var state = {
@@ -1737,7 +1722,7 @@
     }
 
     function reload(opts) {
-      if (!opts || !opts.quiet) els.wrap.innerHTML = skeletonRows();
+      if (!opts || !opts.quiet) els.wrap.innerHTML = global.Skeleton.html('table.grid');
       return Promise.all([
         TT().load(t),
         TT().getTableSettings(t),
@@ -1850,5 +1835,5 @@
     return reload();
   }
 
-  global.TableUI = { mount: mount, skeletonRows: skeletonRows };
+  global.TableUI = { mount: mount };
 })(typeof window !== 'undefined' ? window : this);

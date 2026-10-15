@@ -106,6 +106,7 @@ const UNIT_FILES = [
   'dashboard-trello.test.js',
   'journey-model.test.js',
   'graph-canvas.test.js',
+  'skeleton.test.js',
   'add-row.test.js',
 ];
 

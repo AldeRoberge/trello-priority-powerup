@@ -326,23 +326,6 @@ button.dc-item-icon:hover {
 .dc-menu-item.is-on {
   font-weight: 600;
 }
-.dc-skel {
-  padding: 12px 8px;
-}
-.dc-skel-bar {
-  display: block;
-  height: 10px;
-  border-radius: 4px;
-  width: 70%;
-  background: linear-gradient(90deg, var(--tp-surface-hover), var(--tp-surface-active), var(--tp-surface-hover));
-  background-size: 200% 100%;
-  animation: dc-shimmer 1.2s linear infinite;
-}
-@keyframes dc-shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
 
 /* ── Document column ──────────────────────────────────────────────── */
 .dc-doc {
@@ -534,6 +517,11 @@ button.dc-item-icon:hover {
 }
 .dc-cover.is-loading .dc-cover-img:not([src]) {
   visibility: hidden;
+}
+@keyframes dc-shimmer {
+  to {
+    background-position: -200% 0;
+  }
 }
 .dc-cover-broken {
   display: none;
@@ -1729,8 +1717,7 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dc-spin,
-  .dc-skel-bar {
+  .dc-spin {
     animation-duration: 3s;
   }
   .dc-page {

@@ -449,11 +449,6 @@ button.db-meter-hit:hover .db-meter { background: var(--tp-border-strong); }
 .db-tl-block b { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .db-tl-block span { flex: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--tp-text-muted); font-size: 11px; white-space: nowrap; }
 
-/* ── Skeleton ────────────────────────────────────────────────────────── */
-.db-skel { border-radius: 6px; background: var(--tp-surface-active); animation: db-pulse 1.2s ease-in-out infinite; }
-.db-skel--row { height: 34px; margin: 10px 24px; }
-@keyframes db-pulse { 50% { opacity: 0.5; } }
-
 @media (max-width: 760px) {
   .db-side.sp { width: 56px; }
   .db-side .sp-head, .db-side .sp-search, .db-nav-label, .db-brand span, .db-side-foot, .db-badge { display: none; }

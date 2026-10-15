@@ -65,10 +65,14 @@
   <script src="./components/shared/graph-canvas.js?v=gc-1"></script>
   <script src="./components/journey/journey-model.js?v=journey-2"></script>
   <script src="./components/journey/journey-ui.js?v=journey-2"></script>
+  <link rel="stylesheet" href="./components/shared/skeleton.css" />
+  <script src="./components/shared/skeleton.js"></script>
 </head>
 <body class="tp-page tp-page--journey">
   <div id="viewTabs"></div>
-  <div id="journeyMount"></div>
+  <div id="journeyMount">
+    <script>document.currentScript.parentNode.innerHTML = Skeleton.html('journey');</script>
+  </div>
   <script>
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'journey' });
     PriorityTrello.initIframePage(function (t) {

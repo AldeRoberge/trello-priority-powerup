@@ -69,12 +69,6 @@
     return DM().isoOf(new Date());
   }
 
-  function skeleton() {
-    var rows = '';
-    for (var i = 0; i < 5; i++) rows += '<div class="db-skel db-skel--row"></div>';
-    return '<div class="db-root" aria-busy="true"><div class="db-side"></div><div class="db-main">' + rows + '</div></div>';
-  }
-
   /** Icon for a day relative to today (circle-dot, jumping arrow, two arrows, calendars). */
   function dayIconName(iso, today) {
     var days = Math.round((new Date(iso + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
@@ -1934,7 +1928,7 @@
     function reload(opts) {
       opts = opts || {};
       if (!opts.quiet) {
-        root.innerHTML = skeleton();
+        root.innerHTML = global.Skeleton.html('dashboard');
       }
       return Promise.all([DT().load(t), loadChain()]).then(function (res) {
         if (!root.contains(shell)) { root.innerHTML = ''; root.appendChild(shell); }
@@ -2067,5 +2061,5 @@
     reload();
   }
 
-  global.DashboardUI = { mount: mount, skeleton: skeleton, menuEntries: menuEntries, pageEntries: pageEntries };
+  global.DashboardUI = { mount: mount, menuEntries: menuEntries, pageEntries: pageEntries };
 })(typeof window !== 'undefined' ? window : this);
