@@ -499,7 +499,8 @@
     var MIN_COL = 60;
     function colWidth(key) {
       var w = state.widths[key];
-      return typeof w === 'number' && w >= MIN_COL ? w : TM().COLUMNS[key].width;
+      var base = typeof w === 'number' && w >= MIN_COL ? w : TM().COLUMNS[key].width;
+      return isPhone() && key === 'name' ? Math.min(base, 200) : base;
     }
     function saveWidths() {
       TT().saveWidths(t, state.widths).catch(fail);
@@ -548,6 +549,16 @@
       });
     }
 
+    /* Phone: the title leads and stays frozen while the other columns pan (Google Sheets). */
+    function isPhone() {
+      return !!(window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+    }
+    function shownColumns() {
+      var cols = state.columns;
+      if (!isPhone() || cols.indexOf('name') < 1) return cols;
+      return ['name'].concat(cols.filter(function (k) { return k !== 'name'; }));
+    }
+
     function renderGrid(opts) {
       opts = opts || {};
       var scrollTop = els.wrap.scrollTop;
@@ -557,8 +568,8 @@
       var rows = visibleRows();
       var table = h('table', { class: 'tb-grid' });
       var head = h('tr', {}, [h('th', { class: 'tb-corner' })]);
-      var tableWidth = 96;
-      state.columns.forEach(function (key) {
+      var tableWidth = isPhone() ? 44 : 96;
+      shownColumns().forEach(function (key) {
         var spec = TM().COLUMNS[key];
         var width = colWidth(key);
         tableWidth += width;
@@ -676,7 +687,7 @@
             }, [icon('archive')]),
           ])
         );
-        state.columns.forEach(function (key) { tr.appendChild(renderCell(row, key)); });
+        shownColumns().forEach(function (key) { tr.appendChild(renderCell(row, key)); });
         body.appendChild(tr);
       });
 
@@ -1203,13 +1214,14 @@
     function moveSelection(rowId, key, dir) {
       var rows = visibleRows();
       var ri = rows.findIndex(function (r) { return r.id === rowId; });
-      var ci = state.columns.indexOf(key);
+      var cols = shownColumns();
+      var ci = cols.indexOf(key);
       if (dir === 'down') ri += 1;
       if (dir === 'up') ri -= 1;
       if (dir === 'right') ci += 1;
       if (dir === 'left') ci -= 1;
-      if (ri < 0 || ri >= rows.length || ci < 0 || ci >= state.columns.length) return;
-      var nextKey = state.columns[ci];
+      if (ri < 0 || ri >= rows.length || ci < 0 || ci >= cols.length) return;
+      var nextKey = cols[ci];
       state.selected = { rowId: rows[ri].id, key: nextKey };
       if (state.editing) {
         if (isEditable(nextKey) && nextKey !== 'statut') return beginEdit(rows[ri].id, nextKey);

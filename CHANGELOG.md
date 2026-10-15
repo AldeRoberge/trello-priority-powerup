@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-14
+- Mobile : le titre passe en premier et reste fixe dans le Tableau, les barres d’outils tiennent sur une seule ligne qu’on fait glisser, et le Tableau de bord et les Documents ne débordent plus.
 - Mindmap : le bouton Perspective range la même carte par personne, par lieu ou par échéance. Les cartes glissent dans leurs colonnes, le reste s’estompe, et Réseau les ramène à leur place.
 - Kanban : Ctrl+K ouvre une recherche rapide pour trouver une carte, changer de vue ou créer une carte.
 - Les champs vides (« Cliquer pour ajouter… ») ont le même aspect discret partout : carte rapide, fiche et documents.
