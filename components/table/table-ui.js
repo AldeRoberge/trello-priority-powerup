@@ -706,20 +706,17 @@
           ])
         );
       }
-      var addInput = h('input', {
-        class: 'tb-add',
+      var addInput = global.AddRow.input({
         id: 'tbAdd',
-        placeholder: 'Nouvelle carte : écrire un titre (« … demain » ou « … vendredi » fixe l’échéance), puis Entrée',
-        onkeydown: function (e) {
-          if (e.key !== 'Enter') return;
-          var name = e.target.value.trim();
-          if (!name || !state.lists.length) return;
-          createIn(newCardList(), name, e.target);
+        className: 'tb-add',
+        onSubmit: function (name, input) {
+          if (!state.lists.length) return;
+          createIn(newCardList(), name, input);
         },
       });
       body.appendChild(
-        h('tr', { class: 'tb-add-row' }, [
-          h('td', { class: 'tb-num' }, [icon('plus')]),
+        h('tr', { class: 'tb-add-row ar-row' }, [
+          h('td', { class: 'tb-num' }, [icon('plus', 'ar-plus')]),
           h('td', { colspan: String(state.columns.length) }, [addInput]),
         ])
       );

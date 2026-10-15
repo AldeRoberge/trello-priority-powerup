@@ -294,3 +294,22 @@ body.tp-page--gantt #ganttMount {
   border-left: 2px dashed var(--tp-danger-text);
   opacity: 0.8;
 }
+
+/* "Nouvelle carte" row closing the list: plus in the checkbox column, text aligned with the task names. */
+.gantt-row--add {
+  border-bottom: 0;
+}
+.gantt-label-cell--add {
+  grid-template-columns: 22px minmax(80px, 1fr);
+}
+.gantt-add-plus {
+  justify-self: center;
+}
+.gantt-add-input {
+  padding-left: 28px;
+}
+.gantt-row--solo {
+  max-width: 420px;
+  margin: 12px auto 0;
+  text-align: left;
+}

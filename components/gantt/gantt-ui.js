@@ -2607,6 +2607,60 @@
       return reload({ quiet: true });
     }
 
+    /** Creates a card from a typed title (« … demain » sets the due date) in a list, at a position. */
+    function createCardIn(title, listId, pos, listName) {
+      if (!listId || !global.PriorityTrello) return Promise.resolve();
+      var QP = global.QuickParse;
+      var q = QP && QP.parse ? QP.parse(title) : { name: title, dueDate: '' };
+      return global.PriorityTrello.createCard(t, { name: q.name || title, idList: listId, pos: pos }).then(function (res) {
+        if (!res || res.ok === false) throw new Error((res && res.reason) || 'erreur');
+        var cardId = res.cardId;
+        var dates = q.dueDate && global.GanttTrello
+          ? global.GanttTrello.saveCardDates(t, cardId, { dueDate: q.dueDate }).catch(function () {})
+          : Promise.resolve();
+        return Promise.resolve(dates).then(function () {
+          record({ type: 'create', targetId: cardId, title: q.name || title, after: listName || '' });
+          return refreshBoardQuiet();
+        });
+      });
+    }
+
+    /** Where a new card lands when no row was pointed at: the first "to do" list (same as C and the Tableau). */
+    function defaultNewCardList() {
+      var lists = state.boardLists || [];
+      var open = lists.filter(function (l) { return l.category !== 'completed' && l.category !== 'canceled' && l.category !== 'blocked'; });
+      return open.filter(function (l) { return l.category === 'unstarted'; })[0] || open[0] || null;
+    }
+
+    /** The "Nouvelle carte" row that closes the list (same as the Tableau): label side + an empty timeline row. */
+    function buildAddRow() {
+      var list = defaultNewCardList();
+      if (!list || !global.AddRow) return null;
+      var label = el('div', 'gantt-row gantt-row--add ar-row');
+      label.style.height = ROW_H + 'px';
+      var cell = el('div', 'gantt-label-cell gantt-label-cell--add');
+      cell.appendChild(el('i', 'ti ti-plus ar-plus gantt-add-plus'));
+      cell.appendChild(global.AddRow.input({
+        className: 'gantt-add-input',
+        onSubmit: function (title, input) {
+          input.disabled = true;
+          createCardIn(title, list.id, 'bottom', list.name).then(function () {
+            setStatus('Carte créée dans « ' + list.name + ' »');
+            var next = body.querySelector('.gantt-add-input');
+            if (next) next.focus({ preventScroll: true });
+          }, function (err) {
+            input.disabled = false;
+            setStatus('Erreur : ' + (err && err.message ? err.message : err), true);
+          });
+        },
+      }));
+      label.appendChild(cell);
+      var time = el('div', 'gantt-row gantt-row--add gantt-timeline-row');
+      time.style.height = ROW_H + 'px';
+      time.style.width = state.timelineWidth + 'px';
+      return { label: label, time: time };
+    }
+
     /** + under a Gantt row creates a card in that list, between its neighbours. */
     function bindLabelInsert(labelsCol) {
       if (!global.InsertGap) return;
@@ -2620,8 +2674,6 @@
           var rec = (id && state.cardsById[id]) || {};
           var listId = rec.listId;
           if (!listId || !global.PriorityTrello) return Promise.resolve();
-          var QP = global.QuickParse;
-          var q = QP && QP.parse ? QP.parse(title) : { name: title, dueDate: '' };
           var siblings = [];
           Object.keys(state.cardsById).forEach(function (k) {
             var c = state.cardsById[k];
@@ -2636,17 +2688,7 @@
             for (var j = 0; j < siblings.length; j++) if (siblings[j].id === id) { index = j + 1; break; }
           }
           var pos = global.TableModel && global.TableModel.dropPos ? global.TableModel.dropPos(siblings, index) : 'bottom';
-          return global.PriorityTrello.createCard(t, { name: q.name || title, idList: listId, pos: pos }).then(function (res) {
-            if (!res || res.ok === false) throw new Error((res && res.reason) || 'erreur');
-            var cardId = res.cardId;
-            var dates = q.dueDate && global.GanttTrello
-              ? global.GanttTrello.saveCardDates(t, cardId, { dueDate: q.dueDate }).catch(function () {})
-              : Promise.resolve();
-            return Promise.resolve(dates).then(function () {
-              record({ type: 'create', targetId: cardId, title: q.name || title, after: rec.listName || '' });
-              return refreshBoardQuiet();
-            });
-          });
+          return createCardIn(title, listId, pos, rec.listName);
         },
       });
     }
@@ -4437,6 +4479,11 @@
       var box = el('div', 'gantt-empty');
       if (!filtersActive()) {
         box.textContent = 'Aucune tâche sur ce tableau.';
+        var first = buildAddRow();
+        if (first) {
+          first.label.classList.add('gantt-row--solo');
+          box.appendChild(first.label);
+        }
         return box;
       }
       box.appendChild(el('div', 'gantt-empty-title', { text: 'Aucune tâche ne correspond aux filtres.' }));
@@ -5161,6 +5208,12 @@
         timelineCol.appendChild(timeRow);
       });
 
+      var addRow = buildAddRow();
+      if (addRow) {
+        labelsCol.appendChild(addRow.label);
+        timelineCol.appendChild(addRow.time);
+      }
+
       chart.appendChild(labelsCol);
       bindLabelInsert(labelsCol);
 
@@ -5471,8 +5524,7 @@
     // C: same composer as Tableau and Kanban; the card lands in the first "to do" list.
     function openNewCard() {
       var lists = state.boardLists || [];
-      var open = lists.filter(function (l) { return l.category !== 'completed' && l.category !== 'canceled' && l.category !== 'blocked'; });
-      var target = open.filter(function (l) { return l.category === 'unstarted'; })[0] || open[0];
+      var target = defaultNewCardList();
       if (!target || !global.NewCard) return;
       global.NewCard.open({
         t: t,

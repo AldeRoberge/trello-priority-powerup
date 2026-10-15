@@ -1,0 +1,47 @@
+/*
+ * "Nouvelle carte" row at the end of a list (Tableau, Gantt). Quiet until used: the placeholder and the +
+ * are dimmed, and only color / background change on hover and focus, so nothing shifts.
+ */
+.ar-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  outline: 0;
+}
+.ar-input::placeholder {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+}
+.ar-input:hover {
+  background: color-mix(in srgb, var(--tp-text) 6%, transparent);
+}
+.ar-input:hover::placeholder {
+  opacity: 0.85;
+}
+.ar-input:focus {
+  background: var(--tp-surface-subtle, transparent);
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+}
+.ar-input:focus::placeholder {
+  opacity: 0.7;
+}
+.ar-input:disabled {
+  opacity: 0.6;
+}
+.ar-plus {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+  font-size: 16px;
+}
+.ar-row:hover .ar-plus,
+.ar-row:focus-within .ar-plus {
+  opacity: 0.9;
+}
