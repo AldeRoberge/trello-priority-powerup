@@ -104,7 +104,7 @@ describe('KanbanAI', () => {
   describe('suggestions', () => {
     it('picks a helpful, runnable sentence from the card state', () => {
       const row = (o) => Object.assign({ id: 'x', name: 'T', statutKey: 'started', progress: 0, desc: 'd' }, o);
-      assert.match(AI.heuristicSuggestion(row({ statutKey: 'blocked' })), /réponse/);
+      assert.match(AI.heuristicSuggestion(row({ statutKey: 'blocked' })), /levé/);
       assert.match(AI.heuristicSuggestion(row({ progress: 100 })), /terminé/);
       assert.match(AI.heuristicSuggestion(row({ desc: '' })), /Définis/);
       assert.match(AI.heuristicSuggestion(row({ progress: 57 })), /70/);

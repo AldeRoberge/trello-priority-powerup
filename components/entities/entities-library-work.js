@@ -107,7 +107,7 @@
       can: ['être réalisée'],
       fields: [
         { key: 'verbe', label: 'Verbe', kind: 'text' },
-        { key: 'cible', label: 'Cible', kind: 'refs', refTypes: [] },
+        { key: 'cible', label: 'Cible', kind: 'refs', refTypes: [], rel: 'related' },
       ],
     },
     {
@@ -120,7 +120,7 @@
       name: 'Aptitude',
       can: ['réaliser'],
       fields: [
-        { key: 'sait_faire', label: 'Peut réaliser', kind: 'refs', refTypes: ['action'] },
+        { key: 'sait_faire', label: 'Peut réaliser', kind: 'refs', refTypes: ['action'], rel: 'related' },
         { key: 'niveau', label: 'Niveau', kind: 'choice', options: ['débutant', 'autonome', 'expert'] },
       ],
     },
@@ -128,8 +128,8 @@
       id: 'processus',
       name: 'Processus',
       fields: [
-        { key: 'entrants', label: 'Entrants', kind: 'refs', refTypes: [] },
-        { key: 'sortants', label: 'Sortants', kind: 'refs', refTypes: [] },
+        { key: 'entrants', label: 'Entrants', kind: 'refs', refTypes: [], rel: 'related' },
+        { key: 'sortants', label: 'Sortants', kind: 'refs', refTypes: [], rel: 'related' },
         { key: 'etapes', label: 'Étapes', kind: 'longtext' },
       ],
     },

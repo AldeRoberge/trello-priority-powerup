@@ -4707,7 +4707,7 @@
           '. Utilise-le pour personnaliser (salutations, suggestions d\'impact / qui est touch\u00e9).'
         : '',
       'Contexte carte actuel (JSON)\u00a0:',
-      JSON.stringify(context),
+      JSON.stringify(context, function (key, value) { return key === 'appReleases' ? undefined : value; }),
       clockLine
     ].filter(Boolean))
     .join('\n');
