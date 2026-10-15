@@ -67,12 +67,12 @@
   }
 
   function iconButton(name, title, onclick) {
-    return h('button', { class: 'tg-icon', type: 'button', title: title, 'aria-label': title, onclick: onclick }, [icon(name)]);
+    return h('button', { class: 'tri-icon', type: 'button', title: title, 'aria-label': title, onclick: onclick }, [icon(name)]);
   }
 
   /** Changes the words (and the icon) of one button of a segmented group. */
   function setOption(button, label, iconName) {
-    var t = button.querySelector('.tg-opt-t');
+    var t = button.querySelector('.tri-opt-t');
     if (t) t.textContent = label;
     var i = button.querySelector('.ti');
     if (i && iconName) i.className = 'ti ti-' + iconName;
@@ -84,17 +84,17 @@
    * -> { el, buttons, set(value) }. `fill` also tints every option up to the value (a scale).
    */
   function segmented(spec) {
-    var el = h('div', { class: 'tg-seg' + (spec.cls ? ' ' + spec.cls : ''), role: 'radiogroup', 'aria-label': spec.label });
+    var el = h('div', { class: 'tri-seg' + (spec.cls ? ' ' + spec.cls : ''), role: 'radiogroup', 'aria-label': spec.label });
     var buttons = spec.options.map(function (o, i) {
       var b = h('button', {
-        class: 'tg-opt' + (o.tone != null ? ' tg-opt--u' + o.tone : ''),
+        class: 'tri-opt' + (o.tone != null ? ' tri-opt--u' + o.tone : ''),
         type: 'button',
         role: 'radio',
         'aria-checked': 'false',
         tabindex: '-1',
         title: o.title || null,
         'data-fk': spec.key + ':' + o.id,
-      }, [o.icon ? icon(o.icon) : null, h('span', { class: 'tg-opt-t', text: o.label })]);
+      }, [o.icon ? icon(o.icon) : null, h('span', { class: 'tri-opt-t', text: o.label })]);
       b.addEventListener('click', function () { spec.onPick(o); });
       b.addEventListener('focus', function () {
         buttons.forEach(function (x) { x.tabIndex = x === b ? 0 : -1; });
@@ -133,29 +133,29 @@
   function detail(row, host) {
     var t = host.t;
     var D = DM();
-    var root = h('div', { class: 'tg', 'data-card': row.id });
-    var body = h('div', { class: 'tg-body' });
+    var root = h('div', { class: 'tri', 'data-card': row.id });
+    var body = h('div', { class: 'tri-body' });
     root.appendChild(body);
 
     /* ── Where it comes from ─────────────────────────────────────── */
     var born = D.createdAtOf(row.id);
     var ago = born ? D.ageLabel(born, Date.now()) : '';
-    body.appendChild(h('div', { class: 'tg-top' }, [
-      h('span', { class: 'tg-origin' }, [icon('inbox'), text((row.statut || 'Inbox') + (ago ? ' · ' + ago : ''))]),
+    body.appendChild(h('div', { class: 'tri-top' }, [
+      h('span', { class: 'tri-origin' }, [icon('inbox'), text((row.statut || 'Inbox') + (ago ? ' · ' + ago : ''))]),
       row.blocked ? h('button', {
-        class: 'tg-blocked',
+        class: 'tri-blocked',
         type: 'button',
         title: 'Bloquée · cliquer pour débloquer',
         'data-fk': 'blocked',
         onclick: function () { host.perform(row, 'blocked'); },
       }, [icon('player-pause'), text('Bloquée')]) : null,
-      h('span', { class: 'tg-spacer' }),
+      h('span', { class: 'tri-spacer' }),
       iconButton('external-link', 'Ouvrir la carte', function () { host.openCard(row); }),
       iconButton('dots', 'Plus d’actions', function (e) { host.cardMenu(row, e.currentTarget); }),
     ]));
 
     /* ── Title ───────────────────────────────────────────────────── */
-    var title = h('textarea', { class: 'tg-title', rows: '1', maxlength: '300', spellcheck: 'true', 'aria-label': 'Titre', 'data-fk': 'title' });
+    var title = h('textarea', { class: 'tri-title', rows: '1', maxlength: '300', spellcheck: 'true', 'aria-label': 'Titre', 'data-fk': 'title' });
     title.value = row.name || '';
     function fitTitle() {
       title.style.height = 'auto';
@@ -182,14 +182,14 @@
     /* ── Note (the description of the card) ──────────────────────── */
     var hasNote = !!clean(row.desc);
     var note = h('div', {
-      class: 'tg-desc' + (hasNote ? '' : ' is-empty'),
+      class: 'tri-desc' + (hasNote ? '' : ' is-empty'),
       role: 'button',
       tabindex: '0',
       title: hasNote ? 'Modifier la note' : 'Ajouter une note',
       'data-fk': 'desc',
     });
     if (hasNote) {
-      var shown = h('div', { class: 'tg-desc-body agent-md' });
+      var shown = h('div', { class: 'tri-desc-body agent-md' });
       if (global.MarkdownDom) global.MarkdownDom.append(shown, row.desc);
       else shown.textContent = row.desc;
       note.appendChild(shown);
@@ -214,7 +214,7 @@
       return WO() && WO().stepText ? WO().stepText(row) : '';
     }
     var step = h('input', {
-      class: 'tg-input',
+      class: 'tri-input',
       type: 'text',
       placeholder: 'Prochaine action',
       'aria-label': 'Prochaine action',
@@ -236,26 +236,26 @@
       host.save(row, function () { return DT().saveNextStep(t, row.id, v); });
       host.refreshRow(row);
     });
-    body.appendChild(h('label', { class: 'tg-next' }, [icon('target-arrow'), step]));
+    body.appendChild(h('label', { class: 'tri-next' }, [icon('target-arrow'), step]));
 
     /* ── Properties: one row each, the same columns ─────────────── */
-    var props = h('div', { class: 'tg-props' });
+    var props = h('div', { class: 'tri-props' });
     function prop(label, parts, cls) {
-      return h('div', { class: 'tg-prop' + (cls ? ' ' + cls : '') }, [
-        h('span', { class: 'tg-k', text: label }),
-        h('div', { class: 'tg-v' }, parts),
+      return h('div', { class: 'tri-prop' + (cls ? ' ' + cls : '') }, [
+        h('span', { class: 'tri-k', text: label }),
+        h('div', { class: 'tri-v' }, parts),
       ]);
     }
 
     // Priority is a result: Impact and Urgence feed it, the shared editor refines it.
-    var prio = h('span', { class: 'tg-prio' });
+    var prio = h('span', { class: 'tri-prio' });
     function paintPrio() {
       prio.textContent = '';
       if (typeof row.priority === 'number') {
         prio.appendChild(h('span', { class: 'db-prio db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)), text: String(row.priority) }));
-        if (row.tier) prio.appendChild(h('span', { class: 'tg-tier', text: row.tier }));
+        if (row.tier) prio.appendChild(h('span', { class: 'tri-tier', text: row.tier }));
       } else {
-        prio.appendChild(h('span', { class: 'tg-quiet', text: 'Pas encore calculée' }));
+        prio.appendChild(h('span', { class: 'tri-quiet', text: 'Pas encore calculée' }));
       }
     }
     function showDisplay(d) {
@@ -268,7 +268,7 @@
     }
     paintPrio();
     var refine = h('button', {
-      class: 'tg-link',
+      class: 'tri-link',
       type: 'button',
       title: 'Affiner la priorité',
       'data-fk': 'refine',
@@ -279,7 +279,7 @@
       label: 'Impact',
       key: 'impact',
       fill: true,
-      cls: 'tg-scale' + (row.impact == null ? ' is-default' : ''),
+      cls: 'tri-scale' + (row.impact == null ? ' is-default' : ''),
       options: IMPACTS.map(function (n) { return { id: n, label: String(n), title: n + ' sur 10' }; }),
       value: row.impact == null ? DEFAULT_IMPACT : row.impact,
       onPick: function (o) {
@@ -355,7 +355,7 @@
 
     props.appendChild(prop('Impact', [impact.el]));
     props.appendChild(prop('Urgence', [urgency.el]));
-    props.appendChild(prop('Priorité', [prio, h('span', { class: 'tg-spacer' }), refine], 'tg-prop--result'));
+    props.appendChild(prop('Priorité', [prio, h('span', { class: 'tri-spacer' }), refine], 'tri-prop--result'));
     props.appendChild(prop('Estimation', [est.el]));
     props.appendChild(prop('Jour prévu', [day.el]));
     body.appendChild(props);
@@ -364,23 +364,23 @@
     var found = CE() ? CE().describe(row) : { people: [], places: [], labels: [] };
     function entity(kind, iconName, label, values, open) {
       var b = h('button', {
-        class: 'tg-ent' + (values.length ? '' : ' is-empty'),
+        class: 'tri-ent' + (values.length ? '' : ' is-empty'),
         type: 'button',
         title: label,
         'data-fk': 'ent:' + kind,
         onclick: function () { open(b); },
       }, [icon(iconName)]);
-      if (!values.length) b.appendChild(h('span', { class: 'tg-ent-t', text: label }));
+      if (!values.length) b.appendChild(h('span', { class: 'tri-ent-t', text: label }));
       values.forEach(function (v) {
-        b.appendChild(h('span', { class: 'tg-tag', title: v.title || null }, [
-          v.dot ? h('i', { class: 'tg-dot', style: 'background:' + v.dot }) : null,
+        b.appendChild(h('span', { class: 'tri-tag', title: v.title || null }, [
+          v.dot ? h('i', { class: 'tri-dot', style: 'background:' + v.dot }) : null,
           text(v.text),
         ]));
       });
       return b;
     }
     var project = host.projectOf ? host.projectOf(row) : null;
-    body.appendChild(h('div', { class: 'tg-ents' }, [
+    body.appendChild(h('div', { class: 'tri-ents' }, [
       entity('people', 'user', 'Personnes', found.people, function (b) { host.openEntities(row, 'people', b); }),
       entity('places', 'map-pin', 'Lieux', found.places, function (b) { host.openEntities(row, 'places', b); }),
       entity('labels', 'tag', 'Étiquettes', found.labels, function (b) { host.openEntities(row, 'labels', b); }),
@@ -388,17 +388,23 @@
     ]));
 
     /* ── Decision: always at the bottom of the pane ──────────────── */
-    var decide = h('div', { class: 'tg-decide', role: 'group', 'aria-label': 'Décision' });
+    var decide = h('div', { class: 'tri-decide', role: 'group', 'aria-label': 'Décision' });
+    var groups = {
+      do: h('div', { class: 'tri-group' }),
+      park: h('div', { class: 'tri-group tri-group--park' }),
+    };
+    decide.appendChild(groups.do);
+    decide.appendChild(groups.park);
     D.TRIAGE_EXITS.forEach(function (ex) {
       var b = h('button', {
-        class: 'db-btn tg-act' + (ex.primary ? ' db-btn--primary' : '') + (ex.danger ? ' db-btn--danger tg-act--end' : ''),
+        class: 'db-btn tri-act' + (ex.primary ? ' db-btn--primary' : '') + (ex.danger ? ' db-btn--danger tri-act--end' : ''),
         type: 'button',
         title: host.hintOf ? host.hintOf(ex.id) : null,
         'data-exit': ex.id,
         'data-fk': 'exit:' + ex.id,
         onclick: function () { host.perform(row, ex.id, b); },
       }, [icon(ex.icon), text(ex.label), h('kbd', { text: ex.key.toUpperCase() })]);
-      decide.appendChild(b);
+      (groups[ex.group] || decide).appendChild(b);
     });
     root.appendChild(decide);
     return root;

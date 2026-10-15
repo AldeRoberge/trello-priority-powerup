@@ -16,11 +16,17 @@
   <link rel="stylesheet" href="/components/shared/view-tabs.css" />
   <link rel="stylesheet" href="/components/shared/card-fields.css" />
   <link rel="stylesheet" href="/components/shared/linear-pick.css" />
+  <link rel="stylesheet" href="/components/shared/card-entities.css" />
   <link rel="stylesheet" href="/components/dashboard/dashboard-ui.css" />
+  <link rel="stylesheet" href="/components/dashboard/triage-ui.css" />
   <link rel="stylesheet" href="/components/shared/assistant-dock.css" />
   <link rel="stylesheet" href="/components/shared/context-menu.css" />
   <link rel="stylesheet" href="/components/shared/view-shell.css?v=narrow-2" />
   <link rel="stylesheet" href="/components/shared/skeleton.css" />
+  <link rel="stylesheet" href="/components/shared/progress-ring.css" />
+  <link rel="stylesheet" href="/components/shared/add-row.css" />
+  <link rel="stylesheet" href="/components/shared/weather-ui.css" />
+  <link rel="stylesheet" href="/components/dashboard/today-ui.css" />
   <script src="/components/shared/skeleton.js"></script>
 </head>
 <body class="tp-page tp-page--dashboard">
@@ -63,6 +69,7 @@
   <script src="/components/shared/view-shell.js?v=narrow-2"></script>
   <script src="/components/shared/card-fields.js"></script>
   <script src="/components/shared/linear-pick.js"></script>
+  <script src="/components/shared/card-entities.js"></script>
   <script src="/components/shared/command-palette.js"></script>
   <script src="/components/shared/new-card.js"></script>
   <script src="/components/shared/linear-keys.js"></script>
@@ -70,6 +77,14 @@
   <script src="/components/docs/docs-model.js"></script>
   <script src="/components/dashboard/dashboard-model.js"></script>
   <script src="/components/dashboard/dashboard-trello.js"></script>
+  <script src="/components/dashboard/triage-ui.js"></script>
+  <script src="/components/shared/hide-done.js"></script>
+  <script src="/components/shared/progress-ring.js"></script>
+  <script src="/components/shared/add-row.js"></script>
+  <script src="/components/shared/weather.js"></script>
+  <script src="/components/shared/weather-ui.js"></script>
+  <script src="/components/dashboard/today-model.js"></script>
+  <script src="/components/dashboard/today-ui.js"></script>
   <script src="/components/shared/work-os.js"></script>
   <script src="/components/shared/assistant-dock.js"></script>
   <script src="/components/kanban/kanban-ai.js"></script>
@@ -78,7 +93,11 @@
   <script>
     // ---- mock Trello data (no network): DashboardTrello is replaced by an in-memory board ----
     var T = '2026-10-06';
+    var NOW = DashboardModel.isoOf(new Date());
     function day(n) { return DashboardModel.addDays(T, n); }
+    function fromNow(n) { return DashboardModel.addDays(NOW, n); }
+    // A Trello id starts with its creation time (hex seconds): this one is `ms` old.
+    function oid(ms) { return Math.floor((Date.now() - ms) / 1000).toString(16) + 'aabbccddeeff0011'; }
     var lists = [
       { id: 'l0', name: 'Inbox', category: 'triage', color: '#5e6ad2', icon: 'circle-arrow-down' },
       { id: 'lb', name: 'Backlog', category: 'backlog', color: '#8270db', icon: 'circle-dashed' },
@@ -90,12 +109,21 @@
     var seq = 10;
     function mk(id, name, listId, o) {
       var l = lists.filter(function (x) { return x.id === listId; })[0];
-      return Object.assign({ id: id, name: name, listId: listId, statut: l.name, statutKey: l.category, statutColor: l.color, pos: seq++, priority: 5, tier: 'Moyenne', tierI: 2, impact: 5, urgency: '', estimate: 0, due: '', start: '', dueDone: false, link: '' }, o || {});
+      return Object.assign({ id: id, name: name, listId: listId, statut: l.name, statutKey: l.category, statutColor: l.color, pos: seq++, priority: 5, tier: 'Moyenne', tierI: 2, impact: 5, urgency: '', estimate: 0, due: '', start: '', dueDone: false, link: '', desc: '', fullDesc: '', items: [], assignees: [], labels: [], inputs: { places: null, customAssignees: [] } }, o || {});
     }
     var rows = [
-      mk('t1', 'Appeler le comptable', 'l0'),
-      mk('t2', 'Idée : refonte de la page d’accueil', 'l0', { impact: 8 }),
-      mk('t3', 'Renouveler le passeport', 'l0'),
+      mk('t1', 'Appeler le comptable', 'l0', { impact: null }),
+      mk('t2', 'Idée : refonte de la page d’accueil', 'l0', { impact: 8, desc: 'Une note courte pour se souvenir du contexte.', fullDesc: 'Une note courte pour se souvenir du contexte.' }),
+      mk('t3', 'Renouveler le passeport', 'l0', { impact: null }),
+      mk(oid(3 * 86400000), 'Préparer la présentation du budget 2027 pour le comité de direction avec les chiffres du troisième trimestre et les prévisions de l’an prochain', 'l0', {
+        impact: 8, urgency: 'Vite', priority: 8.1, tier: 'Haute', tierI: 1, estimate: 45, due: fromNow(1), start: fromNow(1),
+        desc: 'Voir **le dossier** partagé : [budget](https://example.com/budget)\n\n- Chiffres du T3\n- Prévisions',
+        fullDesc: 'Voir **le dossier** partagé : [budget](https://example.com/budget)\n\n- Chiffres du T3\n- Prévisions',
+        items: [{ id: 's1', text: 'Demander les chiffres à Marie', done: false, progress: 0 }],
+        assignees: [{ id: 'm2', name: 'Marie Gagnon', custom: false, trelloId: 'm2' }],
+        labels: [{ id: 'lb1', name: 'Urgent', color: 'red' }, { id: 'lb3', name: 'Finances', color: 'green' }],
+        inputs: { places: { at: { id: 'p1', name: 'Bureau' } }, customAssignees: [] }
+      }),
       mk('c1', 'Préparer la réunion de lancement', 'l1', { priority: 7.4, tierI: 1, tier: 'Haute', estimate: 90 }),
       mk('c2', 'Refonte du tableau de bord', 'l2', { priority: 5.1, estimate: 240, due: day(0), start: day(0) }),
       mk('c3', 'Publier la version 2', 'l2', { priority: 9.2, tierI: 0, tier: 'Critique', estimate: 120, due: day(-1), start: day(-1), items: [{ text: 'Rédiger les notes de version', done: false, progress: 0 }] }),
@@ -106,7 +134,18 @@
       mk('c8', 'Bloquer 14 h', 'l1', { priority: 6, due: DashboardModel.isoOf(new Date()), start: DashboardModel.isoOf(new Date()), startTime: '14:00', dueTime: '14:00', estimate: 45 })
     ];
     var log = (window.__log = []);
+    var graveyard = {}; // cards a decision took out of the board, kept so that an undo can bring them back
     function find(id) { return rows.filter(function (r) { return r.id === id; })[0]; }
+    function listOf(cats) { return DashboardTrello.listFor(lists, cats); }
+    function inList(r, l) { r.listId = l.id; r.statut = l.name; r.statutKey = l.category; }
+    var TIERS = ['Critique', 'Haute', 'Moyenne', 'Basse'];
+    function fakeDisplay(r) {
+      var u = DashboardModel.URGENCY_IDS.indexOf(DashboardModel.urgencyIdOf(r.urgency));
+      var score = Math.round(((r.impact == null ? 5 : r.impact) * 0.7 + u * 0.8) * 10) / 10;
+      var tierI = score >= 8 ? 0 : score >= 6 ? 1 : score >= 4 ? 2 : 3;
+      return { priority: score, tier: TIERS[tierI], tierI: tierI };
+    }
+    function later(value) { return new Promise(function (res) { setTimeout(function () { res(value); }, 150); }); }
     DashboardTrello.load = function () {
       return Promise.resolve({ lists: lists, rows: rows.map(function (r) { return Object.assign({}, r); }) });
     };
@@ -116,14 +155,25 @@
       return Promise.resolve({ list: lists[0], created: names, failed: [] });
     };
     DashboardTrello.moveToCategory = function (t, row, ls, cats) {
-      var l = DashboardTrello.listFor(lists, cats), r = find(row.id);
-      if (l && r) { r.listId = l.id; r.statut = l.name; r.statutKey = l.category; }
+      var l = listOf(cats), r = find(row.id);
+      if (l && r) inList(r, l);
       log.push(['move', row.id, cats[0]]);
-      return Promise.resolve(l);
+      return later(l);
     };
     DashboardTrello.ensureInbox = function () { lists[0].category = 'triage'; lists[0].icon = 'circle-arrow-down'; log.push(['inbox']); return Promise.resolve({ listId: 'l0', created: true }); };
-    DashboardTrello.savePriority = function (t, id, p) { log.push(['prio', id, p]); return Promise.resolve(); };
-    DashboardTrello.saveEstimate = function (t, id, m) { var r = find(id); if (r) r.estimate = m; log.push(['est', id, m]); return Promise.resolve(); };
+    DashboardTrello.savePriority = function (t, id, p) {
+      var r = find(id);
+      if (r) {
+        if (p.impact != null) r.impact = p.impact;
+        if (p.empressement) r.urgency = DashboardModel.URGENCIES.filter(function (u) { return u[0] === p.empressement; })[0][1];
+        var d = fakeDisplay(r);
+        r.priority = d.priority; r.tier = d.tier; r.tierI = d.tierI;
+      }
+      log.push(['prio', id, p]);
+      return later(r ? fakeDisplay(r) : null);
+    };
+    DashboardTrello.saveEstimate = function (t, id, m) { var r = find(id); if (r) r.estimate = m; log.push(['est', id, m]); return later(); };
+    DashboardTrello.saveNextStep = function (t, id, text) { var r = find(id); if (r) r.items = DashboardModel.withNextStep(r.items, text); log.push(['step', id, text]); return later(); };
     DashboardTrello.planDay = function (t, id, iso) { var r = find(id); if (r) { r.start = iso; r.due = iso; } log.push(['plan', id, iso]); return Promise.resolve(); };
     DashboardTrello.planAt = function (t, id, iso, vague, time) {
       var r = find(id);
@@ -132,12 +182,164 @@
         else { r.dueVague = ''; r.dueMode = ''; r.start = iso; r.due = iso; r.startTime = time || ''; r.dueTime = time || ''; }
       }
       log.push(['planAt', id, iso, vague || '', time || '']);
-      return Promise.resolve();
+      return later();
     };
     DashboardTrello.complete = function (t, row) { var r = find(row.id); if (r) { r.dueDone = true; r.statutKey = 'completed'; } log.push(['done', row.id]); return Promise.resolve(); };
-    DashboardTrello.cancel = function (t, row) { rows = rows.filter(function (r) { return r.id !== row.id; }); log.push(['cancel', row.id]); return Promise.resolve(); };
+    DashboardTrello.cancel = function (t, row) {
+      var r = find(row.id);
+      if (r) graveyard[row.id] = r;
+      rows = rows.filter(function (x) { return x.id !== row.id; });
+      log.push(['cancel', row.id]);
+      return later();
+    };
+    DashboardTrello.setWaiting = function (t, row, ls, name) {
+      var r = find(row.id), l = listOf(['backlog', 'unstarted']);
+      if (r) { r.waiting = name; r.waitingSince = NOW; inList(r, l); }
+      log.push(['waiting', row.id, name]);
+      return later(l);
+    };
+    DashboardTrello.setSomeday = function (t, row) {
+      var r = find(row.id), l = listOf(['backlog', 'unstarted']);
+      if (r) { r.dueVague = 'eventuellement'; r.dueMode = 'vague'; r.start = ''; r.due = ''; inList(r, l); }
+      log.push(['someday', row.id]);
+      return later(l);
+    };
+    DashboardTrello.fileReference = function (t, row) { log.push(['reference', row.id]); return later({ docId: 'd1', added: '\n- ' + row.name }); };
+    DashboardTrello.restoreTriage = function (t, snap) {
+      var r = find(snap.id) || graveyard[snap.id];
+      if (r) {
+        if (rows.indexOf(r) < 0) rows.push(r);
+        inList(r, lists.filter(function (x) { return x.id === snap.listId; })[0]);
+        r.pos = snap.pos;
+        Object.assign(r, snap.local);
+        delete graveyard[snap.id];
+      }
+      log.push(['restore', snap.id]);
+      return later();
+    };
     TableTrello.saveName = function (t, id, n) { var r = find(id); if (r) r.name = n; log.push(['name', id, n]); return Promise.resolve(); };
-    var t = { get: function () { return Promise.resolve(null); }, set: function () { return Promise.resolve(); }, board: function () { return Promise.resolve({ id: 'b1' }); }, showCard: function () { return Promise.resolve(); } };
+    TableTrello.saveDesc = function (t, row, text) { var r = find(row.id); if (r) { r.desc = text; r.fullDesc = text; } log.push(['desc', row.id]); return Promise.resolve(text); };
+    TableTrello.moveCard = function (t, id, listId) { var r = find(id); if (r) inList(r, lists.filter(function (x) { return x.id === listId; })[0]); log.push(['moveCard', id, listId]); return Promise.resolve(); };
+    TableTrello.archiveCard = function (t, id) { var r = find(id); if (r) graveyard[id] = r; rows = rows.filter(function (x) { return x.id !== id; }); log.push(['archive', id]); return later(); };
+    TableTrello.unarchiveCard = function (t, id) { log.push(['unarchive', id]); return Promise.resolve(); };
+    // The people, places and labels pickers read the board through these.
+    var members = [{ id: 'm1', fullName: 'Paul Tremblay', username: 'paul' }, { id: 'm2', fullName: 'Marie Gagnon', username: 'marie' }];
+    var boardLabels = [{ id: 'lb1', name: 'Urgent', color: 'red' }, { id: 'lb2', name: 'Perso', color: 'blue' }, { id: 'lb3', name: 'Finances', color: 'green' }];
+    PriorityTrello.getBoardMembers = function () { return Promise.resolve(members); };
+    PriorityTrello.getCustomAssigneeCatalog = function () { return Promise.resolve([]); };
+    PriorityTrello.getPlaceCatalog = function () { return Promise.resolve([{ id: 'p1', name: 'Bureau' }, { id: 'p2', name: 'Maison' }]); };
+    PriorityTrello.getBoardLabels = function () { return Promise.resolve(boardLabels); };
+    PriorityTrello.getCardInputsById = function () { return Promise.resolve({ impact: 5, ease: 5, empressement: 'aucun' }); };
+    PriorityTrello.saveCardInputsById = function (t, id, patch) {
+      var r = find(id);
+      if (r && patch.places !== undefined) r.inputs = Object.assign({}, r.inputs, { places: patch.places });
+      log.push(['inputs', id, patch]);
+      return Promise.resolve(patch);
+    };
+    SheetsTrello.trelloRest = function (t, path, method, body) {
+      var m = /^\/cards\/([^/?]+)/.exec(path), r = m && find(decodeURIComponent(m[1]));
+      if (r && body && body.idMembers != null) {
+        r.assignees = String(body.idMembers).split(',').filter(Boolean).map(function (id) {
+          var mem = members.filter(function (x) { return x.id === id; })[0];
+          return { id: id, name: mem ? mem.fullName : id, custom: false, trelloId: id };
+        });
+      }
+      if (r && body && body.idLabels != null) {
+        r.labels = String(body.idLabels).split(',').filter(Boolean).map(function (id) {
+          return boardLabels.filter(function (x) { return x.id === id; })[0] || { id: id, name: id, color: '' };
+        });
+      }
+      log.push(['rest', path, body]);
+      return Promise.resolve({ ok: true, data: {} });
+    };
+    // The goal map of the Mindmap: two projects, one of them under an objective.
+    var goals = {
+      nodes: [{ id: 'g:o1', level: 'objective', name: 'Lancer le site' }, { id: 'g:p1', level: 'project', name: 'Refonte du site' }, { id: 'g:p2', level: 'project', name: 'Déclaration d’impôts' }],
+      links: [{ from: 'g:p1', to: 'g:o1' }]
+    };
+    window.MindmapGoalsTrello = {
+      load: function () { return Promise.resolve(JSON.parse(JSON.stringify(goals))); },
+      save: function (t, g) { goals = JSON.parse(JSON.stringify(g)); log.push(['goals', goals.links]); return later(goals); }
+    };
+    var t = {
+      get: function () { return Promise.resolve(null); },
+      set: function () { return Promise.resolve(); },
+      board: function () { return Promise.resolve({ id: 'b1', members: members }); },
+      showCard: function () { return Promise.resolve(); }
+    };
+    // ---- Aujourd'hui: a sample day, planning with an end hour, and a fake weather service ----
+    // ?wx=clear|cloudy|rain|snow|storm|fog|sleet|night|off|live  picks the sky (default cloudy with rain at 17 h).
+    (function () {
+      var n = new Date();
+      function at(h, m) { return ('0' + h).slice(-2) + ':' + ('0' + (m || 0)).slice(-2); }
+      rows.push(
+        mk('d1', 'Rédiger le rapport trimestriel', 'l2', { priority: 8.2, tierI: 1, tier: 'Haute', estimate: 90, due: NOW, start: NOW, startTime: at(9, 30), dueTime: at(9, 30) }),
+        mk('d2', 'Réunion d’équipe', 'l1', { priority: 6, estimate: 60, due: NOW, start: NOW, startTime: at(11), dueTime: at(12) }),
+        mk('d3', 'Appeler le comptable', 'l1', { priority: 5, estimate: 15, due: NOW, start: NOW }),
+        mk('d4', 'Réserver le billet de train', 'l1', { priority: 4, estimate: 10, due: NOW, start: NOW }),
+        mk('d5', 'Répondre aux courriels', 'l1', { priority: 3.2, tierI: 3, tier: 'Basse', estimate: 30, due: NOW, start: NOW }),
+        mk('d6', 'Dentiste', 'l1', { priority: 7, tierI: 1, tier: 'Haute', estimate: 60, due: NOW, start: NOW, startTime: at(15), dueTime: at(15) }),
+        mk('d7', 'Valider le budget (attend Marie)', 'l2', { priority: 6, estimate: 30, due: NOW, start: NOW, blocked: true }),
+        mk('d8', 'Envoyer la facture', 'l3', { priority: 5, estimate: 15, due: NOW, start: NOW, startTime: at(8), dueTime: at(8), dueDone: true }),
+        mk('d9', 'Café avec Paul', 'l3', { priority: 3, estimate: 30, due: NOW, start: NOW, dueDone: true })
+      );
+      DashboardTrello.planAt = function (t, id, iso, vague, time, endTime) {
+        var r = find(id);
+        if (r) {
+          if (vague) { r.dueVague = vague; r.dueMode = 'vague'; r.start = ''; r.due = ''; r.startTime = ''; r.dueTime = ''; }
+          else { r.dueVague = ''; r.dueMode = 'precise'; r.start = iso; r.due = iso; r.startTime = time || ''; r.dueTime = endTime || time || ''; }
+        }
+        log.push(['planAt', id, iso, vague || '', time || '', endTime || '']);
+        return later();
+      };
+      DashboardTrello.restoreDates = function (t, id, d) {
+        var r = find(id);
+        if (r) Object.assign(r, { start: d.start || '', due: d.due || '', startTime: d.startTime || '', dueTime: d.dueTime || '', dueVague: d.dueVague || '', dueMode: d.dueMode || '' });
+        log.push(['restoreDates', id, d]);
+        return later();
+      };
+
+      var kind = new URLSearchParams(location.search).get('wx') || 'cloudy';
+      try { localStorage.removeItem('tp-weather-cache'); } catch (e) { /* ignore */ }
+      var realFetch = window.fetch.bind(window);
+      function stamp(d, withMinutes) {
+        var p = function (v) { return ('0' + v).slice(-2); };
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + (withMinutes ? p(d.getMinutes()) : '00');
+      }
+      function fakeForecast() {
+        var codes = { clear: 0, cloudy: 3, partly: 2, rain: 63, snow: 73, storm: 95, fog: 45, sleet: 66, night: 3 };
+        var code = codes[kind] != null ? codes[kind] : 3;
+        var times = [], temps = [], pops = [], wc = [], day = [];
+        for (var i = 0; i < 5 * 24; i++) {
+          var d = new Date(n.getFullYear(), n.getMonth(), n.getDate(), i, 0);
+          var h = d.getHours();
+          times.push(stamp(d));
+          temps.push(Math.round((kind === 'snow' ? -4 : kind === 'clear' ? 21 : 8) + Math.sin((h - 9) / 24 * Math.PI * 2) * 3));
+          var rainLater = kind === 'cloudy' && i >= 17 && i < 20;
+          pops.push(rainLater ? 70 : kind === 'rain' || kind === 'storm' ? 80 : kind === 'cloudy' ? 15 : 5);
+          wc.push(rainLater ? 61 : code);
+          day.push(kind === 'night' ? 0 : h >= 7 && h < 18 ? 1 : 0);
+        }
+        var dates = [], sr = [], ss = [];
+        for (var k = 0; k < 5; k++) {
+          var dd = new Date(n.getFullYear(), n.getMonth(), n.getDate() + k, 12);
+          dates.push(stamp(dd).slice(0, 10)); sr.push(stamp(dd).slice(0, 10) + 'T07:12'); ss.push(stamp(dd).slice(0, 10) + 'T18:05');
+        }
+        return {
+          timezone: 'America/Toronto',
+          current: { time: stamp(n, true), temperature_2m: temps[n.getHours()], apparent_temperature: temps[n.getHours()] - 3, relative_humidity_2m: 78, is_day: day[n.getHours()], precipitation: 0, weather_code: wc[n.getHours()], wind_speed_10m: 17, wind_gusts_10m: kind === 'storm' ? 62 : 28 },
+          hourly: { time: times, temperature_2m: temps, precipitation_probability: pops, weather_code: wc, is_day: day },
+          daily: { time: dates, weather_code: [code, 3, 61, 0, 71], temperature_2m_max: [11, 9, 7, 13, 2], temperature_2m_min: [3, 4, 2, 5, -3], precipitation_probability_max: [40, 40, 80, 5, 70], sunrise: sr, sunset: ss, uv_index_max: [2, 1, 1, 3, 1] }
+        };
+      }
+      window.fetch = function (url, init) {
+        if (/api\.open-meteo\.com/.test(String(url)) && kind !== 'live') {
+          if (kind === 'off') return Promise.reject(new Error('offline'));
+          return Promise.resolve({ ok: true, json: function () { return Promise.resolve(fakeForecast()); } });
+        }
+        return realFetch(url, init);
+      };
+    })();
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'dashboard' });
     DashboardUI.mount(document.getElementById('dashboardMount'), t);
   </script>

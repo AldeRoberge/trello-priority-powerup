@@ -13,7 +13,7 @@
 (function (global) {
   'use strict';
 
-  var WORK_END = 18 * 60; // a flow block that ends later is flagged late
+  var WORK_END = 18 * 60; // a flow block that starts at or after this is flagged late
   var FLOW_LIMIT = 22 * 60; // nothing is projected past this: the rest is "overflow"
   var STEP = 5; // minutes: the grid of every time the page writes
 
@@ -107,14 +107,16 @@
     return DM().hhmm(clamp(Math.round(min), 0, 1439));
   }
 
-  /** The hours of a time menu, with quarter hours inside: [{ hour, label, children: [{ time: '14:15', label }] }]. */
-  function timeSlots(fromHour, toHour) {
+  /**
+   * The times of a time menu, every half hour: [{ time: '14:30', minute: 870, label: '14 h 30' }].
+   * A menu has one level, so this stays flat (the menu's search box finds "14").
+   */
+  function timeSlots(fromHour, toHour, stepMinutes) {
     var out = [];
-    var last = toHour == null ? 22 : toHour;
-    for (var hr = fromHour == null ? 6 : fromHour; hr <= last; hr++) {
-      var kids = [];
-      for (var q = 0; q < 4; q++) kids.push({ time: pad2(hr) + ':' + pad2(q * 15), label: fmtClock(hr * 60 + q * 15) });
-      out.push({ hour: hr, label: fmtClock(hr * 60), children: kids });
+    var step = stepMinutes > 0 ? stepMinutes : 30;
+    var last = (toHour == null ? 22 : toHour) * 60 + 30;
+    for (var m = (fromHour == null ? 6 : fromHour) * 60; m <= last; m += step) {
+      out.push({ time: pad2(Math.floor(m / 60)) + ':' + pad2(m % 60), minute: m, label: fmtClock(m) });
     }
     return out;
   }
@@ -195,9 +197,11 @@
     var cursor = ceilTo(opts.start == null ? DM().DAY_START : opts.start, STEP);
     var blocks = [];
     var overflow = [];
-    (rows || []).forEach(function (row) {
-      var d = DM().estimateOf(row);
-      var s = cursor;
+    var left = (rows || []).slice();
+
+    // First start from `from` where [start, start + d) misses every fixed block.
+    function earliest(d, from) {
+      var s = from;
       var moved = true;
       while (moved) {
         moved = false;
@@ -208,13 +212,37 @@
           }
         }
       }
-      if (s + d > limit) {
-        overflow.push(row);
-        return;
+      return s;
+    }
+
+    while (left.length) {
+      // The best task that fits right here goes first: a short one fills the gap in front of a fixed block
+      // that the best task is too long for. With nothing in the way this is always the first task.
+      var pick = -1;
+      for (var i = 0; i < left.length; i++) {
+        var d = DM().estimateOf(left[i]);
+        if (earliest(d, cursor) === cursor && cursor + d <= limit) {
+          pick = i;
+          break;
+        }
       }
-      blocks.push({ id: row.id, row: row, start: s, end: s + d, kind: 'flow', late: s + d > softEnd });
-      cursor = ceilTo(s + d, STEP);
-    });
+      var row;
+      var s;
+      if (pick >= 0) {
+        row = left.splice(pick, 1)[0];
+        s = cursor;
+      } else {
+        row = left.shift();
+        s = earliest(DM().estimateOf(row), cursor);
+      }
+      var dur = DM().estimateOf(row);
+      if (s + dur > limit) {
+        overflow.push(row);
+        continue;
+      }
+      blocks.push({ id: row.id, row: row, start: s, end: s + dur, kind: 'flow', late: s >= softEnd });
+      cursor = ceilTo(s + dur, STEP);
+    }
     return { blocks: blocks, overflow: overflow };
   }
 

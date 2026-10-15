@@ -220,8 +220,9 @@
    * A horizon clears the hard date (same idea as setSomeday) so it stays off the day board.
    * A day clears the horizon.
    */
-  async function planAt(t, cardId, iso, vagueId, time) {
+  async function planAt(t, cardId, iso, vagueId, time, endTime) {
     var hhmm = time || '';
+    var until = endTime || hhmm; // a card that is a span (a meeting) keeps its own end
     if (vagueId) {
       await savePriority(t, cardId, {
         dueMode: 'vague',
@@ -243,7 +244,7 @@
       startDate: iso || '',
       dueDate: iso || '',
       startTime: hhmm,
-      dueTime: hhmm,
+      dueTime: until,
     });
     if (!saved || !saved.ok) {
       var err = new Error((saved && saved.reason) || 'dates-failed');
@@ -256,7 +257,7 @@
       dueDate: iso || '',
       startDate: iso || '',
       startTime: hhmm,
-      dueTime: hhmm,
+      dueTime: until,
     });
   }
 
@@ -455,6 +456,7 @@
     saveEstimate: saveEstimate,
     planDay: planDay,
     planAt: planAt,
+    restoreDates: restoreDates,
     complete: complete,
     cancel: cancel,
     saveNextStep: saveNextStep,

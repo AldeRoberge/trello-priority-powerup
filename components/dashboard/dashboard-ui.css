@@ -154,7 +154,7 @@ button.db-chip:focus-visible { outline: 2px solid var(--tp-primary); outline-off
 .db-split-l { flex: 0 0 min(420px, 45%); min-width: 0; padding: 20px 0 0; border-right: 1px solid var(--tp-border); overflow: auto; }
 .db-split-l .db-head { padding: 0 16px; }
 .db-split-r { flex: 1; min-width: 0; padding: 0; overflow: auto; container-type: inline-size; }
-.tg-row.is-sel { box-shadow: inset 2px 0 0 var(--tp-primary); }
+.tri-row.is-sel { box-shadow: inset 2px 0 0 var(--tp-primary); }
 
 /* ── Orchestrator ────────────────────────────────────────────────────── */
 .db-page--board {
@@ -468,7 +468,10 @@ button.db-meter-hit:hover .db-meter { background: var(--tp-border-strong); }
     padding-left: 0;
   }
   .db-board-days .db-col-card { flex: 0 0 200px; height: auto; min-height: 240px; }
-  .db-split-l { flex: none; border-right: 0; }
+  /* Sorting: the card comes first, the rest of the queue is under it, and the whole page scrolls. */
+  .db-page--split { height: auto; }
+  .db-split-l { flex: none; border-right: 0; border-top: 1px solid var(--tp-border); overflow: visible; }
+  .db-split-r { order: -1; overflow: visible; }
 }
 
 /* ── Rich capture ────────────────────────────────────────────────────── */

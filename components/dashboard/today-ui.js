@@ -307,14 +307,14 @@
       if (next < 22 * 60) {
         items.push({ id: 'time:now', label: 'Maintenant · ' + TM().fmtClock(next), icon: 'player-play', action: function () { api.plan(row, ui.today, '', TM().toClock(next)); } });
       }
+      var current = TM().rowRange(row, ui.today);
       TM().timeSlots().forEach(function (slot) {
         items.push({
-          id: 'time:' + slot.hour,
+          id: 'time:' + slot.time,
           label: slot.label,
           icon: 'clock',
-          children: slot.children.map(function (c) {
-            return { id: 'time:' + c.time, label: c.label, icon: 'clock', action: function () { api.plan(row, ui.today, '', c.time); } };
-          }),
+          checked: !!current && current.start === slot.minute,
+          action: function () { api.plan(row, ui.today, '', slot.time); },
         });
       });
       return items;
@@ -496,7 +496,7 @@
 
     function suggestions(day) {
       var skip = day.focus && day.focus.state === 'backlog' ? day.focus.row.id : null;
-      var list = TM().suggest(api.state().rows, ui.today, 6, skip);
+      var list = TM().suggest(api.rows(), ui.today, 6, skip);
       if (!list.length) return null;
       var open = ui.sugg == null ? day.stats.open < 3 : ui.sugg === '1';
       var head = h('button', {
@@ -899,13 +899,14 @@
       }
 
       var tools = [];
-      if (day.flow.length) {
+      var ready = day.flow.filter(function (b) { return !b.late; });
+      if (ready.length) {
         tools.push(h('button', {
           class: 'td-btn td-btn--primary',
           type: 'button',
           title: 'Écrire ces heures dans les cartes',
           onclick: function () {
-            api.planMany(day.flow.map(function (b) { return { id: b.id, date: ui.today, time: TM().toClock(b.start) }; }), plural(day.flow.length, 'tâche planifiée', 'tâches planifiées'));
+            api.planMany(ready.map(function (b) { return { id: b.id, date: ui.today, time: TM().toClock(b.start) }; }), plural(ready.length, 'tâche planifiée', 'tâches planifiées'));
           },
         }, [icon('wand'), text('Planifier ma journée')]));
       }
@@ -971,7 +972,7 @@
       ui.nowMin = now.getHours() * 60 + now.getMinutes();
       ui.today = api.today();
       ui.showDone = global.HideDone ? !global.HideDone.get() : false;
-      var day = TM().buildDay(st.rows, { today: ui.today, nowMin: ui.nowMin, capacity: st.capacity });
+      var day = TM().buildDay(api.rows(), { today: ui.today, nowMin: ui.nowMin, capacity: st.capacity });
       ui.day = day;
       ui.flowKey = Math.floor(ui.nowMin / TM().STEP);
       ui.blockById = {};

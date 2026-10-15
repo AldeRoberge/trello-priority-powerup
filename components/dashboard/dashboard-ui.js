@@ -976,10 +976,15 @@
     function triageRow(r, selected) {
       var sub = (WO() && WO().stepText(r)) || DM().snippet(r.desc, 90);
       return h('div', {
-        class: 'db-row tg-row' + (selected ? ' is-sel' : ''),
+        class: 'db-row tri-row' + (selected ? ' is-sel' : ''),
         'data-id': r.id,
         'data-card': r.id,
-        onclick: function () { state.selected = r.id; render(); },
+        onclick: function () {
+          state.selected = r.id;
+          render();
+          // On a phone the pane is above the list: bring it into view.
+          if (global.matchMedia && global.matchMedia('(max-width: 760px)').matches) els.main.scrollTop = 0;
+        },
       }, [
         h('span', { class: 'db-row-main' }, [
           h('span', { class: 'db-row-name', text: r.name }),
@@ -1132,19 +1137,59 @@
     }
 
     /* ── 3. Orchestrator ───────────────────────────────────────────── */
-    function plan(row, iso, vague, time) {
+    // endTime: a card that is a span (a meeting) keeps its own end when it moves.
+    function plan(row, iso, vague, time, endTime) {
       var hhmm = vague ? '' : (time || '');
+      var until = vague ? '' : (endTime || hhmm);
       row.dueVague = vague || '';
       row.dueMode = vague ? 'vague' : (iso ? 'precise' : '');
       row.start = vague ? '' : iso;
       row.due = vague ? '' : iso;
       row.startTime = hhmm;
-      row.dueTime = hhmm;
+      row.dueTime = until;
       save(row, function () {
         return DT().planAt
-          ? DT().planAt(t, row.id, iso, vague || '', hhmm)
+          ? DT().planAt(t, row.id, iso, vague || '', hhmm, until)
           : DT().planDay(t, row.id, iso);
       });
+      render();
+    }
+
+    /**
+     * Plans several cards at once: moves = [{ id, date, time }]. One message, one undo (button or Ctrl+Z)
+     * puts every card back on the day and hour it had.
+     */
+    function planMany(moves, message) {
+      var done = [];
+      (moves || []).forEach(function (m) {
+        var row = state.rows.filter(function (r) { return r.id === m.id; })[0];
+        if (!row) return;
+        done.push({
+          row: row,
+          move: m,
+          before: { due: row.due || '', start: row.start || '', startTime: row.startTime || '', dueTime: row.dueTime || '', dueVague: row.dueVague || '', dueMode: row.dueMode || '' },
+        });
+      });
+      if (!done.length) return;
+      done.forEach(function (x) {
+        var hhmm = x.move.time || '';
+        Object.assign(x.row, { dueVague: '', dueMode: 'precise', start: x.move.date, due: x.move.date, startTime: hhmm, dueTime: hhmm });
+        save(x.row, function () { return DT().planAt(t, x.row.id, x.move.date, '', hhmm); });
+      });
+      function undo() {
+        if (state.undo !== undo) return;
+        state.undo = null;
+        done.forEach(function (x) {
+          // A reload may have replaced the card since: act on the current one.
+          var cur = state.rows.filter(function (r) { return r.id === x.row.id; })[0] || x.row;
+          Object.assign(cur, x.before);
+          save(cur, function () { return DT().restoreDates(t, cur.id, x.before); });
+        });
+        setStatus('Remis comme avant', 'ok');
+        render();
+      }
+      state.undo = undo;
+      setStatus(message, 'ok', 9000, { label: 'Défaire', run: undo });
       render();
     }
 
@@ -1767,129 +1812,39 @@
     }
 
     /* ── 4. Today ──────────────────────────────────────────────────── */
+    var todayView = null;
+
+    // The page itself lives in today-ui.js; this hands it the helpers that write to Trello and draw the chips.
     function renderToday() {
-      var tasks = DM().todayList(viewRows(), today);
-      var used = DM().minutesOf(tasks);
-      var blocks = DM().timeline(tasks);
-      var byId = {};
-      tasks.forEach(function (r) { byId[r.id] = r; });
-      var focus = h('div', { class: 'db-list' }, tasks.length ? tasks.map(function (r) {
-        var late = r.due && r.due < today;
-        return h('div', { class: 'db-row', 'data-card': r.id }, [
-          h('button', {
-            class: 'db-check',
-            type: 'button',
-            title: 'Terminer',
-            'aria-label': 'Terminer « ' + r.name + ' »',
-            onclick: function () {
-              r.dueDone = true;
-              write(DT().complete(t, r, state.lists, true), '« ' + r.name + ' » terminée');
-              render();
-            },
-          }, [icon('circle-check')]),
-          h('span', { class: 'db-row-main' }, [
-            h('span', { class: 'db-row-line' }, [
-              h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
-              late ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
-            ]),
-            stepLine(r),
-            placeLine(r),
-          ]),
-          h('span', { class: 'db-props' }, [
-            h('span', { class: 'db-prop db-prop--prio' }, [prioBadge(r)]),
-            h('span', { class: 'db-prop db-prop--est' }, [estChip(r)]),
-            h('span', { class: 'db-prop db-prop--due' }, [dueChip(r)]),
-            h('span', { class: 'db-prop db-prop--go' }, [
-              h('button', { class: 'db-icon-btn', type: 'button', title: 'Reporter à demain', onclick: function () { plan(r, DM().addDays(today, 1)); } }, [icon('arrow-curve-right')]),
-            ]),
-          ]),
-        ]);
-      }) : [h('div', { class: 'db-empty' }, [icon('sun'), h('p', { text: 'Rien de prévu aujourd’hui.' }),
-        h('button', { class: 'db-btn', type: 'button', onclick: function () { go('orchestrator'); } }, [icon('calendar-event'), document.createTextNode('Ouvrir l’orchestrateur')])])]);
-      if (global.InsertGap) {
-        global.InsertGap.watch(focus, {
-          item: '.db-row',
-          placeholder: 'Titre…',
-          onCreate: function (title) {
-            var parse = global.QuickParse && global.QuickParse.parse;
-            var draft = DM().taskDraft(title, today, parse, '');
-            if (draft) createHere(draft);
-          },
+      if (!todayView) {
+        todayView = global.TodayUI.create({
+          t: t,
+          state: function () { return state; },
+          rows: viewRows,
+          section: function () { return state.section; },
+          today: function () { return today; },
+          rerender: render,
+          go: go,
+          parse: global.QuickParse && global.QuickParse.parse,
+          prioBadge: prioBadge,
+          estChip: estChip,
+          dueChip: dueChip,
+          capChip: capChip,
+          menuChip: menuChip,
+          stepLine: stepLine,
+          placeLine: placeLine,
+          plan: plan,
+          planMany: planMany,
+          setEstimate: setEstimate,
+          complete: function (row) { exitComplete(row, true); },
+          reopen: function (row) { exitComplete(row, false); },
+          unblock: exitBlocked,
+          openCard: openCard,
+          createHere: createHere,
+          review: reviewBlock,
         });
       }
-
-      var first = DM().DAY_START;
-      var last = Math.max(first + 8 * 60, blocks.length ? blocks[blocks.length - 1].end : 0);
-      var lay = DM().timelineLayout
-        ? DM().timelineLayout(blocks, first, { minPx: 22, gap: 3, hourPx: 56 })
-        : { hourPx: 56, items: blocks.map(function (b) {
-          return { id: b.id, top: ((b.start - first) / 60) * 56, height: Math.max(22, ((b.end - b.start) / 60) * 56 - 3) };
-        }) };
-      var hourPx = lay.hourPx;
-      var boxOf = {};
-      lay.items.forEach(function (item) { boxOf[item.id] = item; });
-      var grid = h('div', { class: 'db-tl', style: 'height:' + Math.ceil(((last - first) / 60) * hourPx) + 'px' });
-      for (var m = first; m <= last; m += 60) {
-        grid.appendChild(h('div', { class: 'db-tl-hour', style: 'top:' + ((m - first) / 60) * hourPx + 'px' }, [h('span', { text: DM().hhmm(m) })]));
-      }
-      blocks.forEach(function (b) {
-        var r = byId[b.id];
-        var box = boxOf[b.id] || { top: 0, height: 22 };
-        var when = DM().hhmm(b.start) + ' - ' + DM().hhmm(b.end);
-        grid.appendChild(h('div', {
-          class: 'db-tl-block',
-          'data-card': r ? r.id : null,
-          style: 'top:' + box.top + 'px;height:' + box.height + 'px',
-          title: when,
-        }, [h('b', { text: (function () { var s = WO() && WO().stepState(r); return s && s.text ? s.text : r.name; })() }), h('span', { text: when })]));
-      });
-      var pct = Math.min(100, Math.round((used / state.capacity) * 100));
-      var next = DM().nextAction(viewRows(), today);
-      var sugg = DM().suggestions(viewRows(), today, 5);
-      var nextStep = next ? (WO() && WO().stepState(next.row)) : null;
-      var actionText = nextStep && nextStep.text ? nextStep.text : (next ? next.row.name : '');
-      var nowCard = next ? h('section', { class: 'db-now', 'data-card': next.row.id }, [
-        h('div', { class: 'db-now-k' }, [icon('target-arrow'), document.createTextNode(next.from === 'today' ? ' Prochaine action' : ' Rien de prévu : je suggère')]),
-        h('div', { class: 'db-now-name', text: actionText, onclick: function () { openCard(next.row); } }),
-        nextStep && nextStep.text ? h('div', { class: 'db-now-card', text: next.row.name }) : null,
-        placeLine(next.row),
-        h('div', { class: 'db-now-meta' }, [
-          next.row.due && next.row.due < today && DM().isOpen(next.row) ? h('span', { class: 'db-chip is-late' }, [icon('alert-circle'), document.createTextNode('En retard')]) : null,
-          prioBadge(next.row),
-          estChip(next.row),
-          dueChip(next.row),
-        ]),
-        h('div', { class: 'db-now-actions' }, [
-          next.from === 'backlog' ? h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () { plan(next.row, today); } }, [icon('sun'), document.createTextNode('Faire aujourd’hui')]) : null,
-          h('button', { class: 'db-btn', type: 'button', onclick: function () {
-            next.row.dueDone = true;
-            write(DT().complete(t, next.row, state.lists, true), '« ' + next.row.name + ' » terminée');
-            render();
-          } }, [icon('circle-check'), document.createTextNode('Terminer')]),
-          h('button', { class: 'db-btn', type: 'button', onclick: function () { openCard(next.row); } }, [icon('external-link'), document.createTextNode('Ouvrir')]),
-        ]),
-      ]) : null;
-      var suggBox = sugg.length ? h('section', { class: 'db-sugg' }, [
-        h('h3', { class: 'db-sugg-h' }, [icon('bulb'), document.createTextNode(' À planifier · par priorité')]),
-        h('div', { class: 'db-list' }, sugg.map(function (r) {
-          return h('div', { class: 'db-row', 'data-card': r.id }, [
-            h('span', { class: 'db-row-name', text: r.name, onclick: function () { openCard(r); } }),
-            prioBadge(r),
-            estChip(r),
-            h('button', { class: 'db-btn', type: 'button', title: 'Ajouter à aujourd’hui', onclick: function () { plan(r, today); } }, [icon('plus'), document.createTextNode('Aujourd’hui')]),
-          ]);
-        })),
-      ]) : null;
-      els.main.appendChild(h('div', { class: 'db-page db-page--wide' }, [
-        pageHead('Aujourd’hui', DAYS_FR[new Date().getDay()] + ' ' + TM().formatDay(today),h('div', { class: 'db-load' }, [
-          capChip(used),
-          h('div', { class: 'db-meter' + (used > state.capacity ? ' is-over' : '') }, [h('div', { class: 'db-meter-fill', style: 'width:' + pct + '%' })]),
-        ])),
-        nowCard,
-        h('div', { class: 'db-today' }, [h('div', { class: 'db-today-l' }, [focus]), h('div', { class: 'db-today-r' }, [grid])]),
-        reviewBlock(),
-        suggBox,
-      ]));
+      todayView.render(els.main);
     }
 
     function parkStarted(row) {
@@ -2022,8 +1977,15 @@
         var top = kept[n.getAttribute('data-keep')];
         if (top != null) n.scrollTop = top;
       });
+      // Keep the selected card of the list in view, inside the list only (on a phone the list is under the pane).
       var sel = state.section === 'triage' ? els.main.querySelector('.db-triage-list .is-sel') : null;
-      if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+      var box = sel ? els.main.querySelector('.db-split-l') : null;
+      if (box) {
+        var b = box.getBoundingClientRect();
+        var r = sel.getBoundingClientRect();
+        if (r.top < b.top) box.scrollTop -= b.top - r.top;
+        else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom;
+      }
       var bodies = els.main.querySelectorAll('.db-col-body');
       for (var i = 0; i < bodies.length && i < colScroll.length; i++) bodies[i].scrollTop = colScroll[i];
       var daysNow = els.main.querySelector('.db-board-days');
@@ -2111,10 +2073,10 @@
     if (global.LinearKeys) {
       global.LinearKeys.attach({
         t: t,
-        hoverSelector: '.tg[data-card]',
+        hoverSelector: '.tri[data-card]',
         idOf: function (el) { return el.getAttribute('data-card'); },
         selectedId: function () { return state.section === 'triage' ? state.selected || '' : ''; },
-        anchorFor: function (id) { return els.main.querySelector('.tg[data-card="' + id + '"] .tg-top'); },
+        anchorFor: function (id) { return els.main.querySelector('.tri[data-card="' + id + '"] .tri-top'); },
         row: function (id) { return state.rows.filter(function (r) { return r.id === id; })[0] || null; },
         lists: function () { return state.lists; },
         setStatus: function (row, list) {

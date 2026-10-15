@@ -267,3 +267,71 @@ describe('DashboardTrello undo of a decision', () => {
     await DT.unfileReference(t, { docId: 'zzz', added: 'x' });
   });
 });
+
+describe('DashboardTrello planning on the clock', () => {
+  let DT;
+  let calls;
+  const t = {};
+
+  before(() => {
+    loadComponent('dashboard/dashboard-model.js');
+    loadComponent('dashboard/dashboard-trello.js');
+    DT = global.DashboardTrello;
+  });
+
+  beforeEach(() => {
+    calls = [];
+    global.PriorityTrello = {
+      restPutCard: async () => ({ ok: true }),
+      getCardInputsById: async () => ({}),
+      saveCardInputsById: async (tt, id, patch) => {
+        calls.push(['inputs', id, patch]);
+        return patch;
+      },
+    };
+    global.GanttTrello = {
+      saveCardDates: async (tt, id, d) => {
+        calls.push(['dates', id, d]);
+        return { ok: true };
+      },
+    };
+  });
+
+  const datesOf = () => calls.filter((c) => c[0] === 'dates')[0][2];
+  const inputsOf = () => calls.filter((c) => c[0] === 'inputs')[0][2];
+
+  it('planAt writes the same hour as start and due for a task placed on the clock', async () => {
+    await DT.planAt(t, 'c1', '2026-10-14', '', '14:30');
+    assert.deepEqual({ ...datesOf() }, { startDate: '2026-10-14', dueDate: '2026-10-14', startTime: '14:30', dueTime: '14:30' });
+    assert.equal(inputsOf().dueTime, '14:30');
+  });
+
+  it('planAt keeps a span: a meeting moved to 10:00 still ends at 11:30', async () => {
+    await DT.planAt(t, 'c1', '2026-10-14', '', '10:00', '11:30');
+    assert.equal(datesOf().startTime, '10:00');
+    assert.equal(datesOf().dueTime, '11:30');
+    assert.equal(inputsOf().dueTime, '11:30');
+    assert.equal(inputsOf().dueMode, 'precise');
+  });
+
+  // The undo of a bulk plan ("Planifier ma journée", "Replanifier") puts each card's snapshot back.
+  it('restoreDates puts a card back on its day and hour', async () => {
+    await DT.restoreDates(t, 'c1', { start: '2026-10-13', due: '2026-10-13', startTime: '09:00', dueTime: '09:30', dueVague: '', dueMode: 'precise' });
+    assert.deepEqual({ ...datesOf() }, { startDate: '2026-10-13', dueDate: '2026-10-13', startTime: '09:00', dueTime: '09:30' });
+    assert.equal(inputsOf().dueMode, 'precise');
+    assert.equal(inputsOf().dueVague, '');
+  });
+
+  it('restoreDates clears the dates of a card that had none', async () => {
+    await DT.restoreDates(t, 'c1', { start: '', due: '', startTime: '', dueTime: '', dueVague: '', dueMode: '' });
+    assert.deepEqual({ ...datesOf() }, { startDate: '', dueDate: '', startTime: '', dueTime: '' });
+    assert.equal(inputsOf().dueMode, '');
+  });
+
+  it('restoreDates puts a vague horizon back as a horizon, not as a day', async () => {
+    await DT.restoreDates(t, 'c1', { start: '', due: '', startTime: '', dueTime: '', dueVague: 'bientot', dueMode: 'vague' });
+    assert.deepEqual({ ...datesOf() }, { startDate: '', dueDate: '', startTime: '', dueTime: '' });
+    assert.equal(inputsOf().dueVague, 'bientot');
+    assert.equal(inputsOf().dueMode, 'vague');
+  });
+});

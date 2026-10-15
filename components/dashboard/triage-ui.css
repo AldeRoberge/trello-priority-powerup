@@ -1,25 +1,25 @@
 /* Triage pane of the Dashboard (triage-ui.js). Colors come from trello-theme.css (--tp-*).
    A click, a hover or a selection only changes a color or a background: nothing here changes a size. */
-.tg {
+.tri {
   box-sizing: border-box;
   min-height: 100%;
-  max-width: 640px;
+  max-width: 760px;
   display: flex;
   flex-direction: column;
   padding: 18px 28px 0;
   color: var(--tp-text);
   font-size: 13px;
 }
-.tg-body { flex: 1 1 auto; display: flex; flex-direction: column; padding-bottom: 20px; }
-.tg button:focus { outline: none; }
-.tg button:focus-visible, .tg .tg-desc:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
+.tri-body { flex: 1 1 auto; display: flex; flex-direction: column; padding-bottom: 20px; }
+.tri button:focus { outline: none; }
+.tri button:focus-visible, .tri .tri-desc:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
 
 /* ── Where it comes from ─────────────────────────────────────────────── */
-.tg-top { display: flex; align-items: center; gap: 6px; min-height: 28px; margin-bottom: 2px; }
-.tg-spacer { flex: 1; }
-.tg-origin { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--tp-text-muted); }
-.tg-origin .ti { font-size: 14px; }
-.tg-icon {
+.tri-top { display: flex; align-items: center; gap: 6px; min-height: 28px; margin-bottom: 2px; }
+.tri-spacer { flex: 1; }
+.tri-origin { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--tp-text-muted); }
+.tri-origin .ti { font-size: 14px; }
+.tri-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -33,8 +33,8 @@
   font-size: 16px;
   cursor: pointer;
 }
-.tg-icon:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
-.tg-blocked {
+.tri-icon:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tri-blocked {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -48,10 +48,10 @@
   font-size: 12px;
   cursor: pointer;
 }
-.tg-blocked:hover { background: color-mix(in srgb, var(--tp-danger-text) 24%, transparent); }
+.tri-blocked:hover { background: color-mix(in srgb, var(--tp-danger-text) 24%, transparent); }
 
 /* ── Title and note ──────────────────────────────────────────────────── */
-.tg-title {
+.tri-title {
   display: block;
   width: calc(100% + 12px);
   box-sizing: border-box;
@@ -68,9 +68,9 @@
   font-weight: 600;
   line-height: 1.3;
 }
-.tg-title:hover { background: var(--tp-surface-hover); }
-.tg-title:focus { outline: none; background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 2px var(--tp-primary); }
-.tg-desc {
+.tri-title:hover { background: var(--tp-surface-hover); }
+.tri-title:focus { outline: none; background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 2px var(--tp-primary); }
+.tri-desc {
   box-sizing: border-box;
   display: flex;
   align-items: flex-start;
@@ -83,16 +83,16 @@
   line-height: 1.45;
   cursor: pointer;
 }
-.tg-desc:hover { background: var(--tp-surface-hover); }
-.tg-desc.is-empty { align-items: center; color: var(--tp-text-muted); opacity: 0.55; }
-.tg-desc.is-empty:hover { opacity: 0.9; }
-.tg-desc .ti { font-size: 14px; flex: none; }
-.tg-desc-body { min-width: 0; max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
-.tg-desc-body > :first-child { margin-top: 0; }
-.tg-desc-body > :last-child { margin-bottom: 0; }
+.tri-desc:hover { background: var(--tp-surface-hover); }
+.tri-desc.is-empty { align-items: center; color: var(--tp-text-muted); opacity: 0.55; }
+.tri-desc.is-empty:hover { opacity: 0.9; }
+.tri-desc .ti { font-size: 14px; flex: none; }
+.tri-desc-body { min-width: 0; max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
+.tri-desc-body > :first-child { margin-top: 0; }
+.tri-desc-body > :last-child { margin-bottom: 0; }
 
 /* ── Prochaine action ────────────────────────────────────────────────── */
-.tg-next {
+.tri-next {
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -106,10 +106,10 @@
   color: var(--tp-text-muted);
   cursor: text;
 }
-.tg-next:hover { box-shadow: inset 0 0 0 1px var(--tp-border-strong); }
-.tg-next:focus-within { box-shadow: inset 0 0 0 2px var(--tp-primary); color: var(--tp-primary); }
-.tg-next .ti { font-size: 16px; flex: none; }
-.tg-input {
+.tri-next:hover { box-shadow: inset 0 0 0 1px var(--tp-border-strong); }
+.tri-next:focus-within { box-shadow: inset 0 0 0 2px var(--tp-primary); color: var(--tp-primary); }
+.tri-next .ti { font-size: 16px; flex: none; }
+.tri-input {
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -120,17 +120,17 @@
   color: var(--tp-text);
   font: inherit;
 }
-.tg-input::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
-.tg-next:focus-within .tg-input::placeholder { opacity: 0.8; }
+.tri-input::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
+.tri-next:focus-within .tri-input::placeholder { opacity: 0.8; }
 
 /* ── Properties: a label column, then the choices ────────────────────── */
-.tg-props { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--tp-border); }
-.tg-prop { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; column-gap: 8px; min-height: 30px; }
-.tg-k { color: var(--tp-text-muted); font-size: 12px; }
-.tg-v { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.tri-props { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--tp-border); }
+.tri-prop { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; column-gap: 8px; min-height: 30px; }
+.tri-k { color: var(--tp-text-muted); font-size: 12px; }
+.tri-v { min-width: 0; display: flex; align-items: center; gap: 8px; }
 
 /* Same look as the scale switcher of the Orchestrateur. */
-.tg-seg {
+.tri-seg {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -139,7 +139,7 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--tp-text) 6%, transparent);
 }
-.tg-opt {
+.tri-opt {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -156,36 +156,36 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.tg-opt .ti { font-size: 14px; flex: none; }
-.tg-opt:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
-.tg-opt[aria-checked="true"] {
+.tri-opt .ti { font-size: 14px; flex: none; }
+.tri-opt:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tri-opt[aria-checked="true"] {
   background: var(--tp-elev-4, var(--tp-surface));
   color: var(--tp-text);
   box-shadow: 0 0 0 1px var(--tp-border), 0 1px 2px rgba(9, 30, 66, 0.14);
 }
 /* Urgence: the selected level takes its color (the same ones as the S / P / D picker). */
-.tg-opt--u1[aria-checked="true"] { background: color-mix(in srgb, #9fadbc 24%, var(--tp-elev-4, var(--tp-surface))); }
-.tg-opt--u2[aria-checked="true"] { background: color-mix(in srgb, #e2b203 22%, var(--tp-elev-4, var(--tp-surface))); }
-.tg-opt--u3[aria-checked="true"] { background: color-mix(in srgb, #f38a3f 24%, var(--tp-elev-4, var(--tp-surface))); }
-.tg-opt--u4[aria-checked="true"] { background: color-mix(in srgb, #e34935 24%, var(--tp-elev-4, var(--tp-surface))); }
-.tg-opt--u1[aria-checked="true"] .ti { color: #9fadbc; }
-.tg-opt--u2[aria-checked="true"] .ti { color: #e2b203; }
-.tg-opt--u3[aria-checked="true"] .ti { color: #f38a3f; }
-.tg-opt--u4[aria-checked="true"] .ti { color: #e34935; }
+.tri-opt--u1[aria-checked="true"] { background: color-mix(in srgb, #9fadbc 24%, var(--tp-elev-4, var(--tp-surface))); }
+.tri-opt--u2[aria-checked="true"] { background: color-mix(in srgb, #e2b203 22%, var(--tp-elev-4, var(--tp-surface))); }
+.tri-opt--u3[aria-checked="true"] { background: color-mix(in srgb, #f38a3f 24%, var(--tp-elev-4, var(--tp-surface))); }
+.tri-opt--u4[aria-checked="true"] { background: color-mix(in srgb, #e34935 24%, var(--tp-elev-4, var(--tp-surface))); }
+.tri-opt--u1[aria-checked="true"] .ti { color: #9fadbc; }
+.tri-opt--u2[aria-checked="true"] .ti { color: #e2b203; }
+.tri-opt--u3[aria-checked="true"] .ti { color: #f38a3f; }
+.tri-opt--u4[aria-checked="true"] .ti { color: #e34935; }
 /* Impact: a scale. Everything up to the value is tinted, the value itself is solid. */
-.tg-scale { gap: 1px; }
-.tg-scale .tg-opt { min-width: 28px; padding: 0; font-variant-numeric: tabular-nums; }
-.tg-scale .tg-opt.is-fill { background: color-mix(in srgb, var(--tp-primary) 20%, transparent); color: var(--tp-text); }
-.tg-scale .tg-opt:hover { background: color-mix(in srgb, var(--tp-primary) 32%, transparent); color: var(--tp-text); }
-.tg-scale .tg-opt[aria-checked="true"] { background: var(--tp-primary); color: var(--tp-primary-text, #fff); box-shadow: none; }
-.tg-scale.is-default .tg-opt.is-fill, .tg-scale.is-default .tg-opt[aria-checked="true"] { opacity: 0.55; }
+.tri-scale { gap: 1px; }
+.tri-scale .tri-opt { min-width: 28px; padding: 0; font-variant-numeric: tabular-nums; }
+.tri-scale .tri-opt.is-fill { background: color-mix(in srgb, var(--tp-primary) 20%, transparent); color: var(--tp-text); }
+.tri-scale .tri-opt:hover { background: color-mix(in srgb, var(--tp-primary) 32%, transparent); color: var(--tp-text); }
+.tri-scale .tri-opt[aria-checked="true"] { background: var(--tp-primary); color: var(--tp-primary-text, #fff); box-shadow: none; }
+.tri-scale.is-default .tri-opt.is-fill, .tri-scale.is-default .tri-opt[aria-checked="true"] { opacity: 0.55; }
 
 /* Priorité: the result of Impact and Urgence. */
-.tg-prio { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.tg-prio .db-prio { min-width: 30px; padding: 2px 6px; font-size: 12px; }
-.tg-tier { color: var(--tp-text-subtle); }
-.tg-quiet { color: var(--tp-text-muted); opacity: 0.55; }
-.tg-link {
+.tri-prio { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.tri-prio .db-prio { min-width: 30px; padding: 2px 6px; font-size: 12px; }
+.tri-tier { color: var(--tp-text-subtle); }
+.tri-quiet { color: var(--tp-text-muted); opacity: 0.55; }
+.tri-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -198,11 +198,11 @@
   font-size: 12px;
   cursor: pointer;
 }
-.tg-link:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tri-link:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
 
 /* ── Where it belongs ────────────────────────────────────────────────── */
-.tg-ents { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--tp-border); }
-.tg-ent {
+.tri-ents { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--tp-border); }
+.tri-ent {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -219,37 +219,43 @@
   text-align: left;
   cursor: pointer;
 }
-.tg-ent:hover { background: var(--tp-surface-hover); }
-.tg-ent .ti { font-size: 14px; flex: none; color: var(--tp-text-muted); }
-.tg-ent.is-empty { border-style: dashed; border-color: var(--tp-border-strong); background: transparent; color: var(--tp-text-muted); opacity: 0.55; }
-.tg-ent.is-empty:hover { background: var(--tp-surface-hover); opacity: 0.9; }
-.tg-tag { min-width: 0; overflow-wrap: anywhere; }
-.tg-tag + .tg-tag::before { content: "·"; margin-right: 6px; color: var(--tp-text-muted); }
-.tg-dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; }
+.tri-ent:hover { background: var(--tp-surface-hover); }
+.tri-ent .ti { font-size: 14px; flex: none; color: var(--tp-text-muted); }
+.tri-ent.is-empty { border-style: dashed; border-color: var(--tp-border-strong); background: transparent; color: var(--tp-text-muted); opacity: 0.55; }
+.tri-ent.is-empty:hover { background: var(--tp-surface-hover); opacity: 0.9; }
+.tri-tag { min-width: 0; overflow-wrap: anywhere; }
+.tri-tag + .tri-tag::before { content: "·"; margin-right: 6px; color: var(--tp-text-muted); }
+.tri-dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; }
 
 /* ── Decision: stays at the bottom of the pane, in the same place for every card ─── */
-.tg-decide {
+.tri-decide {
   position: sticky;
   bottom: 0;
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 6px 12px;
   margin: 0 -28px;
   padding: 12px 28px 14px;
   background: var(--tp-surface);
   border-top: 1px solid var(--tp-border);
 }
-.tg-act--end { margin-left: auto; }
+.tri-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.tri-act--end { margin-left: auto; }
+
+/* Too narrow for one row: "do it" and Annuler on the first row, "park it" under them. */
+@container (max-width: 760px) {
+  .tri-act--end { order: 1; }
+  .tri-group--park { order: 2; flex-basis: 100%; }
+}
 
 /* The pane gets narrower than the screen: the labels move above their choices. */
 @container (max-width: 520px) {
-  .tg { padding: 14px 16px 0; }
-  .tg-decide { margin: 0 -16px; padding: 10px 16px 12px; }
-  .tg-prop { grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
-  .tg-seg { flex-wrap: wrap; }
-  .tg-scale { display: flex; width: 100%; flex-wrap: nowrap; }
-  .tg-scale .tg-opt { flex: 1 1 0; min-width: 0; }
-  .tg-act--end { margin-left: 0; }
+  .tri { padding: 14px 16px 0; }
+  .tri-decide { margin: 0 -16px; padding: 10px 16px 12px; }
+  .tri-prop { grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
+  .tri-seg { flex-wrap: wrap; }
+  .tri-scale { display: flex; width: 100%; flex-wrap: nowrap; }
+  .tri-scale .tri-opt { flex: 1 1 0; min-width: 0; }
 }

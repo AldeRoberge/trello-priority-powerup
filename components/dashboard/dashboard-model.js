@@ -643,14 +643,15 @@
   /* ── Triage: the decisions, the one-click choices and the next step ─────────────────────── */
 
   // Where a captured card goes next. `key` is the letter that picks it (S, P, D, C, J, K and 1-3 belong to
-  // other shortcuts), shown on the button and in the card menu.
+  // other shortcuts), shown on the button and in the card menu. `group`: do (it will be done), park (not now,
+  // or not an action), drop (gone).
   var TRIAGE_EXITS = [
-    { id: 'accept', label: 'Accepter', icon: 'check', key: 'a', primary: true },
-    { id: 'backlog', label: 'Backlog', icon: 'circle-dashed', key: 'b' },
-    { id: 'waiting', label: 'En attente', icon: 'hourglass', key: 'e' },
-    { id: 'someday', label: 'Un jour', icon: 'calendar-off', key: 'u' },
-    { id: 'reference', label: 'Référence', icon: 'bookmark', key: 'r' },
-    { id: 'cancel', label: 'Annuler', icon: 'circle-x', key: 'x', danger: true },
+    { id: 'accept', label: 'Accepter', icon: 'check', key: 'a', group: 'do', primary: true },
+    { id: 'backlog', label: 'Backlog', icon: 'circle-dashed', key: 'b', group: 'do' },
+    { id: 'waiting', label: 'En attente', icon: 'hourglass', key: 'e', group: 'park' },
+    { id: 'someday', label: 'Un jour', icon: 'calendar-off', key: 'u', group: 'park' },
+    { id: 'reference', label: 'Référence', icon: 'bookmark', key: 'r', group: 'park' },
+    { id: 'cancel', label: 'Annuler', icon: 'circle-x', key: 'x', group: 'drop', danger: true },
   ];
 
   function exitById(id) {

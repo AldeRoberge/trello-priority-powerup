@@ -60,13 +60,15 @@ describe('TodayModel', () => {
       assert.equal(TM.inWords(120), 'dans 2 h');
     });
 
-    it('lists the hours of a time menu with their quarter hours', () => {
+    it('lists the times of a time menu, every half hour, on one level', () => {
       const slots = TM.timeSlots(6, 8);
-      assert.deepEqual(slots.map((s) => s.hour), [6, 7, 8]);
-      assert.equal(slots[1].label, '7 h');
-      assert.deepEqual(slots[1].children.map((c) => c.time), ['07:00', '07:15', '07:30', '07:45']);
-      assert.equal(slots[1].children[2].label, '7 h 30');
-      assert.equal(TM.timeSlots().length, 17);
+      assert.deepEqual(slots.map((s) => s.time), ['06:00', '06:30', '07:00', '07:30', '08:00', '08:30']);
+      assert.equal(slots[2].label, '7 h');
+      assert.equal(slots[3].label, '7 h 30');
+      assert.equal(slots[3].minute, at(7, 30));
+      assert.equal(TM.timeSlots().length, 34);
+      assert.equal(TM.timeSlots().pop().time, '22:30');
+      assert.deepEqual(TM.timeSlots(9, 9, 15).map((s) => s.time), ['09:00', '09:15', '09:30']);
     });
 
     it('snaps and rounds on the 5-minute grid', () => {
@@ -163,16 +165,29 @@ describe('TodayModel', () => {
       assert.deepEqual(out.blocks.map((x) => [x.id, x.start]), [['a', at(9)], ['b', at(10, 30)]]);
     });
 
+    it('fills the gap before a fixed block with shorter tasks the best one is too long for', () => {
+      const fixed = [{ start: at(9, 30), end: at(11) }];
+      const out = TM.flowPlan(fixed, [row('big', { estimate: 120 }), row('s1', { estimate: 15 }), row('s2', { estimate: 15 })], { start: at(9) });
+      assert.deepEqual(out.blocks.map((x) => [x.id, x.start]), [['s1', at(9)], ['s2', at(9, 15)], ['big', at(11)]]);
+    });
+
+    it('keeps best first when everything fits in order', () => {
+      const out = TM.flowPlan([{ start: at(12), end: at(13) }], [row('a', { estimate: 60 }), row('b', { estimate: 30 }), row('c', { estimate: 30 })], { start: at(9) });
+      assert.deepEqual(out.blocks.map((x) => x.id), ['a', 'b', 'c']);
+    });
+
     it('does not squeeze a task into a gap that is too short', () => {
       const fixed = [{ start: at(9, 15), end: at(10) }];
       const out = TM.flowPlan(fixed, [row('big', { estimate: 30 })], { start: at(9) });
       assert.equal(out.blocks[0].start, at(10));
     });
 
-    it('flags a block that ends after the end of the workday', () => {
-      const out = TM.flowPlan([], [row('a', { estimate: 60 })], { start: at(17, 30) });
-      assert.equal(out.blocks[0].late, true);
-      const early = TM.flowPlan([], [row('b', { estimate: 60 })], { start: at(9) });
+    it('flags a block that starts after the end of the workday, not one that merely ends after it', () => {
+      const evening = TM.flowPlan([], [row('a', { estimate: 60 })], { start: at(18) });
+      assert.equal(evening.blocks[0].late, true);
+      const edge = TM.flowPlan([], [row('b', { estimate: 60 })], { start: at(17, 30) });
+      assert.equal(edge.blocks[0].late, false);
+      const early = TM.flowPlan([], [row('c', { estimate: 60 })], { start: at(9) });
       assert.equal(early.blocks[0].late, false);
     });
 

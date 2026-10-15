@@ -328,6 +328,12 @@ describe('DashboardModel', () => {
       assert.deepEqual(DM.TRIAGE_EXITS.map((e) => e.id), ['accept', 'backlog', 'waiting', 'someday', 'reference', 'cancel']);
     });
 
+    it('the decisions come in groups: do it, park it, drop it', () => {
+      assert.deepEqual(DM.TRIAGE_EXITS.map((e) => e.group), ['do', 'do', 'park', 'park', 'park', 'drop']);
+      assert.equal(DM.TRIAGE_EXITS.filter((e) => e.primary).length, 1, 'one primary button');
+      assert.equal(DM.TRIAGE_EXITS.filter((e) => e.danger).map((e) => e.id).join(), 'cancel');
+    });
+
     it('exitForKey is case blind and ignores anything that is not one letter', () => {
       assert.equal(DM.exitForKey('A').id, 'accept');
       assert.equal(DM.exitForKey('e').id, 'waiting');
