@@ -6,7 +6,7 @@ Un Power-Up Trello pour décider quoi faire en premier : priorité urgence / imp
 >
 > *You always have so much to do and so little time? A system that works means less list-making, more living.*
 
-<img width="683" alt="Priorité paramétrable" src="https://github.com/user-attachments/assets/0da7cae6-93db-4483-8617-33133fa6750a" />
+<img width="683" alt="Priorité paramétrable" src="docs/img/priorite.png" />
 
 ## Fonctionnalités
 
@@ -20,7 +20,7 @@ Un Power-Up Trello pour décider quoi faire en premier : priorité urgence / imp
 
 | Gantt | Sous-tâches |
 |---|---|
-| <img src="https://github.com/user-attachments/assets/77dc05b3-f739-4e18-90ea-f505b07f8ca1" /> | <img src="https://github.com/user-attachments/assets/896ce1d3-6e74-4ad0-81e0-b03866aa6907" /> |
+| <img src="docs/img/gantt.png" /> | <img src="docs/img/sous-taches.png" /> |
 
 ## Démarrage rapide
 
@@ -71,4 +71,4 @@ L'interface est en français (Québec).
 
 ## Licence
 
-[GNU GPL v3](LICENSE)
+[MIT](LICENSE)
