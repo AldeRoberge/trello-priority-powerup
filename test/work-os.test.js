@@ -124,6 +124,61 @@ describe('WorkOS', () => {
     assert.equal(map.missing, undefined);
   });
 
+  describe('a task and its project', () => {
+    const goals = () => ({
+      nodes: [
+        { id: 'g', level: 'goal', name: 'Être lu' },
+        { id: 'o', level: 'objective', name: 'Lancer le site' },
+        { id: 'p', level: 'project', name: 'Page d’accueil' },
+        { id: 'q', level: 'project', name: 'Newsletter' },
+      ],
+      links: [
+        { from: 'o', to: 'g' },
+        { from: 'p', to: 'o' },
+        { from: 'card', to: 'p' },
+        { from: 'card', to: 'other' },
+      ],
+    });
+
+    it('projectOf finds the project above a task, and null for a free task', () => {
+      assert.equal(WO.projectOf(goals(), 'card').name, 'Page d’accueil');
+      assert.equal(WO.projectOf(goals(), 'free'), null);
+      assert.equal(WO.projectOf(null, 'card'), null);
+    });
+
+    it('withTaskProject moves a task to another project and keeps its dependencies', () => {
+      const next = WO.withTaskProject(goals(), 'card', 'q');
+      assert.equal(WO.projectOf(next, 'card').name, 'Newsletter');
+      assert.deepEqual(next.links.filter((l) => l.from === 'card' || l.to === 'card'), [{ from: 'card', to: 'other' }, { from: 'card', to: 'q' }]);
+      assert.equal(next.nodes.length, 4);
+    });
+
+    it('withTaskProject drops a direct link to a goal level so the task has one place', () => {
+      const g = goals();
+      g.links.push({ from: 'card', to: 'o' });
+      const next = WO.withTaskProject(g, 'card', 'q');
+      assert.deepEqual(next.links.filter((l) => l.from === 'card').map((l) => l.to), ['other', 'q']);
+    });
+
+    it('withTaskProject(null) detaches, and only a project can be chosen', () => {
+      const none = WO.withTaskProject(goals(), 'card', null);
+      assert.equal(WO.projectOf(none, 'card'), null);
+      assert.deepEqual(none.links.filter((l) => l.from === 'card'), [{ from: 'card', to: 'other' }]);
+      const notProject = WO.withTaskProject(goals(), 'free', 'o');
+      assert.deepEqual(notProject.links.filter((l) => l.from === 'free'), []);
+      const fresh = WO.withTaskProject(goals(), 'free', 'q');
+      assert.equal(WO.projectOf(fresh, 'free').id, 'q');
+    });
+
+    it('withTaskProject never changes the data it was given, and copes with an empty map', () => {
+      const g = goals();
+      const before = JSON.stringify(g);
+      WO.withTaskProject(g, 'card', 'q');
+      assert.equal(JSON.stringify(g), before);
+      assert.deepEqual(WO.withTaskProject(null, 'card', 'q'), { nodes: [], links: [] });
+    });
+  });
+
   it('a measured result with no date, or an old date, is flagged immobile', () => {
     const fresh = { metricLabel: '3 / 10', metricUpdated: '2026-10-12' };
     const old = { metricLabel: '3 / 10', metricUpdated: '2026-09-01' };

@@ -1,11 +1,11 @@
 /*
  * Role: UI of the Dashboard view, a Linear-style workspace:
- *   Ingest        type tasks (one per line) → cards land in the triage list; optional "Demander à l'IA"
- *   Triage        what the item is, then priority / estimate / date: accept, backlog, reference, waiting, someday, cancel
+ *   Triage        the list of captured cards and, beside it, TriageUI: what the card is, its priority / estimate / day / place,
+ *                 then the decision: accept, backlog, waiting, someday, reference, cancel (an undo stays one click away)
  *   Orchestrateur zoom glides from minutes to Vague (wheel eases, columns stretch, the instant under the cursor stays). Each column creates a task in place.
  *   Aujourd'hui   focus list, the hour-by-hour timeline, and the revue (triage, next step, waiting, work in progress, project outcome).
  * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel + WorkOS (pure).
- * Keys: 1-4 section · C capture · J/K move · A accept · B backlog · X cancel (Triage).
+ * Keys: 1-3 section · J/K move · A accept · B backlog · E waiting · U someday · R reference · X cancel (Triage).
  * Right-click a card: triage exits, day, fields, open, move, archive (same menu in every section).
  * Icons: Tabler webfont.
  */
@@ -22,14 +22,7 @@
     { key: 'orchestrator', label: 'Orchestrateur', icon: 'calendar-event', hint: '2' },
     { key: 'today', label: 'Aujourd’hui', icon: 'sun', hint: '3' },
   ];
-  var URGENCIES = [
-    ['aucun', 'Aucune'],
-    ['bientot', 'Bientôt'],
-    ['assez-vite', 'Assez vite'],
-    ['vite', 'Vite'],
-    ['au-plus-vite', 'Au plus vite'],
-  ];
-  var ESTIMATES = [0, 15, 30, 60, 120, 240];
+  var URGENCIES = global.DashboardModel.URGENCIES;
   var QUICK_ESTIMATES = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 0];
   var DAYS_FR =['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   var HORIZON = 7;
@@ -112,21 +105,26 @@
     var open = !done && !canceled;
     var items = [];
 
+    // The decisions: words, icon and key come from DashboardModel.TRIAGE_EXITS, the keys only work in the triage.
+    function exitEntry(id, extra) {
+      var ex = DM().exitById(id);
+      return Object.assign({ id: id, label: ex.label, icon: ex.icon, group: 'Trier', hint: triage ? ex.key.toUpperCase() : undefined, danger: !!ex.danger }, extra || {});
+    }
     if (triage) {
-      items.push({ id: 'accept', label: 'Accepter', icon: 'check', group: 'Trier', hint: 'A' });
-      items.push({ id: 'backlog', label: 'Backlog', icon: 'circle-dashed', group: 'Trier', hint: 'B' });
+      items.push(exitEntry('accept'));
+      items.push(exitEntry('backlog'));
     }
     if (open) {
-      items.push({ id: 'reference', label: 'Référence', icon: 'bookmark', group: 'Trier' });
+      items.push(exitEntry('reference'));
       var names = ctx.waitingNames || [];
       var waitKids = names.map(function (n) {
         return { id: 'wait:' + n, label: n, icon: 'user', checked: row.waiting === n };
       });
       if (triage) waitKids.push({ id: 'wait:', label: names.length ? 'Autre…' : 'Choisir…', icon: 'pencil' });
-      if (waitKids.length) items.push({ id: 'waiting', label: 'En attente', icon: 'hourglass', group: 'Trier', children: waitKids });
-      items.push({ id: 'someday', label: 'Un jour', icon: 'calendar-off', group: 'Trier' });
+      if (waitKids.length) items.push(exitEntry('waiting', { children: waitKids }));
+      items.push(exitEntry('someday'));
     }
-    if (triage) items.push({ id: 'cancel', label: 'Annuler', icon: 'circle-x', group: 'Trier', hint: 'X', danger: true });
+    if (triage) items.push(exitEntry('cancel'));
     if (open && !triage) items.push({ id: 'complete', label: 'Terminer', icon: 'circle-check', group: 'Trier' });
     if (done) items.push({ id: 'reopen', label: 'Rouvrir', icon: 'rotate', group: 'Trier' });
 
@@ -243,6 +241,8 @@
       projects: [],
       places: {},
       selected: null, // triage selection (card id)
+      undo: null, // takes back the last decision (a function while it can be)
+      goals: { nodes: [], links: [] }, // the Mindmap goal map: projects and the tasks under them
       capacity: DT().getCapacity(),
       scale: DT().getScale ? DT().getScale() : 'day',
       zoomP: 0, // pixels per day; 0 means "fit the saved scale" until the user zooms
@@ -288,7 +288,8 @@
     root.appendChild(shell);
 
     /* ── Status ────────────────────────────────────────────────────── */
-    function setStatus(msg, kind, keepMs) {
+    /** action: { label, run } adds a button after the message (an undo). */
+    function setStatus(msg, kind, keepMs, action) {
       state.status = msg || '';
       state.statusKind = kind || '';
       els.status.className = 'db-status' + (kind ? ' is-' + kind : '');
@@ -297,6 +298,9 @@
       if (kind === 'busy') els.status.appendChild(icon('refresh', 'db-spin'));
       if (kind === 'error') els.status.appendChild(icon('alert-triangle'));
       els.status.appendChild(document.createTextNode(msg || ''));
+      if (action && typeof action.run === 'function') {
+        els.status.appendChild(h('button', { class: 'db-undo', type: 'button', onclick: function () { action.run(); } }, [icon('arrow-back-up'), document.createTextNode(action.label)]));
+      }
       clearTimeout(statusTimer);
       if (msg && kind !== 'error' && kind !== 'busy') {
         statusTimer = setTimeout(function () { setStatus('', ''); }, keepMs || 2500);
@@ -355,6 +359,24 @@
         fail(err);
         reload({ quiet: true });
       });
+    }
+
+    // The writes of one card run one after the other: each reads the card's stored values and merges its own,
+    // so two quick clicks (an impact, then an urgency) must not read the same old values.
+    var queues = {};
+
+    /** Queued write for a card: factory() starts the Trello call once the card's previous write is over. opts: { ok, then(result) }. */
+    function save(row, factory, opts) {
+      opts = opts || {};
+      var prev = queues[row.id] || Promise.resolve();
+      var run = prev.then(factory, factory);
+      queues[row.id] = run.then(function () {}, function () {});
+      return write(run.then(function (res) {
+        if (typeof opts.then === 'function') {
+          try { opts.then(res); } catch (e) { /* a view hook must not fail the write */ }
+        }
+        return res;
+      }), opts.ok);
     }
 
     function scheduleReload() {
@@ -423,13 +445,6 @@
     }
 
     /* ── Shared row pieces ─────────────────────────────────────────── */
-    function statusIcon(row) {
-      var l = state.lists.filter(function (x) { return x.id === row.listId; })[0];
-      var i = icon(l ? l.icon : 'circle-dotted', 'db-st');
-      if (l) i.style.color = l.color;
-      return i;
-    }
-
     /** Clickable priority badge: opens the shared priority editor hanging from it. */
     function prioBadge(row, askIfEmpty) {
       var has = typeof row.priority === 'number';
@@ -457,8 +472,25 @@
 
     function setEstimate(row, minutes) {
       row.estimate = minutes;
-      write(DT().saveEstimate(t, row.id, minutes));
+      save(row, function () { return DT().saveEstimate(t, row.id, minutes); });
       render();
+    }
+
+    /** The duration menu (the same everywhere in the app) hanging from `anchor`. */
+    function estimateMenu(row, anchor) {
+      var CM = global.ContextMenu;
+      if (!CM || typeof CM.show !== 'function' || !anchor) return;
+      var r = anchor.getBoundingClientRect();
+      var items = QUICK_ESTIMATES.map(function (m) {
+        return {
+          id: 'est:' + m,
+          label: m ? DM().formatMinutes(m) : 'Non estimée',
+          icon: m ? 'clock' : 'clock-off',
+          checked: (row.estimate || 0) === m,
+          action: function () { setEstimate(row, m); },
+        };
+      });
+      CM.show({ clientX: r.left, clientY: r.bottom + 4 }, items);
     }
 
     /** Clickable estimate chip: opens a duration menu (same menu everywhere in the app). */
@@ -470,19 +502,7 @@
         title: 'Cliquer pour changer l’estimation',
         onclick: function (e) {
           e.stopPropagation();
-          var CM = global.ContextMenu;
-          if (!CM || typeof CM.show !== 'function') return;
-          var r = chip.getBoundingClientRect();
-          var items = QUICK_ESTIMATES.map(function (m) {
-            return {
-              id: 'est:' + m,
-              label: m ? DM().formatMinutes(m) : 'Non estimée',
-              icon: m ? 'clock' : 'clock-off',
-              checked: (row.estimate || 0) === m,
-              action: function () { setEstimate(row, m); },
-            };
-          });
-          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, items);
+          estimateMenu(row, chip);
         },
       }, [icon('clock'), document.createTextNode(empty ? 'Estimer…' : DM().formatMinutes(row.estimate))]);
       return chip;
@@ -590,11 +610,6 @@
       };
     }
 
-    function typedField(label) {
-      var el = els.main.querySelector('[aria-label="' + label + '"]');
-      return el ? String(el.value || '').replace(/\s+/g, ' ').trim() : '';
-    }
-
     function advanceSelection(row) {
       if (!row || state.selected !== row.id) return;
       var q = DM().triageQueue(viewRows());
@@ -611,56 +626,108 @@
       row.statutKey = list.category;
     }
 
-    function exitMove(row, cats, label, withStep) {
+    /* The decisions. Each one acts at once and can be taken back: a button in the status bar, or Ctrl+Z. */
+    function snapshotOf(row, extra) {
+      return Object.assign({
+        id: row.id,
+        name: row.name,
+        listId: row.listId,
+        pos: row.pos,
+        triage: row.statutKey === 'triage',
+        fullDesc: row.fullDesc || row.desc || '',
+        local: {
+          waiting: row.waiting || '',
+          waitingSince: row.waitingSince || '',
+          start: row.start || '',
+          due: row.due || '',
+          startTime: row.startTime || '',
+          dueTime: row.dueTime || '',
+          dueVague: row.dueVague || '',
+          dueMode: row.dueMode || '',
+        },
+      }, extra || {});
+    }
+
+    function offerUndo(row, snap, message) {
+      function undo() {
+        if (state.undo !== undo) return;
+        state.undo = null;
+        // A reload may have replaced the card since: act on the current one.
+        var cur = state.rows.filter(function (r) { return r.id === snap.id; })[0] || row;
+        if (state.rows.indexOf(cur) < 0) state.rows.push(cur);
+        applyList(cur, state.lists.filter(function (l) { return l.id === snap.listId; })[0]);
+        cur.pos = snap.pos;
+        cur.fullDesc = snap.fullDesc;
+        Object.assign(cur, snap.local);
+        if (snap.triage) {
+          state.selected = snap.id;
+          state.section = 'triage';
+        }
+        save(cur, function () { return DT().restoreTriage(t, snap); }, { ok: '« ' + snap.name + ' » ' + (snap.triage ? 'remise en triage' : 'remise en place') });
+        render();
+      }
+      state.undo = undo;
+      setStatus(message, 'ok', 8000, { label: snap.triage ? 'Remettre en triage' : 'Défaire', run: undo });
+    }
+
+    function exitMove(row, cats, label) {
       var list = DT().listFor(state.lists, cats);
       if (!list) return setStatus('Aucune liste « ' + label + ' » : définissez les Statuts du tableau.', 'error');
-      var step = withStep && state.selected === row.id ? typedField('Prochaine action') : '';
+      var snap = snapshotOf(row);
       advanceSelection(row);
       applyList(row, list);
-      var job = step && DT().saveNextStep ? DT().saveNextStep(t, row.id, step) : Promise.resolve();
-      write(Promise.resolve(job).then(function () { return DT().moveToCategory(t, row, state.lists, cats); }));
-      setStatus('« ' + row.name + ' » → ' + list.name, 'ok');
+      save(row, function () { return DT().moveToCategory(t, row, state.lists, cats); });
+      offerUndo(row, snap, '« ' + row.name + ' » → ' + list.name);
       render();
     }
 
     function exitCancel(row) {
+      var snap = snapshotOf(row, { archived: !DT().listFor(state.lists, ['canceled']) });
       advanceSelection(row);
       state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
-      write(DT().cancel(t, row, state.lists));
-      setStatus('« ' + row.name + ' » annulée', 'ok');
+      save(row, function () { return DT().cancel(t, row, state.lists); });
+      offerUndo(row, snap, '« ' + row.name + ' » annulée');
       render();
     }
 
     function exitReference(row) {
+      var snap = snapshotOf(row, { archived: !DT().listFor(state.lists, ['canceled']) });
       advanceSelection(row);
       state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
-      write(DT().fileReference(t, row).then(function () { return DT().cancel(t, row, state.lists); }));
-      setStatus('« ' + row.name + ' » dans Références', 'ok');
+      save(row, function () {
+        return DT().fileReference(t, row).then(function (ref) {
+          snap.reference = ref;
+          return DT().cancel(t, row, state.lists);
+        });
+      });
+      offerUndo(row, snap, '« ' + row.name + ' » dans Références');
       render();
     }
 
     function exitWait(row, name) {
       var list = DT().listFor(state.lists, ['backlog', 'unstarted']);
       if (!list) return setStatus('Aucune liste « Backlog » : définissez les Statuts du tableau.', 'error');
+      var snap = snapshotOf(row, { restoreDesc: true });
       advanceSelection(row);
       row.waiting = name;
       applyList(row, list);
-      write(DT().setWaiting(t, row, state.lists, name));
-      setStatus('En attente de ' + name, 'ok');
+      save(row, function () { return DT().setWaiting(t, row, state.lists, name); });
+      offerUndo(row, snap, 'En attente de ' + name);
       render();
     }
 
     function exitSomeday(row) {
       var list = DT().listFor(state.lists, ['backlog', 'unstarted']);
       if (!list) return setStatus('Aucune liste « Backlog » : définissez les Statuts du tableau.', 'error');
+      var snap = snapshotOf(row, { restoreDates: true });
       advanceSelection(row);
       row.dueVague = 'eventuellement';
       row.due = '';
       row.start = '';
       row.dueMode = 'vague';
       applyList(row, list);
-      write(DT().setSomeday(t, row, state.lists));
-      setStatus('Un jour', 'ok');
+      save(row, function () { return DT().setSomeday(t, row, state.lists); });
+      offerUndo(row, snap, '« ' + row.name + ' » → Un jour');
       render();
     }
 
@@ -672,10 +739,11 @@
     }
 
     function exitArchive(row) {
+      var snap = snapshotOf(row, { archived: true });
       advanceSelection(row);
       state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
-      write(global.TableTrello.archiveCard(t, row.id));
-      setStatus('« ' + row.name + ' » archivée', 'ok');
+      save(row, function () { return global.TableTrello.archiveCard(t, row.id); });
+      offerUndo(row, snap, '« ' + row.name + ' » archivée');
       render();
     }
 
@@ -722,14 +790,81 @@
       clip.writeText(url).then(function () { setStatus('Lien copié', 'ok'); }, function () {});
     }
 
-    function focusWho(row) {
-      state.selected = row.id;
-      state.section = 'triage';
+    /** "En attente de qui ?": one search box over the people of the board and the names already waited on; a new name is taken as typed. */
+    function askWaiting(row, anchor) {
+      if (!row || !global.LinearPick) return;
+      var from = anchor && anchor.getBoundingClientRect ? anchor : els.main.querySelector('[data-exit="waiting"]') || els.main;
+      global.LinearPick.open({
+        anchor: from,
+        placeholder: 'En attente de…',
+        digits: false,
+        current: row.waiting || '',
+        items: namesForWaiting().map(function (n) { return { id: n, label: n, icon: 'user' }; }),
+        create: function (q) { return { id: q, label: 'En attente de « ' + q + ' »', icon: 'user-plus' }; },
+        onPick: function (it) { exitWait(row, it.id); },
+      });
+    }
+
+    function byName(a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' });
+    }
+
+    /** The project of a card, as the Mindmap goal map has it: { text, title } for the chip of the pane, or null. */
+    function projectOfRow(row) {
+      var p = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
+      if (!p) return null;
+      var place = state.places && state.places[row.id];
+      return { text: p.name, title: place ? WO().placeLabel(place) : p.name };
+    }
+
+    /** The card joins a project (null: leaves it). It is saved in the goal map of the Mindmap; a card may also stay free. */
+    function setProject(row, projectId) {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG || typeof GG.save !== 'function' || !WO() || !WO().withTaskProject) return setStatus('Projets indisponibles ici.', 'error');
+      var next = WO().withTaskProject(state.goals, row.id, projectId);
+      state.goals = next;
+      state.places = WO().places(next);
       render();
-      setTimeout(function () {
-        var input = els.main.querySelector('[aria-label="En attente de"]');
-        if (input) input.focus();
-      }, 0);
+      GG.save(t, next).then(function (saved) {
+        state.goals = saved;
+        state.places = WO().places(saved);
+        setStatus(projectId ? 'Projet enregistré' : 'Projet retiré', 'ok');
+      }, function (err) {
+        if (err && err.reason === 'conflict') setStatus('Les projets ont changé ailleurs : rechargés.', 'error');
+        else fail(err);
+        reload({ quiet: true });
+      });
+    }
+
+    function pickProject(row, anchor) {
+      var projects = (state.projects || []).slice().sort(byName);
+      if (!projects.length) return setStatus('Aucun projet pour l’instant : créez-en un dans la Mindmap.', '', 4500);
+      if (!global.LinearPick) return;
+      var cur = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
+      var items = projects.map(function (p) { return { id: p.id, label: p.name + (p.outcome ? ' · ' + p.outcome : ''), icon: 'stack-2' }; });
+      if (cur) items.unshift({ id: '', label: 'Aucun projet', icon: 'circle-x' });
+      global.LinearPick.open({
+        anchor: anchor,
+        placeholder: 'Choisir un projet…',
+        digits: false,
+        current: cur ? cur.id : '',
+        items: items,
+        onPick: function (it) { setProject(row, it.id || null); },
+      });
+    }
+
+    /** People, places and labels of a card: the shared picker; the board reloads once it closes. */
+    function openEntities(row, kind, anchor) {
+      var CE = global.CardEntities;
+      if (!CE) return setStatus('Éditeur indisponible', 'error');
+      CE.open(kind, {
+        t: t,
+        rec: row,
+        anchor: anchor,
+        onSaved: function () { setStatus('Enregistré', 'ok'); },
+        onError: function (m) { setStatus(m, 'error'); },
+        onClose: function (changed) { if (changed) reload({ quiet: true }); },
+      });
     }
 
     function createCard() {
@@ -749,8 +884,8 @@
     }
 
     function perform(row, id, anchor) {
-      if (id === 'accept') return exitMove(row, ['unstarted', 'backlog'], 'À faire', true);
-      if (id === 'backlog') return exitMove(row, ['backlog', 'unstarted'], 'Backlog', true);
+      if (id === 'accept') return exitMove(row, ['unstarted', 'backlog'], 'À faire');
+      if (id === 'backlog') return exitMove(row, ['backlog', 'unstarted'], 'Backlog');
       if (id === 'cancel') return exitCancel(row);
       if (id === 'reference') return exitReference(row);
       if (id === 'someday') return exitSomeday(row);
@@ -776,16 +911,7 @@
       if (id === 'new-card') return createCard();
       if (id === 'reload') return reload();
       if (id.indexOf('go:') === 0) return go(id.slice(3));
-      if (id === 'waiting-go' || id === 'wait:') {
-        var typed = id === 'waiting-go' ? typedField('En attente de') : '';
-        if (!typed) {
-          var input = els.main.querySelector('[aria-label="En attente de"]');
-          if (input && row && state.section === 'triage' && state.selected === row.id) { input.focus(); return; }
-          if (row) focusWho(row);
-          return;
-        }
-        return exitWait(row, typed);
-      }
+      if (id === 'waiting' || id === 'wait:') return askWaiting(row, anchor);
       if (id.indexOf('wait:') === 0) return exitWait(row, id.slice(5));
       if (id.indexOf('plan:') === 0) return plan(row, id.slice(5));
       if (id.indexOf('vague:') === 0) return plan(row, '', id.slice(6));
@@ -794,7 +920,15 @@
         var lab = uid;
         URGENCIES.forEach(function (u) { if (u[0] === uid) lab = u[1]; });
         row.urgency = lab;
-        write(DT().savePriority(t, row.id, { empressement: uid }));
+        save(row, function () { return DT().savePriority(t, row.id, { empressement: uid }); }, {
+          then: function (d) {
+            if (!d) return;
+            row.priority = d.priority;
+            row.tier = d.tier;
+            row.tierI = d.tierI;
+            if (!renderUnlessTyping()) refreshRow(row);
+          },
+        });
         setStatus('Urgence modifiée', 'ok');
         render();
         return;
@@ -838,111 +972,106 @@
     }
 
     /* ── 2. Triage ─────────────────────────────────────────────────── */
+    /** One card of the list on the left: its title, the line under it (next step, else the note) and its score. */
+    function triageRow(r, selected) {
+      var sub = (WO() && WO().stepText(r)) || DM().snippet(r.desc, 90);
+      return h('div', {
+        class: 'db-row tg-row' + (selected ? ' is-sel' : ''),
+        'data-id': r.id,
+        'data-card': r.id,
+        onclick: function () { state.selected = r.id; render(); },
+      }, [
+        h('span', { class: 'db-row-main' }, [
+          h('span', { class: 'db-row-name', text: r.name }),
+          sub ? h('span', { class: 'db-step', text: sub }) : null,
+        ]),
+        prioBadge(r),
+      ]);
+    }
+
+    /** Draws the page again unless a text field has the caret (a redraw would drop it). Tells whether it did. */
+    function renderUnlessTyping() {
+      var a = document.activeElement;
+      if (a && els.main.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+      render();
+      return true;
+    }
+
+    /** Draws one row of the list again (its title, next step or score changed) without touching the rest of the page. */
+    function refreshRow(row) {
+      var cur = els.main.querySelector('.db-triage-list .db-row[data-id="' + row.id + '"]');
+      if (cur) cur.replaceWith(triageRow(row, cur.classList.contains('is-sel')));
+    }
+
+    /** What a decision does, for its tooltip. */
+    function exitHint(id) {
+      var ex = DM().exitById(id);
+      if (!ex) return '';
+      function into(cats) {
+        var l = DT().listFor(state.lists, cats);
+        return l ? 'va dans « ' + l.name + ' »' : '';
+      }
+      var what = {
+        accept: into(['unstarted', 'backlog']),
+        backlog: into(['backlog', 'unstarted']),
+        waiting: 'reste au backlog, avec le nom de la personne',
+        someday: 'reste au backlog, sans date',
+        reference: 'garde une ligne dans le document « Références »',
+        cancel: 'annule la carte',
+      }[id] || '';
+      return ex.label + ' (' + ex.key.toUpperCase() + ')' + (what ? ' : ' + what : '');
+    }
+
+    /** Everything the pane on the right needs from this page (see triage-ui.js). */
+    function triageHost() {
+      return {
+        t: t,
+        today: today,
+        save: save,
+        perform: perform,
+        openCard: openCard,
+        openEditor: openEditor,
+        openEntities: openEntities,
+        pickProject: pickProject,
+        estimateMenu: estimateMenu,
+        plan: function (row, iso) { plan(row, iso); },
+        projectOf: projectOfRow,
+        refreshRow: refreshRow,
+        hintOf: exitHint,
+        dayLabel: function (iso) { return dayLabel(iso, today); },
+        dayText: function (row) {
+          return row.dueVague ? (VAGUE_SHORT[row.dueVague] || row.dueVague) : dayLabel(DM().plannedDay(row), today);
+        },
+        dayIcon: function (row) {
+          return row.dueVague ? 'calendar-time' : dayIconName(DM().plannedDay(row), today);
+        },
+        cardMenu: function (row, anchor) {
+          var CM = global.ContextMenu;
+          if (!CM || typeof CM.show !== 'function' || !anchor) return;
+          var r = anchor.getBoundingClientRect();
+          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, withActions(row, menuEntries(row, menuCtx()), anchor));
+        },
+      };
+    }
+
     function renderTriage() {
       var q = DM().triageQueue(viewRows());
       if (!q.length) {
+        var none = !hasTriage() ? 'Aucune liste de triage sur ce tableau.' : state.filter ? 'Aucune carte ne correspond.' : 'Boîte de triage vide. Bien joué.';
         els.main.appendChild(h('div', { class: 'db-page' }, [
-          pageHead('Triage', 'Rien à trier.'),
+          pageHead('Triage'),
           hasTriage() ? null : inboxBanner(),
-          h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: hasTriage() ? 'Boîte de triage vide. Bien joué.' : 'Aucune liste de triage sur ce tableau.' }),]),
+          h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: none })]),
         ]));
         return;
       }
       var sel = q.filter(function (r) { return r.id === state.selected; })[0] || q[0];
       state.selected = sel.id;
-      var list = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) {
-        return h('div', { class: 'db-row' + (r.id === sel.id ? ' is-sel' : ''), 'data-id': r.id, 'data-card': r.id, onclick: function () { state.selected = r.id; render(); } }, [
-          statusIcon(r), h('span', { class: 'db-row-name', text: r.name }), prioBadge(r),
-        ]);
-      }));
+      var list = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === sel.id); }));
       els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
-        h('div', { class: 'db-split-l' }, [pageHead('Triage', q.length + (q.length > 1 ? ' cartes à définir' : ' carte à définir')), list]),
-        h('div', { class: 'db-split-r' }, [triageDetail(sel)]),
+        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('span', { class: 'db-badge', text: String(q.length) })), list]),
+        h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [global.TriageUI.detail(sel, triageHost())]),
       ]));
-    }
-
-    function triageDetail(row) {
-      var nextStep = h('input', {
-        class: 'db-input',
-        type: 'text',
-        placeholder: 'Prochaine action',
-        'aria-label': 'Prochaine action',
-        onkeydown: function (e) { e.stopPropagation(); },
-      });
-      var who = h('input', {
-        class: 'db-input',
-        type: 'text',
-        placeholder: 'Qui ?',
-        'aria-label': 'En attente de',
-        onkeydown: function (e) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
-      });
-      var impact = h('input', { type: 'range', min: '0', max: '10', step: '1', value: String(row.impact == null ? 5 : row.impact), 'aria-label': 'Impact' });
-      var impactVal = h('span', { class: 'db-muted', text: impact.value });
-      impact.addEventListener('input', function () { impactVal.textContent = impact.value; });
-      impact.addEventListener('change', function () {
-        row.impact = Number(impact.value);
-        write(DT().savePriority(t, row.id, { impact: row.impact }));
-      });
-      var urgency = h('select', {
-        class: 'db-select',
-        'aria-label': 'Urgence',
-        onchange: function (e) { row.urgency = e.target.selectedOptions[0].textContent; write(DT().savePriority(t, row.id, { empressement: e.target.value })); },
-      }, URGENCIES.map(function (u) { return h('option', { value: u[0], selected: row.urgency === u[1], text: u[1] }); }));
-      var est = h('select', {
-        class: 'db-select',
-        'aria-label': 'Estimation',
-        onchange: function (e) { row.estimate = Number(e.target.value); write(DT().saveEstimate(t, row.id, row.estimate)); },
-      }, ESTIMATES.map(function (m) { return h('option', { value: String(m), selected: (row.estimate || 0) === m, text: m ? DM().formatMinutes(m) : 'Non estimée' }); }));
-      var date = h('input', {
-        class: 'db-date',
-        type: 'date',
-        value: row.due || '',
-        'aria-label': 'Jour prévu',
-        onchange: function (e) {
-          var iso = e.target.value;
-          row.due = iso; row.start = iso;
-          write(DT().planDay(t, row.id, iso));
-          renderSide();
-        },
-      });
-      return h('div', { class: 'db-detail', 'data-card': row.id }, [
-        h('div', { class: 'db-detail-head' }, [
-          statusIcon(row),
-          h('input', {
-            class: 'db-name',
-            type: 'text',
-            value: row.name,
-            'aria-label': 'Titre',
-            onkeydown: function (e) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); },
-            onchange: function (e) {
-              var v = e.target.value.trim();
-              if (!v) { e.target.value = row.name; return; }
-              row.name = v;
-              write(global.TableTrello.saveName(t, row.id, v));
-            },
-          }),
-          h('button', { class: 'db-icon-btn', type: 'button', title: 'Ouvrir la carte', onclick: function () { openCard(row); } }, [icon('external-link')]),
-        ]),
-        field('Impact', h('div', { class: 'db-range' }, [impact, impactVal])),
-        field('Urgence', urgency),
-        field('Estimation', est),
-        field('Jour prévu', date),
-        h('div', { class: 'db-actions db-actions--exits' }, [nextStep, who]),
-        h('div', { class: 'db-actions db-actions--detail' }, [
-          h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: function () { perform(row, 'accept'); } }, [icon('check'), document.createTextNode('Accepter'), h('kbd', { text: 'A' })]),
-          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'backlog'); } }, [icon('circle-dashed'), document.createTextNode('Backlog'), h('kbd', { text: 'B' })]),
-          h('button', { class: 'db-btn db-btn--danger', type: 'button', onclick: function () { perform(row, 'cancel'); } }, [icon('circle-x'), document.createTextNode('Annuler'), h('kbd', { text: 'X' })]),
-        ]),
-        h('div', { class: 'db-actions db-actions--exits' }, [
-          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'reference'); } }, [icon('file-text'), document.createTextNode('Référence')]),
-          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'waiting-go'); } }, [icon('hourglass'), document.createTextNode('En attente')]),
-          h('button', { class: 'db-btn', type: 'button', onclick: function () { perform(row, 'someday'); } }, [icon('calendar-off'), document.createTextNode('Un jour')]),
-        ]),
-      ]);
-    }
-
-    function field(label, control) {
-      return h('label', { class: 'db-field' }, [h('span', { class: 'db-field-l', text: label }), control]);
     }
 
     /** List a task created in the orchestrator lands in, so it shows on the board (not in triage). */
@@ -1011,10 +1140,11 @@
       row.due = vague ? '' : iso;
       row.startTime = hhmm;
       row.dueTime = hhmm;
-      var writePlan = DT().planAt
-        ? DT().planAt(t, row.id, iso, vague || '', hhmm)
-        : DT().planDay(t, row.id, iso);
-      write(writePlan);
+      save(row, function () {
+        return DT().planAt
+          ? DT().planAt(t, row.id, iso, vague || '', hhmm)
+          : DT().planDay(t, row.id, iso);
+      });
       render();
     }
 
@@ -1876,12 +2006,24 @@
       if (prevDays) daysScroll = prevDays.scrollLeft;
       var colScroll = [];
       els.main.querySelectorAll('.db-col-body').forEach(function (b) { colScroll.push(b.scrollTop); });
+      // The triage list and pane keep their scroll, and the control that had the focus gets it back:
+      // a click must never feel like a reload.
+      var kept = {};
+      els.main.querySelectorAll('[data-keep]').forEach(function (n) { kept[n.getAttribute('data-keep')] = n.scrollTop; });
+      var had = document.activeElement;
+      var focusKey = had && had !== document.body && els.main.contains(had) ? had.getAttribute('data-fk') : null;
       els.main.textContent = '';
       renderSide();
       if (state.section === 'triage') renderTriage();
       else if (state.section === 'orchestrator') renderOrchestrator();
       else renderToday();
       els.main.scrollTop = keepScroll;
+      els.main.querySelectorAll('[data-keep]').forEach(function (n) {
+        var top = kept[n.getAttribute('data-keep')];
+        if (top != null) n.scrollTop = top;
+      });
+      var sel = state.section === 'triage' ? els.main.querySelector('.db-triage-list .is-sel') : null;
+      if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
       var bodies = els.main.querySelectorAll('.db-col-body');
       for (var i = 0; i < bodies.length && i < colScroll.length; i++) bodies[i].scrollTop = colScroll[i];
       var daysNow = els.main.querySelector('.db-board-days');
@@ -1890,25 +2032,36 @@
         var addInput = els.main.querySelector('.db-add-input');
         if (addInput && document.activeElement !== addInput) addInput.focus({ preventScroll: true });
       }
+      // A decision button is never given back (a held key would decide the next card too); the page takes
+      // the focus then, so the keys keep working.
+      var back = focusKey && focusKey.indexOf('exit:') !== 0 ? els.main.querySelector('[data-fk="' + focusKey + '"]') : null;
+      var now = document.activeElement;
+      if (back) back.focus({ preventScroll: true });
+      else if (!now || now === document.body) shell.focus({ preventScroll: true });
     }
 
     shell.addEventListener('keydown', function (e) {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       var tag = (e.target && e.target.tagName) || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      // Ctrl+Z takes the last decision back (a text field keeps its own undo).
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing && state.undo) {
+        e.preventDefault();
+        return state.undo();
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (typing) return;
       var k = e.key.toLowerCase();
       var idx = '123'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (state.section !== 'triage') return;
       var q = DM().triageQueue(viewRows());
       var i = q.map(function (r) { return r.id; }).indexOf(state.selected);
-      if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); if (q[i + 1]) { state.selected = q[i + 1].id; render(); } }
-      else if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); if (q[i - 1]) { state.selected = q[i - 1].id; render(); } }
-      else if (k === 'a' || k === 'b' || k === 'x') {
+      if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); if (q[i + 1]) { state.selected = q[i + 1].id; render(); } return; }
+      if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); if (q[i - 1]) { state.selected = q[i - 1].id; render(); } return; }
+      var ex = DM().exitForKey(e.key);
+      if (ex && q[i]) {
         e.preventDefault();
-        var cls = k === 'a' ? '.db-btn--primary' : k === 'x' ? '.db-btn--danger' : '.db-actions--detail .db-btn:nth-child(2)';
-        var btn = els.main.querySelector('.db-actions--detail ' + cls) || els.main.querySelector(cls);
-        if (btn) btn.click();
+        perform(q[i], ex.id, els.main.querySelector('[data-exit="' + ex.id + '"]'));
       }
     });
 
@@ -1937,6 +2090,7 @@
         var goals = res[1][0] || { nodes: [], links: [] };
         var objectifs = (res[1][1] && res[1][1][0]) || [];
         var metrics = (res[1][1] && res[1][1][1]) || [];
+        state.goals = goals;
         state.projects = WO() ? WO().projectChain(goals, state.rows, metrics, objectifs) : [];
         state.places = WO() ? WO().places(goals) : {};
         // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Triage.
@@ -1951,13 +2105,15 @@
       });
     }
 
-    // Linear-style keys on a triage row: S statut, P urgence, D échéance, C nouvelle carte (shared with Tableau and Kanban).
+    // Linear-style keys on the card of the pane: S statut, P urgence, D échéance, C nouvelle carte (shared with Tableau and Kanban).
+    // The pane is the card that is selected, so the keys never act on a row the pointer merely rests on.
     if (global.LinearKeys) {
       global.LinearKeys.attach({
         t: t,
-        hoverSelector: '.db-row[data-id]',
-        idOf: function (el) { return el.getAttribute('data-id'); },
-        selectedId: function () { return state.selected || ''; },
+        hoverSelector: '.tg[data-card]',
+        idOf: function (el) { return el.getAttribute('data-card'); },
+        selectedId: function () { return state.section === 'triage' ? state.selected || '' : ''; },
+        anchorFor: function (id) { return els.main.querySelector('.tg[data-card="' + id + '"] .tg-top'); },
         row: function (id) { return state.rows.filter(function (r) { return r.id === id; })[0] || null; },
         lists: function () { return state.lists; },
         setStatus: function (row, list) {
@@ -1969,11 +2125,7 @@
           }, fail);
         },
         setUrgency: function (row, urgencyId) {
-          setStatus('Enregistrement…', 'busy');
-          global.LinearKeys.saveUrgency(t, row.id, urgencyId).then(function () {
-            setStatus('Urgence modifiée', 'ok');
-            return reload({ quiet: true });
-          }, fail);
+          perform(row, 'urg:' + urgencyId);
         },
         openDue: function (row, anchor) {
           if (!global.CardFields) return;

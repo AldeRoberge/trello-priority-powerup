@@ -61,3 +61,209 @@ describe('DashboardTrello.ensureInbox / ingest', () => {
     );
   });
 });
+
+describe('DashboardTrello next step and priority', () => {
+  let DT;
+  let data;
+  let writes;
+  const t = {};
+
+  before(() => {
+    loadComponent('dashboard/dashboard-model.js');
+    loadComponent('dashboard/dashboard-trello.js');
+    DT = global.DashboardTrello;
+  });
+
+  beforeEach(() => {
+    data = { items: [] };
+    writes = 0;
+    global.CompletionTrello = {
+      normalizeCompletionData: (d) => d,
+      getCardCompletionById: async () => data,
+      saveCardCompletionById: async (tt, id, next) => {
+        writes++;
+        data = next;
+      },
+    };
+  });
+
+  it('saveNextStep makes the text the first step and rewrites it when the same field is typed again', async () => {
+    await DT.saveNextStep(t, 'c1', 'Appeler');
+    assert.deepEqual(data.items.map((i) => i.text), ['Appeler']);
+    await DT.saveNextStep(t, 'c1', 'Appeler le comptable');
+    assert.deepEqual(data.items.map((i) => i.text), ['Appeler le comptable']);
+    assert.equal(writes, 2);
+  });
+
+  it('saveNextStep writes nothing for the same text, an empty text or no checklist store', async () => {
+    await DT.saveNextStep(t, 'c1', 'Appeler');
+    await DT.saveNextStep(t, 'c1', ' appeler ');
+    await DT.saveNextStep(t, 'c1', '   ');
+    assert.equal(writes, 1);
+    global.CompletionTrello = null;
+    await DT.saveNextStep(t, 'c1', 'Autre');
+    assert.equal(writes, 1);
+  });
+
+  it('saveNextStep keeps the other fields of the checklist (the estimate, the progress)', async () => {
+    data = { items: [], estimatedMinutes: 45, progress: 0 };
+    await DT.saveNextStep(t, 'c1', 'Appeler');
+    assert.equal(data.estimatedMinutes, 45);
+  });
+
+  describe('savePriority', () => {
+    let saved;
+    beforeEach(() => {
+      saved = null;
+      global.PriorityTrello = {
+        getCardInputsById: async () => ({ impact: 5, empressement: 'vite' }),
+        saveCardInputsById: async (tt, id, patch) => {
+          saved = patch;
+          return Object.assign({}, patch, { normalized: true });
+        },
+        ensureBoardPriorityContext: async () => ({ settings: true }),
+        computeDisplay: (inputs) => ({ score: inputs.impact * 0.93, tierLabel: 'Haute', tierI: 1 }),
+      };
+    });
+
+    it('merges the patch into the stored inputs and returns the score of what was saved', async () => {
+      const display = await DT.savePriority(t, 'c1', { impact: 8 });
+      assert.equal(saved.impact, 8);
+      assert.equal(saved.empressement, 'vite', 'the other inputs stay');
+      assert.deepEqual({ ...display }, { priority: 7.4, tier: 'Haute', tierI: 1 });
+    });
+
+    it('prefers the matrix label and still saves when the score cannot be computed', async () => {
+      global.PriorityTrello.computeDisplay = () => ({ score: 3, matrixLabel: 'Matrice', tierLabel: 'Basse', tierI: 3 });
+      assert.equal((await DT.savePriority(t, 'c1', { impact: 3 })).tier, 'Matrice');
+      global.PriorityTrello.computeDisplay = () => { throw new Error('boom'); };
+      assert.equal(await DT.savePriority(t, 'c1', { impact: 4 }), null);
+      assert.equal(saved.impact, 4);
+      global.PriorityTrello.computeDisplay = () => ({ score: 5, priorityEnabled: false });
+      assert.equal(await DT.savePriority(t, 'c1', { impact: 4 }), null);
+      delete global.PriorityTrello.computeDisplay;
+      assert.equal(await DT.savePriority(t, 'c1', { impact: 4 }), null);
+    });
+  });
+});
+
+describe('DashboardTrello undo of a decision', () => {
+  let DT;
+  let calls;
+  let doc;
+  const t = {};
+
+  before(() => {
+    loadComponent('dashboard/dashboard-model.js');
+    loadComponent('dashboard/dashboard-trello.js');
+    DT = global.DashboardTrello;
+  });
+
+  beforeEach(() => {
+    calls = [];
+    doc = { id: 'd1', title: 'Références', body: '- Ancienne', rev: 3 };
+    global.TableTrello = {
+      unarchiveCard: async (tt, id) => calls.push(['unarchive', id]),
+      moveCard: async (tt, id, listId, pos) => calls.push(['move', id, listId, pos]),
+    };
+    global.PriorityTrello = {
+      restPutCard: async (tt, id, body) => {
+        calls.push(['put', id, body]);
+        return { ok: true };
+      },
+      getCardInputsById: async () => ({}),
+      saveCardInputsById: async (tt, id, patch) => {
+        calls.push(['inputs', id, patch]);
+        return patch;
+      },
+    };
+    global.GanttTrello = {
+      saveCardDates: async (tt, id, d) => {
+        calls.push(['dates', id, d]);
+        return { ok: true };
+      },
+    };
+    global.DocsTrello = {
+      listDocs: async () => [{ id: doc.id, title: doc.title }],
+      loadDoc: async () => Object.assign({}, doc),
+      saveDoc: async (tt, d) => {
+        doc = Object.assign({}, doc, { body: d.body, rev: d.rev + 1 });
+      },
+      createDoc: async (tt, title, body) => {
+        doc = { id: 'd2', title, body, rev: 1 };
+        return { id: 'd2' };
+      },
+    };
+  });
+
+  it('restoreTriage moves the card back to its list and place', async () => {
+    await DT.restoreTriage(t, { id: 'c1', listId: 'inbox', pos: 1024 });
+    assert.deepEqual(calls, [['move', 'c1', 'inbox', 1024]]);
+  });
+
+  it('restoreTriage unarchives first when the decision archived the card', async () => {
+    await DT.restoreTriage(t, { id: 'c1', listId: 'inbox', pos: 5, archived: true });
+    assert.deepEqual(calls.map((c) => c[0]), ['unarchive', 'move']);
+  });
+
+  it('restoreTriage writes the old description back after a waiting decision', async () => {
+    await DT.restoreTriage(t, { id: 'c1', listId: 'inbox', pos: 5, restoreDesc: true, fullDesc: 'Texte' });
+    assert.deepEqual(calls[1], ['put', 'c1', { desc: 'Texte' }]);
+    calls.length = 0;
+    await DT.restoreTriage(t, { id: 'c1', listId: 'inbox', pos: 5, restoreDesc: true });
+    assert.deepEqual(calls[1], ['put', 'c1', { desc: '' }], 'a card that had no note gets an empty one back');
+  });
+
+  it('restoreTriage writes the dates back after an "Un jour" decision', async () => {
+    const local = { start: '2026-10-20', due: '2026-10-20', startTime: '', dueTime: '', dueVague: '', dueMode: 'precise' };
+    await DT.restoreTriage(t, { id: 'c1', listId: 'inbox', pos: 5, restoreDates: true, local });
+    const dates = calls.filter((c) => c[0] === 'dates')[0];
+    assert.deepEqual({ ...dates[2] }, { startDate: '2026-10-20', dueDate: '2026-10-20', startTime: '', dueTime: '' });
+    const inputs = calls.filter((c) => c[0] === 'inputs')[0];
+    assert.equal(inputs[2].dueMode, 'precise');
+    assert.equal(inputs[2].dueVague, '');
+  });
+
+  it('restoreTriage fails loudly when Trello refuses the dates', async () => {
+    global.GanttTrello.saveCardDates = async () => ({ ok: false, reason: 'not-authorized' });
+    await assert.rejects(
+      DT.restoreTriage(t, { id: 'c1', listId: 'inbox', pos: 5, restoreDates: true, local: {} }),
+      (err) => err.reason === 'not-authorized'
+    );
+  });
+
+  it('fileReference adds a line to Références and unfileReference takes exactly that line out', async () => {
+    const ref = await DT.fileReference(t, { name: 'Appeler le comptable', desc: '' });
+    assert.equal(doc.body, '- Ancienne\n- Appeler le comptable');
+    assert.deepEqual({ ...ref }, { docId: 'd1', added: '\n- Appeler le comptable' });
+    await DT.unfileReference(t, ref);
+    assert.equal(doc.body, '- Ancienne');
+  });
+
+  it('fileReference keeps the note under the line, and undoing removes both', async () => {
+    const ref = await DT.fileReference(t, { name: 'Idée', desc: 'Détails' });
+    assert.equal(doc.body, '- Ancienne\n- Idée\n\nDétails');
+    await DT.unfileReference(t, ref);
+    assert.equal(doc.body, '- Ancienne');
+  });
+
+  it('fileReference creates the document when there is none, and undoing leaves it empty', async () => {
+    global.DocsTrello.listDocs = async () => [];
+    const ref = await DT.fileReference(t, { name: 'Première', desc: '' });
+    assert.equal(doc.title, 'Références');
+    assert.equal(doc.body, '- Première');
+    assert.equal(ref.docId, 'd2');
+    global.DocsTrello.listDocs = async () => [{ id: doc.id, title: doc.title }];
+    await DT.unfileReference(t, ref);
+    assert.equal(doc.body, '');
+  });
+
+  it('unfileReference leaves a document alone when the line is no longer there', async () => {
+    const ref = await DT.fileReference(t, { name: 'Idée', desc: '' });
+    doc = Object.assign({}, doc, { body: '- Autre chose entièrement' });
+    await DT.unfileReference(t, ref);
+    assert.equal(doc.body, '- Autre chose entièrement');
+    await DT.unfileReference(t, null);
+    await DT.unfileReference(t, { docId: 'zzz', added: 'x' });
+  });
+});

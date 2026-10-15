@@ -167,11 +167,36 @@
     return list;
   }
 
-  /** Patch of { impact, ease, empressement } merged into the card's stored priority inputs. */
+  /**
+   * What a board row shows for stored priority inputs: { priority, tier, tierI }, the same numbers
+   * GanttTrello.loadBoard puts on a row. null when the priority is off or cannot be computed.
+   */
+  async function displayOf(t, inputs) {
+    var pt = PT();
+    if (!inputs || !pt || typeof pt.computeDisplay !== 'function' || typeof pt.ensureBoardPriorityContext !== 'function') return null;
+    try {
+      var settings = await pt.ensureBoardPriorityContext(t);
+      var d = pt.computeDisplay(inputs, settings);
+      if (!d || d.priorityEnabled === false || typeof d.score !== 'number') return null;
+      return {
+        priority: Math.round(d.score * 10) / 10,
+        tier: d.matrixLabel || d.tierLabel || d.label || '',
+        tierI: d.tierI != null ? d.tierI : null,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Patch of { impact, ease, empressement } merged into the card's stored priority inputs.
+   * Resolves the new { priority, tier, tierI } (or null) so a view can show the score without reloading the board.
+   */
   async function savePriority(t, cardId, patch) {
     var pt = PT();
     var cur = (await pt.getCardInputsById(t, cardId)) || {};
-    await pt.saveCardInputsById(t, cardId, Object.assign({}, cur, patch));
+    var saved = await pt.saveCardInputsById(t, cardId, Object.assign({}, cur, patch));
+    return displayOf(t, saved);
   }
 
   async function saveEstimate(t, cardId, minutes) {
@@ -285,22 +310,24 @@
     return moveToCategory(t, row, lists, ['backlog', 'unstarted']);
   }
 
+  /**
+   * Makes `text` the card's next step (DashboardModel.withNextStep): it rewrites the open first step or adds
+   * one on top, so typing the same field twice never stacks two steps.
+   */
   async function saveNextStep(t, cardId, text) {
     var ct = CT();
     var clean = String(text || '').replace(/\s+/g, ' ').trim();
     if (!clean || !ct) return;
     var data = ct.normalizeCompletionData((await ct.getCardCompletionById(t, cardId)) || { items: [] });
-    var items = (data.items || []).slice();
-    if (items.length && items[0].done !== true && items[0].text === clean) return;
-    items.unshift({
-      id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      text: clean,
-      progress: 0,
-      done: false,
-    });
+    var items = global.DashboardModel.withNextStep(data.items, clean);
+    if (items === data.items) return;
     await ct.saveCardCompletionById(t, cardId, Object.assign({}, data, { items: items }));
   }
 
+  /**
+   * Keeps the card's title (and note) as a line of the "Références" document.
+   * Resolves { docId, added }: what to take out again to undo it (unfileReference).
+   */
   async function fileReference(t, row) {
     var docs = global.DocsTrello;
     if (!docs || typeof docs.listDocs !== 'function') {
@@ -311,13 +338,71 @@
     var list = await docs.listDocs(t);
     var found = (list || []).filter(function (d) { return d.title === 'Références'; })[0];
     if (!found) {
-      await docs.createDoc(t, 'Références', line + extra);
-      return;
+      var made = await docs.createDoc(t, 'Références', line + extra);
+      return { docId: made && made.id ? String(made.id) : '', added: line + extra };
     }
     var full = await docs.loadDoc(t, found.id);
     var body = String(full.body || '').replace(/\s+$/, '');
-    body = body ? body + '\n' + line + extra : line + extra;
-    await docs.saveDoc(t, { id: full.id, body: body, rev: full.rev, cover: full.cover, subject: full.subject, props: full.props });
+    var added = (body ? '\n' : '') + line + extra;
+    await docs.saveDoc(t, { id: full.id, body: body + added, rev: full.rev, cover: full.cover, subject: full.subject, props: full.props });
+    return { docId: String(full.id), added: added };
+  }
+
+  /** Takes a line filed by fileReference out of the "Références" document; a document edited since stays as it is. */
+  async function unfileReference(t, ref) {
+    var docs = global.DocsTrello;
+    if (!ref || !ref.added || !docs || typeof docs.listDocs !== 'function') return;
+    var list = await docs.listDocs(t);
+    var found = (list || []).filter(function (d) { return ref.docId ? d.id === ref.docId : d.title === 'Références'; })[0];
+    if (!found) return;
+    var full = await docs.loadDoc(t, found.id);
+    var body = String(full.body || '');
+    var at = body.lastIndexOf(ref.added);
+    if (at < 0) return;
+    var next = (body.slice(0, at) + body.slice(at + ref.added.length)).replace(/\s+$/, '');
+    await docs.saveDoc(t, { id: full.id, body: next, rev: full.rev, cover: full.cover, subject: full.subject, props: full.props });
+  }
+
+  /** Writes back the dates of a card as they were: { start, due, startTime, dueTime, dueVague, dueMode }. */
+  async function restoreDates(t, cardId, d) {
+    var saved = await GT().saveCardDates(t, cardId, {
+      startDate: d.start || '',
+      dueDate: d.due || '',
+      startTime: d.startTime || '',
+      dueTime: d.dueTime || '',
+    });
+    if (!saved || !saved.ok) {
+      var err = new Error((saved && saved.reason) || 'dates-failed');
+      err.reason = saved && saved.reason;
+      throw err;
+    }
+    await savePriority(t, cardId, {
+      dueMode: d.dueMode || '',
+      dueVague: d.dueVague || '',
+      dueDate: d.due || '',
+      startDate: d.start || '',
+      startTime: d.startTime || '',
+      dueTime: d.dueTime || '',
+    });
+  }
+
+  /**
+   * Puts a card back in the triage list, at its old place, and undoes what the decision wrote.
+   * snap: { id, listId, pos, archived?, reference?, restoreDesc?, fullDesc?, restoreDates?, local? }
+   *   archived       the decision archived the card (no "Annulé" list)
+   *   reference      what fileReference returned
+   *   restoreDesc    write `fullDesc` back (a waiting name lives in the description)
+   *   restoreDates   write the dates of `local` back (a "Un jour" horizon cleared them)
+   */
+  async function restoreTriage(t, snap) {
+    if (snap.reference) await unfileReference(t, snap.reference);
+    if (snap.archived) await TT().unarchiveCard(t, snap.id);
+    await TT().moveCard(t, snap.id, snap.listId, snap.pos);
+    if (snap.restoreDesc) {
+      var put = await PT().restPutCard(t, snap.id, { desc: snap.fullDesc || '' });
+      if (put && put.ok === false) throw new Error(put.reason || 'desc-failed');
+    }
+    if (snap.restoreDates) await restoreDates(t, snap.id, snap.local || {});
   }
 
   var SCALE_KEY = 'tp-dashboard-scale';
@@ -374,6 +459,8 @@
     cancel: cancel,
     saveNextStep: saveNextStep,
     fileReference: fileReference,
+    unfileReference: unfileReference,
+    restoreTriage: restoreTriage,
     setWaiting: setWaiting,
     setSomeday: setSomeday,
     getCapacity: getCapacity,

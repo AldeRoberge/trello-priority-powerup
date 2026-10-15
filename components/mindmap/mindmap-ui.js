@@ -3653,11 +3653,6 @@
     if (global.AssistantDock) {
       global.AssistantDock.mount({ t: t, after: root, onRefresh: function () { reload({ quiet: true }); }, isBusy: function () { return global.CardFields && global.CardFields.isOpen(); } });
     }
-    return reload().then(loadGoals);
-  }
-
-  global.MindmapUI = { mount: mount };
-})(typeof window !== 'undefined' ? window : this);
     if (global.CommandPalette) {
       global.CommandPalette.attach({
         cards: function () { return state.records.map(function (r) { return { id: r.id, name: r.name }; }); },
@@ -3666,3 +3661,8 @@
         isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
       });
     }
+    return reload().then(loadGoals);
+  }
+
+  global.MindmapUI = { mount: mount };
+})(typeof window !== 'undefined' ? window : this);

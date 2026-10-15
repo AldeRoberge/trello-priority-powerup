@@ -65,6 +65,26 @@
     return out;
   }
 
+  /**
+   * What a card shows for its people, places and labels, ready to draw:
+   * { people, places, labels } each [{ text, title, dot? }]. A place in the Où slot shows its bare name.
+   */
+  function describe(rec) {
+    rec = rec || {};
+    return {
+      people: (rec.assignees || []).map(function (a) {
+        return { text: a.name, title: a.custom ? a.name + ' (hors Trello)' : a.name };
+      }),
+      places: placeChips(rec.inputs && rec.inputs.places).map(function (p) {
+        return { text: (p.slot === 'at' ? '' : p.label + ' ') + p.name, title: p.label + ' · ' + p.name };
+      }),
+      labels: (rec.labels || []).map(function (l) {
+        var name = l.name || l.color || '·';
+        return { text: name, title: name, dot: COLORS[l.color] || '' };
+      }),
+    };
+  }
+
   /** Same person on both lists (a contact linked to a board member counts once). */
   function samePerson(a, b) {
     return String(a.id) === String(b.id) || !!(a.trelloId && String(a.trelloId) === String(b.id));
@@ -423,6 +443,7 @@
     filterItems: filterItems,
     nextPlaces: nextPlaces,
     placeChips: placeChips,
+    describe: describe,
     samePerson: samePerson,
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -47,6 +47,25 @@ test('placeChips lists Où, De, Vers in that order and skips empty slots', () =>
   assert.deepEqual(JSON.parse(JSON.stringify(CE.placeChips(null))), []);
 });
 
+test('describe lists the people, places and labels of a card ready to draw', () => {
+  const d = JSON.parse(JSON.stringify(CE.describe({
+    assignees: [{ id: 'm1', name: 'Paul' }, { id: 'c1', name: 'Marie', custom: true }],
+    inputs: { places: { at: { id: 'p1', name: 'Bureau' }, to: { id: 'p2', name: 'Gare' } } },
+    labels: [{ id: 'l1', name: 'Urgent', color: 'red' }, { id: 'l2', name: '', color: 'blue' }, { id: 'l3', name: 'Autre', color: 'nope' }],
+  })));
+  assert.deepEqual(d.people.map((p) => p.text), ['Paul', 'Marie']);
+  assert.equal(d.people[1].title, 'Marie (hors Trello)');
+  assert.deepEqual(d.places.map((p) => p.text), ['Bureau', 'Vers Gare']);
+  assert.deepEqual(d.labels.map((l) => l.text), ['Urgent', 'blue', 'Autre']);
+  assert.equal(d.labels[0].dot, CE.COLORS.red);
+  assert.equal(d.labels[2].dot, '', 'an unknown colour has no dot');
+});
+
+test('describe copes with a card that has nothing yet', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(CE.describe(null))), { people: [], places: [], labels: [] });
+  assert.deepEqual(JSON.parse(JSON.stringify(CE.describe({ inputs: {} }))), { people: [], places: [], labels: [] });
+});
+
 test('samePerson matches a contact linked to a Trello member', () => {
   assert.equal(CE.samePerson({ id: 'm1' }, { id: 'm1' }), true);
   assert.equal(CE.samePerson({ id: 'c1', trelloId: 'm1' }, { id: 'm1' }), true);

@@ -794,25 +794,16 @@
         tip.appendChild(back);
         wrap.appendChild(tip);
       }
-      live = { gc: gc, view: view, byPos: byPos };
-      return wrap;
-    }
-
-    function fitNow() {
-      if (!live || !live.view.nodes.length) return;
-      var box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
-      live.view.nodes.forEach(function (n) {
-        box.x0 = Math.min(box.x0, n.x); box.y0 = Math.min(box.y0, n.y);
       if (global.AddRow && openListId()) {
         wrap.appendChild(global.AddRow.line({
           float: true,
           onSubmit: function (title, input) { addTask(title, input); },
         }));
       }
-        box.x1 = Math.max(box.x1, n.x + n.w); box.y1 = Math.max(box.y1, n.y + n.h);
-      });
-      var s = live.gc.size();
-      live.gc.setView(GC().fitView(box, s.w, s.h, 40, 1, 0.3));
+      live = { gc: gc, view: view, byPos: byPos };
+      return wrap;
+    }
+
     /** "Nouvelle carte…" on the map: a task in the first open list, left without a goal until it is linked. */
     async function addTask(title, input) {
       var tt = global.TableTrello;
@@ -835,6 +826,15 @@
       }
     }
 
+    function fitNow() {
+      if (!live || !live.view.nodes.length) return;
+      var box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+      live.view.nodes.forEach(function (n) {
+        box.x0 = Math.min(box.x0, n.x); box.y0 = Math.min(box.y0, n.y);
+        box.x1 = Math.max(box.x1, n.x + n.w); box.y1 = Math.max(box.y1, n.y + n.h);
+      });
+      var s = live.gc.size();
+      live.gc.setView(GC().fitView(box, s.w, s.h, 40, 1, 0.3));
     }
 
     /** After the map is in the page (sizes are known): center the focused box, or fit everything the first time. */
@@ -1194,15 +1194,15 @@
     }
 
     container.classList.add('jy-mount');
-    reload();
-    return { reload: reload };
-  }
-
-  global.JourneyUI = { mount: mount };
-})(typeof window !== 'undefined' ? window : this);
     if (global.CommandPalette) {
       global.CommandPalette.attach({
         cards: function () { return (state.board.cards || []).map(function (c) { return { id: c.id, name: c.name }; }); },
         onCard: function (id) { selectNode(id, 'task'); },
       });
     }
+    reload();
+    return { reload: reload };
+  }
+
+  global.JourneyUI = { mount: mount };
+})(typeof window !== 'undefined' ? window : this);

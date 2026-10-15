@@ -319,6 +319,122 @@ describe('DashboardModel', () => {
     assert.deepEqual(DM.counts(rows, '2026-10-06'), { triage: 1, orchestrator: 1, today: 1 });
   });
 
+  describe('triage', () => {
+    it('every decision has its own letter, and none takes a key another shortcut owns', () => {
+      const keys = DM.TRIAGE_EXITS.map((e) => e.key);
+      assert.equal(new Set(keys).size, keys.length);
+      const taken = ['s', 'p', 'd', 'c', 'j', 'k', '1', '2', '3'];
+      keys.forEach((k) => assert.ok(taken.indexOf(k) < 0, k + ' is already a shortcut'));
+      assert.deepEqual(DM.TRIAGE_EXITS.map((e) => e.id), ['accept', 'backlog', 'waiting', 'someday', 'reference', 'cancel']);
+    });
+
+    it('exitForKey is case blind and ignores anything that is not one letter', () => {
+      assert.equal(DM.exitForKey('A').id, 'accept');
+      assert.equal(DM.exitForKey('e').id, 'waiting');
+      assert.equal(DM.exitForKey('u').id, 'someday');
+      assert.equal(DM.exitForKey('x').id, 'cancel');
+      assert.equal(DM.exitForKey('Enter'), null);
+      assert.equal(DM.exitForKey('s'), null);
+      assert.equal(DM.exitForKey(''), null);
+      assert.equal(DM.exitById('reference').icon, 'bookmark');
+      assert.equal(DM.exitById('nope'), null);
+    });
+
+    it('urgencyIdOf reads the labels of the table, the dashboard and the composer', () => {
+      assert.equal(DM.urgencyIdOf('Aucun'), 'aucun');
+      assert.equal(DM.urgencyIdOf('Aucune'), 'aucun');
+      assert.equal(DM.urgencyIdOf(''), 'aucun');
+      assert.equal(DM.urgencyIdOf(undefined), 'aucun');
+      assert.equal(DM.urgencyIdOf('Bientôt'), 'bientot');
+      assert.equal(DM.urgencyIdOf('Assez vite'), 'assez-vite');
+      assert.equal(DM.urgencyIdOf('Vite'), 'vite');
+      assert.equal(DM.urgencyIdOf('Au plus vite'), 'au-plus-vite');
+      assert.equal(DM.urgencyIdOf('au-plus-vite'), 'au-plus-vite');
+      assert.equal(DM.urgencyIdOf('n’importe quoi'), 'aucun');
+    });
+
+    it('quickDays are today, tomorrow and the first Monday after tomorrow', () => {
+      // 2026-10-14 is a Wednesday
+      assert.deepEqual(DM.quickDays('2026-10-14').map((d) => d.iso), ['2026-10-14', '2026-10-15', '2026-10-19']);
+      assert.deepEqual(DM.quickDays('2026-10-14').map((d) => d.id), ['today', 'tomorrow', 'monday']);
+      // Saturday: tomorrow is Sunday, Monday is 2 days away
+      assert.equal(DM.quickDays('2026-10-17')[2].iso, '2026-10-19');
+      // Sunday: tomorrow is already Monday, so the third day is the Monday after
+      assert.equal(DM.quickDays('2026-10-18')[1].iso, '2026-10-19');
+      assert.equal(DM.quickDays('2026-10-18')[2].iso, '2026-10-26');
+      // Monday: next Monday is a week away
+      assert.equal(DM.quickDays('2026-10-19')[2].iso, '2026-10-26');
+    });
+
+    it('quickDayOf tells which one-click day a card sits on, and that a horizon or another day is "other"', () => {
+      const today = '2026-10-14';
+      assert.equal(DM.quickDayOf(row('a'), today), '');
+      assert.equal(DM.quickDayOf(row('a', { start: today, due: today }), today), 'today');
+      assert.equal(DM.quickDayOf(row('a', { due: '2026-10-15' }), today), 'tomorrow');
+      assert.equal(DM.quickDayOf(row('a', { start: '2026-10-19', due: '2026-10-19' }), today), 'monday');
+      assert.equal(DM.quickDayOf(row('a', { due: '2026-11-02' }), today), 'other');
+      assert.equal(DM.quickDayOf(row('a', { dueVague: 'bientot' }), today), 'other');
+      assert.equal(DM.quickDayOf(null, today), '');
+    });
+
+    it('withNextStep adds a first step, rewrites an open one and never adds the same text twice', () => {
+      const id = () => 'n1';
+      assert.deepEqual(DM.withNextStep([], 'Appeler Paul', id), [{ id: 'n1', text: 'Appeler Paul', progress: 0, done: false }]);
+      assert.deepEqual(DM.withNextStep(undefined, '  Appeler   Paul ', id).map((s) => s.text), ['Appeler Paul']);
+      const items = [{ id: 'a', text: 'Écrire', progress: 0, done: false }, { id: 'b', text: 'Relire', progress: 0, done: false }];
+      const edited = DM.withNextStep(items, 'Écrire le plan', id);
+      assert.deepEqual(edited.map((s) => s.text), ['Écrire le plan', 'Relire']);
+      assert.equal(edited[0].id, 'a', 'the open step keeps its id');
+      assert.equal(items[0].text, 'Écrire', 'the input is not changed');
+      assert.equal(DM.withNextStep(items, 'écrire', id), items, 'same text: the same list comes back');
+      assert.equal(DM.withNextStep(items, '   ', id), items, 'nothing typed: nothing changes');
+    });
+
+    it('withNextStep skips finished steps and leaves a step that has its own sub-steps alone', () => {
+      const id = () => 'new';
+      const done = [{ id: 'a', text: 'Fait', done: true, progress: 100 }, { id: 'b', text: 'À faire', done: false, progress: 0 }];
+      assert.deepEqual(DM.withNextStep(done, 'Autre', id).map((s) => s.text), ['Fait', 'Autre']);
+      const allDone = [{ id: 'a', text: 'Fait', done: true, progress: 100 }];
+      assert.deepEqual(DM.withNextStep(allDone, 'Suite', id).map((s) => s.id), ['new', 'a']);
+      const nested = [{ id: 'g', text: 'Groupe', done: false, progress: 0, items: [{ text: 'x', done: false }] }];
+      assert.deepEqual(DM.withNextStep(nested, 'Première', id).map((s) => s.text), ['Première', 'Groupe']);
+    });
+
+    it('createdAtOf reads the creation time out of a Trello id and refuses anything else', () => {
+      const ms = DM.createdAtOf('68e5a3c0aabbccddeeff0011');
+      assert.equal(ms, 0x68e5a3c0 * 1000);
+      assert.equal(DM.createdAtOf('t1'), null);
+      assert.equal(DM.createdAtOf(''), null);
+      assert.equal(DM.createdAtOf('00000000aabbccddeeff0011'), null, 'a zero date is not a creation date');
+      assert.equal(DM.createdAtOf('ffffffffaabbccddeeff0011'), null, 'a date after 2100 is not one either');
+    });
+
+    it('ageLabel speaks in minutes, hours, days, weeks and months', () => {
+      const now = Date.UTC(2026, 9, 14, 12, 0, 0);
+      const ago = (s) => DM.ageLabel(now - s * 1000, now);
+      assert.equal(ago(20), 'à l’instant');
+      assert.equal(ago(5 * 60), 'il y a 5 min');
+      assert.equal(ago(3 * 3600), 'il y a 3 h');
+      assert.equal(ago(30 * 3600), 'hier');
+      assert.equal(ago(4 * 86400), 'il y a 4 j');
+      assert.equal(ago(21 * 86400), 'il y a 3 sem.');
+      assert.equal(ago(90 * 86400), 'il y a 3 mois');
+      assert.equal(ago(800 * 86400), 'il y a 2 ans');
+      assert.equal(DM.ageLabel(now + 5000, now), '', 'a date in the future has no age');
+      assert.equal(DM.ageLabel(NaN, now), '');
+    });
+
+    it('snippet is the first readable line, cut on a word', () => {
+      assert.equal(DM.snippet(''), '');
+      assert.equal(DM.snippet('\n\n**Appeler** le [comptable](https://x.co)\nsuite'), 'Appeler le comptable');
+      assert.equal(DM.snippet('- une puce'), 'une puce');
+      const long = 'mot '.repeat(40);
+      const cut = DM.snippet(long, 30);
+      assert.ok(cut.length <= 30 && /…$/.test(cut), cut);
+      assert.ok(!/ …$/.test(cut), 'no space before the ellipsis');
+    });
+  });
+
   it('zoomLayout stretches a column and changes scale only past the next size', () => {
     const day = DM.zoomLayout(200);
     assert.equal(day.scale, 'day');

@@ -496,10 +496,10 @@
             text: !state.authOk ? 'Autorisation Trello requise.' : state.filter ? 'Aucun document ne correspond.' : 'Aucun document pour l’instant.',
           })
         );
+        appendAddRow(list);
         return;
       }
       rows.forEach(function (r) {
-        appendAddRow(list);
         if (r.type === 'folder') {
           list.appendChild(folderRow(r));
           if (pend && pend.parent === r.folder.id) list.appendChild(newFolderRow(r.depth + 1));
@@ -546,13 +546,10 @@
         wireDrag(row, 'doc', d.id, docFolderOf(d.id));
         list.appendChild(row);
       });
+      appendAddRow(list);
       bindDocInsert();
     }
 
-      appendAddRow(list);
-    /** + in the seam under a document (or a folder) creates one there. */
-    function bindDocInsert() {
-      if (!global.InsertGap) return;
     /** The "Nouveau document…" line that closes the list, same as the Tableau's "Nouvelle carte…". */
     function appendAddRow(list) {
       if (!global.AddRow || !state.authOk) return;
@@ -562,6 +559,9 @@
       }));
     }
 
+    /** + in the seam under a document (or a folder) creates one there. */
+    function bindDocInsert() {
+      if (!global.InsertGap) return;
       global.InsertGap.watch(els.sideList, {
         item: '.dc-item',
         placeholder: 'Titre…',

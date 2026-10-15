@@ -640,6 +640,141 @@
     };
   }
 
+  /* ── Triage: the decisions, the one-click choices and the next step ─────────────────────── */
+
+  // Where a captured card goes next. `key` is the letter that picks it (S, P, D, C, J, K and 1-3 belong to
+  // other shortcuts), shown on the button and in the card menu.
+  var TRIAGE_EXITS = [
+    { id: 'accept', label: 'Accepter', icon: 'check', key: 'a', primary: true },
+    { id: 'backlog', label: 'Backlog', icon: 'circle-dashed', key: 'b' },
+    { id: 'waiting', label: 'En attente', icon: 'hourglass', key: 'e' },
+    { id: 'someday', label: 'Un jour', icon: 'calendar-off', key: 'u' },
+    { id: 'reference', label: 'Référence', icon: 'bookmark', key: 'r' },
+    { id: 'cancel', label: 'Annuler', icon: 'circle-x', key: 'x', danger: true },
+  ];
+
+  function exitById(id) {
+    for (var i = 0; i < TRIAGE_EXITS.length; i++) if (TRIAGE_EXITS[i].id === id) return TRIAGE_EXITS[i];
+    return null;
+  }
+
+  /** The decision a key triggers (case blind), or null. */
+  function exitForKey(key) {
+    var k = String(key == null ? '' : key).toLowerCase();
+    if (k.length !== 1) return null;
+    for (var i = 0; i < TRIAGE_EXITS.length; i++) if (TRIAGE_EXITS[i].key === k) return TRIAGE_EXITS[i];
+    return null;
+  }
+
+  // [id, label] in the order of the pickers. The id is what Trello stores (inputs.empressement).
+  var URGENCIES = [
+    ['aucun', 'Aucune'],
+    ['bientot', 'Bientôt'],
+    ['assez-vite', 'Assez vite'],
+    ['vite', 'Vite'],
+    ['au-plus-vite', 'Au plus vite'],
+  ];
+  var URGENCY_IDS = URGENCIES.map(function (u) { return u[0]; });
+
+  /** "Aucun", "Aucune", "Bientôt", "Au plus vite", "vite"… → the urgency id; anything unknown is "aucun". */
+  function urgencyIdOf(value) {
+    var s = String(value == null ? '' : value)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .trim()
+      .replace(/[\s_]+/g, '-');
+    return URGENCY_IDS.indexOf(s) >= 0 ? s : 'aucun';
+  }
+
+  var ESTIMATE_CHIPS = [5, 15, 30, 60, 120]; // minutes offered in one click, the rest sits in a menu
+
+  /** The days offered in one click: today, tomorrow, and the first Monday after tomorrow. */
+  function quickDays(today) {
+    var monday = '';
+    for (var n = 2; n <= 8 && !monday; n++) {
+      var iso = addDays(today, n);
+      var d = parseIso(iso);
+      if (d && d.getDay() === 1) monday = iso;
+    }
+    return [
+      { id: 'today', iso: today },
+      { id: 'tomorrow', iso: addDays(today, 1) },
+      { id: 'monday', iso: monday },
+    ];
+  }
+
+  /** Which one-click day a card is planned on: 'today' | 'tomorrow' | 'monday', 'other' (another day or a horizon), '' (none). */
+  function quickDayOf(row, today) {
+    if (!row) return '';
+    if (row.dueVague) return 'other';
+    var day = plannedDay(row);
+    if (!day) return '';
+    var days = quickDays(today);
+    for (var i = 0; i < days.length; i++) if (days[i].iso && days[i].iso === day) return days[i].id;
+    return 'other';
+  }
+
+  function sameText(a, b) {
+    return String(a || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  /**
+   * The checklist once `text` is the next step. An open first step is rewritten (the field shows it, so typing
+   * again edits it); otherwise the text becomes a new first step. Returns the same array when nothing changes.
+   */
+  function withNextStep(items, text, makeId) {
+    var clean = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+    var list = Array.isArray(items) ? items : [];
+    if (!clean) return list;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i] && list[i].done !== true && !(list[i].progress >= 100)) break;
+    }
+    var open = i < list.length ? list[i] : null;
+    if (open && !(Array.isArray(open.items) && open.items.length)) {
+      if (sameText(open.text, clean)) return list;
+      var out = list.slice();
+      out[i] = Object.assign({}, open, { text: clean });
+      return out;
+    }
+    var id = typeof makeId === 'function' ? makeId() : 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    return [{ id: id, text: clean, progress: 0, done: false }].concat(list);
+  }
+
+  /** Trello card ids start with the creation time (seconds, hex). null when the id does not look like one. */
+  function createdAtOf(id) {
+    var s = String(id == null ? '' : id);
+    if (!/^[0-9a-f]{24}$/i.test(s)) return null;
+    var ms = parseInt(s.slice(0, 8), 16) * 1000;
+    return ms > Date.UTC(2011, 0, 1) && ms < Date.UTC(2100, 0, 1) ? ms : null;
+  }
+
+  /** "à l’instant", "il y a 5 min", "il y a 3 h", "hier", "il y a 4 j", "il y a 3 sem.", "il y a 2 mois". */
+  function ageLabel(ms, now) {
+    var secs = (now - ms) / 1000;
+    if (!(secs >= 0)) return '';
+    if (secs < 60) return 'à l’instant';
+    if (secs < 3600) return 'il y a ' + Math.floor(secs / 60) + ' min';
+    if (secs < 86400) return 'il y a ' + Math.floor(secs / 3600) + ' h';
+    var days = Math.floor(secs / 86400);
+    if (days === 1) return 'hier';
+    if (days < 14) return 'il y a ' + days + ' j';
+    if (days < 60) return 'il y a ' + Math.floor(days / 7) + ' sem.';
+    if (days < 730) return 'il y a ' + Math.floor(days / 30) + ' mois';
+    return 'il y a ' + Math.floor(days / 365) + ' ans';
+  }
+
+  /** First readable line of a Markdown text, cut on a word at `max` characters. '' when there is none. */
+  function snippet(md, max) {
+    var line = String(md == null ? '' : md)
+      .split(/\r?\n/)
+      .map(function (l) { return plainText(l); })
+      .filter(Boolean)[0] || '';
+    max = max > 0 ? max : 90;
+    return line.length > max ? line.slice(0, max - 1).replace(/\s+\S*$/, '') + '…' : line;
+  }
+
   var ZOOM_MIN_COL = 148;
   var ZOOM_VAGUE_COL = 106;
 
@@ -766,5 +901,18 @@
     formatMinutes: formatMinutes,
     taskDraft: taskDraft,
     counts: counts,
+    TRIAGE_EXITS: TRIAGE_EXITS,
+    exitById: exitById,
+    exitForKey: exitForKey,
+    URGENCIES: URGENCIES,
+    URGENCY_IDS: URGENCY_IDS,
+    urgencyIdOf: urgencyIdOf,
+    ESTIMATE_CHIPS: ESTIMATE_CHIPS,
+    quickDays: quickDays,
+    quickDayOf: quickDayOf,
+    withNextStep: withNextStep,
+    createdAtOf: createdAtOf,
+    ageLabel: ageLabel,
+    snippet: snippet,
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -192,6 +192,33 @@
     return out;
   }
 
+  /** The goal map with the task attached to `projectId` (null detaches it). A task belongs to one place:
+   *  its links to goal nodes are replaced, its links to other tasks (dependencies) stay. */
+  function withTaskProject(goals, taskId, projectId) {
+    var nodes = ((goals && goals.nodes) || []).slice();
+    var isNode = Object.create(null);
+    var isProject = Object.create(null);
+    nodes.forEach(function (n) {
+      if (!n || !n.id) return;
+      isNode[n.id] = true;
+      if (n.level === 'project') isProject[n.id] = true;
+    });
+    var links = ((goals && goals.links) || []).filter(function (l) {
+      if (!l) return false;
+      var other = l.from === taskId ? l.to : l.to === taskId ? l.from : null;
+      return !(other && isNode[other]);
+    });
+    if (projectId && isProject[projectId]) links.push({ from: taskId, to: projectId });
+    return { nodes: nodes, links: links };
+  }
+
+  /** The project node a task sits under (nearest first), or null. */
+  function projectOf(goals, taskId) {
+    var chain = indexGoals(goals).chain(taskId);
+    for (var i = 0; i < chain.length; i++) if (chain[i].level === 'project') return chain[i];
+    return null;
+  }
+
   /** "Projet · Objectif", or the goal when the project has no objective. */
   function placeLabel(place) {
     if (!place) return '';
@@ -378,6 +405,8 @@
     backlinks: backlinks,
     projectChain: projectChain,
     places: places,
+    withTaskProject: withTaskProject,
+    projectOf: projectOf,
     placeLabel: placeLabel,
     wip: wip,
     review: review,

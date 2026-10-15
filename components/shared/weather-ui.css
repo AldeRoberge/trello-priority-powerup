@@ -1,0 +1,300 @@
+/* Weather on the Aujourd'hui page (see weather-ui.js). The card is always a coloured sky, light or dark app theme. */
+
+/* ── Sky ─────────────────────────────────────────────────────────────── */
+.wx-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(160deg, #2b6fd8 0%, #4a97ea 52%, #86c4f2 100%);
+}
+.wx-sky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8, 16, 36, 0) 38%, rgba(8, 16, 36, 0.26) 100%);
+}
+.wx-sky > i { position: absolute; display: block; }
+
+.wx-sky--clear-night { background: linear-gradient(160deg, #0a1128 0%, #172554 52%, #2b3a7a 100%); }
+.wx-sky--partly-day { background: linear-gradient(160deg, #3f78c8 0%, #6a9fd8 55%, #a3c5e6 100%); }
+.wx-sky--partly-night { background: linear-gradient(160deg, #101a38 0%, #25356a 55%, #435087 100%); }
+.wx-sky--cloudy { background: linear-gradient(160deg, #56677d 0%, #7488a0 55%, #9bacbf 100%); }
+.wx-sky--cloudy.is-night { background: linear-gradient(160deg, #1d2531 0%, #2f3a4b 55%, #475569 100%); }
+.wx-sky--fog { background: linear-gradient(160deg, #78879a 0%, #9eabb9 55%, #c3ccd6 100%); }
+.wx-sky--fog.is-night { background: linear-gradient(160deg, #262e39 0%, #3b4656 55%, #536071 100%); }
+.wx-sky--rain { background: linear-gradient(160deg, #3b5170 0%, #546d8c 55%, #7690ab 100%); }
+.wx-sky--rain.is-night { background: linear-gradient(160deg, #131c29 0%, #24344a 55%, #384e68 100%); }
+.wx-sky--sleet { background: linear-gradient(160deg, #475c76 0%, #6a819a 55%, #98adc1 100%); }
+.wx-sky--sleet.is-night { background: linear-gradient(160deg, #18222f 0%, #2d3d50 55%, #455b72 100%); }
+.wx-sky--snow { background: linear-gradient(160deg, #5a7a9f 0%, #82a1c1 55%, #b0c8de 100%); }
+.wx-sky--snow.is-night { background: linear-gradient(160deg, #243449 0%, #3f5876 55%, #607d9d 100%); }
+.wx-sky--storm { background: linear-gradient(160deg, #1b202e 0%, #313a50 55%, #4b566d 100%); }
+
+.wx-glow {
+  right: -6%;
+  top: -75%;
+  width: 62%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 238, 176, 0.7) 0%, rgba(255, 238, 176, 0.24) 38%, rgba(255, 238, 176, 0) 68%);
+  animation: wx-pulse 9s ease-in-out infinite;
+}
+.wx-glow--moon {
+  background: radial-gradient(circle, rgba(206, 220, 255, 0.4) 0%, rgba(206, 220, 255, 0.12) 40%, rgba(206, 220, 255, 0) 68%);
+}
+@keyframes wx-pulse { 50% { transform: scale(1.08); opacity: 0.85; } }
+
+.wx-cloud {
+  left: -45%;
+  border-radius: 999px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 70%);
+  filter: blur(5px);
+  animation: wx-drift linear infinite;
+}
+.wx-cloud--dark { background: radial-gradient(ellipse at 50% 45%, rgba(214, 224, 238, 0.85) 0%, rgba(214, 224, 238, 0) 70%); }
+@keyframes wx-drift { from { left: -45%; } to { left: 105%; } }
+
+.wx-drop {
+  top: -34px;
+  width: 1.5px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.7));
+  animation: wx-rain linear infinite;
+}
+@keyframes wx-rain {
+  from { transform: translate3d(0, 0, 0) rotate(10deg); }
+  to { transform: translate3d(-80px, 360px, 0) rotate(10deg); }
+}
+
+.wx-flake {
+  top: -10px;
+  border-radius: 50%;
+  background: #fff;
+  animation: wx-snow linear infinite;
+}
+@keyframes wx-snow {
+  from { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(16px, 150px, 0); }
+  to { transform: translate3d(-8px, 320px, 0); }
+}
+
+.wx-star {
+  border-radius: 50%;
+  background: #fff;
+  animation: wx-twinkle ease-in-out infinite;
+}
+@keyframes wx-twinkle { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+
+.wx-band {
+  left: -20%;
+  top: 14%;
+  width: 140%;
+  height: 34%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0));
+  filter: blur(12px);
+  animation: wx-fog 24s ease-in-out infinite alternate;
+}
+.wx-band--2 { top: 40%; animation-duration: 31s; animation-direction: alternate-reverse; opacity: 0.8; }
+.wx-band--3 { top: 64%; animation-duration: 37s; opacity: 0.7; }
+@keyframes wx-fog { from { transform: translateX(-9%); } to { transform: translateX(9%); } }
+
+.wx-flash {
+  inset: 0;
+  background: radial-gradient(circle at 72% 18%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 62%);
+  opacity: 0;
+  animation: wx-flash 8s linear infinite;
+}
+@keyframes wx-flash {
+  0%, 88%, 100% { opacity: 0; }
+  89% { opacity: 0.75; }
+  90.5% { opacity: 0.1; }
+  92% { opacity: 0.55; }
+  95% { opacity: 0; }
+}
+
+/* ── Panel ───────────────────────────────────────────────────────────── */
+.wx {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+.wx-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wx-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px 3px 7px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: inherit;
+  cursor: pointer;
+}
+.wx-place > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-place:hover { background: rgba(255, 255, 255, 0.26); }
+.wx-caret { font-size: 12px; opacity: 0.75; }
+.wx-iconbtn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+.wx-iconbtn:hover { background: rgba(255, 255, 255, 0.26); }
+.wx-iconbtn.is-spin .ti { animation: wx-turn 0.9s linear infinite; }
+@keyframes wx-turn { to { transform: rotate(360deg); } }
+.wx-place:focus-visible, .wx-iconbtn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+
+.wx-now { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.wx-big { flex: none; display: inline-flex; }
+.wx-big svg { width: 72px; height: 72px; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.2)); }
+.wx-temp { flex: none; font-size: 52px; font-weight: 300; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.wx-desc { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wx-desc b { font-size: 15px; font-weight: 650; }
+.wx-desc small { font-size: 12px; opacity: 0.88; }
+.wx-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.wx-tip .ti { flex: none; font-size: 15px; }
+.wx-tip.is-warn { background: rgba(255, 255, 255, 0.24); }
+
+.wx-strip { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.wx-hours {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+.wx-h {
+  flex: none;
+  width: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0 3px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.wx-h.is-now { background: rgba(255, 255, 255, 0.2); }
+.wx-h-t { opacity: 0.88; white-space: nowrap; }
+.wx-h-deg { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wx-h-pop { height: 12px; font-size: 10px; color: #d3eaff; font-variant-numeric: tabular-nums; }
+.wx-more { align-self: center; }
+
+.wx-week { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.22); }
+.wx-days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.wx-day { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0 3px; border-radius: 10px; font-size: 11px; }
+.wx-day:first-child { background: rgba(255, 255, 255, 0.16); }
+.wx-day-n { opacity: 0.9; }
+.wx-day-t { display: inline-flex; gap: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.wx-day-t span { opacity: 0.7; }
+.wx-sun { display: flex; justify-content: center; gap: 18px; font-size: 12px; opacity: 0.92; }
+.wx-sun .ti { vertical-align: -2px; }
+
+.wx-empty { display: flex; align-items: center; gap: 8px; padding: 18px 0; font-size: 13px; opacity: 0.85; }
+.wx-empty .ti { font-size: 22px; }
+.wx-skel { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+.wx-skel-bar { display: block; height: 14px; width: 60%; border-radius: 7px; background: rgba(255, 255, 255, 0.2); animation: wx-shimmer 1.3s ease-in-out infinite; }
+.wx-skel-bar--big { height: 44px; width: 45%; border-radius: 12px; }
+.wx-skel-bar--short { width: 35%; }
+@keyframes wx-shimmer { 50% { opacity: 0.45; } }
+
+/* ── City picker ─────────────────────────────────────────────────────── */
+.wx-pop {
+  position: fixed;
+  z-index: 10000;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 12px;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  box-shadow: 0 12px 32px rgba(9, 30, 66, 0.28);
+  font-size: 13px;
+}
+.wx-pop-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  color: var(--tp-text-muted);
+}
+.wx-pop-field:focus-within { box-shadow: inset 0 0 0 2px var(--tp-primary); }
+.wx-pop-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--tp-text); font: inherit; }
+.wx-pop-input::placeholder { color: var(--tp-text-muted); opacity: 0.6; }
+.wx-pop-list { display: flex; flex-direction: column; margin-top: 6px; max-height: 260px; overflow: auto; }
+.wx-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wx-pop-item .ti { flex: none; color: var(--tp-text-muted); }
+.wx-pop-item.is-on, .wx-pop-item:hover { background: var(--tp-surface-hover); }
+.wx-pop-name { font-weight: 600; white-space: nowrap; }
+.wx-pop-detail { min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--tp-text-muted); }
+.wx-pop-note { padding: 8px; font-size: 12px; color: var(--tp-text-muted); opacity: 0.8; }
+
+/* ── Glyph motion (only the large glyph of the card moves) ───────────── */
+.wx-big .wx-rays { animation: wx-turn 48s linear infinite; }
+.wx-big .wx-drops line { animation: wx-dropfall 1.15s linear infinite; }
+.wx-big .wx-drops .wx-d1 { animation-delay: -0.38s; }
+.wx-big .wx-drops .wx-d2 { animation-delay: -0.76s; }
+.wx-big .wx-flakes circle { animation: wx-flake 3.4s ease-in-out infinite; }
+.wx-big .wx-flakes .wx-f1 { animation-delay: -1.1s; }
+.wx-big .wx-flakes .wx-f2 { animation-delay: -2.2s; }
+.wx-big .wx-bolt { animation: wx-bolt 4.5s ease-in-out infinite; }
+.wx-big .wx-bars { animation: wx-bars 6s ease-in-out infinite alternate; }
+@keyframes wx-dropfall { 0% { transform: translateY(-4px); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(9px); opacity: 0; } }
+@keyframes wx-flake { 0%, 100% { transform: translate(-1.5px, -1px); } 50% { transform: translate(1.5px, 4px); } }
+@keyframes wx-bolt { 0%, 78%, 100% { opacity: 1; } 82% { opacity: 0.25; } 86% { opacity: 1; } 90% { opacity: 0.4; } }
+@keyframes wx-bars { from { transform: translateX(-2px); } to { transform: translateX(2px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-sky > i, .wx-big svg *, .wx-iconbtn .ti, .wx-skel-bar { animation: none !important; }
+  .wx-drop, .wx-flake, .wx-flash { display: none; }
+  .wx-cloud { left: 20%; }
+}

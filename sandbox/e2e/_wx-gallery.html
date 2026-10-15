@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr" data-color-mode="light">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weather gallery (temporary)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/components/shared/trello-theme.css" />
+  <link rel="stylesheet" href="/components/shared/weather-ui.css" />
+  <style>
+    body { margin: 0; padding: 16px; background: var(--tp-surface-subtle); font: 13px system-ui, sans-serif; color: var(--tp-text); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 14px; }
+    .card { position: relative; border-radius: 18px; overflow: hidden; min-height: 230px; isolation: isolate; }
+    .card .in { position: relative; padding: 16px 20px; }
+    .lbl { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: #fff; opacity: .8; z-index: 3 }
+  </style>
+</head>
+<body>
+  <div class="grid" id="grid"></div>
+  <script src="/components/shared/weather.js"></script>
+  <script src="/components/shared/weather-ui.js"></script>
+  <script>
+    function fixture(code, isDay, temp, feels, hourCodes) {
+      var times = [];
+      for (var h = 0; h < 24; h++) times.push('2026-10-14T' + String(h).padStart(2, '0') + ':00');
+      var n = times.length;
+      return {
+        timezone: 'America/Toronto',
+        current: { time: '2026-10-14T15:30', temperature_2m: temp, apparent_temperature: feels, relative_humidity_2m: 70, is_day: isDay ? 1 : 0, precipitation: 0, weather_code: code, wind_speed_10m: 14, wind_gusts_10m: 30 },
+        hourly: {
+          time: times,
+          temperature_2m: times.map(function (_, i) { return temp + Math.round(Math.sin(i / 4) * 2); }),
+          precipitation_probability: times.map(function (_, i) { return i > 15 && i < 20 ? 60 : 10; }),
+          weather_code: times.map(function (_, i) { return hourCodes ? hourCodes[i % hourCodes.length] : code; }),
+          is_day: times.map(function (_, i) { return i >= 7 && i < 18 ? 1 : 0; })
+        },
+        daily: {
+          time: ['2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18'],
+          weather_code: [code, 3, 61, 0, 71],
+          temperature_2m_max: [11, 9, 7, 13, 2],
+          temperature_2m_min: [3, 4, 2, 5, -3],
+          precipitation_probability_max: [20, 40, 80, 5, 70],
+          sunrise: ['2026-10-14T07:12'], sunset: ['2026-10-14T18:05'], uv_index_max: [2]
+        }
+      };
+    }
+    var cases = [
+      ['clear', 0, true, 21, 21], ['clear night', 0, false, 6, 3], ['partly day', 2, true, 14, 12], ['partly night', 2, false, 9, 8],
+      ['cloudy', 3, true, 9, 5], ['cloudy night', 3, false, 8, 4], ['fog', 45, true, 7, 6], ['rain', 63, true, 8, 5], ['rain night', 63, false, 8, 5],
+      ['snow', 73, true, -4, -9], ['snow night', 73, false, -6, -11], ['storm', 95, true, 19, 21], ['sleet', 66, true, 0, -3]
+    ];
+    var grid = document.getElementById('grid');
+    cases.forEach(function (c, i) {
+      var model = Weather.parse(fixture(c[1], c[2], c[3], c[4]), { name: 'Montréal' });
+      var d = Weather.describe(c[1], c[2]);
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.appendChild(WeatherUI.sky(d.scene, c[2]));
+      var inn = document.createElement('div');
+      inn.className = 'in';
+      inn.appendChild(WeatherUI.panel({ model: model, place: { name: 'Montréal' }, status: 'ok' }, { expanded: i % 3 === 0, onPlace: function (a) { WeatherUI.placePicker(a, { onPick: function (p) { console.log('pick', p); } }); } }));
+      card.appendChild(inn);
+      var lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = c[0] + ' → ' + d.scene; card.appendChild(lbl);
+      grid.appendChild(card);
+    });
+  </script>
+</body>
+</html>

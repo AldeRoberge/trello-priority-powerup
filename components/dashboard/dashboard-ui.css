@@ -49,6 +49,10 @@ html[data-color-mode] .tp-page--dashboard {
 .db-status { flex: none; min-height: 24px; padding: 4px 16px; font-size: 12px; color: var(--tp-text-muted); display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--tp-border); }
 .db-status:empty { visibility: hidden; }
 .db-status.is-ok { color: var(--tp-success); }
+.db-undo { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--tp-link); font: inherit; cursor: pointer; }
+.db-undo:hover { background: var(--tp-surface-hover); }
+.db-undo:focus { outline: none; }
+.db-undo:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
 .db-status.is-error { color: var(--tp-danger-text); }
 
 .db-page { max-width: 760px; margin: 0 auto; padding: 28px 24px 40px; }
@@ -82,7 +86,7 @@ html[data-color-mode] .tp-page--dashboard {
 .db-btn kbd { font: inherit; font-size: 10px; opacity: 0.7; padding: 0 4px; border-radius: 3px; box-shadow: inset 0 0 0 1px currentColor; }
 .db-icon-btn { font: inherit; border: 0; background: transparent; color: var(--tp-text-muted); border-radius: 4px; padding: 3px 5px; cursor: pointer; }
 .db-icon-btn:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
-.db-select, .db-date, .db-name {
+.db-select {
   font: inherit;
   padding: 5px 8px;
   border: 0;
@@ -91,7 +95,7 @@ html[data-color-mode] .tp-page--dashboard {
   color: var(--tp-text);
   box-shadow: inset 0 0 0 1px var(--tp-border);
 }
-.db-select:focus, .db-date:focus, .db-name:focus, .db-capture:focus { outline: 2px solid var(--tp-primary); outline-offset: 0; }
+.db-select:focus, .db-capture:focus { outline: 2px solid var(--tp-primary); outline-offset: 0; }
 
 /* ── Capture ─────────────────────────────────────────────────────────── */
 .db-card { border: 1px solid var(--tp-border); border-radius: 8px; background: var(--tp-surface); }
@@ -146,18 +150,11 @@ button.db-chip:focus-visible { outline: 2px solid var(--tp-primary); outline-off
 .db-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 16px; color: var(--tp-text-muted); }
 .db-empty > .ti { font-size: 32px; }
 
-/* ── Triage ──────────────────────────────────────────────────────────── */
+/* ── Triage (the pane on the right is in triage-ui.css) ─────────────── */
 .db-split-l { flex: 0 0 min(420px, 45%); min-width: 0; padding: 20px 0 0; border-right: 1px solid var(--tp-border); overflow: auto; }
 .db-split-l .db-head { padding: 0 16px; }
-.db-split-r { flex: 1; min-width: 0; padding: 24px; overflow: auto; }
-.db-detail { max-width: 520px; display: flex; flex-direction: column; gap: 14px; }
-.db-detail-head { display: flex; align-items: center; gap: 8px; }
-.db-name { flex: 1; font-size: 16px; font-weight: 600; }
-.db-field { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 8px; }
-.db-field-l { color: var(--tp-text-muted); }
-.db-range { display: flex; align-items: center; gap: 8px; }
-.db-range input { flex: 1; }
-.db-actions--detail { border-top: 0; padding: 8px 0 0; flex-wrap: wrap; }
+.db-split-r { flex: 1; min-width: 0; padding: 0; overflow: auto; container-type: inline-size; }
+.tg-row.is-sel { box-shadow: inset 2px 0 0 var(--tp-primary); }
 
 /* ── Orchestrator ────────────────────────────────────────────────────── */
 .db-page--board {
@@ -536,7 +533,6 @@ button.db-prio { border: 0; font-family: inherit; cursor: pointer; }
 }
 .db-input::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
 .db-input:focus { outline: 2px solid var(--tp-primary); outline-offset: 0; }
-.db-actions--exits { border-top: 0; padding: 8px 0 0; flex-wrap: wrap; }
 .db-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .db-step { font-size: 12px; color: var(--tp-text-muted); overflow-wrap: anywhere; }
 .db-step.is-missing { color: var(--tp-danger-text); }

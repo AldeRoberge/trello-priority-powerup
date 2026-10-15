@@ -26,9 +26,9 @@
     var el = document.createElement('input');
     el.type = 'text';
     el.className = 'ar-input' + (o.className ? ' ' + o.className : '');
-    el.placeholder = o.placeholder || LABEL + '…';
+    el.placeholder = o.placeholder || (o.label || LABEL) + '…';
     el.autocomplete = 'off';
-    el.setAttribute('aria-label', LABEL);
+    el.setAttribute('aria-label', o.label || LABEL);
     if (o.id) el.id = o.id;
     el.addEventListener('keydown', function (e) {
       e.stopPropagation();

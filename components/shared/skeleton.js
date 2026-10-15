@@ -169,7 +169,7 @@
 
   /** Rows of the chart: H header, S section (accent), T task. Both panes read the same list. */
   var GANTT_ROWS = ['S', 'T', 'T', 'T', 'S', 'T', 'T', 'T', 'S', 'T', 'S', 'T', 'T', 'T', 'T', 'T', 'T', 'T'];
-  var GANTT_ACCENTS = ['var(--tp-primary)', 'var(--tp-text-subtle)', 'var(--tp-danger-text, #ae2e24)'];
+  var GANTT_ACCENTS = ['var(--tp-border-strong)'];
   var BAR_AT = [30, 168, 250, 96, 330, 140, 60, 210];
   var BAR_W = [120, 210, 96, 168, 260, 84];
 
@@ -278,8 +278,8 @@
   ];
   var MM_EDGES = [[0, 1], [0, 2], [0, 3, true], [1, 3], [3, 4], [2, 5]];
   var MM_BLOBS = [
-    { x: 38, y: 52, w: 46, h: 62, color: '#8270db' },
-    { x: 74, y: 70, w: 34, h: 46, color: '#1f845a' },
+    { x: 38, y: 52, w: 46, h: 62, color: 'var(--tp-text)' },
+    { x: 74, y: 70, w: 34, h: 46, color: 'var(--tp-text)' },
   ];
 
   function mindmapCanvas() {
@@ -299,10 +299,10 @@
   /* ── Parcours ──────────────────────────────────────────────────────── */
 
   var JY_NODES = [
-    { x: 14, y: 30, w: 170, lines: [66, 40], mark: 'var(--tp-primary)' },
+    { x: 14, y: 30, w: 170, lines: [66, 40] },
     { x: 40, y: 20, w: 170, lines: [58, 36] },
     { x: 40, y: 50, w: 170, lines: [72, 44] },
-    { x: 66, y: 34, w: 170, lines: [54, 30], mark: 'var(--tp-danger-text, #ae2e24)' },
+    { x: 66, y: 34, w: 170, lines: [54, 30] },
     { x: 66, y: 66, w: 170, lines: [62, 38] },
     { x: 88, y: 50, w: 150, lines: [50, 28] },
   ];

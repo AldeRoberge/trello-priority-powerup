@@ -274,7 +274,6 @@ html[data-color-mode] .tp-page--mindmap {
   left: 12px;
   bottom: 12px;
   display: flex;
-.mm-canvas .ar-line--float { bottom: 54px; }
   gap: 12px;
   padding: 6px 10px;
   border-radius: 6px;
@@ -284,6 +283,7 @@ html[data-color-mode] .tp-page--mindmap {
   color: var(--tp-text-muted);
   pointer-events: none;
 }
+.mm-canvas .ar-line--float { bottom: 54px; }
 .mm-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .mm-swatch { width: 22px; height: 0; border-top: 2px solid var(--tp-text-muted); }
 .mm-swatch--depends { border-top: 2px solid var(--mm-depends); }

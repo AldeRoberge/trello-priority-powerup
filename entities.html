@@ -108,10 +108,10 @@
   </div>
   <script>
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'entities' });
+    CommandPalette.attach({});
     PriorityTrello.initIframePage(function (t) {
       EntitiesUI.mount(document.getElementById('entitiesMount'), t);
     });
   </script>
-    CommandPalette.attach({});
 </body>
 </html>

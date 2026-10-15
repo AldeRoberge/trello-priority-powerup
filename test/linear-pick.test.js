@@ -26,6 +26,19 @@ test('filterItems is accent and case blind and needs every word', () => {
   assert.deepEqual(LP.filterItems(items, 'zzz'), []);
 });
 
+test('withCreate adds one row for text that matches no choice exactly', () => {
+  const names = [{ id: 'Paul', label: 'Paul' }, { id: 'Pauline', label: 'Pauline' }];
+  const create = (q) => ({ id: 'new:' + q, label: 'En attente de « ' + q + ' »' });
+  assert.deepEqual(LP.withCreate(LP.filterItems(names, 'pau'), 'pau', create).map((i) => i.id), ['Paul', 'Pauline', 'new:pau']);
+  assert.deepEqual(LP.withCreate(LP.filterItems(names, 'zoé'), 'zoé', create).map((i) => i.id), ['new:zoé']);
+  assert.deepEqual(LP.withCreate(LP.filterItems(names, 'PAUL'), 'PAUL', create).map((i) => i.id), ['Paul', 'Pauline'], 'an exact name is not offered again');
+  assert.deepEqual(LP.withCreate(names, '', create).map((i) => i.id), ['Paul', 'Pauline'], 'nothing typed, nothing to create');
+  assert.deepEqual(LP.withCreate(names, '   ', create).map((i) => i.id), ['Paul', 'Pauline']);
+  assert.deepEqual(LP.withCreate(names, 'x', undefined).map((i) => i.id), ['Paul', 'Pauline'], 'no create option, no extra row');
+  assert.deepEqual(LP.withCreate(names, 'x', () => null).map((i) => i.id), ['Paul', 'Pauline']);
+  assert.equal(names.length, 2, 'the list is not changed');
+});
+
 test('digitIndex maps 1-9 to 0-8 only', () => {
   assert.equal(LP.digitIndex('1'), 0);
   assert.equal(LP.digitIndex('9'), 8);

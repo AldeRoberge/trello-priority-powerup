@@ -9,6 +9,7 @@
  *     items: [{ id, label, icon?, color?, hint? }],
  *     current,                // id of the checked item
  *     digits,                 // false: no 1-9 shortcuts (a palette where digits are typed)
+ *     create(query),          // optional: the extra choice offered for text that matches nothing, { id, label, icon? } or null
  *     wide,                   // true: wider popover (command palette)
  *     onPick(item),           // called once, then the popover closes
  *     onClose(),              // optional
@@ -35,6 +36,19 @@
       var label = norm(it.label);
       return words.every(function (w) { return label.indexOf(w) !== -1; });
     });
+  }
+
+  /**
+   * The matches plus one more row for the typed text when it is not already a choice (create(query) -> item | null).
+   * Lets a picker of names accept a new name without a second dialog.
+   */
+  function withCreate(matches, query, create) {
+    var q = String(query == null ? '' : query).trim();
+    if (!q || typeof create !== 'function') return matches;
+    var key = norm(q);
+    if (matches.some(function (it) { return norm(it.label) === key; })) return matches;
+    var extra = create(q);
+    return extra ? matches.concat([extra]) : matches;
   }
 
   /** "1".."9" -> 0..8, anything else -> -1 (the shortcut shown next to the nth item). */
@@ -107,7 +121,7 @@
 
     function paint() {
       list.textContent = '';
-      shown = filterItems(items, input.value);
+      shown = withCreate(filterItems(items, input.value), input.value, opts.create);
       if (active >= shown.length) active = Math.max(0, shown.length - 1);
       if (!shown.length) list.appendChild(el('div', 'lp-empty', 'Aucun résultat'));
       shown.forEach(function (it, i) {
@@ -176,6 +190,7 @@
     close: close,
     isOpen: function () { return !!current; },
     filterItems: filterItems,
+    withCreate: withCreate,
     digitIndex: digitIndex,
   };
 })(typeof window !== 'undefined' ? window : this);
