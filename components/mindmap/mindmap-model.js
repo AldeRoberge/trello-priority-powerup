@@ -1208,7 +1208,25 @@
     { id: 'people', label: 'Personnes', icon: 'users' },
     { id: 'places', label: 'Lieux', icon: 'map-pin' },
     { id: 'time', label: 'Échéances', icon: 'calendar-event' },
+    { id: 'status', label: 'Statuts', icon: 'progress' },
+    { id: 'urgency', label: 'Urgence', icon: 'flag' },
   ];
+
+  var STATUS_COLUMNS = [
+    { key: 'blocked', label: 'Bloqué' },
+    { key: 'doing', label: 'En cours' },
+    { key: 'will', label: 'À faire' },
+    { key: 'done', label: 'Terminé' },
+    { key: 'canceled', label: 'Annulé' },
+  ];
+
+  /** Status column of a task: blocked wins over the planned/doing phase. */
+  function statusBucket(rec) {
+    rec = rec && typeof rec === 'object' ? rec : {};
+    var phase = taskPhase(rec);
+    if (phase === 'will' && (rec.blocked || rec.category === 'blocked' || categoryFromList(rec.listName) === 'blocked')) return 'blocked';
+    return phase;
+  }
 
   function perspectiveById(id) {
     for (var i = 0; i < PERSPECTIVES.length; i++) if (PERSPECTIVES[i].id === id) return PERSPECTIVES[i];
@@ -1271,6 +1289,29 @@
       var loose = { key: '', label: headKind === 'person' ? 'Sans responsable' : 'Sans lieu', items: [] };
       list.forEach(function (n) { if (n.kind === 'task' && colOf[n.id] == null) loose.items.push(n); });
       if (loose.items.length) cols.push(loose);
+    } else if (id === 'status') {
+      STATUS_COLUMNS.forEach(function (c) { cols.push({ key: c.key, label: c.label, items: [] }); });
+      list.forEach(function (n) {
+        if (n.kind !== 'task') return;
+        var b = statusBucket(n.rec);
+        for (var i = 0; i < cols.length; i++) if (cols[i].key === b) cols[i].items.push(n);
+      });
+      cols = cols.filter(function (c) { return c.items.length; });
+    } else if (id === 'urgency') {
+      var tiers = Object.create(null);
+      list.forEach(function (n) {
+        if (n.kind !== 'task') return;
+        var r = n.rec || {};
+        var label = r.priorityEnabled !== false && r.priorityLabel ? String(r.priorityLabel) : '';
+        if (!tiers[label]) { tiers[label] = { key: label || 'none', label: label || 'Sans urgence', items: [], score: -Infinity }; cols.push(tiers[label]); }
+        tiers[label].items.push(n);
+        if (typeof r.priorityScore === 'number') tiers[label].score = Math.max(tiers[label].score, r.priorityScore);
+      });
+      cols.sort(function (a, b) {
+        if (!a.key || a.key === 'none') return 1;
+        if (!b.key || b.key === 'none') return -1;
+        return b.score - a.score;
+      });
     } else {
       TIME_COLUMNS.forEach(function (c) { cols.push({ key: c.key, label: c.label, items: [] }); });
       list.forEach(function (n) {
@@ -1285,6 +1326,11 @@
       var da = a.rec && a.rec.due ? String(a.rec.due) : '\uffff';
       var db = b.rec && b.rec.due ? String(b.rec.due) : '\uffff';
       return da < db ? -1 : da > db ? 1 : String(a.label).localeCompare(String(b.label), 'fr');
+    }
+    function byScore(a, b) {
+      var sa = a.rec && typeof a.rec.priorityScore === 'number' ? a.rec.priorityScore : -Infinity;
+      var sb = b.rec && typeof b.rec.priorityScore === 'number' ? b.rec.priorityScore : -Infinity;
+      return sa === sb ? byDue(a, b) : sb - sa;
     }
     var GAP = 14;
     var colW = 0;
@@ -1304,7 +1350,7 @@
         out.heads.push({ key: c.key, label: c.label, x: x, y: y + 12, count: c.items.length });
         y += 34;
       }
-      c.items.sort(byDue).forEach(function (n) {
+      c.items.sort(id === 'urgency' ? byScore : byDue).forEach(function (n) {
         out.positions[n.id] = { x: x, y: y + (n.h || 60) / 2 };
         y += (n.h || 60) + GAP;
       });

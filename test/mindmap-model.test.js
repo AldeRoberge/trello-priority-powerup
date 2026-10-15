@@ -533,6 +533,18 @@ describe('MindmapModel', () => {
       assert.ok(p.positions.t1.x < p.positions.t2.x);
     });
 
+    it('groups by status and by urgency tier', () => {
+      const tasks = [
+        { id: 'a', kind: 'task', label: 'A', w: 200, h: 60, rec: { blocked: true, priorityLabel: 'Haute', priorityScore: 9 } },
+        { id: 'b', kind: 'task', label: 'B', w: 200, h: 60, rec: { progress: 40, priorityLabel: 'Basse', priorityScore: 2 } },
+        { id: 'c', kind: 'task', label: 'C', w: 200, h: 60, rec: {} },
+      ];
+      const s = MM.perspective(tasks, [], 'status', { now });
+      assert.deepEqual(s.heads.map((h) => h.label), ['Bloqué', 'En cours', 'À faire']);
+      const u = MM.perspective(tasks, [], 'urgency', { now });
+      assert.deepEqual(u.heads.map((h) => h.label), ['Haute', 'Basse', 'Sans urgence']);
+    });
+
     it('returns nothing for the network or an unknown perspective', () => {
       assert.deepEqual(MM.perspective(nodes, edges, 'network').positions, {});
       assert.deepEqual(MM.perspective(nodes, edges, 'nope').positions, {});
