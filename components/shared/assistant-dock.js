@@ -1,22 +1,24 @@
 /*
- * Role: collapsible project-scope Assistant docked at the bottom of a view
- * (Table, Gantt, Kanban, Mindmap, Dashboard, Documents, Entités).
- * One bar ("Assistant"), a drag grip to resize, and the full AssistantMount chat inside when open.
+ * Role: the Assistant box docked at the bottom of every view (Table, Gantt, Kanban, Mindmap, Dashboard,
+ * Documents, Entités). Always open: one message box that takes text, pasted / dropped images and files.
+ * The AI (KanbanAI.run, with the board's cards and lists) decides what to create or change; files are
+ * attached to the cards it creates. This replaces the old Capture page.
  *
  *   AssistantDock.mount({ t, after: mountEl, onRefresh, isBusy })
  *     after     element the dock is inserted after (the view's mount node, inside a flex-column body)
- *     onRefresh () => any   called to reload the view while the dock is open (the assistant edits cards)
- *     isBusy    () => bool  true while the user is editing: skips the periodic refresh
+ *     onRefresh () => any   called after the AI wrote something, to reload the view
+ *     isBusy    () => bool  unused here (kept so the views' calls stay valid)
+ *   → { root, focus, toggle }   toggle() just focuses the box (the dock has no collapsed state)
  */
 (function (global) {
   'use strict';
 
-  var HEIGHT_KEY = 'tp.assistantDockHeight';
-  var LEGACY_HEIGHT_KEY = 'tb.dockHeight';
-  var MIN_H = 160;
-  var POLL_MS = 20000;
-  var OLD_MS = 25000; // lines start fading
-  var GONE_MS = 60000; // lines vanish (until the chat is hovered / focused / scrolled up)
+  var MAX_FILE_BYTES = 10 * 1048576; // Trello's attachment limit
+  var MAX_SHOTS = 4; // images sent to the model
+  var SHOT_EDGE = 1600; // longest edge sent to the model, in px
+  var LOG_KEEP = 4;
+  var LOG_FADE_MS = 45000;
+  var IMG_RE = /^image\/(png|jpe?g|gif|webp|bmp)$/;
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -31,327 +33,252 @@
     return i;
   }
 
+  function stamp() {
+    var d = new Date();
+    return ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  /** Pasted screenshots are all called image.png: give them a readable, distinct name. */
+  function named(file) {
+    if (file.name && file.name !== 'image.png') return file;
+    var ext = ((file.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
+    try { return new File([file], 'Capture ' + stamp() + '.' + ext, { type: file.type }); } catch (e) { return file; }
+  }
+
+  /** Image File → downscaled JPEG data URL for the model ('' when it cannot be decoded). */
+  function toDataUrl(file) {
+    return new Promise(function (resolve) {
+      var url = global.URL && URL.createObjectURL ? URL.createObjectURL(file) : '';
+      if (!url) return resolve('');
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var k = Math.min(1, SHOT_EDGE / Math.max(img.naturalWidth, img.naturalHeight, 1));
+          var c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.naturalWidth * k));
+          c.height = Math.max(1, Math.round(img.naturalHeight * k));
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/jpeg', 0.85));
+        } catch (e) { resolve(''); }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(''); };
+      img.src = url;
+    });
+  }
+
   function mount(opts) {
     opts = opts || {};
-    var dock = { open: false, mounted: false, height: 220, poll: null, body: null };
-    try {
-      var saved = parseInt(global.localStorage.getItem(HEIGHT_KEY) || global.localStorage.getItem(LEGACY_HEIGHT_KEY), 10);
-      if (saved >= MIN_H) dock.height = saved;
-    } catch (e) { /* storage unavailable */ }
+    var t = opts.t;
+    var files = []; // { id, file, thumb }
+    var seq = 0;
+    var busy = false;
+    var log = []; // { who: 'me' | 'ai' | 'error', text, at }
 
     var root = el('div', 'ad-dock');
     if (opts.after && opts.after.parentNode) opts.after.parentNode.insertBefore(root, opts.after.nextSibling);
     else document.body.appendChild(root);
 
-    function maxHeight() {
-      if (global.ViewShell && typeof global.ViewShell.dockMaxHeight === 'function') {
-        return global.ViewShell.dockMaxHeight();
-      }
-      return Math.max(180, Math.round(global.innerHeight * 0.75));
+    var logEl = el('div', 'ad-dock-log');
+    logEl.setAttribute('role', 'log');
+    logEl.setAttribute('aria-live', 'polite');
+    var attsEl = el('div', 'ad-dock-atts');
+    var composer = el('div', 'ad-dock-composer');
+    var picker = el('input');
+    picker.type = 'file';
+    picker.multiple = true;
+    picker.hidden = true;
+    var clip = el('button', 'ad-dock-btn');
+    clip.type = 'button';
+    clip.title = 'Joindre des fichiers';
+    clip.setAttribute('aria-label', 'Joindre des fichiers');
+    clip.appendChild(icon('paperclip'));
+    var input = el('textarea', 'ad-dock-input');
+    input.rows = 1;
+    input.placeholder = 'Une tâche, une idée, une image…';
+    input.setAttribute('aria-label', 'Message à l\'assistant');
+    var send = el('button', 'ad-dock-btn ad-dock-send');
+    send.type = 'button';
+    send.title = 'Envoyer (Entrée)';
+    send.setAttribute('aria-label', 'Envoyer');
+    send.appendChild(icon('arrow-up'));
+    composer.appendChild(clip);
+    composer.appendChild(input);
+    composer.appendChild(send);
+    composer.appendChild(picker);
+    root.appendChild(logEl);
+    root.appendChild(attsEl);
+    root.appendChild(composer);
+
+    function addLog(who, text) {
+      log.push({ who: who, text: text, at: Date.now() });
+      if (log.length > LOG_KEEP) log.shift();
+      renderLog();
     }
 
-    function setHeight(px, persist) {
-      dock.height = Math.max(MIN_H, Math.min(maxHeight(), Math.round(px)));
-      if (dock.body) dock.body.style.height = dock.height + 'px';
-      if (persist) {
-        try { global.localStorage.setItem(HEIGHT_KEY, String(dock.height)); } catch (e) { /* ignore */ }
-      }
+    function renderLog() {
+      var now = Date.now();
+      log = log.filter(function (m) { return now - m.at < LOG_FADE_MS || m.who === 'error'; });
+      logEl.innerHTML = '';
+      logEl.hidden = !log.length;
+      log.forEach(function (m) {
+        logEl.appendChild(el('div', 'ad-dock-msg is-' + m.who, m.text));
+      });
+      logEl.scrollTop = logEl.scrollHeight;
     }
+    setInterval(function () { if (root.isConnected && log.length) renderLog(); }, 5000);
 
-    function refresh() {
-      if (typeof opts.onRefresh !== 'function') return;
-      try { opts.onRefresh(); } catch (e) { /* view gone */ }
-    }
-
-    /* The message box is often created a moment after the click (provider load).
-       A catcher takes the keystrokes in the meantime, then hands them over. */
-    var catcher = null;
-    var focusWatch = null;
-    dock.typing = false;
-
-    function composerInput() {
-      if (!dock.body) return null;
-      var input = dock.body.querySelector('textarea.agent-composer-input');
-      if (!input || input.disabled) return null;
-      var node = input;
-      while (node) {
-        if (node.hidden) return null;
-        node = node.parentElement;
-      }
-      return input;
-    }
-
-    function removeCatcher() {
-      if (catcher && catcher.parentNode) catcher.parentNode.removeChild(catcher);
-    }
-
-    function ensureCatcher() {
-      if (!dock.body || composerInput()) return null;
-      if (!catcher) {
-        catcher = el('textarea', 'ad-dock-catcher');
-        catcher.rows = 1;
-        catcher.setAttribute('aria-label', 'Message à l\'assistant');
-        catcher.placeholder = 'Demandez ce que vous voulez';
-      }
-      if (!catcher.isConnected) dock.body.appendChild(catcher);
-      return catcher;
-    }
-
-    function placeCaret(input) {
-      var len = (input.value || '').length;
-      try { input.setSelectionRange(len, len); } catch (e) { /* ignore */ }
-    }
-
-    function transferCatcher(input) {
-      if (!catcher) return;
-      var extra = catcher.value || '';
-      if (extra) {
-        var cur = input.value || '';
-        if (cur.slice(-extra.length) !== extra) {
-          input.value = cur + extra;
-          try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { /* ignore */ }
+    function renderAtts() {
+      attsEl.innerHTML = '';
+      attsEl.hidden = !files.length;
+      files.forEach(function (a) {
+        var chip = el('span', 'ad-dock-att');
+        chip.title = a.file.name;
+        if (a.thumb) {
+          var im = el('img', 'ad-dock-att-img');
+          im.alt = '';
+          im.src = a.thumb;
+          chip.appendChild(im);
+        } else {
+          chip.appendChild(icon(a.file.type === 'application/pdf' ? 'file-type-pdf' : 'file'));
         }
-        catcher.value = '';
-        placeCaret(input);
-      }
-      removeCatcher();
+        chip.appendChild(el('span', 'ad-dock-att-name', a.file.name));
+        var x = el('button', 'ad-dock-att-x');
+        x.type = 'button';
+        x.setAttribute('aria-label', 'Retirer');
+        x.appendChild(icon('x'));
+        x.addEventListener('click', function () {
+          if (a.thumb) try { URL.revokeObjectURL(a.thumb); } catch (e) { /* ignore */ }
+          files = files.filter(function (f) { return f !== a; });
+          renderAtts();
+          input.focus();
+        });
+        chip.appendChild(x);
+        attsEl.appendChild(chip);
+      });
+      refreshSend();
     }
 
-    function focusBox(input) {
-      if (!input) return false;
-      try { input.focus({ preventScroll: true }); } catch (e) { try { input.focus(); } catch (e2) { /* ignore */ } }
-      return document.activeElement === input;
-    }
-
-    function tryFocus() {
-      if (!dock.open || !dock.typing) return;
-      var input = composerInput();
-      if (input) {
-        transferCatcher(input);
-        focusBox(input);
-        return;
-      }
-      focusBox(ensureCatcher());
-    }
-
-    function stopFocusWatch() {
-      if (focusWatch) clearInterval(focusWatch);
-      focusWatch = null;
-    }
-
-    function armTyping() {
-      dock.typing = true;
-      tryFocus();
-      stopFocusWatch();
-      var stableSince = 0;
-      focusWatch = setInterval(function () {
-        if (!dock.open || !dock.typing) { stopFocusWatch(); return; }
-        var input = composerInput();
-        if (input && document.activeElement === input && !(catcher && catcher.value)) {
-          removeCatcher();
-          if (!stableSince) stableSince = Date.now();
-          if (Date.now() - stableSince > 1500) stopFocusWatch();
+    function addFiles(list) {
+      Array.prototype.forEach.call(list || [], function (raw) {
+        if (raw.size > MAX_FILE_BYTES) {
+          addLog('error', '« ' + raw.name + ' » dépasse 10 Mo (limite de Trello).');
           return;
         }
-        stableSince = 0;
-        if (!input && catcher && document.activeElement === catcher) return;
-        tryFocus();
-      }, 80);
+        var file = named(raw);
+        var isImg = IMG_RE.test(file.type);
+        files.push({ id: ++seq, file: file, thumb: isImg && global.URL && URL.createObjectURL ? URL.createObjectURL(file) : '' });
+      });
+      renderAtts();
     }
 
-    function insertKey(input, e) {
-      var val = input.value || '';
-      var start = input.selectionStart != null ? input.selectionStart : val.length;
-      var end = input.selectionEnd != null ? input.selectionEnd : val.length;
-      if (e.key === 'Backspace') {
-        var cut = start === end ? Math.max(0, start - 1) : start;
-        input.value = val.slice(0, cut) + val.slice(end);
-        try { input.setSelectionRange(cut, cut); } catch (err) { /* ignore */ }
-      } else {
-        input.value = val.slice(0, start) + e.key + val.slice(end);
-        var pos = start + e.key.length;
-        try { input.setSelectionRange(pos, pos); } catch (err2) { /* ignore */ }
-      }
-      try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (err3) { /* ignore */ }
+    function refreshSend() {
+      send.disabled = busy || (!input.value.trim() && !files.length);
+      input.disabled = busy;
+      root.classList.toggle('is-busy', busy);
     }
 
-    function onPointerDown(e) {
-      if (!dock.typing || !e.target || !e.target.closest) return;
-      if (e.target.closest('.agent-composer-input, .ad-dock-catcher, .ad-dock-bar')) return;
-      dock.typing = false;
+    function grow() {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 140) + 'px';
     }
 
-    function onKeyDown(e) {
-      if (!dock.open || !dock.typing) return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
-      var typingKey = e.key.length === 1 || e.key === 'Backspace';
-      if (!typingKey && e.key !== 'Enter') return;
-      var input = composerInput();
-      var box = input || (catcher && catcher.isConnected ? catcher : null);
-      if (!box) return;
-      if (document.activeElement === box) return;
-      var ae = document.activeElement;
-      if (ae && ae !== document.body && ae !== document.documentElement &&
-          (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
-        dock.typing = false;
-        return;
-      }
-      if (e.key === 'Enter') {
-        if (!input) return;
-        e.preventDefault();
-        focusBox(input);
-        try {
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        } catch (err) { /* ignore */ }
-        return;
-      }
-      e.preventDefault();
-      if (!input) box = ensureCatcher();
-      else box = input;
-      if (!box) return;
-      focusBox(box);
-      insertKey(box, e);
-    }
-
-    document.addEventListener('mousedown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown, true);
-
-    function toggle(force) {
-      dock.open = typeof force === 'boolean' ? force : !dock.open;
-      render();
-      if (dock.open && !dock.mounted && global.AssistantMount) {
-        dock.mounted = true;
-        var mountEl = dock.body.querySelector('#assistantMount');
-        global.AssistantMount.mount(mountEl, opts.t, { resizeBody: false, focusComposer: true, preferComposer: true }).catch(function (err) {
-          dock.mounted = false;
-          mountEl.textContent = '';
-          mountEl.appendChild(el('div', 'ad-dock-error', 'Assistant indisponible : ' + (err && err.message)));
+    function submit() {
+      var text = input.value.trim();
+      if (busy || (!text && !files.length)) return;
+      var AI = global.KanbanAI;
+      var TT = global.TableTrello;
+      if (!AI || !TT) return addLog('error', 'Assistant indisponible sur cette page.');
+      var sending = files.slice();
+      busy = true;
+      addLog('me', (text || '') + (sending.length ? (text ? ' ' : '') + '📎 ' + sending.length : ''));
+      input.value = '';
+      grow();
+      refreshSend();
+      var shots = sending.filter(function (a) { return IMG_RE.test(a.file.type); }).slice(0, MAX_SHOTS);
+      Promise.all(shots.map(function (a) { return toDataUrl(a.file); })).then(function (urls) {
+        var attachments = sending.map(function (a) {
+          var i = shots.indexOf(a);
+          return { name: a.file.name, type: a.file.type, dataUrl: i >= 0 ? urls[i] : '' };
         });
-      }
-      clearInterval(dock.poll);
-      dock.poll = null;
-      if (dock.open) {
-        armTyping();
-        dock.poll = setInterval(function () {
-          if (typeof opts.isBusy === 'function' && opts.isBusy()) return;
-          refresh();
-        }, POLL_MS);
-      } else {
-        dock.typing = false;
-        stopFocusWatch();
-        removeCatcher();
-        if (dock.mounted) refresh();
-      }
+        return TT.load(t).then(function (board) {
+          return AI.run(t, {
+            text: text,
+            rows: board.rows,
+            lists: board.lists,
+            attachments: attachments,
+            files: sending.map(function (a) { return a.file; }),
+          });
+        });
+      }).then(function (res) {
+        var parts = [];
+        if (res.applied.length) parts.push(res.applied.join(', '));
+        else if (res.message) parts.push(res.message);
+        else parts.push('Rien à faire.');
+        if (res.failed.length) parts.push('Échec : ' + res.failed.join(' ; '));
+        addLog(res.failed.length && !res.applied.length ? 'error' : 'ai', parts.join(' — '));
+        if (res.applied.length) {
+          sending.forEach(function (a) { if (a.thumb) try { URL.revokeObjectURL(a.thumb); } catch (e) { /* ignore */ } });
+          files = [];
+          renderAtts();
+          if (typeof opts.onRefresh === 'function') try { opts.onRefresh(); } catch (e) { /* view gone */ }
+        } else if (!res.failed.length) {
+          input.value = text; // nothing happened (a question came back): keep the draft
+          grow();
+        }
+      }, function (err) {
+        input.value = text;
+        grow();
+        addLog('error', (err && (err.message || err.reason)) || 'Erreur de l’assistant.');
+      }).then(function () {
+        busy = false;
+        refreshSend();
+        input.focus();
+      });
     }
 
-
-    /* MMO-style log behaviour: lines fade with age, scroll arrows, "awake" on hover / focus / scroll-up. */
-    function enhanceLog(body) {
-      var log = null;
-      var bound = null;
-      var arrows = el('div', 'ad-dock-arrows');
-      var up = el('button', 'ad-dock-arrow');
-      var down = el('button', 'ad-dock-arrow');
-      up.type = down.type = 'button';
-      up.title = 'Remonter'; down.title = 'Descendre';
-      up.appendChild(icon('chevron-up')); down.appendChild(icon('chevron-down'));
-      arrows.appendChild(up); arrows.appendChild(down);
-      body.appendChild(arrows);
-
-      function atBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < 8; }
-      function awake() {
-        return body.matches(':hover') || body.contains(document.activeElement) || !atBottom();
-      }
-      function tick() {
-        if (!log || !log.isConnected) { find(); if (!log) return; }
-        var now = Date.now();
-        var kids = log.children;
-        for (var i = 0; i < kids.length; i++) {
-          var k = kids[i];
-          if (!k.classList.contains('agent-msg')) continue;
-          if (!k.dataset.adT || k.classList.contains('is-streaming')) k.dataset.adT = String(now);
-          var age = now - Number(k.dataset.adT);
-          k.classList.toggle('is-old', age > OLD_MS);
-          k.classList.toggle('is-gone', age > GONE_MS);
-        }
-        body.classList.toggle('is-awake', awake());
-        up.disabled = log.scrollTop <= 0;
-        down.disabled = atBottom();
-      }
-      function find() {
-        log = body.querySelector('.agent-messages');
-        if (log && log !== bound) {
-          bound = log;
-          log.addEventListener('scroll', tick, { passive: true });
-          new MutationObserver(tick).observe(log, { childList: true });
-        }
-      }
-      up.addEventListener('click', function () { log.scrollBy({ top: -Math.max(40, log.clientHeight * 0.8) }); });
-      down.addEventListener('click', function () { log.scrollBy({ top: Math.max(40, log.clientHeight * 0.8) }); });
-      body.addEventListener('mouseenter', tick);
-      body.addEventListener('mouseleave', tick);
-      body.addEventListener('focusin', tick);
-      body.addEventListener('focusout', function () { setTimeout(tick, 0); });
-      setInterval(function () { if (body.isConnected) tick(); }, 1000);
-      find();
-      new MutationObserver(function () { find(); tick(); }).observe(body, { childList: true, subtree: true });
-    }
-
-    function render() {
-      var keep = dock.body;
-      root.innerHTML = '';
-      root.classList.toggle('is-open', dock.open);
-      var grip = el('div', 'ad-dock-grip');
-      grip.title = 'Glisser pour redimensionner';
-      grip.addEventListener('pointerdown', function (e) {
-        if (!dock.open) return;
+    input.addEventListener('input', function () { grow(); refreshSend(); });
+    input.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+      else if (e.key === 'Escape') input.blur();
+    });
+    input.addEventListener('paste', function (e) {
+      var fl = e.clipboardData && e.clipboardData.files;
+      if (fl && fl.length) { e.preventDefault(); addFiles(fl); }
+    });
+    send.addEventListener('click', submit);
+    clip.addEventListener('click', function () { picker.click(); });
+    picker.addEventListener('change', function () {
+      addFiles(picker.files);
+      picker.value = '';
+      input.focus();
+    });
+    root.addEventListener('dragover', function (e) {
+      if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0) {
         e.preventDefault();
-        var startY = e.clientY;
-        var startH = dock.height;
-        function move(ev) { setHeight(startH + (startY - ev.clientY), false); }
-        function up() {
-          document.removeEventListener('pointermove', move);
-          document.removeEventListener('pointerup', up);
-          setHeight(dock.height, true);
-        }
-        document.addEventListener('pointermove', move);
-        document.addEventListener('pointerup', up);
-      });
-      var bar = el('div', 'ad-dock-bar');
-      bar.setAttribute('role', 'button');
-      bar.tabIndex = 0;
-      bar.setAttribute('aria-expanded', dock.open ? 'true' : 'false');
-      bar.addEventListener('mousedown', function (e) {
-        if (e.button !== 0) return;
-        e.preventDefault();
-      });
-      bar.addEventListener('click', function () { toggle(); });
-      bar.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-      });
-      bar.appendChild(icon('sparkles'));
-      bar.appendChild(el('strong', null, 'Assistant'));
-      bar.appendChild(el('span', 'ad-dock-hint', 'Posez une question ou demandez une modification sur tout le projet…'));
-      bar.appendChild(el('span', 'ad-dock-spacer'));
-      bar.appendChild(icon(dock.open ? 'chevron-down' : 'chevron-up'));
-      root.appendChild(grip);
-      root.appendChild(bar);
-      if (dock.open) {
-        if (!keep) {
-          keep = el('div', 'ad-dock-body tp-page--priority tp-page--assistant');
-          var m = el('div');
-          m.id = 'assistantMount';
-          keep.appendChild(m);
-          enhanceLog(keep);
-        }
-        dock.body = keep;
-        keep.style.height = dock.height + 'px';
-        root.appendChild(keep);
+        root.classList.add('is-drop');
       }
-    }
+    });
+    root.addEventListener('dragleave', function (e) {
+      if (!root.contains(e.relatedTarget)) root.classList.remove('is-drop');
+    });
+    root.addEventListener('drop', function (e) {
+      root.classList.remove('is-drop');
+      var fl = e.dataTransfer && e.dataTransfer.files;
+      if (!fl || !fl.length) return;
+      e.preventDefault();
+      addFiles(fl);
+      input.focus();
+    });
 
-    render();
-    return { toggle: toggle, root: root };
+    renderLog();
+    renderAtts();
+    function focus() { try { input.focus(); } catch (e) { /* ignore */ } }
+    return { root: root, focus: focus, toggle: focus };
   }
 
   global.AssistantDock = { mount: mount };

@@ -1,69 +1,107 @@
-/* Assistant dock shared by Table, Gantt, Kanban and Mindmap (components/shared/assistant-dock.js). Colors from trello-theme.css (--tp-*). */
-/* ── Assistant dock ─────────────────────────────────────────────────── */
+/* Assistant box docked at the bottom of every view (components/shared/assistant-dock.js). Colors from trello-theme.css (--tp-*). */
 .ad-dock {
   flex: none;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
   border-top: 1px solid var(--tp-border-strong, var(--tp-border));
   background: var(--tp-surface);
 }
-.ad-dock-grip {
+.ad-dock.is-drop::after {
+  content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  top: -3px;
-  height: 6px;
-  z-index: 8;
-  cursor: default;
+  inset: 2px;
+  border: 2px dashed var(--tp-primary);
+  border-radius: 10px;
+  pointer-events: none;
 }
-.ad-dock.is-open .ad-dock-grip {
-  cursor: ns-resize;
-}
-.ad-dock.is-open .ad-dock-grip:hover {
-  background: var(--tp-primary);
-  opacity: 0.5;
-}
-.ad-dock-bar {
+
+/* Short log of what the AI did: lines fade away on their own */
+.ad-dock-log {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  user-select: none;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 96px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ad-dock-log[hidden],
+.ad-dock-atts[hidden] {
+  display: none;
+}
+.ad-dock-msg {
+  overflow-wrap: anywhere;
+  color: var(--tp-text);
+}
+.ad-dock-msg.is-me {
   color: var(--tp-text-subtle);
 }
-.ad-dock-bar:hover {
+.ad-dock-msg.is-error {
+  color: var(--tp-danger, #c9372c);
+}
+
+/* Attached files */
+.ad-dock-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ad-dock-att {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 2px 4px 2px 6px;
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
   background: var(--tp-surface-hover);
-}
-.ad-dock-bar strong {
-  color: var(--tp-text);
-  font-weight: 600;
-}
-.ad-dock-hint {
-  color: var(--tp-text-muted);
+  color: var(--tp-text-subtle);
   font-size: 12px;
+}
+.ad-dock-att-img {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.ad-dock-att-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ad-dock.is-open .ad-dock-hint {
-  display: none;
+.ad-dock-att-x {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
-.ad-dock-body {
-  overflow: hidden;
-  border-top: 1px solid var(--tp-border);
+.ad-dock-att-x:hover {
+  background: var(--tp-border);
+  color: var(--tp-text);
 }
-/* Stand-in message box, focused the instant the bar opens, until the real composer exists. */
-.ad-dock-catcher {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  z-index: 5;
+
+/* Message box: paperclip · text · send */
+.ad-dock-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.ad-dock-input {
+  flex: 1 1 auto;
+  min-width: 0;
   box-sizing: border-box;
-  height: 40px;
+  min-height: 36px;
+  max-height: 140px;
   margin: 0;
   padding: 8px 10px;
   resize: none;
+  overflow-y: auto;
   border: 1px solid var(--tp-border-strong, var(--tp-border));
   border-radius: 8px;
   background: var(--tp-surface);
@@ -71,257 +109,51 @@
   font: inherit;
   line-height: 1.4;
 }
-.ad-dock-body #assistantMount {
-  height: 100%;
+.ad-dock-input:focus {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: -1px;
 }
-
-/* ── Assistant dock: compact chat (transcript scrolls, composer pinned at the bottom) ── */
-.ad-dock .ad-dock-body .variant-chat-section--standalone .field--chat {
-  max-width: none;
-  padding: 6px 12px 8px;
-  gap: 4px;
+.ad-dock-input::placeholder {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
 }
-.ad-dock .ad-dock-body .agent-standalone-head {
-  min-height: 0;
+.ad-dock-input:hover::placeholder,
+.ad-dock-input:focus::placeholder {
+  opacity: 0.8;
 }
-.ad-dock .ad-dock-body .agent-standalone-heading {
-  padding: 0;
-  font-size: 12px;
-}
-/* Order: transcript · quick replies · composer — nothing else competes for the height. */
-.ad-dock .ad-dock-body .agent-chat-panel {
-  gap: 6px;
-}
-.ad-dock .ad-dock-body .agent-messages {
-  order: 1;
-  padding: 4px 4px 4px 6px;
-}
-.ad-dock .ad-dock-body .agent-empty,
-.ad-dock .ad-dock-body .agent-followups,
-.ad-dock .ad-dock-body .agent-prompts,
-.ad-dock .ad-dock-body .agent-apply-suggestions,
-.ad-dock .ad-dock-body .agent-error {
-  order: 2;
-  flex-shrink: 0;
-}
-.ad-dock .ad-dock-body .agent-suggestions {
-  order: 90;
-}
-.ad-dock .ad-dock-body .agent-composer {
-  order: 91;
-}
-.ad-dock .ad-dock-body .agent-interview-bar {
-  order: 92;
-}
-/* Hidden to save space: power picker (still in the composer's right-click menu), stats, debug. */
-.ad-dock .ad-dock-body .agent-composer-foot,
-.ad-dock .ad-dock-body .agent-chat-info,
-.ad-dock .ad-dock-body .agent-debug-panel {
-  display: none !important;
-}
-/* Quick suggestions: one slim scrollable row of small pills */
-.ad-dock .ad-dock-body .agent-suggestions {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  margin: 0;
-  padding: 0 0 2px;
-  gap: 6px;
-  scrollbar-width: thin;
-}
-.ad-dock .ad-dock-body .agent-suggestion-chip {
+.ad-dock-btn {
   flex: 0 0 auto;
-  width: auto;
-  padding: 3px 10px;
-  font-size: 12px;
-  white-space: nowrap;
-  border-radius: 999px;
-}
-.ad-dock .ad-dock-body .agent-suggestion-chip::before,
-.ad-dock .ad-dock-body .agent-suggestion-chip::after,
-.ad-dock .ad-dock-body .agent-suggestion-num {
-  display: none;
-}
-/* Composer: one compact row, icon-only send */
-.ad-dock .ad-dock-body .agent-composer {
-  flex-wrap: nowrap;
-  align-items: flex-end;
-  gap: 6px;
-}
-.ad-dock .ad-dock-body .agent-composer .tp-tab-complete-wrap,
-.ad-dock .ad-dock-body .agent-composer > .agent-composer-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.ad-dock .ad-dock-body .agent-composer-input {
-  min-height: 40px;
-  max-height: 120px;
-  padding: 8px 10px;
-}
-.ad-dock .ad-dock-body .agent-composer .tp-tab-complete-ghost {
-  padding: 8px 10px;
-}
-.ad-dock .ad-dock-body .agent-send-btn {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  justify-content: center;
-}
-.ad-dock .ad-dock-body .agent-send-btn-label {
-  display: none;
-}
-.ad-dock .ad-dock-body .agent-composer-input {
-  height: 40px;
-  resize: none;
-  field-sizing: content;
-}
-/* The dock bar already says "Assistant": keep only the settings gear, floated top-right. */
-.ad-dock .ad-dock-body {
-  position: relative;
-}
-.ad-dock .ad-dock-body .agent-standalone-head {
-  position: absolute;
-  top: 4px;
-  right: 10px;
-  z-index: 3;
-  width: auto;
-  padding: 0;
-}
-.ad-dock .ad-dock-body .agent-standalone-heading {
-  display: none;
-}
-
-.ad-dock-spacer { flex: 1 1 auto; }
-.ad-dock-error { padding: 12px; color: var(--tp-text-muted); font-size: 13px; }
-
-/* ── Assistant dock: MMORPG-style chat log ("Alde : texte" / "AI : réponse") ── */
-.ad-dock .ad-dock-body .agent-messages {
-  gap: 1px;
-  padding: 4px 30px 4px 8px;
-  max-height: none;
-  scroll-behavior: smooth;
-  scrollbar-width: none;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.ad-dock .ad-dock-body .agent-messages::-webkit-scrollbar { display: none; }
-.ad-dock .ad-dock-body .agent-msg,
-.ad-dock .ad-dock-body .agent-msg--user,
-.ad-dock .ad-dock-body .agent-msg--assistant {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 6px;
-  align-items: baseline;
-  align-self: stretch;
-  width: auto;
-  max-width: none;
-  padding: 1px 4px;
-  border-radius: 4px;
-  transition: opacity 0.6s ease;
-}
-.ad-dock .ad-dock-body .agent-msg:hover { background: var(--tp-surface-hover); }
-.ad-dock .ad-dock-body .agent-msg::before {
-  grid-column: 1;
-  grid-row: 1;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.ad-dock .ad-dock-body .agent-msg--user::before {
-  content: 'Alde :';
-  color: var(--tp-warning-text, #b65c02);
-}
-.ad-dock .ad-dock-body .agent-msg--assistant::before {
-  content: 'AI :';
-  color: var(--tp-primary, #0c66e4);
-}
-.ad-dock .ad-dock-body .agent-msg--error::before { color: var(--tp-danger-text, #ae2e24); }
-.ad-dock .ad-dock-body .agent-msg > * { grid-column: 2; }
-.ad-dock .ad-dock-body .agent-msg-bubble,
-.ad-dock .ad-dock-body .agent-msg--user .agent-msg-bubble,
-html[data-color-mode='dark'] .ad-dock .ad-dock-body .agent-msg--user .agent-msg-bubble {
-  grid-row: 1;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--tp-text);
-  overflow-wrap: anywhere;
-}
-/* Rich content stays, but compact. */
-.ad-dock .ad-dock-body .agent-msg-bubble p,
-.ad-dock .ad-dock-body .agent-msg-bubble ul,
-.ad-dock .ad-dock-body .agent-msg-bubble ol { margin: 0 0 2px; }
-.ad-dock .ad-dock-body .agent-msg-bubble h1,
-.ad-dock .ad-dock-body .agent-msg-bubble h2,
-.ad-dock .ad-dock-body .agent-msg-bubble h3 { margin: 2px 0; font-size: 13px; }
-.ad-dock .ad-dock-body .agent-msg-bubble pre,
-.ad-dock .ad-dock-body .agent-msg-bubble table { font-size: 12px; max-width: 100%; overflow-x: auto; }
-.ad-dock .ad-dock-body .agent-msg-bubble img { max-height: 120px; }
-/* No avatar; feedback / copy / edit controls only on hover, overlaid at the line's end. */
-.ad-dock .ad-dock-body .agent-msg .agent-face,
-.ad-dock .ad-dock-body .agent-msg .agent-think-clouds { display: none !important; }
-.ad-dock .ad-dock-body .agent-msg-note { font-size: 11px; color: var(--tp-text-muted); }
-.ad-dock .ad-dock-body .agent-msg-feedback { opacity: 0; transition: opacity 0.15s; }
-.ad-dock .ad-dock-body .agent-msg:hover .agent-msg-feedback,
-.ad-dock .ad-dock-body .agent-msg:focus-within .agent-msg-feedback { opacity: 1; }
-
-/* Auto-disappearing: old lines fade out unless the chat is "awake" (hover, focus, scrolled up). */
-.ad-dock .ad-dock-body .agent-msg.is-old { opacity: 0.4; }
-.ad-dock .ad-dock-body .agent-msg.is-gone { opacity: 0; pointer-events: none; }
-.ad-dock .ad-dock-body.is-awake .agent-msg.is-old,
-.ad-dock .ad-dock-body.is-awake .agent-msg.is-gone { opacity: 1; pointer-events: auto; }
-
-/* Scroll arrows (right edge, under the settings gear) */
-.ad-dock-arrows {
-  position: absolute;
-  top: 30px;
-  right: 8px;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.ad-dock-body.is-awake .ad-dock-arrows { opacity: 1; }
-.ad-dock-arrow {
-  width: 22px;
-  height: 22px;
-  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--tp-border);
-  border-radius: 4px;
-  background: var(--tp-surface);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--tp-text-subtle);
+  font-size: 18px;
   cursor: pointer;
-  font-size: 14px;
 }
-.ad-dock-arrow:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
-.ad-dock-arrow:disabled { opacity: 0.35; cursor: default; }
-
-/* Compact pass: hover controls overlay the line instead of taking grid rows; no stray gaps. */
-.ad-dock .ad-dock-body .agent-msg { position: relative; row-gap: 0; min-height: 0; margin: 0; }
-.ad-dock .ad-dock-body .agent-msg > .agent-msg-feedback,
-.ad-dock .ad-dock-body .agent-msg > .agent-msg-copy,
-.ad-dock .ad-dock-body .agent-msg > .agent-msg-edit,
-.ad-dock .ad-dock-body .agent-msg > .tp-spell-revert {
-  position: absolute;
-  top: 0;
-  right: 4px;
-  grid-column: auto;
-  margin: 0;
-  background: var(--tp-surface);
-  order: 0;
+.ad-dock-btn:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
 }
-.ad-dock .ad-dock-body .agent-msg > .agent-msg-copy { right: 56px; }
-.ad-dock .ad-dock-body .agent-msg > .agent-msg-edit { right: 56px; }
-.ad-dock .ad-dock-body .agent-msg-bubble { line-height: 1.4; min-height: 0; }
-.ad-dock .ad-dock-body .agent-messages { padding-top: 2px; padding-bottom: 2px; }
-.ad-dock .ad-dock-body .agent-messages > :first-child { margin-top: auto; }
-.ad-dock .ad-dock-body .agent-messages > * { flex: 0 0 auto; }
-.ad-dock .ad-dock-body .agent-chat-panel { gap: 4px; }
+.ad-dock-send {
+  background: var(--tp-primary);
+  color: var(--tp-primary-text, #fff);
+}
+.ad-dock-send:hover {
+  background: var(--tp-primary-hover);
+  color: var(--tp-primary-text, #fff);
+}
+.ad-dock-send:disabled {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text-muted);
+  opacity: 0.7;
+  cursor: default;
+}
+.ad-dock.is-busy .ad-dock-input {
+  opacity: 0.6;
+}

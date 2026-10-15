@@ -18,10 +18,9 @@
   var WO = function () { return global.WorkOS; };
 
   var SECTIONS = [
-    { key: 'ingest', label: 'Capture', icon: 'inbox', hint: '1' },
-    { key: 'triage', label: 'Triage', icon: 'circle-arrow-down', hint: '2' },
-    { key: 'orchestrator', label: 'Orchestrateur', icon: 'calendar-event', hint: '3' },
-    { key: 'today', label: 'Aujourd’hui', icon: 'sun', hint: '4' },
+    { key: 'triage', label: 'Triage', icon: 'circle-arrow-down', hint: '1' },
+    { key: 'orchestrator', label: 'Orchestrateur', icon: 'calendar-event', hint: '2' },
+    { key: 'today', label: 'Aujourd’hui', icon: 'sun', hint: '3' },
   ];
   var URGENCIES = [
     ['aucun', 'Aucune'],
@@ -244,7 +243,7 @@
 
   function mount(root, t) {
     var state = {
-      section: 'ingest',
+      section: 'triage',
       lists: [],
       rows: [],
       projects: [],
@@ -261,8 +260,6 @@
       busy: false,
       status: '',
       statusKind: '',
-      draftHtml: '', // capture editor content, kept across section switches
-      files: {}, // pending attachments of the capture editor: id → { file, thumb }
       authOk: true,
       landed: false, // first load decides the landing section once
       composer: null, // orchestrator column open for a new task ('pool', 'cal:ISO', 'vague:id')
@@ -400,10 +397,6 @@
     function go(key) {
       state.section = key;
       render();
-      if (key === 'ingest') {
-        var ta = els.main.querySelector('.db-capture');
-        if (ta) ta.focus();
-      }
     }
 
     /* ── Shared row pieces ─────────────────────────────────────────── */
@@ -814,230 +807,6 @@
       });
     }
 
-    /* ── 1. Ingest (rich capture) ──────────────────────────────────── */
-    var attSeq = 0;
-
-    function escHtml(s) {
-      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    function sizeLabel(n) {
-      return n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
-    }
-
-    /** Inline chip for a pasted / dropped file; `data-aid` links it to state.files. */
-    function chipHtml(aid, att) {
-      var visual = att.thumb
-        ? '<img class="db-att-img" alt="" src="' + escHtml(att.thumb) + '">'
-        : '<i class="ti ti-' + (att.file.type === 'application/pdf' ? 'file-type-pdf' : 'file') + '"></i>';
-      return (
-        '<span class="db-att" contenteditable="false" data-aid="' + aid + '" title="' + escHtml(att.file.name) + '">' +
-        visual +
-        '<span class="db-att-name">' + escHtml(att.file.name) + '</span>' +
-        '<span class="db-att-size">' + sizeLabel(att.file.size) + '</span>' +
-        '<button class="db-att-x" type="button" tabindex="-1" aria-label="Retirer">×</button></span>'
-      );
-    }
-
-    function addFile(file) {
-      if (file.size > DM().MAX_FILE_BYTES) {
-        setStatus('« ' + file.name + ' » dépasse 10 Mo (limite de Trello).', 'error', 5000);
-        return null;
-      }
-      var aid = 'a' + ++attSeq;
-      var isImg = /^image\/(png|jpe?g|gif|webp|bmp|svg\+xml)$/.test(file.type);
-      var att = { file: file, thumb: isImg && global.URL && URL.createObjectURL ? URL.createObjectURL(file) : '' };
-      if (!file.name || file.name === 'image.png') {
-        var d = new Date();
-        var stamp = ('0' + d.getHours()).slice(-2) + 'h' + ('0' + d.getMinutes()).slice(-2);
-        var ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
-        try { att.file = new File([file], 'Capture ' + stamp + '.' + ext, { type: file.type }); } catch (e) { /* keep the original name */ }
-      }
-      state.files[aid] = att;
-      return chipHtml(aid, att);
-    }
-
-    function dropFile(aid) {
-      var att = state.files[aid];
-      if (att && att.thumb) try { URL.revokeObjectURL(att.thumb); } catch (e) { /* ignore */ }
-      delete state.files[aid];
-    }
-
-    /** Editor content → Markdown, each chip replaced by its ⟦id⟧ token (DocsModel.domToMd does the formatting). */
-    function editorMarkdown(ed) {
-      var clone = ed.cloneNode(true);
-      Array.prototype.forEach.call(clone.querySelectorAll('.db-att'), function (c) {
-        c.replaceWith(document.createTextNode(' ' + DM().captureToken(c.getAttribute('data-aid')) + ' '));
-      });
-      return global.DocsModel.domToMd(clone);
-    }
-
-    function captureTasks(ed) {
-      var names = {};
-      Object.keys(state.files).forEach(function (k) { names[k] = state.files[k].file.name; });
-      return DM().parseCapture(editorMarkdown(ed), names).map(function (task) {
-        task.files = task.aids.map(function (id) { return state.files[id] && state.files[id].file; }).filter(Boolean);
-        return task;
-      });
-    }
-
-    function renderIngest() {
-      var recent = DM().triageQueue(state.rows).slice(-5).reverse();
-      var DOCS = global.DocsModel;
-      var ed = h('div', {
-        class: 'db-capture',
-        contenteditable: 'true',
-        role: 'textbox',
-        'aria-multiline': 'true',
-        'aria-label': 'Capture',
-        'data-placeholder': 'Une tâche par ligne…',
-        spellcheck: 'true',
-      });
-      try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { /* browser default separator */ }
-      ed.innerHTML = state.draftHtml || '';
-      var count = h('span', { class: 'db-muted' });
-      function refresh() {
-        var empty = !ed.textContent.trim() && !ed.querySelector('.db-att, img');
-        ed.classList.toggle('is-empty', empty);
-        state.draftHtml = empty ? '' : ed.innerHTML;
-        var found = empty ? [] : captureTasks(ed);
-        var n = found.length;
-        var dated = found.filter(function (x) { return x.due; }).length;
-        count.textContent = n ? n + (n > 1 ? ' tâches' : ' tâche') + (dated ? ' · ' + dated + ' avec échéance' : '') : '';
-      }
-      function insertHtml(html) {
-        ed.focus();
-        document.execCommand('insertHTML', false, html);
-        refresh();
-      }
-      function paste(e) {
-        var cd = e.clipboardData;
-        if (!cd) return;
-        var files = Array.prototype.slice.call(cd.files || []);
-        if (files.length) {
-          e.preventDefault();
-          insertHtml(files.map(addFile).filter(Boolean).join(''));
-          return;
-        }
-        var html = cd.getData('text/html');
-        var text = cd.getData('text/plain');
-        if (!html && !text) return;
-        e.preventDefault();
-        var out;
-        if (html && DOCS) {
-          // Same sanitizer as the Documents editor: HTML → Markdown → whitelisted HTML (bold, italic, links, lists...).
-          out = DOCS.mdToHtml(DOCS.domToMd(new DOMParser().parseFromString(html, 'text/html').body));
-          var single = /^<p>((?:(?!<\/?p>)[\s\S])*)<\/p>$/.exec(out);
-          if (single) out = single[1];
-        } else {
-          var lines = text.replace(/\r\n?/g, '\n').split('\n').filter(function (l) { return l.trim(); });
-          // One line stays inline (the caret remains on it, so a file pasted next joins this task).
-          out = lines.length === 1 ? escHtml(lines[0]) : lines.map(function (l) { return '<p>' + escHtml(l) + '</p>'; }).join('');
-        }
-        insertHtml(out);
-      }
-      function submit() {
-        var tasks = captureTasks(ed);
-        if (!tasks.length || state.busy) return;
-        if (!hasTriage()) return setStatus('Créez d’abord la boîte de triage (bandeau ci-dessus).', 'error', 5000);
-        state.busy = true;
-        var nFiles = tasks.reduce(function (n, x) { return n + x.files.length; }, 0);
-        setStatus(nFiles ? 'Création et envoi des pièces jointes…' : 'Création…', 'busy');
-        DT().ingest(t, tasks, state.lists).then(function (res) {
-          state.busy = false;
-          Object.keys(state.files).forEach(dropFile);
-          state.draftHtml = '';
-          var msg = tasks.length + (tasks.length > 1 ? ' tâches ajoutées' : ' tâche ajoutée') + ' dans « ' + res.list.name + ' »';
-          if (res.failed && res.failed.length) setStatus(msg + ' (échec : ' + res.failed.join(', ') + ')', 'error');
-          else setStatus(msg, 'ok');
-          return reload({ quiet: true });
-        }, function (err) { state.busy = false; fail(err); });
-      }
-      function askAI() {
-        var text = ed.innerText.trim();
-        var AI = global.KanbanAI;
-        if (!text || state.busy) return;
-        if (!AI) return setStatus('IA indisponible', 'error');
-        state.busy = true;
-        setStatus('IA en cours…', 'busy');
-        AI.run(t, { text: 'Crée une tâche par élément (sépare le texte en tâches distinctes), dans la liste de triage : ' + text, rows: state.rows, lists: state.lists }).then(function (res) {
-          state.busy = false;
-          if (res.applied.length) { state.draftHtml = ''; Object.keys(state.files).forEach(dropFile); }
-          setStatus(res.applied.length ? 'IA : ' + res.applied.join(', ') : res.message || 'Rien à créer.', res.applied.length ? 'ok' : 'error', 6000);
-          return reload({ quiet: true });
-        }, function (err) { state.busy = false; fail(err); });
-      }
-      function format(cmd) {
-        ed.focus();
-        document.execCommand(cmd);
-        refresh();
-      }
-      var picker = h('input', {
-        type: 'file',
-        multiple: true,
-        hidden: true,
-        onchange: function (e) {
-          var html = Array.prototype.map.call(e.target.files, addFile).filter(Boolean).join('');
-          e.target.value = '';
-          if (html) insertHtml(html);
-        },
-      });
-
-      ed.addEventListener('input', refresh);
-      ed.addEventListener('paste', paste);
-      ed.addEventListener('keydown', function (e) {
-        e.stopPropagation();
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
-        else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
-      });
-      ed.addEventListener('click', function (e) {
-        var x = e.target.closest && e.target.closest('.db-att-x');
-        if (!x) return;
-        var chip = x.closest('.db-att');
-        dropFile(chip.getAttribute('data-aid'));
-        chip.remove();
-        refresh();
-      });
-      ed.addEventListener('dragover', function (e) {
-        if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0) { e.preventDefault(); ed.classList.add('is-drop'); }
-      });
-      ed.addEventListener('dragleave', function () { ed.classList.remove('is-drop'); });
-      ed.addEventListener('drop', function (e) {
-        ed.classList.remove('is-drop');
-        var files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
-        if (!files.length) return;
-        e.preventDefault();
-        insertHtml(files.map(addFile).filter(Boolean).join(''));
-      });
-
-      function tool(iconName, title, fn) {
-        return h('button', { class: 'db-icon-btn', type: 'button', title: title, 'aria-label': title, onmousedown: function (e) { e.preventDefault(); }, onclick: fn }, [icon(iconName)]);
-      }
-      refresh();
-      els.main.appendChild(h('div', { class: 'db-page' }, [
-        pageHead('Capture'),
-        hasTriage() ? null : inboxBanner(),
-        h('div', { class: 'db-card' }, [
-          ed,
-          h('div', { class: 'db-actions' }, [
-            tool('bold', 'Gras (Ctrl+B)', function () { format('bold'); }),
-            tool('italic', 'Italique (Ctrl+I)', function () { format('italic'); }),
-            tool('paperclip', 'Joindre des fichiers', function () { picker.click(); }),
-            picker,
-            count,
-            h('span', { class: 'db-spacer' }),
-            h('button', { class: 'db-btn', type: 'button', onclick: askAI }, [icon('sparkles'), document.createTextNode('Demander à l’IA')]),
-            h('button', { class: 'db-btn db-btn--primary', type: 'button', onclick: submit }, [icon('plus'), document.createTextNode('Ajouter'), h('kbd', { text: 'Ctrl+↵' })]),
-          ]),
-        ]),
-        recent.length ? h('div', { class: 'db-section-title', text: 'Derniers ajouts' }) : null,
-        recent.length ? h('div', { class: 'db-list' }, recent.map(function (r) {
-          return h('div', { class: 'db-row', 'data-card': r.id, onclick: function () { state.selected = r.id; go('triage'); } }, [statusIcon(r), h('span', { class: 'db-row-name', text: r.name })]);
-        })) : null,
-      ]));
-      setTimeout(function () { ed.focus(); }, 0);
-    }
-
     function pageHead(title, sub, right) {
       return h('header', { class: 'db-head' }, [
         h('div', {}, [h('h1', { class: 'db-title', text: title }), sub ? h('p', { class: 'db-sub', text: sub }) : null]),
@@ -1052,8 +821,7 @@
         els.main.appendChild(h('div', { class: 'db-page' }, [
           pageHead('Triage', 'Rien à trier.'),
           hasTriage() ? null : inboxBanner(),
-          h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: hasTriage() ? 'Boîte de triage vide. Bien joué.' : 'Aucune liste de triage sur ce tableau.' }),
-            h('button', { class: 'db-btn', type: 'button', onclick: function () { go('ingest'); } }, [icon('plus'), document.createTextNode('Capturer des tâches')])]),
+          h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: hasTriage() ? 'Boîte de triage vide. Bien joué.' : 'Aucune liste de triage sur ce tableau.' }),]),
         ]));
         return;
       }
@@ -2087,8 +1855,7 @@
       els.main.querySelectorAll('.db-col-body').forEach(function (b) { colScroll.push(b.scrollTop); });
       els.main.textContent = '';
       renderSide();
-      if (state.section === 'ingest') renderIngest();
-      else if (state.section === 'triage') renderTriage();
+      if (state.section === 'triage') renderTriage();
       else if (state.section === 'orchestrator') renderOrchestrator();
       else renderToday();
       els.main.scrollTop = keepScroll;
@@ -2107,9 +1874,8 @@
       var tag = (e.target && e.target.tagName) || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       var k = e.key.toLowerCase();
-      var idx = '1234'.indexOf(k);
+      var idx = '123'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
-      if (k === 'c') { e.preventDefault(); return go('ingest'); }
       if (state.section !== 'triage') return;
       var q = DM().triageQueue(state.rows);
       var i = q.map(function (r) { return r.id; }).indexOf(state.selected);
@@ -2150,7 +1916,7 @@
         var metrics = (res[1][1] && res[1][1][1]) || [];
         state.projects = WO() ? WO().projectChain(goals, state.rows, metrics, objectifs) : [];
         state.places = WO() ? WO().places(goals) : {};
-        // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Capture.
+        // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Triage.
         if (!state.landed) {
           state.landed = true;
           if (DM().todayList(state.rows, today).length) state.section = 'today';

@@ -201,4 +201,34 @@ describe('KanbanAI', () => {
       await assert.rejects(() => AI.run({}, { text: 'x', target: null, rows: mkRows(), lists }), /illisible/);
     });
   });
+
+  describe('captures with attachments (assistant dock)', () => {
+    it('puts new tasks in the triage list when there is no target', () => {
+      const withTriage = [{ id: 'lt', name: 'Triage', category: 'triage' }].concat(lists);
+      assert.equal(AI.defaultListId(withTriage, null), 'lt');
+      assert.equal(AI.defaultListId(lists, null), 'l1');
+    });
+
+    it('keeps the attachment names a created task asks for', () => {
+      const out = AI.normalizeActions([{ op: 'create', title: 'Payer', files: ['facture.png', '', 3] }], { rows: mkRows(), lists });
+      assert.deepEqual(out[0].files, ['facture.png']);
+      assert.equal(AI.normalizeActions([{ op: 'create', title: 'Payer' }], { rows: mkRows(), lists })[0].files, undefined);
+    });
+
+    it('sends images to the model and only the file names for other files', () => {
+      const msgs = AI.buildMessages({
+        text: 'tâches de la capture',
+        rows: mkRows(),
+        lists,
+        today: '2026-10-14',
+        attachments: [{ name: 'a.jpg', type: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAA' }, { name: 'b.pdf', type: 'application/pdf' }],
+      });
+      const content = msgs[1].content;
+      assert.ok(Array.isArray(content));
+      assert.equal(content[1].image_url.url, 'data:image/jpeg;base64,AAA');
+      assert.match(content[0].text, /b.pdf/);
+      assert.ok(!/AAA/.test(content[0].text));
+      assert.equal(typeof AI.buildMessages({ text: 'x', rows: [], lists }) [1].content, 'string');
+    });
+  });
 });
