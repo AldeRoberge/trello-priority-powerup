@@ -72,6 +72,8 @@
   function dayLabel(iso, today) {
     if (iso === today) return 'Aujourd’hui';
     if (iso === DM().addDays(today, 1)) return 'Demain';
+    // The Monday the triage offers in one click ("Lundi"): spelled out instead of dated.
+    if (today && iso === DM().quickDays(today)[2].iso) return 'Lundi prochain';
     var d = new Date(iso + 'T00:00:00');
     return DAYS_FR[d.getDay()] + ' ' + TM().formatDay(iso);
   }
@@ -88,6 +90,32 @@
     var h = Math.floor(n / 60);
     var m = n % 60;
     return m ? h + ' h ' + ('0' + m).slice(-2) : h + ' h';
+  }
+
+  /**
+   * What the day chip offers: the next eight days, then a "Plus tard" submenu with the vague horizons.
+   * Ids are `plan:<iso>` and `vague:<id>`; the page attaches the actions.
+   * vagues: [{ id, label }]
+   */
+  function dueChoices(row, today, vagues) {
+    row = row || {};
+    var vague = row.dueVague || '';
+    var day = vague ? '' : row.due || '';
+    var items = [];
+    for (var n = 0; n <= 7; n++) {
+      var iso = DM().addDays(today, n);
+      items.push({
+        id: 'plan:' + iso,
+        label: dayLabel(iso, today),
+        icon: dayIconName(iso, today),
+        checked: day === iso,
+      });
+    }
+    var later = (vagues || []).map(function (v) {
+      return { id: 'vague:' + v.id, label: v.label, icon: 'calendar-time', checked: vague === v.id };
+    });
+    if (later.length) items.push({ id: 'later', label: 'Plus tard', icon: 'calendar-time', children: later });
+    return items;
   }
 
   /**
@@ -528,25 +556,32 @@
       return chip;
     }
 
-    /** Clickable day chip: plans the card on the chosen day (icons follow the day). */
+    /**
+     * Clickable day chip: plans the card on the chosen day or on a vague horizon
+     * (icons follow the day; "Plus tard" holds the horizons, like the card menu's "Jour prévu").
+     */
     function dueChip(row) {
-      var late = !!row.due && row.due < today && DM().isOpen(row);
-      var label = !row.due ? 'Planifier…' : row.due === today ? 'Aujourd’hui' : dayLabel(row.due, today);
-      var cls = (late ? 'is-late' : '') + (!row.due ? ' is-empty' : '');
-      return menuChip(cls.trim(), 'Cliquer pour changer le jour', row.due ? dayIconName(row.due, today) : 'calendar-plus', label, function () {
-        var items = [];
-        for (var n = 0; n <= 7; n++) {
-          (function (iso) {
-            items.push({
-              id: 'plan:' + iso,
-              label: dayLabel(iso, today),
-              icon: dayIconName(iso, today),
-              checked: row.due === iso,
-              action: function () { plan(row, iso); },
-            });
-          })(DM().addDays(today, n));
+      var vague = row.dueVague || '';
+      var day = vague ? '' : row.due || '';
+      var late = !!day && day < today && DM().isOpen(row);
+      var label = vague ? (VAGUE_SHORT[vague] || vague) : !day ? 'Planifier…' : dayLabel(day, today);
+      var cls = (late ? 'is-late' : '') + (!vague && !day ? ' is-empty' : '');
+      var iconName = vague ? 'calendar-time' : day ? dayIconName(day, today) : 'calendar-plus';
+      return menuChip(cls.trim(), 'Cliquer pour changer le jour', iconName, label, function () {
+        var vagues = vagueOptions().map(function (v) { return { id: v.id, label: VAGUE_SHORT[v.id] || v.label }; });
+        function withAction(item) {
+          if (item.children) {
+            item.children.forEach(withAction);
+            return item;
+          }
+          var id = String(item.id);
+          item.action = function () {
+            if (id.indexOf('vague:') === 0) plan(row, '', id.slice(6));
+            else plan(row, id.slice(5));
+          };
+          return item;
         }
-        return items;
+        return dueChoices(row, today, vagues).map(withAction);
       });
     }
 
@@ -2176,5 +2211,5 @@
     reload();
   }
 
-  global.DashboardUI = { mount: mount, menuEntries: menuEntries, pageEntries: pageEntries };
+  global.DashboardUI = { mount: mount, menuEntries: menuEntries, pageEntries: pageEntries, dueChoices: dueChoices, dayLabel: dayLabel };
 })(typeof window !== 'undefined' ? window : this);

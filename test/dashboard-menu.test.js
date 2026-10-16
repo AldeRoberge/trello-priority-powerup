@@ -85,6 +85,53 @@ describe('Dashboard card menu', () => {
     assert.equal(items.filter((it) => it.id === 'open-trello')[0].disabled, true);
   });
 
+  describe('day chip menu', () => {
+    const vagues = [
+      { id: 'bientot', label: 'Bientôt' },
+      { id: 'eventuellement', label: 'Éventuellement' },
+    ];
+    const friday = '2026-10-16';
+
+    it('says "Lundi prochain" for the next Monday instead of its date', () => {
+      assert.equal(UI.dayLabel('2026-10-19', friday), 'Lundi prochain');
+      assert.equal(UI.dayLabel('2026-10-18', friday), 'dim. 18 oct.');
+      assert.equal(UI.dayLabel('2026-10-20', friday), 'mar. 20 oct.');
+      // A later Monday keeps its date, and tomorrow wins when tomorrow is a Monday.
+      assert.equal(UI.dayLabel('2026-10-26', friday), 'lun. 26 oct.');
+      assert.equal(UI.dayLabel('2026-10-19', '2026-10-18'), 'Demain');
+      assert.equal(UI.dayLabel('2026-10-26', '2026-10-19'), 'Lundi prochain');
+    });
+
+    it('lists the eight days, then the vague horizons under "Plus tard"', () => {
+      const items = UI.dueChoices({ due: '', dueVague: '' }, friday, vagues);
+      assert.deepEqual(items.slice(0, 8).map((i) => i.label), [
+        'Aujourd’hui', 'Demain', 'dim. 18 oct.', 'Lundi prochain', 'mar. 20 oct.', 'mer. 21 oct.', 'jeu. 22 oct.', 'ven. 23 oct.',
+      ]);
+      const later = items[8];
+      assert.equal(items.length, 9);
+      assert.equal(later.id, 'later');
+      assert.equal(later.label, 'Plus tard');
+      assert.deepEqual(later.children.map((c) => c.id), ['vague:bientot', 'vague:eventuellement']);
+      assert.equal(items.some((i) => i.checked), false);
+    });
+
+    it('checks the planned day, or the horizon, but never both', () => {
+      const onDay = UI.dueChoices({ due: '2026-10-19', dueVague: '' }, friday, vagues);
+      assert.equal(onDay.filter((i) => i.checked)[0].id, 'plan:2026-10-19');
+      assert.equal(onDay[8].children.some((c) => c.checked), false);
+
+      const onHorizon = UI.dueChoices({ due: '2026-10-19', dueVague: 'eventuellement' }, friday, vagues);
+      assert.equal(onHorizon.slice(0, 8).some((i) => i.checked), false);
+      assert.equal(onHorizon[8].children.filter((c) => c.checked)[0].id, 'vague:eventuellement');
+    });
+
+    it('has no "Plus tard" entry when no horizon is known', () => {
+      const items = UI.dueChoices({}, friday, []);
+      assert.equal(items.length, 8);
+      assert.equal(items.some((i) => i.id === 'later'), false);
+    });
+  });
+
   it('empty space offers a new card, the sections and reload', () => {
     const items = UI.pageEntries({ section: 'triage', canCreate: true });
     const id = ids(items);
