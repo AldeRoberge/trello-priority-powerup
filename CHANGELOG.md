@@ -3,6 +3,9 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-10-19
+- Tableau : les sous-tâches d’une carte s’affichent en lignes filles sous la carte, avec une flèche pour les déplier ou replier.
+
 ## 2026-10-16
 - Dashboard : le menu du jour prévu (Orchestrateur) propose maintenant les horizons vagues (Bientôt, Sous peu, Éventuellement…) dans « Plus tard », et le prochain lundi s’écrit « Lundi prochain » au lieu de sa date.
 

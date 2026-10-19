@@ -305,6 +305,23 @@ textarea.tb-input {
 .tb-handle { display: inline-block; margin-right: 2px; opacity: 0.35; vertical-align: -2px; }
 .tb-handle.is-off { cursor: not-allowed; opacity: 0.15; }
 .tb-rownum { display: inline-block; min-width: 20px; text-align: right; }
+
+/* ── Subtasks (checklist items as child rows) ───────────────────── */
+/* Fixed width with or without subtasks, so the Objet text lines up on every row. */
+.tb-subtoggle {
+  display: inline-flex; align-items: center; justify-content: space-between; box-sizing: border-box;
+  width: 34px; height: 18px; margin-right: 2px; padding: 0 3px; border: 0; border-radius: 4px;
+  background: transparent; color: var(--tp-text-muted); font-size: 13px; line-height: 1; vertical-align: -3px; cursor: pointer;
+}
+.tb-subtoggle:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tb-subtoggle.is-empty { cursor: default; }
+.tb-subcount { font-size: 11px; color: var(--tp-text-subtle); opacity: 0.6; margin-right: 1px; }
+.tb-sub td { font-size: 12.5px; }
+.tb-sub .tb-cell { cursor: default; }
+.tb-sub-indent { display: inline-block; }
+.tb-sub-icon { margin-right: 6px; font-size: 13px; color: var(--tp-text-subtle); vertical-align: -2px; }
+.tb-sub .tb-name { color: var(--tp-text-muted); }
+.tb-sub .tb-name.is-done { color: var(--tp-text-subtle); }
 .tb-rowbtn {
   border: 0; background: transparent; color: var(--tp-text-muted); cursor: pointer; padding: 2px 3px;
   margin-left: 4px; border-radius: 4px; font-size: 15px; line-height: 1; visibility: hidden; vertical-align: -2px;

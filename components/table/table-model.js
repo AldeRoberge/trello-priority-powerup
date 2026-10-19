@@ -322,7 +322,34 @@
     }
   }
 
+  /**
+   * A card's checklist items as child rows (its subtasks), nested items after their parent with a
+   * depth. Items linked to another card are left out: that card already has its own row.
+   */
+  function subtaskRows(row) {
+    var out = [];
+    (function walk(items, depth) {
+      (items || []).forEach(function (it) {
+        if (!it || it.linkedCardId) return;
+        var itemId = it.id != null ? String(it.id) : String(out.length);
+        out.push({
+          id: 'sub:' + row.id + ':' + itemId,
+          parentId: row.id,
+          depth: depth,
+          name: it.text || 'Sous-tâche',
+          done: !!it.done,
+          progress: typeof it.progress === 'number' ? Math.round(it.progress) : it.done ? 100 : 0,
+          due: it.dueDate || '',
+          start: it.startDate || '',
+        });
+        walk(it.items, depth + 1);
+      });
+    })(row.items, 0);
+    return out;
+  }
+
   global.TableModel = {
+    subtaskRows: subtaskRows,
     urgencyLabel: function (id) { return URGENCY_LABELS[id] || ''; },
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,

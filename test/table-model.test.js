@@ -207,3 +207,40 @@ describe('TableModel', () => {
     assert.equal(TM.parseConnectionCode(insecure), null);
   });
 });
+
+describe('TableModel.subtaskRows', () => {
+  let TM;
+
+  before(() => {
+    loadComponent('table/table-model.js');
+    TM = global.TableModel;
+  });
+
+  it('turns checklist items into child rows, nested ones after their parent with a deeper depth', () => {
+    const row = {
+      id: 'card1',
+      items: [
+        { id: 'a', text: 'Vidéo', done: true },
+        { id: 'b', text: 'Photos', progress: 40, dueDate: '2026-10-30', items: [{ id: 'b1', text: 'Drone', done: false }] },
+      ],
+    };
+    const subs = TM.subtaskRows(row);
+    assert.deepEqual(
+      subs.map((s) => [s.name, s.depth, s.done, s.progress, s.parentId]),
+      [
+        ['Vidéo', 0, true, 100, 'card1'],
+        ['Photos', 0, false, 40, 'card1'],
+        ['Drone', 1, false, 0, 'card1'],
+      ]
+    );
+    assert.equal(subs[1].due, '2026-10-30');
+    assert.equal(new Set(subs.map((s) => s.id)).size, 3);
+  });
+
+  it('leaves out items linked to another card and returns [] when there are none', () => {
+    const row = { id: 'c', items: [{ id: 'x', text: 'Autre carte', linkedCardId: 'c2' }, { id: 'y', text: 'Local' }] };
+    assert.deepEqual(TM.subtaskRows(row).map((s) => s.name), ['Local']);
+    assert.deepEqual(TM.subtaskRows({ id: 'd', items: [] }), []);
+    assert.deepEqual(TM.subtaskRows({ id: 'e' }), []);
+  });
+});

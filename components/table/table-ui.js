@@ -80,6 +80,7 @@
       menuOpen: false,
       drawer: null, // 'logs' | 'activities'
       alerts: [],
+      expanded: {}, // rowId → true when its subtasks (checklist items) show as child rows
     };
     var pushTimer = null;
     var statusTimer = null;
@@ -675,6 +676,7 @@
         );
         shownColumns().forEach(function (key) { tr.appendChild(renderCell(row, key)); });
         body.appendChild(tr);
+        if (state.expanded[row.id]) renderSubRows(row, body);
       });
 
       if (!rows.length && state.filter) {
@@ -1078,6 +1080,7 @@
       if (key === 'name') {
         td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
         td.title = row.name;
+        td.appendChild(subToggle(row));
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
         var stepText = global.WorkOS && global.WorkOS.stepText(row);
         if (stepText) td.appendChild(h('span', { class: 'tb-step', text: stepText }));
@@ -1131,6 +1134,51 @@
         if (editable) beginEdit(row.id, key);
         else renderGrid();
       });
+      return td;
+    }
+
+    /* ── Subtasks: checklist items shown as child rows under their card ── */
+    /** Chevron before the Objet: toggles the child rows; a placeholder of the same width when there are none. */
+    function subToggle(row) {
+      var count = TM().subtaskRows(row).length;
+      if (!count) return h('span', { class: 'tb-subtoggle is-empty' });
+      var open = !!state.expanded[row.id];
+      return h('button', {
+        class: 'tb-subtoggle',
+        type: 'button',
+        title: open ? 'Replier les sous-tâches' : 'Déplier les sous-tâches',
+        onclick: function (e) {
+          e.stopPropagation(); // the click must not start renaming the card
+          state.expanded[row.id] = !open;
+          renderGrid();
+        },
+      }, [icon(open ? 'chevron-down' : 'chevron-right'), h('span', { class: 'tb-subcount', text: String(count) })]);
+    }
+
+    function renderSubRows(row, body) {
+      TM().subtaskRows(row).forEach(function (sub) {
+        var tr = h('tr', { class: 'tb-sub', 'data-parent': row.id });
+        tr.appendChild(h('td', { class: 'tb-num' }));
+        shownColumns().forEach(function (key) { tr.appendChild(renderSubCell(sub, key)); });
+        body.appendChild(tr);
+      });
+    }
+
+    /** Read-only cells of a subtask: the same columns as the card row, so every value stays aligned. */
+    function renderSubCell(sub, key) {
+      var spec = TM().COLUMNS[key];
+      var td = h('td', { class: 'tb-cell tb-cell--' + spec.kind + ' tb-cell--sub is-ro' });
+      if (key === 'name') {
+        td.classList.add('tb-cell--name');
+        td.title = sub.name;
+        td.appendChild(h('span', { class: 'tb-sub-indent', style: 'width:' + (36 + 16 * sub.depth) + 'px' }));
+        td.appendChild(icon(sub.done ? 'circle-check' : 'circle', 'tb-sub-icon'));
+        td.appendChild(h('span', { class: 'tb-name' + (sub.done ? ' is-done' : ''), text: sub.name }));
+      } else if (key === 'progress') {
+        td.textContent = TM().cellText(sub, 'progress');
+      } else if (key === 'due') {
+        td.textContent = sub.due ? TM().formatDay(sub.due) : '';
+      }
       return td;
     }
 
