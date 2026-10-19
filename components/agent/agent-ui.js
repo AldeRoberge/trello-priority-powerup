@@ -1314,6 +1314,37 @@
     });
     infoHead.appendChild(infoToggleBtn);
 
+    var copyDebugBtn = el('button', 'agent-debug-btn', {
+      type: 'button',
+      'aria-label': 'Copier la conversation pour le d\u00e9bogage',
+      title: 'Copier pour le d\u00e9bogage'
+    });
+    var copyDebugIcon = el('i', 'ti ti-copy');
+    copyDebugIcon.setAttribute('aria-hidden', 'true');
+    copyDebugBtn.appendChild(copyDebugIcon);
+    copyDebugBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var text = Agent.buildChatDebugExport({
+        provider: provider,
+        history: history,
+        debugLog: debugLog,
+        statusLevel: statusLevel
+      });
+      copyTextToClipboard(text).then(function (ok) {
+        if (!ok) {
+          errorEl.textContent = 'Copie impossible.';
+          errorEl.hidden = false;
+          return;
+        }
+        copyDebugIcon.className = 'ti ti-check';
+        clearTimeout(copyDebugBtn._copyReset);
+        copyDebugBtn._copyReset = setTimeout(function () {
+          copyDebugIcon.className = 'ti ti-copy';
+        }, 1400);
+      });
+    });
+    infoHead.appendChild(copyDebugBtn);
+
     var debugBtn = el('button', 'agent-debug-btn', {
       type: 'button',
       'aria-label': 'Panneau de d\u00e9bogage',

@@ -19009,6 +19009,178 @@
     return results;
   }
 
+  /** Markdown fence that cannot be closed by backticks inside `text`. */
+  function debugFenced(lang, text) {
+    var body = String(text == null ? '' : text);
+    var fence = '```';
+    var runs = body.match(/`{3,}/g) || [];
+    for (var r = 0; r < runs.length; r++) {
+      if (runs[r].length >= fence.length) fence = runs[r] + '`';
+    }
+    return fence + (lang || '') + '\n' + body + '\n' + fence;
+  }
+
+  function debugJsonText(value) {
+    if (value == null) return '';
+    if (typeof value === 'string') {
+      try {
+        return JSON.stringify(JSON.parse(value), null, 2);
+      } catch (e) {
+        return value;
+      }
+    }
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch (e) {
+      return String(value);
+    }
+  }
+
+  function debugIsoStamp(value) {
+    var d = typeof value === 'number' || typeof value === 'string' ? new Date(value) : null;
+    return d && !isNaN(d.getTime()) ? localStamp(d.toISOString()) : '?';
+  }
+
+  /**
+   * Texte copiable pour déboguer une conversation : les messages tels que
+   * l'utilisateur les voit, puis ce qui s'est passé sous le capot pour chaque
+   * appel (requête, réponse brute, tentatives, métriques). Le contexte système
+   * n'est écrit qu'une fois par version. La clé API n'est jamais incluse.
+   */
+  function buildChatDebugExport(input) {
+    var src = input || {};
+    var provider = normalizeProvider(src.provider);
+    var history = Array.isArray(src.history) ? src.history : [];
+    var debugLog = Array.isArray(src.debugLog) ? src.debugLog : [];
+    var appInfo = currentAppBuildInfo() || {};
+    var out = [];
+
+    out.push('# Débogage — conversation avec l’Assistant');
+    out.push('');
+    out.push('- Exporté : ' + debugIsoStamp(Date.now()) + ' (heure locale)');
+    if (appInfo.builtAt) out.push('- App compilée : ' + debugIsoStamp(appInfo.builtAt));
+    out.push(
+      '- Fournisseur : ' + provider.preset + ' · modèle ' + provider.model + ' · ' + provider.baseUrl
+    );
+    out.push('- Niveau de statut : ' + (src.statusLevel || 'inconnu'));
+    out.push('');
+
+    out.push('## 1. Conversation (' + history.length + ' message(s))');
+    out.push('');
+    for (var h = 0; h < history.length; h++) {
+      var entry = history[h];
+      if (!entry || !entry.content) continue;
+      var who = entry.role === 'user' ? 'Utilisateur' : entry.role === 'assistant' ? 'Assistant' : String(entry.role);
+      out.push('### ' + (h + 1) + '. ' + who + (entry.selfPrompt ? ' (relance automatique)' : ''));
+      out.push(String(entry.content));
+      if (entry.role === 'assistant' && entry.rawJson) {
+        out.push('');
+        out.push('JSON brut :');
+        out.push(debugFenced('json', debugJsonText(entry.rawJson)));
+      }
+      out.push('');
+    }
+
+    out.push('## 2. Sous le capot (' + debugLog.length + ' appel(s))');
+    out.push('');
+    var systemVersions = [];
+    for (var c = 0; c < debugLog.length; c++) {
+      var d = debugLog[c] || {};
+      var req = d.request || null;
+      var body = req && req.body ? req.body : null;
+      out.push('### Appel ' + (c + 1) + ' — ' + (d.label || d.kind || 'appel'));
+      out.push('- Type : ' + (d.kind || '?'));
+      out.push('- Début : ' + debugIsoStamp(d.startedAt));
+      out.push('- Durée : ' + (d.latencyMs != null ? d.latencyMs + ' ms' : '?'));
+      out.push('- Résultat : ' + (d.ok === false ? 'erreur' : 'ok'));
+      if (d.error) out.push('- Erreur : ' + d.error);
+      if (req) {
+        out.push(
+          '- Requête : ' + (req.method || 'POST') + ' ' + (req.url || '') +
+            ' · modèle ' + (req.model || '?') +
+            ' · stream ' + (req.stream ? 'oui' : 'non') +
+            ' · mode JSON ' + (req.jsonMode ? 'oui' : 'non') +
+            ' · température ' + (req.temperature != null ? req.temperature : '?') +
+            ' · max_tokens ' + (req.max_tokens != null ? req.max_tokens : '?') +
+            ' · ' + (req.messageCount || 0) + ' messages'
+        );
+        if (req.status != null) out.push('- Statut HTTP : ' + req.status);
+        if (req.note) out.push('- Note : ' + req.note);
+      }
+      if (body && Array.isArray(body.messages)) {
+        var sysText = null;
+        var lastUser = null;
+        for (var m = 0; m < body.messages.length; m++) {
+          var msg = body.messages[m];
+          if (!msg) continue;
+          if (msg.role === 'system' && sysText == null) sysText = String(msg.content || '');
+          if (msg.role === 'user') lastUser = String(msg.content || '');
+        }
+        if (sysText != null) {
+          var version = -1;
+          for (var v = 0; v < systemVersions.length; v++) {
+            if (systemVersions[v].text === sysText) version = v;
+          }
+          if (version < 0) {
+            systemVersions.push({ text: sysText, calls: [] });
+            version = systemVersions.length - 1;
+          }
+          systemVersions[version].calls.push(c + 1);
+          out.push('- Contexte système : version ' + (version + 1) + ' (section 3)');
+        }
+        if (lastUser != null) {
+          out.push('');
+          out.push('Dernier message envoyé :');
+          out.push(debugFenced('', lastUser));
+        }
+      }
+      if (d.attempts && d.attempts.length) {
+        out.push('');
+        out.push('Tentatives :');
+        for (var a = 0; a < d.attempts.length; a++) {
+          var at = d.attempts[a] || {};
+          out.push(
+            '- ' + (at.label || 'essai') + (at.status != null ? ' · HTTP ' + at.status : '') +
+              (at.ok === false || at.error ? ' · échec' : '') +
+              (at.error ? ' : ' + at.error : '')
+          );
+        }
+      }
+      if (d.response) {
+        out.push('');
+        out.push('Réponse brute du modèle :');
+        out.push(debugFenced('', d.response.content || '(vide)'));
+        if (d.response.parsed) {
+          out.push('');
+          out.push('Sortie analysée :');
+          out.push(debugFenced('json', debugJsonText(d.response.parsed)));
+        }
+        if (d.response.raw) {
+          out.push('');
+          out.push('Réponse API brute :');
+          out.push(debugFenced('json', debugJsonText(d.response.raw)));
+        }
+      }
+      if (d.usage) {
+        out.push('');
+        out.push('Métriques :');
+        out.push(debugFenced('json', debugJsonText(d.usage)));
+      }
+      out.push('');
+    }
+
+    out.push('## 3. Contexte système envoyé au modèle (' + systemVersions.length + ' version(s))');
+    out.push('');
+    for (var sv = 0; sv < systemVersions.length; sv++) {
+      out.push('### Version ' + (sv + 1) + ' (appels ' + systemVersions[sv].calls.join(', ') + ')');
+      out.push(debugFenced('', systemVersions[sv].text));
+      out.push('');
+    }
+    if (!systemVersions.length) out.push('Aucun appel avec contexte.');
+
+    return out.join('\n');
+  }
+
   global.PriorityAgent = {
     PROVIDER_STORAGE_KEY: PROVIDER_STORAGE_KEY,
     CARD_INTERVIEW_KEY: CARD_INTERVIEW_KEY,
@@ -19020,6 +19192,7 @@
     normalizeProvider: normalizeProvider,
     detectMessageLanguage: detectMessageLanguage,
     systemPrompt: systemPrompt,
+    buildChatDebugExport: buildChatDebugExport,
     humanProfileJobLines: humanProfileJobLines,
     profileLanguageInstruction: profileLanguageInstruction,
     normalizeModelTier: normalizeModelTier,

@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-19
+- Assistant : un bouton copie la conversation avec le détail technique (requêtes, réponses brutes, contexte envoyé) pour le déboguer.
 - Tableau : les sous-tâches d’une carte s’affichent en lignes filles sous la carte, avec une flèche pour les déplier ou replier.
 
 ## 2026-10-16
