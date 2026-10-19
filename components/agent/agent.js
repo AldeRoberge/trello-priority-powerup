@@ -8323,6 +8323,8 @@
       set_progress: true,
       set_project: true,
       add_subtask: true,
+      rename_subtask: true,
+      remove_subtask: true,
       toggle_subtask: true,
       set_subtask_blocked: true,
       set_subtask_progress: true,
