@@ -115,23 +115,38 @@
 
   /* ── 1c. Page subject + document fields ──────────────────────────── */
   /*
-   * A page can belong to one task or one entity (`subject: task:<id>` / `subject: entity:<id>`).
+   * A page can belong to one task, one entity, or one project
+   * (`subject: task:<id>` / `subject: entity:<id>` / `subject: project:g:…`).
    * The card or the entity keeps its own fields (members, labels, description). The document only
    * stores the link, plus its own short tags and people when those are not the task's.
-   * Caps keep the hidden block small: 6 tags of 20 characters, 8 people.
+   * A project id is the goal-map id (`g:` plus letters). Caps keep the hidden block small:
+   * 6 tags of 20 characters, 8 people.
    */
 
   var MAX_TAGS = 6;
   var MAX_TAG = 20;
   var MAX_PAGE_PEOPLE = 8;
 
+  /** Goal-map project ids look like `g:` plus base36. Anything else is not a project subject. */
+  function projectIdOk(id) {
+    var s = String(id == null ? '' : id).trim();
+    return /^g:[A-Za-z0-9]{1,24}$/.test(s) ? s : '';
+  }
+
   function normalizeSubject(raw) {
     if (raw == null || raw === '') return null;
     if (typeof raw === 'string') {
-      var m = /^(task|entity):([A-Za-z0-9_-]{1,32})$/.exec(String(raw).trim());
+      var text = String(raw).trim();
+      var project = /^project:(g:[A-Za-z0-9]{1,24})$/.exec(text);
+      if (project) return { k: 'project', id: project[1] };
+      var m = /^(task|entity):([A-Za-z0-9_-]{1,32})$/.exec(text);
       return m ? { k: m[1], id: m[2] } : null;
     }
     if (typeof raw !== 'object') return null;
+    if (raw.k === 'project' || raw.kind === 'project') {
+      var pid = projectIdOk(raw.id);
+      return pid ? { k: 'project', id: pid } : null;
+    }
     var k = raw.k === 'task' || raw.k === 'entity' ? raw.k : raw.kind === 'task' || raw.kind === 'entity' ? raw.kind : '';
     var id = cleanId(raw.id);
     if (id.length > 32) id = '';

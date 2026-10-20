@@ -675,6 +675,118 @@
     };
   }
 
+  function listed(doc) {
+    return {
+      id: doc.id,
+      title: doc.title,
+      updatedAt: doc.updatedAt,
+      size: (doc.body || '').length,
+      body: doc.body || '',
+      subject: doc.subject,
+      props: doc.props,
+      icon: doc.icon,
+    };
+  }
+
+  async function cardNames(t) {
+    var names = Object.create(null);
+    if (!t || typeof t.cards !== 'function') return names;
+    try {
+      var cards = await t.cards('id', 'name');
+      (cards || []).forEach(function (c) {
+        if (c && c.id && c.name) names[String(c.id)] = String(c.name);
+      });
+    } catch (e) {
+      /* names stay empty: tasks without a name are not turned into documents */
+    }
+    return names;
+  }
+
+  /**
+   * One document per project, titled with the project name. Each task of that project gets its own
+   * document, nested under the project. Already-linked documents are renamed or re-nested; nothing
+   * is deleted. `opts.keepTitles` skips renaming those document ids (an unsaved title in the editor).
+   * @returns {Promise<{docs:object[], created:object[]}>}
+   */
+  async function ensureProjectDocs(t, docs, opts) {
+    docs = Array.isArray(docs) ? docs.slice() : [];
+    var DP = global.DocsProjects;
+    var GG = global.MindmapGoalsTrello;
+    if (!DP || !GG || typeof GG.load !== 'function') return { docs: docs, created: [] };
+    var goals;
+    try {
+      goals = await GG.load(t);
+    } catch (e) {
+      return { docs: docs, created: [] };
+    }
+    var keep = Object.create(null);
+    ((opts && opts.keepTitles) || []).forEach(function (id) { if (id) keep[id] = true; });
+    var names = await cardNames(t);
+    var created = [];
+    var plan = DP.plan(goals, docs, names);
+    var i;
+    for (i = 0; i < plan.createProjects.length; i++) {
+      var p = plan.createProjects[i];
+      var doc = await createDoc(t, p.name, '', { subject: { k: 'project', id: p.id }, icon: { i: 'briefcase' } });
+      docs.unshift(listed(doc));
+      created.push(doc);
+    }
+    plan = DP.plan(goals, docs, names);
+    for (i = 0; i < plan.rename.length; i++) {
+      var rn = plan.rename[i];
+      if (keep[rn.docId]) continue;
+      var renamed = await renameDoc(t, rn.docId, rn.name);
+      docs.forEach(function (d) { if (d.id === rn.docId) d.title = renamed.title; });
+    }
+    plan = DP.plan(goals, docs, names);
+    for (i = 0; i < plan.createTasks.length; i++) {
+      var task = plan.createTasks[i];
+      var td = await createDoc(t, task.name, '', { subject: { k: 'task', id: task.taskId }, icon: { i: 'checkbox' } });
+      docs.unshift(listed(td));
+      created.push(td);
+    }
+    plan = DP.plan(goals, docs, names);
+    var edits = DP.parentEdits(getFolderIndex(), docs, plan);
+    if (edits.set.length || edits.clear.length) {
+      await updateFolderIndex(t, function (idx) {
+        idx.parents = idx.parents || {};
+        edits.clear.forEach(function (id) { delete idx.parents[id]; });
+        edits.set.forEach(function (n) {
+          if (!n.child || !n.parent || n.child === n.parent) return;
+          if (DM().isDocInside(idx, n.child, n.parent)) return;
+          idx.parents[n.child] = n.parent;
+          delete idx.docs[n.child];
+        });
+      });
+    }
+    return { docs: docs, created: created };
+  }
+
+  /** Attaches a board card to a project on the goal map. No-op when it is already there. */
+  async function linkTaskToProject(t, taskId, projectId) {
+    var GG = global.MindmapGoalsTrello;
+    var WO = global.WorkOS;
+    if (!GG || !WO || typeof GG.load !== 'function' || typeof WO.withTaskProject !== 'function') return;
+    if (!taskId || !projectId) return;
+    var goals = await GG.load(t);
+    var cur = typeof WO.projectOf === 'function' ? WO.projectOf(goals, taskId) : null;
+    if (cur && cur.id === projectId) return;
+    await GG.save(t, WO.withTaskProject(goals, taskId, projectId));
+  }
+
+  /** The project node keeps the document's title. No-op when the names already match. */
+  async function syncProjectTitle(t, projectId, name) {
+    var GG = global.MindmapGoalsTrello;
+    var WO = global.WorkOS;
+    if (!GG || !WO || typeof GG.load !== 'function' || typeof WO.withNodeEdit !== 'function') return;
+    var title = DM().cleanTitle(name);
+    if (!projectId || !title) return;
+    var goals = await GG.load(t);
+    var node = (goals.nodes || []).filter(function (n) { return n && n.id === projectId; })[0];
+    if (!node || node.name === title) return;
+    await GG.save(t, WO.withNodeEdit(goals, projectId, { name: title }));
+  }
+
   global.DocsTrello = {
     isAuthorized: isAuthorized,
     authorize: authorize,
@@ -682,6 +794,9 @@
     getFolderIndex: getFolderIndex,
     updateFolderIndex: updateFolderIndex,
     ensureFolderDocs: ensureFolderDocs,
+    ensureProjectDocs: ensureProjectDocs,
+    linkTaskToProject: linkTaskToProject,
+    syncProjectTitle: syncProjectTitle,
     loadDoc: loadDoc,
     createDoc: createDoc,
     ensureDefaultDoc: ensureDefaultDoc,

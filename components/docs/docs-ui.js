@@ -478,6 +478,13 @@
       placePop(pop, rect);
     }
 
+    function subjectGlyph(subject) {
+      if (subject && subject.k === 'entity') return 'stack-2';
+      if (subject && subject.k === 'task') return 'checkbox';
+      if (subject && subject.k === 'project') return 'briefcase';
+      return 'file-text';
+    }
+
     function paintList() {
       var list = els.sideList;
       list.textContent = '';
@@ -537,7 +544,7 @@
           },
         }, [
           docChev(r),
-          itemIcon(d, d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text'),
+          itemIcon(d, subjectGlyph(d.subject)),
           h('span', { class: 'dc-item-main' }, [
             h('span', { class: 'dc-item-title', text: d.title }),
             h('span', { class: 'dc-item-time', text: DM().relativeTime(d.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(d.size) : '') }),
@@ -2050,7 +2057,7 @@
       state.face = null;
       state.taskFields = null;
       paintProps();
-      if (!sub) return;
+      if (!sub || sub.k === 'project') return;
       var req = sub.k === 'task' ? DT().loadCardFace(t, sub.id) : DT().loadEntityFace(t, sub.id);
       req.then(function (face) {
         if (token !== faceToken || !state.current || !state.current.subject || state.current.subject.id !== sub.id) return;
@@ -2085,7 +2092,7 @@
         els.props.appendChild(propRow('link', 'Lié à', function (v) {
           v.appendChild(emptyBtn('Cliquer pour lier…', function (e) { openLinkPicker(e.currentTarget); }));
         }));
-      } else {
+      } else if (sub.k !== 'project') {
         var face = state.face;
         var missing = !!(face && face.missing);
         var name = (face && face.name) || (sub.k === 'entity' ? 'Entité' : 'Tâche');
@@ -2183,7 +2190,7 @@
         });
         childDocs().forEach(function (d) {
           v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', onclick: function () { openDoc(d.id); } }, [
-            icon(d.subject && d.subject.k === 'entity' ? 'stack-2' : d.subject && d.subject.k === 'task' ? 'checkbox' : 'file-text'),
+            icon(subjectGlyph(d.subject)),
             h('span', { text: d.title }),
           ]));
         });
@@ -5119,6 +5126,20 @@
       placePop(pop, anchor.getBoundingClientRect());
     }
 
+    /** The project this page belongs to: the page itself, or a project document above it. */
+    function projectHere() {
+      var cur = state.current;
+      var id = cur && cur.id;
+      var hops = 0;
+      var parents = (state.idx && state.idx.parents) || {};
+      while (id && hops++ < 30) {
+        var d = id === cur.id ? cur : (state.docs || []).filter(function (x) { return x.id === id; })[0];
+        if (d && d.subject && d.subject.k === 'project') return d.subject.id;
+        id = parents[id];
+      }
+      return '';
+    }
+
     function createTaskFromSelection(listId) {
       var range = liveSelectionRange() || (heldRange && editor && editor.contains(heldRange.startContainer) ? heldRange.cloneRange() : selectionRange());
       heldRange = null;
@@ -5137,6 +5158,22 @@
         state.sources.cards = (state.sources.cards || []).filter(function (c) { return c && c.id !== card.id; });
         state.sources.cards.push({ id: card.id, name: card.name, idList: card.idList, dueComplete: false });
         rebuildIndex();
+        var projectId = projectHere();
+        var placed = projectId && DT().linkTaskToProject
+          ? DT().linkTaskToProject(t, card.id, projectId).then(function () {
+            return DT().ensureProjectDocs ? DT().ensureProjectDocs(t, state.docs) : { docs: state.docs };
+          }, function () { return { docs: state.docs }; })
+          : Promise.resolve(null);
+        placed.then(function (r) {
+          if (!r || !r.docs) return;
+          state.docs = r.docs;
+          state.idx = DT().getFolderIndex();
+          state.docs.forEach(function (d) {
+            if (d.subject && d.subject.k === 'project' && d.subject.id === projectId) setFolderOpen('doc:' + d.id, true);
+          });
+          paintList();
+          if (state.current) paintProps();
+        });
         if (!insertMentionAtRange(kept, { type: 'task', id: card.id, label: card.name })) {
           toast('Tâche créée, mais le lien n’a pas pu remplacer la sélection.', 'error');
           return;
@@ -6439,6 +6476,9 @@
             histRenamed(cur.id, oldTitle, r.title);
             touchListItem(cur.id, { title: r.title });
             syncFolderName(cur.id, r.title);
+            if (cur.subject && cur.subject.k === 'project' && DT().syncProjectTitle) {
+              DT().syncProjectTitle(t, cur.subject.id, r.title).catch(function () {});
+            }
             rebuildIndex();
           });
         });
@@ -6523,6 +6563,11 @@
       lastRefreshAt = Date.now();
       return DT().listDocs(t).then(function (docs) {
         return DT().ensureFolderDocs(t, docs).then(function (r) { return r.docs; }, function () { return docs; });
+      }).then(function (docs) {
+        var keep = state.saveState !== 'saved' && state.current ? [state.current.id] : [];
+        return DT().ensureProjectDocs
+          ? DT().ensureProjectDocs(t, docs, { keepTitles: keep }).then(function (r) { return r.docs; }, function () { return docs; })
+          : docs;
       }).then(function (docs) {
         var openId = state.current && state.current.id;
         state.docs = docs;
@@ -7127,6 +7172,10 @@
           );
         }).then(function (docs) {
           return DT().ensureFolderDocs(t, docs).then(function (r) { return r.docs; }, function () { return docs; });
+        }).then(function (docs) {
+          return DT().ensureProjectDocs
+            ? DT().ensureProjectDocs(t, docs).then(function (r) { return r.docs; }, function () { return docs; })
+            : docs;
         }).then(
           function (docs) {
             state.docs = docs;

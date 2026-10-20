@@ -9,6 +9,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Action | Comment |
 |--------|---------|
 | Nouveau document | bouton **Nouveau** (ou `@@@titre` puis *Créer le document « titre »* depuis un autre document) |
+| Projet | chaque projet est un document (icône mallette). Ses tâches sont des documents enfants, repliés dessous |
 | Ouvrir un dossier | clic sur son nom : le dossier est un document, on y écrit comme dans les autres. Le chevron montre ce qu’il contient |
 | Icône | clic sur l’icône dans la liste : choisir le dessin et la couleur |
 | Mentionner une personne | `@` puis quelques lettres ; ↑ ↓ pour choisir, **Entrée** ou **Tab** pour valider, **Échap** pour fermer |
