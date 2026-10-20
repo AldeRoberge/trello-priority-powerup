@@ -2924,16 +2924,24 @@
         return;
       }
       var tool = a.tool.trim();
-      var args = a.args && typeof a.args === 'object' ? a.args : {};
+      var rawArgs = a.args;
       if (tool === 'cardPatches' || tool === 'card_patches') {
-        if (Array.isArray(args.patches)) cards = cards.concat(args.patches);
-        else if (Array.isArray(args.cardPatches)) cards = cards.concat(args.cardPatches);
-        else if (args.op || args.text || args.query) cards.push(args);
+        if (Array.isArray(rawArgs)) cards = cards.concat(rawArgs);
+        else {
+          var args = rawArgs && typeof rawArgs === 'object' ? rawArgs : {};
+          if (Array.isArray(args.patches)) cards = cards.concat(args.patches);
+          else if (Array.isArray(args.cardPatches)) cards = cards.concat(args.cardPatches);
+          else if (args.op || args.text || args.query) cards.push(args);
+        }
         return;
       }
       if (tool === 'patches' || tool === 'boardPatches' || tool === 'board_patches') {
-        if (Array.isArray(args.patches)) boards = boards.concat(args.patches);
-        else if (args.op || args.text || args.query) boards.push(args);
+        if (Array.isArray(rawArgs)) boards = boards.concat(rawArgs);
+        else {
+          var boardArgs = rawArgs && typeof rawArgs === 'object' ? rawArgs : {};
+          if (Array.isArray(boardArgs.patches)) boards = boards.concat(boardArgs.patches);
+          else if (boardArgs.op || boardArgs.text || boardArgs.query) boards.push(boardArgs);
+        }
         return;
       }
       kept.push(a);

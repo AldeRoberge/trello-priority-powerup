@@ -102,7 +102,7 @@
   <script src="/components/shared/work-os.js"></script>
   <script src="/components/shared/assistant-dock.js"></script>
   <script src="/components/kanban/kanban-ai.js"></script>
-  <script src="/components/dashboard/dashboard-ui.js"></script>
+  <script src="/components/dashboard/dashboard-ui.js?v=focus-1"></script>
   <script src="/components/shared/context-menu.js"></script>
   <script>
     // ---- mock Trello data (no network): DashboardTrello is replaced by an in-memory board ----
@@ -242,6 +242,9 @@
       }
       log.push(['restore', snap.id]);
       return later();
+    };
+    TableTrello.load = function () {
+      return Promise.resolve({ lists: lists, rows: rows.map(function (r) { return Object.assign({}, r); }) });
     };
     TableTrello.saveName = function (t, id, n) { var r = find(id); if (r) r.name = n; log.push(['name', id, n]); return Promise.resolve(); };
     TableTrello.saveDesc = function (t, row, text) { var r = find(row.id); if (r) { r.desc = text; r.fullDesc = text; } log.push(['desc', row.id]); return Promise.resolve(text); };

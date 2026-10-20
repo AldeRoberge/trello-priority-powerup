@@ -66,6 +66,7 @@ const UNIT_FILES = [
   'agent-parity-more.test.js',
   'agent-color.test.js',
   'interview-why-guards.test.js',
+  'lift-patch-tools.test.js',
   'add-subtask-dedupe.test.js',
   'gantt-model.test.js',
   'gantt-trello.test.js',

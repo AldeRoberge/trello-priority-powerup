@@ -617,7 +617,7 @@
         t: t,
         cardId: id,
         name: row.name || '',
-        onChange: function () { render(); },
+        onChange: function () { reload({ quiet: true }); },
         onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
       });
     }

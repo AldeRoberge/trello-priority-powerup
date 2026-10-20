@@ -8606,218 +8606,29 @@
           ? Agent.emptyCardInterview()
           : { complete: false, asked: [] };
       }
-      if (interviewState.complete) {
-        refreshSuggestions({ animate: true });
-        markSettleReady();
-        if (chatRestored) {
-          refreshApplySuggestions({ animate: true });
-          scheduleCardDream({ delay: 4000 });
-        } else {
-          await runOpenSanityThenSuggestions({ animate: true });
-        }
-        return;
-      }
-
-      if (history.length) {
-        // Resume an in-progress interview with restored messages (no second opening).
-        setInterviewMode(true);
-        expandAssistant();
-        refreshSuggestions({ animate: true });
-        markSettleReady();
-        notifyLayout();
-        focusComposerInput();
-        return;
-      }
-
-      setInterviewMode(true);
-      expandAssistant();
-      pending = true;
-      updateComposerEnabled();
-      setSuggestionsBusy(true);
-      var thinking = appendPendingMessage();
-      var bubble = thinking.querySelector('.agent-msg-bubble');
-
-      try {
-        var PT = global.PriorityTrello;
-        var Mem = global.AgentMemory;
-        var neighborhood = { surrounding: [], recentCreated: [], current: null };
-        if (PT && typeof PT.getCardNeighborhood === 'function') {
-          neighborhood = await PT.getCardNeighborhood(t, {
-            neighborRadius: 4,
-            recentMax: 8,
-            includePriority: false
-          });
-        }
-        interviewSurrounding = neighborhood.surrounding || [];
-        interviewRecentCards = neighborhood.recentCreated || [];
-
-        var toRecord = [];
-        if (neighborhood.current) {
-          toRecord.push({
-            id: neighborhood.current.id,
-            name: neighborhood.current.name,
-            list: neighborhood.current.list,
-            at:
-              (Mem && Mem.cardIdCreatedAt && Mem.cardIdCreatedAt(neighborhood.current.id)) ||
-              new Date().toISOString()
-          });
-        }
-        (neighborhood.recentCreated || []).forEach(function (c) {
-          toRecord.push({
-            id: c.id,
-            name: c.name,
-            list: c.list,
-            at: c.at
-          });
-        });
-        if (Mem && typeof Mem.recordRecentCards === 'function' && toRecord.length) {
-          try {
-            var updatedMem = await Mem.recordRecentCards(t, toRecord);
-            if (onMemoryUpdate) onMemoryUpdate(updatedMem);
-            else {
-              var prevGet = bridge.getMemory;
-              bridge.getMemory = function () {
-                return updatedMem || (prevGet && prevGet());
-              };
-            }
-            if (updatedMem && updatedMem.shortTerm && updatedMem.shortTerm.recentCards) {
-              interviewRecentCards = updatedMem.shortTerm.recentCards.slice();
-            }
-          } catch (memErr) {
-            console.error('AgentUI recordRecentCards failed', memErr);
-          }
-        }
-
-        if (!interviewState.startedAt) {
-          interviewState.startedAt = new Date().toISOString();
+      if (!interviewState.complete) {
+        interviewState = Agent.markInterviewComplete
+          ? Agent.markInterviewComplete(interviewState)
+          : Object.assign({}, interviewState, {
+              complete: true,
+              completedAt: new Date().toISOString()
+            });
+        try {
           await persistInterviewState(interviewState);
+        } catch (persistErr) {
+          console.error('AgentUI close interview failed', persistErr);
         }
-
-        var cardTitle = String(
-          (bridge.getCardName && bridge.getCardName()) || ''
-        ).trim();
-        var startPrompt = cardTitle
-          ? 'Commence l\'interview. Titre de la carte\u00a0: «\u00a0' +
-            cardTitle +
-            '\u00a0». Interview MINIMALE\u00a0: PAS de question POURQUOI / motivation, PAS d\'intro, PAS de gabarit \u00ab\u00a0si on ne le fait pas, c\'est grave?\u00a0\u00bb. Inf\u00e8re set_task_types + axes \u00e9vidents en silence. Puis demande-toi ce qui manque le plus pour d\u00e9finir cette carte et la faire avancer (r\u00e9sultat attendu, premi\u00e8re \u00e9tape, port\u00e9e, qui, \u00e9ch\u00e9ance, choix \u00e0 trancher). Premi\u00e8re r\u00e9ponse = UNE seule question propre \u00e0 CE titre, avec 2 \u00e0 5 boutons de r\u00e9ponse concrets d\u00e9duits du titre (suggestions), SI n\u00e9cessaire\u00a0; sinon completeInterview:true apr\u00e8s avoir appliqu\u00e9 ce que tu peux. Court, naturel, ancr\u00e9 au titre.'
-          : 'Commence l\'interview de cette carte. Interview MINIMALE\u00a0: PAS de POURQUOI. Une question utile pour le scoring seulement si n\u00e9cessaire.';
-        var fallbackOpening =
-          Agent.urgencyAskForTaskTypes
-            ? Agent.urgencyAskForTaskTypes([])
-            : 'Si on ne le fait pas, c\'est [[a:grave]]?';
-        // urgencyAskForTaskTypes may return markup without heat chips — keep chips below.
-        if (!fallbackOpening || !/\?/.test(fallbackOpening)) {
-          fallbackOpening = 'Si on ne le fait pas, c\'est [[a:grave]]?';
-        }
-
-        markTurnPhase(thinking, 'send');
-        var turn = await Agent.cardInterviewTurn(
-          provider,
-          [],
-          bridge,
-          startPrompt,
-          {
-            onDelta: function () {
-              if (thinking._turnStatus) thinking._turnStatus.setPhase('read');
-            },
-            asked: interviewState.asked || [],
-            surrounding: interviewSurrounding,
-            recentCards: interviewRecentCards,
-            priorityAxesTrusted: interviewPriorityTrusted
-          }
-        );
-
-        endTurnStatus(thinking);
-        stopThinkingMotions();
-        thinking.classList.remove('is-pending', 'is-streaming');
-        thinking.removeAttribute('aria-busy');
-        thinking.removeAttribute('aria-label');
-        if (bubble) {
-          revealPendingBubble(
-            bubble,
-            turn.message || fallbackOpening,
-            turn.blocks || []
-          );
-        }
-        var opening = turn.message || fallbackOpening;
-        var openingSuggestions =
-          turn.suggestions && turn.suggestions.length
-            ? turn.suggestions
-            : [
-                { label: 'Pas grand-chose', heat: 0 },
-                { label: 'Un peu embêtant', heat: 2 },
-                { label: 'Oui, c\'est urgent', heat: 4 }
-              ];
-        var openingMulti = turn.suggestions && turn.suggestions.length
-          ? !!turn.suggestionsMulti
-          : false;
-        history.push({
-          role: 'assistant',
-          content: opening,
-          rawJson: turn.rawJson,
-          suggestions: openingSuggestions,
-          suggestionsMulti: openingMulti
-        });
-        schedulePersistChatHistory();
-        if (/\?/.test(opening)) {
-          interviewState = Agent.markInterviewQuestionAsked
-            ? Agent.markInterviewQuestionAsked(interviewState, opening)
-            : interviewState;
-          await persistInterviewState(interviewState);
-        }
-        if (turn.actions && turn.actions.length) {
-          var applied = await runActionsWithPanel(turn.actions);
-          appendChangeRecap(applied, {
-            droppedActions: turn.droppedActions,
-            ok: applied.ok
-          });
-          appendActionResultBlocks(applied, turn.context);
-          interviewPriorityTrusted = true;
-          muteListening();
-        }
-        if (turn.cardPatches && turn.cardPatches.length) {
-          await applyCardPatchesFromTurn(turn.cardPatches);
-        }
-        if (turn.patches && turn.patches.length) {
-          await applyBoardMemoryPatches(turn.patches);
-        }
-        if (turn.usage) updateSessionStats(turn.usage);
-        renderPrompts(turn.prompts);
-        if (openingSuggestions.length) {
-          suggestionsSeq += 1;
-          renderSuggestions(openingSuggestions, {
-            animate: true,
-            multi: openingMulti,
-            pinScroll: true
-          });
-        }
-        markSettleReady();
-        var openingEmotion = finalizeAssistantRow(thinking, opening, {});
-        if (typeof applied !== 'undefined') {
-          openingEmotion = applied.ok ? 'happy' : 'sad';
-          setAssistantFaceEmotion(thinking, openingEmotion);
-        }
-        announceAssistantArrival({ emotion: openingEmotion });
-        scrollMessagesToBottom();
-        dbgLog('agentUi', 'bootstrap.interview.end', { ok: true });
-      } catch (err) {
-        dbgError('agentUi', 'bootstrap.interview.end', err, { ok: false });
-        console.error('AgentUI bootstrapCardInterview failed', err);
-        endTurnStatus(thinking);
-        stopThinkingMotions();
-        thinking.classList.remove('is-pending', 'is-streaming');
-        if (thinking && thinking.parentNode) thinking.remove();
-        appendMessage(
-          'assistant',
-          'Je n\'ai pas pu d\u00e9marrer l\'interview. Posez-moi une question sur cette carte.'
-        );
-        setInterviewMode(false);
-        refreshSuggestions({ animate: true });
-        markSettleReady();
-      } finally {
-        releasePendingAndDrain();
-        focusComposerInput();
       }
+      setInterviewMode(false);
+      refreshSuggestions({ animate: true });
+      markSettleReady();
+      if (chatRestored) {
+        refreshApplySuggestions({ animate: true });
+        scheduleCardDream({ delay: 4000 });
+      } else {
+        await runOpenSanityThenSuggestions({ animate: true });
+      }
+      return;
     }
 
     async function ensureProviderLoaded() {
@@ -9180,10 +8991,7 @@
       pending = true;
       updateComposerEnabled();
       var myGen = ++chatTurnGen;
-      var turnKind =
-        interviewActive && typeof Agent.cardInterviewTurn === 'function'
-          ? 'cardInterviewTurn'
-          : 'chatTurn';
+      var turnKind = 'chatTurn';
       dbgLog('agentUi', 'turn.start', { kind: turnKind });
       var thinking = appendPendingMessage();
       var bubble = thinking.querySelector('.agent-msg-bubble');
@@ -9197,46 +9005,10 @@
           apiMsg = buildCorrectionUserPayload(msg, feedbackContext.content);
         }
         var turn;
-        if (interviewActive && typeof Agent.cardInterviewTurn === 'function') {
-          try {
-            await prepareTurnContext();
-          } catch (prepErr) { /* keep cached context */ }
-          if (myGen !== chatTurnGen) return;
-          markTurnPhase(thinking, 'send');
-          turn = await Agent.cardInterviewTurn(
-            provider,
-            history.slice(0, -1),
-            bridge,
-            apiMsg,
-            {
-              onDelta: function (visible) {
-                markTurnPhase(thinking, 'read');
-                if (myGen !== chatTurnGen) return;
-                if (!bubble || !visible) return;
-                if (!streamed) {
-                  streamed = true;
-                  stopThinkingMotions();
-                  thinking.classList.remove('is-pending');
-                  thinking.removeAttribute('aria-busy');
-                  thinking.removeAttribute('aria-label');
-                  revealPendingBubble(bubble, visible, []);
-                } else {
-                  fillMessageContent(bubble, visible, [], { streaming: true });
-                }
-                scrollMessagesIfPinned(true);
-                notifyLayout();
-              },
-              asked: interviewState.asked || [],
-              surrounding: interviewSurrounding,
-              recentCards: interviewRecentCards,
-              priorityAxesTrusted: interviewPriorityTrusted
-            }
-          );
-        } else {
-          if (
-            isProjectScope &&
-            typeof bridge.refreshBoardDigest === 'function'
-          ) {
+        if (
+          isProjectScope &&
+          typeof bridge.refreshBoardDigest === 'function'
+        ) {
             try {
               await bridge.refreshBoardDigest();
             } catch (digestErr) {
@@ -9275,7 +9047,6 @@
               }
             }
           );
-        }
         // Capture exchange even if this turn is superseded (edit/resume).
         if (turn && turn.debug) pushDebugEntry(turn.debug);
         if (myGen !== chatTurnGen) return;
