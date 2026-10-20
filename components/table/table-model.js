@@ -11,6 +11,8 @@
   var COLUMNS = {
     category: { header: 'Catégorie', icon: 'tag', kind: 'text', editable: true, width: 200 },
     name: { header: 'Objet', icon: 'file-text', kind: 'text', editable: true, width: 380 },
+    project: { header: 'Projet', icon: 'folder', kind: 'text', editable: false, width: 180 },
+    parent: { header: 'Tâche parente', icon: 'corner-left-up', kind: 'text', editable: false, width: 200 },
     statut: { header: 'Statut', icon: 'progress-check', kind: 'list', editable: true, width: 140 },
     urgency: { header: 'Urgence', icon: 'flame', kind: 'text', editable: false, width: 110 },
     priority: { header: 'Priorité', icon: 'flag', kind: 'number', editable: false, width: 105, heat: 10 },
@@ -39,7 +41,7 @@
   }
 
   var DEFAULT_COLUMNS = [
-    'category', 'name', 'statut', 'urgency', 'priority', 'progress', 'desc', 'due', 'link',
+    'category', 'name', 'project', 'parent', 'statut', 'urgency', 'priority', 'progress', 'desc', 'due', 'link',
   ];
 
   var URGENCY_LABELS = {
@@ -127,6 +129,35 @@
       waitingSince: metaGet(rec.desc, 'waiting-since'),
       outlookEvent: metaGet(rec.desc, 'outlook-event-id'),
     };
+  }
+
+  /**
+   * Fills row.project (goal map project name) and row.parent (name of the card whose checklist links
+   * this one) in place. places: { cardId: { project } } from WorkOS.places.
+   */
+  function withHierarchy(rows, places) {
+    var parentOf = {};
+    var byId = {};
+    (rows || []).forEach(function (r) {
+      byId[r.id] = r;
+    });
+    (rows || []).forEach(function (r) {
+      (function walk(items) {
+        (items || []).forEach(function (it) {
+          if (!it) return;
+          var linked = it.linkedCardId != null ? String(it.linkedCardId).trim() : '';
+          if (linked && !parentOf[linked]) parentOf[linked] = r.id;
+          walk(it.items);
+        });
+      })(r.items);
+    });
+    (rows || []).forEach(function (r) {
+      var p = byId[parentOf[r.id]];
+      r.parent = p ? p.name : '';
+      var place = places && places[r.id];
+      r.project = place && place.project ? place.project : '';
+    });
+    return rows;
   }
 
   /** Adds { category, color, icon } to each board list from the board's Statut settings. */
@@ -350,6 +381,7 @@
 
   global.TableModel = {
     subtaskRows: subtaskRows,
+    withHierarchy: withHierarchy,
     urgencyLabel: function (id) { return URGENCY_LABELS[id] || ''; },
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,

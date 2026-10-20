@@ -243,4 +243,13 @@ describe('TableModel.subtaskRows', () => {
     assert.deepEqual(TM.subtaskRows({ id: 'd', items: [] }), []);
     assert.deepEqual(TM.subtaskRows({ id: 'e' }), []);
   });
+  it('withHierarchy fills the project and the card that links this one', () => {
+    const rows = [
+      { id: 'a', name: 'Parent', items: [{ text: 'x', items: [{ linkedCardId: 'b' }] }] },
+      { id: 'b', name: 'Enfant', items: [] },
+      { id: 'c', name: 'Libre', items: [] },
+    ];
+    TM.withHierarchy(rows, { b: { project: 'Site web' } });
+    assert.deepEqual(rows.map((r) => [r.parent, r.project]), [['', ''], ['Parent', 'Site web'], ['', '']]);
+  });
 });

@@ -34,6 +34,7 @@
       row.start = rec.startDate || '';
       row.dueDone = !!rec.dueComplete;
       row.estimate = rec.estimatedMinutes || 0;
+      row.items = Array.isArray(rec.items) ? rec.items : []; // subtasks (checklist items), for the Triage tree
       row.dueVague = (rec.inputs && rec.inputs.dueVague) || '';
       row.dueMode = (rec.inputs && rec.inputs.dueMode) || '';
       row.startTime = rec.startTime || '';

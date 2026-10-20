@@ -289,6 +289,8 @@
       composerText: '',
       filter: '', // side-panel search: narrows every section
       docOpen: false, // the Document pane (paste text and images, get tasks) replaces the card pane of the Triage
+      triageTree: !global.TriageTree || global.TriageTree.prefs.treeOn(), // projects > tasks > subtasks, or the flat list
+      triageFold: global.TriageTree ? global.TriageTree.prefs.collapsed() : {}, // folded lines of the tree (keys of TriageTree)
     };
     var docUI = null; // built on first use, kept so the draft survives opening a card
     var statusTimer = null;
@@ -1011,6 +1013,67 @@
     }
 
     /* ── 2. Triage ─────────────────────────────────────────────────── */
+    /** The Triage list as a tree (projects, their tasks, their subtasks), or the flat list when the tree button is off. */
+    function triageBuilt(q) {
+      if (!global.TriageTree || !state.triageTree) return null;
+      return global.TriageTree.build(q, {
+        projectOf: function (r) {
+          var p = WO() && WO().projectOf ? WO().projectOf(state.goals, r.id) : null;
+          return p ? { id: p.id, name: p.name } : null;
+        },
+        collapsed: state.triageFold,
+      });
+    }
+
+    /** The cards in the order the list shows them (what J / K walk through; folded ones are skipped). */
+    function triageOrder(q) {
+      var built = triageBuilt(q);
+      return built ? built.tasks : q;
+    }
+
+    function treeCtx(selId) {
+      return {
+        taskEl: function (row) { return triageRow(row, row.id === selId); },
+        toggle: function (key) {
+          if (state.triageFold[key]) delete state.triageFold[key];
+          else state.triageFold[key] = true;
+          global.TriageTree.prefs.setCollapsed(state.triageFold);
+          render();
+        },
+        select: function (id) {
+          state.selected = id;
+          state.docOpen = false;
+          render();
+        },
+      };
+    }
+
+    function triageListEl(q, selId) {
+      var built = triageBuilt(q);
+      if (!built) return h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === selId); }));
+      var list = h('div', { class: 'db-list db-triage-list', role: 'tree', 'aria-label': 'Triage' }, []);
+      list.appendChild(global.TriageTree.render(built, treeCtx(selId)));
+      return list;
+    }
+
+    function treeToggle() {
+      if (!global.TriageTree) return null;
+      var label = state.triageTree ? 'Afficher en liste simple' : 'Afficher en arbre (projets, tâches, sous-tâches)';
+      return h('button', {
+        class: 'db-icon-btn' + (state.triageTree ? ' is-on' : ''),
+        type: 'button',
+        title: label,
+        'aria-label': label,
+        'aria-pressed': String(!!state.triageTree),
+        'data-fk': 'triage-tree',
+        onclick: function () {
+          state.triageTree = !state.triageTree;
+          global.TriageTree.prefs.setTreeOn(state.triageTree);
+          render();
+        },
+      }, [icon('list-tree')]);
+    }
+
     /** One card of the list on the left: its title, the line under it (next step, else the note) and its score. */
     function triageRow(r, selected) {
       var sub = (WO() && WO().stepText(r)) || DM().snippet(r.desc, 90);
@@ -1045,7 +1108,10 @@
     /** Draws one row of the list again (its title, next step or score changed) without touching the rest of the page. */
     function refreshRow(row) {
       var cur = els.main.querySelector('.db-triage-list .db-row[data-id="' + row.id + '"]');
-      if (cur) cur.replaceWith(triageRow(row, cur.classList.contains('is-sel')));
+      if (!cur) return;
+      var fresh = triageRow(row, cur.classList.contains('is-sel'));
+      if (global.TriageTree) global.TriageTree.carryOver(cur, fresh, treeCtx(state.selected));
+      cur.replaceWith(fresh);
     }
 
     /** What a decision does, for its tooltip. */
@@ -1172,9 +1238,9 @@
     function renderTriage() {
       var q = DM().triageQueue(viewRows());
       if (state.docOpen && global.TriageDocUI) {
-        var open = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, false); }));
+        var open = triageListEl(q, null);
         els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
-          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
+          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
           h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [docPane()]),
         ]));
         return;
@@ -1188,11 +1254,11 @@
         ]));
         return;
       }
-      var sel = q.filter(function (r) { return r.id === state.selected; })[0] || q[0];
+      var sel = q.filter(function (r) { return r.id === state.selected; })[0] || triageOrder(q)[0] || q[0];
       state.selected = sel.id;
-      var list = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === sel.id); }));
+      var list = triageListEl(q, sel.id);
       els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
-        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
+        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
         h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [global.TriageUI.detail(sel, triageHost())]),
       ]));
     }
@@ -2136,7 +2202,7 @@
       var idx = '123'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (state.section !== 'triage') return;
-      var q = DM().triageQueue(viewRows());
+      var q = triageOrder(DM().triageQueue(viewRows()));
       var i = q.map(function (r) { return r.id; }).indexOf(state.selected);
       // The Document pane shows no card: J / K go back to the list, the decision keys wait.
       if (state.docOpen) {

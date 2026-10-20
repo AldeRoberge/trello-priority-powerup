@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Triage : la liste s’affiche en arbre : les projets, sous eux leurs tâches, puis les sous-tâches (repliables, avec le « 2/5 » de sous-tâches faites). Le bouton arbre en haut revient à la liste simple ; J et K suivent l’ordre de l’arbre.
 - Triage, Orchestrateur, Aujourd’hui : la priorité s’affiche avec un « P » devant le chiffre (P5), pour qu’on ne la prenne plus pour un compteur.
 - Assistant : le visage reste immobile (plus de rebond, de clignement ni de lueur en boucle), et la pastille « nouveau message » et le point d’écoute ne pulsent plus.
 - Tableau : en mode sombre, le bandeau des cartes critiques est un rouge foncé au lieu d’une barre rouge vif.

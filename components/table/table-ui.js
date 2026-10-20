@@ -1084,7 +1084,7 @@
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
         var stepText = global.WorkOS && global.WorkOS.stepText(row);
         if (stepText) td.appendChild(h('span', { class: 'tb-step', text: stepText }));
-        var place = state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[row.id]) : '';
+        var place = state.places && global.WorkOS && state.columns.indexOf('project') === -1 ? global.WorkOS.placeLabel(state.places[row.id]) : '';
         if (place) td.appendChild(h('span', { class: 'tb-place', text: place }));
         td.addEventListener('click', function () {
           state.selected = { rowId: row.id, key: key };
@@ -1769,6 +1769,21 @@
       return goals.load(t).then(function (g) { return os.places(g || {}); }).catch(function () { return {}; });
     }
 
+    /** One-time: boards with saved columns get Projet and Tâche parente after Objet (hideable afterwards). */
+    function showNewHierarchyColumns() {
+      var flag = 'tp-table-hierarchy-cols';
+      try {
+        if (localStorage.getItem(flag)) return;
+        localStorage.setItem(flag, '1');
+      } catch (e) { return; }
+      var add = ['project', 'parent'].filter(function (k) { return state.columns.indexOf(k) === -1; });
+      if (!add.length) return;
+      var next = state.columns.slice();
+      var at = next.indexOf('name') + 1;
+      next.splice.apply(next, [at, 0].concat(add));
+      applyColumns(next);
+    }
+
     function reload(opts) {
       if (!opts || !opts.quiet) els.wrap.innerHTML = global.Skeleton.html('table.grid');
       return Promise.all([
@@ -1783,7 +1798,7 @@
         .then(function (res) {
           var data = res[0];
           state.lists = data.lists;
-          state.rows = data.rows;
+          state.rows = TM().withHierarchy(data.rows, res[4]);
           state.categoryFieldId = data.categoryFieldId;
           state.categoryAvailable = data.categoryAvailable;
           state.columns = res[1].columns;
@@ -1791,6 +1806,7 @@
           state.sheet = res[2];
           state.authOk = !!res[3];
           state.places = res[4] || {};
+          showNewHierarchyColumns();
           renderBanner();
           renderGrid();
           global.Skeleton.remember('table', { rows: visibleRows().length });
