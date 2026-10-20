@@ -548,6 +548,7 @@
 
     function renderGrid(opts) {
       opts = opts || {};
+      if (global.Isolation) global.Isolation.adopt(t, state.rows);
       var scrollTop = els.wrap.scrollTop;
       var scrollLeft = els.wrap.scrollLeft;
       if (opts.keepFocus !== 'filter') renderBar();
@@ -631,7 +632,7 @@
       var rowNo = 0;
       function renderRowTr(row) {
         var i = rowNo++;
-        var tr = h('tr', { 'data-id': row.id });
+        var tr = h('tr', { 'data-id': row.id, 'data-iso-card': row.id });
         tr.addEventListener('dragover', function (e) {
           if (!state.dragId || !canReorder()) return;
           e.preventDefault();
@@ -1165,7 +1166,12 @@
 
     function renderSubRows(row, body) {
       TM().subtaskRows(row).forEach(function (sub) {
-        var tr = h('tr', { class: 'tb-sub', 'data-parent': row.id });
+        var tr = h('tr', {
+          class: 'tb-sub',
+          'data-parent': row.id,
+          'data-iso-sub': sub.id,
+          'data-iso-label': sub.name || '',
+        });
         tr.appendChild(h('td', { class: 'tb-num' }));
         shownColumns().forEach(function (key) { tr.appendChild(renderSubCell(sub, key)); });
         body.appendChild(tr);
@@ -1414,6 +1420,8 @@
       var list = listById(row.listId);
       var items = [
         { title: row.name || 'Carte' },
+        { icon: 'archive', label: 'Archiver la carte', danger: true, action: function () { archiveRow(row); } },
+        { sep: true },
         { icon: 'arrow-up-right', label: 'Ouvrir la carte', action: function () { openCard(row); } },
         { icon: 'file-text', label: 'Document', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id); } },
         { icon: 'brand-trello', label: 'Ouvrir dans Trello', disabled: !row.link, action: function () { window.open(row.link, '_blank', 'noopener'); } },
@@ -1474,7 +1482,15 @@
           createIn(list, 'Nouvelle carte', null, { rename: true });
         },
       });
-      items.push({ icon: 'archive', label: 'Archiver la carte', danger: true, action: function () { archiveRow(row); } });
+      if (global.Isolation) {
+        items = items.concat(global.Isolation.menuItems({
+          cardId: row.id,
+          cardName: row.name,
+          projectId: row.projectId || '',
+          projectName: row.project || '',
+          people: global.Isolation.peopleOf(row),
+        }));
+      }
       return items;
     }
 
@@ -1494,11 +1510,24 @@
       }
       e.preventDefault();
       var pt = { x: e.clientX, y: e.clientY };
+      var subTr = e.target.closest('tr.tb-sub');
+      var sectionTr = !subTr && e.target.closest('tr.tb-section:not(.is-free)');
       var th = e.target.closest('th[data-key]');
       var cell = e.target.closest('td[data-key]');
       var num = e.target.closest('td.tb-num[data-row]');
       var items;
-      if (th) items = headerItems(th.getAttribute('data-key'));
+      if (subTr && global.Isolation) {
+        items = global.Isolation.menuItems({
+          cardId: subTr.getAttribute('data-parent') || '',
+          subId: subTr.getAttribute('data-iso-sub') || '',
+          subName: subTr.getAttribute('data-iso-label') || '',
+        });
+      } else if (sectionTr && global.Isolation) {
+        items = global.Isolation.menuItems({
+          projectId: sectionTr.getAttribute('data-iso-project') || '',
+          projectName: sectionTr.getAttribute('data-iso-label') || '',
+        });
+      } else if (th) items = headerItems(th.getAttribute('data-key'));
       else if (cell) {
         var row = findRow(cell.getAttribute('data-row'));
         var key = cell.getAttribute('data-key');
@@ -1509,6 +1538,10 @@
         items = rowItems(findRow(num.getAttribute('data-row')), null);
       } else items = generalItems();
       MENU().show(pt, items, { minWidth: 230 });
+    });
+
+    document.addEventListener('tp-isolation-world', function () {
+      if (state.rows && state.rows.length) renderGrid();
     });
 
     function markSelected() {
@@ -1797,9 +1830,12 @@
         h('span', { class: 'tb-section-name', text: g.name }),
         h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
       ]);
+      var pid = g.free ? '' : ((g.rows[0] && g.rows[0].projectId) || '');
       return h('tr', {
         class: 'tb-section' + (g.free ? ' is-free' : ''),
         'aria-expanded': String(g.open),
+        'data-iso-project': pid || null,
+        'data-iso-label': g.free ? null : g.name,
         onclick: function () { toggleSection(g.key); },
       }, [h('td', { class: 'tb-num' }), h('td', { colspan: String(state.columns.length) }, [inner])]);
     }

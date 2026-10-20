@@ -212,6 +212,47 @@
     return { nodes: nodes, links: links };
   }
 
+  function copyGoals(goals) {
+    return {
+      nodes: ((goals && goals.nodes) || []).map(function (n) { return Object.assign({}, n); }),
+      links: ((goals && goals.links) || []).filter(Boolean).map(function (l) { return { from: l.from, to: l.to }; }),
+    };
+  }
+
+  /**
+   * The goal map with `projectId` serving `outcome` ({ id } of an existing objective, or { id, name }
+   * to create one). `outcome` null detaches it. Links to tasks stay. A non-objective target is ignored.
+   */
+  function withProjectOutcome(goals, projectId, outcome) {
+    var base = copyGoals(goals);
+    var byId = Object.create(null);
+    base.nodes.forEach(function (n) { if (n && n.id) byId[n.id] = n; });
+    var project = byId[projectId];
+    if (!project || project.level !== 'project') return base;
+    var target = null;
+    if (outcome && outcome.id) {
+      target = byId[outcome.id] || null;
+      if (!target) {
+        var name = String(outcome.name || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (!name) return base;
+        target = { id: String(outcome.id), level: 'objective', name: name };
+        base.nodes.push(target);
+      } else if (target.level !== 'objective') {
+        return base;
+      }
+    }
+    var isGoal = Object.create(null);
+    base.nodes.forEach(function (n) {
+      if (n && n.id && RANK[n.level] != null) isGoal[n.id] = true;
+    });
+    base.links = base.links.filter(function (l) {
+      var other = l.from === projectId ? l.to : l.to === projectId ? l.from : null;
+      return !(other && isGoal[other]);
+    });
+    if (target) base.links.push({ from: projectId, to: target.id });
+    return base;
+  }
+
   /** The goal map with the node `id` changed: patch.name and/or patch.desc (an empty desc clears it). */
   function withNodeEdit(goals, id, patch) {
     var nodes = ((goals && goals.nodes) || []).map(function (n) {
@@ -221,6 +262,13 @@
       if (patch && typeof patch.desc === 'string') {
         if (patch.desc.trim()) next.desc = patch.desc;
         else delete next.desc;
+      }
+      if (patch && Object.prototype.hasOwnProperty.call(patch, 'icon')) {
+        if (patch.icon && typeof patch.icon === 'object' && (patch.icon.i || patch.icon.c)) {
+          next.icon = {};
+          if (patch.icon.i) next.icon.i = patch.icon.i;
+          if (patch.icon.c) next.icon.c = patch.icon.c;
+        } else delete next.icon;
       }
       return next;
     });
@@ -285,16 +333,21 @@
         var tasks = taskIds.map(function (id) { return byRow[id]; }).filter(Boolean);
         var open = tasks.filter(isOpen).sort(byPriority);
         var step = null;
+        var exhausted = null;
         for (i = 0; i < open.length; i++) {
           var st = stepState(open[i]);
           if (st && st.text) {
             step = { text: st.text, cardId: open[i].id, cardName: open[i].name, missing: false };
             break;
           }
-          if (st && st.missing) continue;
+          if (st && st.missing) {
+            if (!exhausted) exhausted = open[i];
+            continue;
+          }
           step = { text: open[i].name, cardId: open[i].id, cardName: open[i].name, missing: false };
           break;
         }
+        if (!step && exhausted) step = { text: '', cardId: exhausted.id, cardName: exhausted.name, missing: true };
         if (!step) step = { text: '', cardId: '', cardName: '', missing: true };
         var progresses = [];
         tasks.forEach(function (t) {
@@ -325,6 +378,7 @@
           id: p.id,
           name: p.name,
           outcome: objective ? objective.name : '',
+          outcomeId: objective ? objective.id : '',
           missingOutcome: !objective,
           step: step,
           missingStep: !!step.missing,
@@ -336,6 +390,7 @@
           metricValue: metric ? (num(metric.currentValue) == null ? 0 : num(metric.currentValue)) : null,
           missingMeasure: !!(objective && usesMetrics && !metric),
           openCount: open.length,
+          icon: p.icon || null,
         };
       });
   }
@@ -421,6 +476,7 @@
     projectChain: projectChain,
     places: places,
     withTaskProject: withTaskProject,
+    withProjectOutcome: withProjectOutcome,
     projectOf: projectOf,
     withNodeEdit: withNodeEdit,
     placeLabel: placeLabel,

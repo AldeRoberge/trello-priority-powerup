@@ -4,14 +4,14 @@
  * (row.items, as CompletionTrello stores them, one level of nesting). Tasks that belong to no project sit under
  * "Sans projet"; when no task belongs to a project at all the tree is just the flat list.
  *
- *   TriageTree.build(rows, { projectOf(row) -> {id, name}|null, collapsed: {key: true} })
+ *   TriageTree.build(rows, { projectOf(row) -> {id, name, icon?}|null, collapsed: {key: true} })
  *     -> { nodes, tasks }   nodes: every visible line in order; tasks: the task rows in display order (j / k keys)
- *     node kinds: 'project' { key, name, count, open, free }
+ *     node kinds: 'project' { key, name, count, open, free, icon }
  *                 'task'    { key, row, depth, open, kids, done, total }
  *                 'sub'     { key, taskId, text, done, blocked, linked, depth, open, kids }
  *   TriageTree.render(built, ctx) -> DocumentFragment
  *     ctx: { taskEl(row) -> element (the existing Triage row), toggle(key), select(taskId),
- *            selectProject(projectId), selectedProject (id of the project shown in the pane) }
+ *            pickIcon(node, icon), selectProject(projectId), selectedProject }
  *   TriageTree.carryOver(oldEl, newEl, ctx)  puts the tree decoration of a redrawn task row back
  *   TriageTree.prefs.{treeOn, setTreeOn, collapsed, setCollapsed}  remembered in localStorage
  *
@@ -81,7 +81,7 @@
       if (!p || !p.id) { free.push(row); return; }
       var g = byId[p.id];
       if (!g) {
-        g = byId[p.id] = { id: String(p.id), name: p.name || '', rows: [], first: i };
+        g = byId[p.id] = { id: String(p.id), name: p.name || '', icon: p.icon || null, rows: [], first: i };
         groups.push(g);
       }
       g.rows.push(row);
@@ -98,7 +98,7 @@
     groups.forEach(function (g) {
       var key = 'p:' + g.id;
       var open = !collapsed[key];
-      nodes.push({ kind: 'project', key: key, id: g.id, name: g.name, count: g.rows.length, open: open, free: !!g.free });
+      nodes.push({ kind: 'project', key: key, id: g.id, name: g.name, icon: g.icon || null, count: g.rows.length, open: open, free: !!g.free });
       if (!open) return;
       g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks); });
     });
@@ -139,15 +139,35 @@
     node.style.setProperty('--tt-depth', String(depth));
   }
 
+  /** The project glyph. A click chooses another icon; it does not fold the line. "Sans projet" stays an inbox. */
+  function projectGlyph(n, ctx) {
+    var mark = n.icon;
+    var name = n.free ? 'inbox' : ((mark && mark.i) || 'stack-2');
+    if (n.free || typeof ctx.pickIcon !== 'function' || !global.IconPick) return icon(name);
+    return global.IconPick.button({
+      icon: mark,
+      fallback: 'stack-2',
+      className: 'ip-glyph',
+      onChoose: function (next) { ctx.pickIcon(n, next); },
+    });
+  }
+
   function projectEl(n, ctx) {
     var pickable = !n.free && n.id && typeof ctx.selectProject === 'function';
     var row = el('div', 'tt-project' + (n.free ? ' is-free' : '') + (pickable && ctx.selectedProject === n.id ? ' is-sel' : ''), { role: 'treeitem', 'aria-level': '1', 'aria-expanded': String(n.open), 'data-key': n.key, tabindex: '-1' });
     indent(row, 0);
     row.appendChild(chevron(n.open, true, function () { ctx.toggle(n.key); }));
-    row.appendChild(icon(n.free ? 'inbox' : 'stack-2'));
-    row.appendChild(el('span', 'tt-name', { text: n.name, title: n.name }));
+    row.appendChild(projectGlyph(n, ctx));
+    var name = el('span', 'tt-name', { text: n.name, title: n.name });
+    // The name folds, same as the arrow. A real project also opens in the pane.
+    name.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ctx.toggle(n.key);
+      if (pickable) ctx.selectProject(n.id);
+    });
+    row.appendChild(name);
     row.appendChild(el('span', 'tt-count', { text: String(n.count) }));
-    // The arrow folds; the rest of the line opens the project in the pane (the free group has none: it folds).
+    // The rest of the line opens the project in the pane (the free group has none: it folds).
     row.addEventListener('click', function () {
       if (pickable) ctx.selectProject(n.id);
       else ctx.toggle(n.key);

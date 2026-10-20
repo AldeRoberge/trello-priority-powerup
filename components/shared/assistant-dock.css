@@ -36,11 +36,35 @@
   overflow-wrap: anywhere;
   color: var(--tp-text);
 }
+.ad-dock-msg.is-ai,
+.ad-dock-msg.is-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
 .ad-dock-msg.is-me {
   color: var(--tp-text-subtle);
 }
 .ad-dock-msg.is-error {
   color: var(--tp-danger, #c9372c);
+}
+.ad-dock-avatar {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #f5b58a;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, #fff 70%, transparent);
+}
+.ad-dock-avatar svg {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+.ad-dock-msg-text {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* Attached files */
@@ -157,3 +181,11 @@
 .ad-dock.is-busy .ad-dock-input {
   opacity: 0.6;
 }
+.ad-dock-load {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 2px 6px;
+}
+.ad-dock-load[hidden] { display: none; }
+.ad-dock-load .ai-status { flex: 1 1 auto; max-width: 320px; }

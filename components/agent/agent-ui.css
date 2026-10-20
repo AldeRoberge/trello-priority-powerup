@@ -5093,4 +5093,78 @@ html .tp-page--priority .agent-suggestion-chip.is-selected {
 @media (prefers-reduced-motion: reduce) {
   .agent-work-panel.is-running .agent-work-head-icon,
   .agent-work-step.is-running .agent-work-mark::before { animation: none; }
+  .ai-status-bar { transition: none; }
+}
+
+/* Wait state for a model turn: step, estimate, bar. No loop. */
+.agent-turn-status {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 320px;
+}
+.agent-turn-status:empty { display: none; }
+.agent-msg--assistant.is-streaming > .agent-msg-bubble:not([hidden]) {
+  flex: 1 1 100%;
+}
+.ai-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0 0;
+}
+.ai-status-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.ai-status-label {
+  font-weight: 600;
+  min-width: 0;
+}
+.ai-status-time {
+  flex: 0 0 auto;
+  color: var(--tp-text-muted);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.ai-status-track {
+  height: 4px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--tp-text) 12%, transparent);
+  overflow: hidden;
+}
+.ai-status-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--tp-primary, #0c66e4);
+  transition: width 0.25s ease;
+}
+.ai-status-detail {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--tp-text-muted);
+  opacity: 0.75;
+}
+.ai-status-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.ai-status-step.is-now { color: var(--tp-text); }
+.ai-status-step.is-done { color: var(--tp-text-muted); }
+.ai-status-step.is-wait {
+  color: var(--tp-text-muted);
+  opacity: 0.55;
 }

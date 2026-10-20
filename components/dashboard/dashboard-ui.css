@@ -40,8 +40,6 @@ html[data-color-mode] .tp-page--dashboard {
 .db-nav-list { display: flex; flex-direction: column; gap: 2px; padding: 2px 8px; }
 .db-brand { display: flex; align-items: center; gap: 8px; padding: 4px 8px 12px; font-weight: 600; }
 .db-nav-label { flex: 1; }
-.db-side-foot { display: flex; flex-direction: column; gap: 4px; }
-.db-side-cap { display: flex; flex-direction: column; gap: 4px; }
 
 /* ── Main column ─────────────────────────────────────────────────────── */
 .db-col { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
@@ -330,14 +328,10 @@ button.db-chip:focus-visible { outline: 2px solid var(--tp-primary); outline-off
   background: transparent;
   font: inherit;
   line-height: 0;
-  cursor: pointer;
   appearance: none;
 }
 .db-meter-hit--spacer { visibility: hidden; pointer-events: none; }
 .db-meter-hit .db-meter { display: block; }
-button.db-meter-hit:focus { outline: none; }
-button.db-meter-hit:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
-button.db-meter-hit:hover .db-meter { background: var(--tp-border-strong); }
 .db-meter-fill { display: block; height: 100%; background: var(--tp-primary); border-radius: 2px; }
 .db-meter.is-over .db-meter-fill { background: var(--tp-danger-text); }
 .db-task {
@@ -448,7 +442,7 @@ button.db-meter-hit:hover .db-meter { background: var(--tp-border-strong); }
 
 @media (max-width: 760px) {
   .db-side.sp { width: 56px; }
-  .db-side .sp-head, .db-side .sp-search, .db-nav-label, .db-brand span, .db-side-foot, .db-badge { display: none; }
+  .db-side .sp-head, .db-side .sp-search, .db-nav-label, .db-brand span, .db-badge { display: none; }
   .db-board, .db-today, .db-page--split { flex-direction: column; }
   .db-col-card--pool {
     flex: none;

@@ -25,6 +25,35 @@ html body.tp-page--has-tabs {
   opacity: 0.6;
   pointer-events: none;
 }
+/* Isolation chip: the subject that stays bright. Click leaves the mode. */
+.vt-iso {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin: 0 8px 4px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 12px;
+  max-width: 220px;
+  cursor: pointer;
+}
+.vt-iso[hidden] { display: none; }
+.vt-iso .ti { font-size: 14px; }
+.vt-iso-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vt-iso-x { opacity: 0.55; }
+.vt-iso:hover { background: var(--tp-surface-hover, rgba(0, 0, 0, 0.05)); }
+.vt-iso:hover .vt-iso-x { opacity: 0.9; }
+/* Tasks outside the isolation stay put, only quieter. */
+.iso-out { opacity: 0.38; }
 .vt-tabs {
   display: flex;
   gap: 2px;

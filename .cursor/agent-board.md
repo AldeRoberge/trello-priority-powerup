@@ -4,6 +4,17 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
+| task-click | NEW `task-focus.js` + `task-focus.css` + `test/task-focus.test.js`. `card-quick.js` (hide Ouvrir when there is no onOpen). `openCard` only: `dashboard-ui.js`, `gantt-ui.js`, `table-ui.js`, `mindmap-ui.js`, `journey-ui.js`. `kanban-ui.js` (`openDetail` / `closeDetail` / `openCard` only). `docs-ui.js` (`openTask` + subject chip). `today-ui.js` (preview isolation, not the pill). `task-focus` script tags. `CHANGELOG.md` one line | Click a task: isolate and edit in the view. iso-mode owns `isolation.js` tags; I will add one only where it is still missing. |
+| cap-set | `settings.html` (Journée section + init), `dashboard-ui.js` (sidebar foot, `capChip`, `capacityMenu` only), `dashboard-ui.css` (`.db-side-foot` / meter pointer), `today-ui.js` (pill class only), `dashboard.html` cache query, `CHANGELOG.md` one line | Capacité / jour moves to Settings |
+| iso-mode | NEW `isolation.js` + `test/isolation.test.js`, `view-tabs.js` (Documents href + chip), `view-tabs.css` (`.vt-iso`, `.iso-out`), `table-ui.js` (attrs + Isoler), `kanban-ui.js` (menu + adopt), `gantt-ui.js` (subtask attr + menu + adopt; not glyphs), `dashboard-ui.js` (`withIso` + adopt; not project icons), `mindmap-ui.js` (stamp at end of `buildNodeEl`, adopt in `renderGraph`, Isoler in `openMenu`; not corners, orbit, `createGoal`), `journey-ui.js` (attrs + menu), `docs-model.js` (person subject), `docs-trello.js` (`ensureSubjectDoc` title), `docs-ui.js` (`takeWantedSubject`), html `isolation.js` tags, `CHANGELOG.md` one line | Isolation on a project, task, subtask or person. Not `work-os.js`. |
+| proj-icon | (released) | Project icon in Triage and Gantt. Keep `icon-pick.js`, `project-icon.js`, and `docs-model.js` on those pages. A Gantt project section uses `row.icon`. |
+| ai-wait | (released) | Wait panel: step, bar, estimate in the assistant chat and the bottom dock |
+| gantt-proj | (released) | Gantt groups by project. Section header already calls `IconPick` when `projectId` is set. Please keep `mindmap-goals-trello.js` and `work-os.js` on `gantt.html`. |
+| dock-face | (released) | Assistant face beside dock replies |
+| proj-doc | (released) | A project is its document; its tasks are children |
+| ghost-hello | (released) | Hello is a greeting, not a sentence to finish |
+| triage-name | (released) | Project name in Triage folds like the arrow |
+| proj-meta | (released) | Triage project pane: description, outcome, next step. Note: `renameGoal` in mindmap-ui.js still drops `desc` when renaming. |
 | journey | (released) `view-tabs.js` has the Parcours tab. Please keep that `VIEWS` entry. | Journey map and next-action queue are on main. |
 | link-doc | (released) | Link button searches documents; selected words stay |
 | phone-fit | (released) | Phone chrome: Sheets freeze, Trello snap, Docs overlay |

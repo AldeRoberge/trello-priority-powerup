@@ -4,6 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Assistant : pendant l’attente, la conversation montre l’étape (préparation, envoi, lecture), une barre et le temps estimé.
+- Paramètres : la capacité par jour se règle dans Journée. Le tableau de bord affiche seulement le temps déjà prévu.
 - Isolation : le clic droit « Isoler » retient une tâche, une sous-tâche, un projet ou une personne. Les autres tâches pâlissent (Tableau, Kanban, Gantt, Mindmap, Parcours, Triage) et Documents ouvre la page de ce sujet.
 - Triage et Gantt : un clic sur l’icône d’un projet en choisit une autre et une couleur, comme pour un document. À la création, l’assistant en propose une.
 - Gantt : « Regrouper par projet » découpe le graphique comme le triage (projets repliables, « Sans projet » à la fin). Déposer une carte sur un projet l’y rattache.

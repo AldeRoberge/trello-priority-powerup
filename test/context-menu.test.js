@@ -496,6 +496,7 @@ describe('ContextMenu', () => {
     assert.ok(gids.includes('open-card'));
     assert.ok(gids.includes('mini-priority'));
     assert.ok(gids.includes('delete'));
+    assert.equal(gantt[0].id, 'delete', 'Archiver comes first');
 
     const msg = ContextMenu.buildAgentMessageItems({
       role: 'assistant',

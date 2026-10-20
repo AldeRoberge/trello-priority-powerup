@@ -1558,7 +1558,9 @@
           if (typeof opts.onToggleDone === 'function') opts.onToggleDone();
         },
       });
-      items.push({
+      // Archiver / Supprimer comes first, like the card menus of the other views.
+      items.unshift({ sep: true });
+      items.unshift({
         id: 'delete',
         label: opts.deleteLabel || 'Supprimer',
         danger: true,

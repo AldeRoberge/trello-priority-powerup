@@ -225,7 +225,7 @@
         ]));
       }
       var cap = api.capChip(s.minutes);
-      cap.classList.add('td-pill', 'td-pill--btn');
+      cap.classList.add('td-pill');
       cap.insertBefore(icon('clock'), cap.firstChild);
       pills.push(cap);
       if (s.overdue) {

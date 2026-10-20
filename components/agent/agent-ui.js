@@ -7,6 +7,7 @@
  * markup is [[g:…]] / [[a:…]] etc., never raw HTML from the model.
  *
  * mount(cardEl, options) returns a controller { destroy, … }.
+ * loadingFrame / mountLoading: staged wait (prepare, send, read, write).
  *
  * Table of contents (inside mount closure)
  * ────────────────────────────────────────
@@ -413,6 +414,7 @@
     var chatRestored = false;
     var chatPersistTimer = null;
     var pending = false;
+    var turnEstimateMs = 8000;
     /** Bumped to invalidate in-flight turns when the user resumes from an earlier message. */
     var chatTurnGen = 0;
     /** User messages typed while a turn is in flight; drained FIFO after pending clears. */
@@ -6290,21 +6292,19 @@
       row.setAttribute('aria-label', 'R\u00e9ponse en cours');
       // Seed identity aura so [[a:…]] accents paint correctly during stream.
       applyAuraCssVars(row, identityAura(), paletteForAura(identityAura()));
-      // Face + thinking clouds while waiting; bubble swaps to text when streaming starts.
+      // Face stays; the status panel shows the step, the bar and the estimate.
+      var statusHost = el('div', 'agent-turn-status');
+      row.appendChild(statusHost);
       var bubble = el('div', 'agent-msg-bubble agent-msg-bubble--pending');
-      var clouds = el('div', 'agent-think-clouds');
-      clouds.setAttribute('aria-hidden', 'true');
-      clouds.appendChild(el('span', 'agent-think-puff agent-think-puff--1'));
-      clouds.appendChild(el('span', 'agent-think-puff agent-think-puff--2'));
-      var cloud = el('span', 'agent-think-cloud');
-      cloud.appendChild(el('span', 'agent-think-dot'));
-      cloud.appendChild(el('span', 'agent-think-dot'));
-      cloud.appendChild(el('span', 'agent-think-dot'));
-      clouds.appendChild(cloud);
-      bubble.appendChild(clouds);
+      bubble.hidden = true;
       row.appendChild(bubble);
       messagesEl.appendChild(row);
       startThinkingMotions(row);
+      row._turnStatus = mountLoading(statusHost, {
+        estimateMs: turnEstimateMs,
+        phases: ['prepare', 'send', 'read'],
+        phase: 'prepare'
+      });
       freezeOlderAssistantFaces(row);
       scrollMessagesToBottom();
       notifyLayout();
@@ -6352,8 +6352,23 @@
 
     function revealPendingBubble(bubble, text, blocks) {
       if (!bubble) return;
+      bubble.hidden = false;
       bubble.classList.remove('agent-msg-bubble--pending');
       fillMessageContent(bubble, text || '', blocks || [], { streaming: false });
+    }
+
+    function endTurnStatus(row) {
+      if (!row || !row._turnStatus) return;
+      var waited = row._turnStatus.elapsed();
+      if (waited > 400) {
+        turnEstimateMs = Math.round(turnEstimateMs * 0.35 + waited * 0.65);
+      }
+      row._turnStatus.stop();
+      row._turnStatus = null;
+    }
+
+    function markTurnPhase(row, phase) {
+      if (row && row._turnStatus) row._turnStatus.setPhase(phase);
     }
 
     /**
@@ -8694,12 +8709,16 @@
           fallbackOpening = 'Si on ne le fait pas, c\'est [[a:grave]]?';
         }
 
+        markTurnPhase(thinking, 'send');
         var turn = await Agent.cardInterviewTurn(
           provider,
           [],
           bridge,
           startPrompt,
           {
+            onDelta: function () {
+              if (thinking._turnStatus) thinking._turnStatus.setPhase('read');
+            },
             asked: interviewState.asked || [],
             surrounding: interviewSurrounding,
             recentCards: interviewRecentCards,
@@ -8707,6 +8726,7 @@
           }
         );
 
+        endTurnStatus(thinking);
         stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         thinking.removeAttribute('aria-busy');
@@ -8782,6 +8802,7 @@
       } catch (err) {
         dbgError('agentUi', 'bootstrap.interview.end', err, { ok: false });
         console.error('AgentUI bootstrapCardInterview failed', err);
+        endTurnStatus(thinking);
         stopThinkingMotions();
         thinking.classList.remove('is-pending', 'is-streaming');
         if (thinking && thinking.parentNode) thinking.remove();
@@ -9035,9 +9056,11 @@
         try {
           await prepareTurnContext();
         } catch (prepErr) { /* keep cached context */ }
+        markTurnPhase(row, 'send');
         var turn = await Agent.chatTurn(provider, snapshot, bridge, text, {
           modelTier: tier || sessionModelTier,
           onDelta: function (visible) {
+            markTurnPhase(row, 'read');
             if (epoch !== laneEpoch || !bubble || !visible) return;
             if (!streamed) {
               streamed = true;
@@ -9056,6 +9079,7 @@
         if (epoch !== laneEpoch) return;
         if (!streamed) revealPendingBubble(bubble, turn.message, turn.blocks || []);
         else fillMessageContent(bubble, turn.message, turn.blocks || [], { streaming: false });
+        endTurnStatus(row);
         row.classList.remove('is-pending', 'is-streaming');
         row.removeAttribute('aria-busy');
         row.removeAttribute('aria-label');
@@ -9090,6 +9114,7 @@
         if (row.parentNode) row.remove();
         appendChatError((err && err.message) || 'Erreur de l\'assistant');
       } finally {
+        endTurnStatus(row);
         activeLaneCount = Math.max(0, activeLaneCount - 1);
         if (userRow) userRow.classList.remove('is-queued');
         notifyLayout();
@@ -9176,6 +9201,7 @@
             await prepareTurnContext();
           } catch (prepErr) { /* keep cached context */ }
           if (myGen !== chatTurnGen) return;
+          markTurnPhase(thinking, 'send');
           turn = await Agent.cardInterviewTurn(
             provider,
             history.slice(0, -1),
@@ -9183,6 +9209,7 @@
             apiMsg,
             {
               onDelta: function (visible) {
+                markTurnPhase(thinking, 'read');
                 if (myGen !== chatTurnGen) return;
                 if (!bubble || !visible) return;
                 if (!streamed) {
@@ -9220,6 +9247,7 @@
             await prepareTurnContext();
           } catch (prepErr) { /* keep cached context */ }
           if (myGen !== chatTurnGen) return;
+          markTurnPhase(thinking, 'send');
           turn = await Agent.chatTurn(
             provider,
             history.slice(0, -1),
@@ -9228,6 +9256,7 @@
             {
               modelTier: sessionModelTier,
               onDelta: function (visible) {
+                markTurnPhase(thinking, 'read');
                 if (myGen !== chatTurnGen) return;
                 if (!bubble || !visible) return;
                 if (!streamed) {
@@ -9258,6 +9287,7 @@
             });
           }
         }
+        endTurnStatus(thinking);
         thinking.classList.remove('is-pending', 'is-streaming');
         thinking.removeAttribute('aria-busy');
         thinking.removeAttribute('aria-label');
@@ -9449,6 +9479,7 @@
         refreshSuggestions({ animate: true });
         scrollMessagesToBottom();
       } finally {
+        endTurnStatus(thinking);
         if (myGen === chatTurnGen) {
           if (queuedSelfPromptFocus != null) {
             queueSelfPromptReview(queuedSelfPromptFocus);
@@ -9677,8 +9708,139 @@
     };
   }
 
+  var LOAD_PHASES = [
+    { id: 'prepare', label: 'Pr\u00e9paration', detail: 'Cartes et contexte', at: 0.12 },
+    { id: 'send', label: 'Envoi de la demande', detail: 'Le mod\u00e8le r\u00e9pond', at: 0.36 },
+    { id: 'read', label: 'Lecture de la r\u00e9ponse', detail: 'Mise en forme', at: 0.8 },
+    { id: 'write', label: '\u00c9criture', detail: 'Cartes mises \u00e0 jour', at: 0.92 }
+  ];
+
+  function loadingFrame(phase, elapsedMs, estimateMs, phaseIds) {
+    var list = LOAD_PHASES;
+    if (phaseIds && phaseIds.length) {
+      list = LOAD_PHASES.filter(function (p) {
+        return phaseIds.indexOf(p.id) !== -1;
+      });
+    }
+    if (!list.length) list = LOAD_PHASES;
+    var idx = 0;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].id === phase) idx = i;
+    }
+    var cur = list[idx];
+    var nextAt = idx + 1 < list.length ? list[idx + 1].at : 0.97;
+    var elapsed = Math.max(0, Number(elapsedMs) || 0);
+    var estimate = estimateMs > 400 ? estimateMs : 8000;
+    var creep = elapsed / estimate;
+    if (creep > 1) creep = 1;
+    var pct = Math.round((cur.at + (nextAt - cur.at) * creep) * 100);
+    if (pct < 4) pct = 4;
+    if (pct > 96) pct = 96;
+    var left = estimate - elapsed;
+    var timeLabel = left > 500
+      ? '\u2248 ' + Math.ceil(left / 1000) + ' s'
+      : Math.max(1, Math.ceil(elapsed / 1000)) + ' s';
+    return {
+      phase: cur.id,
+      label: cur.label,
+      detail: cur.detail,
+      percent: pct,
+      timeLabel: timeLabel,
+      steps: list.map(function (p, n) {
+        return {
+          id: p.id,
+          label: p.label,
+          state: n < idx ? 'done' : n === idx ? 'now' : 'wait'
+        };
+      })
+    };
+  }
+
+  function mountLoading(parent, options) {
+    options = options || {};
+    var doc = global.document;
+    if (!parent || !doc) {
+      return {
+        setPhase: function () {},
+        stop: function () {},
+        elapsed: function () { return 0; }
+      };
+    }
+    var ids = options.phases || ['prepare', 'send', 'read'];
+    var estimate = options.estimateMs > 400 ? options.estimateMs : 8000;
+    var phase = options.phase || ids[0];
+    var t0 = Date.now();
+    var root = doc.createElement('div');
+    root.className = 'ai-status';
+    root.setAttribute('role', 'status');
+    root.setAttribute('aria-live', 'polite');
+    var head = doc.createElement('div');
+    head.className = 'ai-status-head';
+    var label = doc.createElement('span');
+    label.className = 'ai-status-label';
+    var time = doc.createElement('span');
+    time.className = 'ai-status-time';
+    head.appendChild(label);
+    head.appendChild(time);
+    var track = doc.createElement('div');
+    track.className = 'ai-status-track';
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', '100');
+    var bar = doc.createElement('span');
+    bar.className = 'ai-status-bar';
+    track.appendChild(bar);
+    var detail = doc.createElement('p');
+    detail.className = 'ai-status-detail';
+    var steps = doc.createElement('ol');
+    steps.className = 'ai-status-steps';
+    root.appendChild(head);
+    root.appendChild(track);
+    root.appendChild(detail);
+    root.appendChild(steps);
+    parent.appendChild(root);
+    function draw() {
+      var view = loadingFrame(phase, Date.now() - t0, estimate, ids);
+      label.textContent = view.label;
+      time.textContent = view.timeLabel;
+      bar.style.width = view.percent + '%';
+      track.setAttribute('aria-valuenow', String(view.percent));
+      track.setAttribute('aria-label', view.label);
+      detail.textContent = view.detail;
+      steps.textContent = '';
+      view.steps.forEach(function (step) {
+        var li = doc.createElement('li');
+        li.className = 'ai-status-step is-' + step.state;
+        li.textContent = step.label;
+        steps.appendChild(li);
+      });
+    }
+    draw();
+    var timer = setInterval(function () {
+      if (!root.isConnected) {
+        clearInterval(timer);
+        return;
+      }
+      draw();
+    }, 250);
+    return {
+      setPhase: function (id) {
+        phase = id;
+        draw();
+      },
+      elapsed: function () { return Date.now() - t0; },
+      stop: function () {
+        clearInterval(timer);
+        if (root.parentNode) root.parentNode.removeChild(root);
+      }
+    };
+  }
+
   global.AgentUI = {
     mount: mount,
+    loadingFrame: loadingFrame,
+    mountLoading: mountLoading,
     /** @internal exposed for unit tests */
     attachOptionalBridgeFns: attachOptionalBridgeFns,
     hydrateBridgeCaches: hydrateBridgeCaches,

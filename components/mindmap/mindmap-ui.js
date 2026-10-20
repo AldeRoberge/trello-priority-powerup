@@ -618,6 +618,13 @@
         nodeEls[n.id] = g;
         gNodes.appendChild(g);
       });
+      if (global.Isolation) {
+        var isoRows = [];
+        (state.graph.nodes || []).forEach(function (n) {
+          if (n && n.kind === 'task' && n.rec) isoRows.push(n.rec);
+        });
+        global.Isolation.adopt(t, isoRows);
+      }
       positionAll();
       applyFocus();
       applyLod(true);
@@ -770,6 +777,15 @@
       title.textContent = n.label;
       g.appendChild(title);
       attachNodeEvents(g, n);
+      if (n.kind === 'task') g.setAttribute('data-iso-card', (n.rec && n.rec.id) || String(n.id || '').replace(/^t:/, ''));
+      else if (n.kind === 'subtask' && n.parentId) {
+        var subItem = String(n.id || '').split(':').slice(2).join(':');
+        if (subItem) g.setAttribute('data-iso-sub', 'sub:' + n.parentId + ':' + subItem);
+      } else if (n.kind === 'person') g.setAttribute('data-iso-person', String(n.id || '').replace(/^p:/, ''));
+      else if (n.kind === 'goal' && n.level === 'project') {
+        g.setAttribute('data-iso-project', n.id);
+        g.setAttribute('data-iso-label', n.label || '');
+      }
       return g;
     }
 
@@ -1965,6 +1981,20 @@
       var parent = parentId && nodeById(parentId);
       var link = parent && MM().rankOf(parent) >= 0 && MM().rankOf(parent) < MM().rankOf({ kind: 'goal', level: level }) ? [{ from: id, to: parentId }] : [];
       var p = saveGoals(goalsWith({ nodes: state.goals.nodes.concat([{ id: id, level: level, name: name }]), link: link }));
+      if (level === 'project' && global.ProjectIcon && typeof global.ProjectIcon.suggest === 'function') {
+        p = p.then(function () {
+          return global.ProjectIcon.suggest(t, name, '').then(function (icon) {
+            if (!icon) return;
+            var cur = (state.goals.nodes || []).filter(function (n) { return n && n.id === id; })[0];
+            if (!cur || cur.icon) return;
+            return saveGoals(goalsWith({
+              nodes: state.goals.nodes.map(function (n) {
+                return n.id === id ? Object.assign({}, n, { icon: icon }) : n;
+              }),
+            }));
+          });
+        });
+      }
       select(id); // the optimistic rebuild already created the node
       return p;
     }
@@ -3430,6 +3460,8 @@
         var TTm = global.TableTrello;
         var anchorEl = onNode;
         items.push({ title: 'Carte' });
+        items.push(['Archiver la carte', '', function () { deleteSelection({ force: true, nodes: [n] }); }, false, 'archive']);
+        items.push(null);
         items.push(['Ouvrir la carte', '', function () { openCard(cardRec); }, false, 'open']);
         items.push(['Progrès…', '', function () { openFieldEditor(cardRec, 'progress', anchorEl); }, false, 'progress']);
         items.push(['Priorité…', '', function () { openFieldEditor(cardRec, 'priority', anchorEl); }, false, 'flag']);
@@ -3460,7 +3492,6 @@
             }),
           });
         }
-        items.push(['Archiver la carte', '', function () { deleteSelection({ force: true, nodes: [n] }); }, false, 'archive']);
         items.push(null);
       }
       if (count) {
@@ -3491,6 +3522,27 @@
       if (manualHit) {
         items.push(['Renommer le groupe', '', function () { renameGroupInline(manualHit); }, false, 'group']);
         items.push(['Dissoudre le groupe', '', function () { dissolveGroup(manualHit.id); }, false, 'trash']);
+      }
+      if (global.Isolation && n) {
+        var iso = {};
+        if (n.kind === 'task') {
+          iso.cardId = (n.rec && n.rec.id) || String(n.id || '').replace(/^t:/, '');
+          iso.cardName = n.label || '';
+          iso.people = global.Isolation.peopleOf(n.rec || {});
+        } else if (n.kind === 'subtask' && n.parentId) {
+          var itemId = String(n.id || '').split(':').slice(2).join(':');
+          iso.cardId = n.parentId;
+          iso.subId = itemId ? 'sub:' + n.parentId + ':' + itemId : '';
+          iso.subName = n.label || '';
+        } else if (n.kind === 'goal' && n.level === 'project') {
+          iso.projectId = n.id;
+          iso.projectName = n.label || '';
+        } else if (n.kind === 'person') {
+          iso.people = [{ id: String(n.id || '').replace(/^p:/, ''), name: n.label || '' }];
+        }
+        global.Isolation.menuItems(iso).forEach(function (it) {
+          items.push(it && it.sep ? null : it);
+        });
       }
       items.push(['Tout sélectionner', 'Ctrl+A', selectAll, false, 'selectAll']);
       items.push(['Réorganiser tout', '', function () { rebuild({ relayout: true, fresh: true }); }, false, 'layout']);

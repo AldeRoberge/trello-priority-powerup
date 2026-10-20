@@ -607,17 +607,20 @@
    * The one document bound to this task or entity. Creates it (titled with the subject's name) when missing.
    * @returns {Promise<{doc:object, created:boolean, docs:object[]}>}
    */
-  async function ensureSubjectDoc(t, kind, id) {
+  async function ensureSubjectDoc(t, kind, id, nameHint) {
     var subject = DM().normalizeSubject({ k: kind, id: id });
     if (!subject) throw fail('bad-subject');
     var docs = await listDocs(t);
     var found = DM().docForSubject(docs, subject.k, subject.id);
     if (found) return { doc: await loadDoc(t, found.id), created: false, docs: docs };
-    var title = DM().UNTITLED;
-    try {
-      title = subject.k === 'task' ? (await loadCardFace(t, subject.id)).name : (await loadEntityFace(t, subject.id)).name;
-    } catch (e) {
-      title = DM().UNTITLED;
+    var hinted = String(nameHint || '').replace(/\s+/g, ' ').trim();
+    var title = hinted || DM().UNTITLED;
+    if (subject.k === 'task' || subject.k === 'entity') {
+      try {
+        title = subject.k === 'task' ? (await loadCardFace(t, subject.id)).name : (await loadEntityFace(t, subject.id)).name;
+      } catch (e) {
+        title = hinted || DM().UNTITLED;
+      }
     }
     var doc = await createDoc(t, title || DM().UNTITLED, '', { subject: subject });
     docs.unshift({ id: doc.id, title: doc.title, updatedAt: doc.updatedAt, size: 0, subject: doc.subject, props: doc.props });

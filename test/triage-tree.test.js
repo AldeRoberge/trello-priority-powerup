@@ -98,10 +98,93 @@ test('rows without items, odd items and a missing projectOf do not break it', ()
   eq(TT.build(null).tasks, []);
 });
 
+test('a project line keeps the icon reported with its tasks', () => {
+  const b = TT.build([card('a')], {
+    projectOf: (row) => (row.id === 'a' ? { id: 'P1', name: 'Site web', icon: { i: 'rocket', c: '#0c66e4' } } : null),
+  });
+  const p = b.nodes.find((n) => n.kind === 'project');
+  assert.deepEqual(p.icon, { i: 'rocket', c: '#0c66e4' });
+});
+
 test('preferences survive a blocked or broken storage', () => {
   // no localStorage in this context: reads fall back to the defaults, writes do nothing
   assert.equal(TT.prefs.treeOn(), true);
   eq(TT.prefs.collapsed(), {});
   TT.prefs.setTreeOn(false);
   TT.prefs.setCollapsed({ 'p:P1': true });
+});
+
+test('clicking a project name folds it, the same as the arrow', () => {
+  function Node(tag) {
+    this.className = '';
+    this.textContent = '';
+    this.children = [];
+    this.listeners = {};
+    this.style = { setProperty() {} };
+    this.parent = null;
+    const self = this;
+    this.classList = { add(c) { self.className += (self.className ? ' ' : '') + c; } };
+  }
+  Node.prototype.setAttribute = function () {};
+  Node.prototype.appendChild = function (c) { this.children.push(c); c.parent = this; return c; };
+  Node.prototype.insertBefore = function (node, before) {
+    const i = this.children.indexOf(before);
+    if (i < 0) this.children.push(node);
+    else this.children.splice(i, 0, node);
+    node.parent = this;
+    return node;
+  };
+  Node.prototype.querySelector = function () { return null; };
+  Object.defineProperty(Node.prototype, 'firstChild', { get() { return this.children[0] || null; } });
+  Node.prototype.addEventListener = function (type, fn) {
+    (this.listeners[type] || (this.listeners[type] = [])).push(fn);
+  };
+  Node.prototype.dispatch = function (type) {
+    const e = { stopPropagation() { e.stopped = true; }, stopped: false };
+    (this.listeners[type] || []).forEach((fn) => fn(e));
+    if (!e.stopped && this.parent && this.parent.dispatch) this.parent.dispatch(type);
+  };
+  function find(node, pred) {
+    if (pred(node)) return node;
+    for (const c of node.children || []) {
+      const hit = find(c, pred);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  const document = {
+    createElement: (tag) => new Node(tag),
+    createDocumentFragment() {
+      const frag = { children: [] };
+      frag.appendChild = (c) => { frag.children.push(c); return c; };
+      return frag;
+    },
+  };
+  const win = { document };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'components', 'dashboard', 'triage-tree.js'), 'utf8'), { window: win, document });
+  const Tree = win.TriageTree;
+  const toggled = [];
+  const selected = [];
+  const built = Tree.build([card('a'), card('free1')], { projectOf });
+  const frag = Tree.render(built, {
+    taskEl: () => new Node('div'),
+    toggle: (key) => toggled.push(key),
+    select() {},
+    selectProject: (id) => selected.push(id),
+    selectedProject: '',
+  });
+  const site = frag.children.find((n) => find(n, (c) => c.className === 'tt-name' && c.textContent === 'Site web'));
+  const free = frag.children.find((n) => find(n, (c) => c.className === 'tt-name' && c.textContent === 'Sans projet'));
+
+  find(site, (c) => c.className === 'tt-name').dispatch('click');
+  eq(toggled, ['p:P1']);
+  eq(selected, ['P1'], 'the name still opens the project in the pane');
+
+  find(site, (c) => c.className === 'tt-chev').dispatch('click');
+  eq(toggled, ['p:P1', 'p:P1']);
+  eq(selected, ['P1'], 'the arrow only folds');
+
+  find(free, (c) => c.className === 'tt-name').dispatch('click');
+  eq(toggled, ['p:P1', 'p:P1', 'p:']);
+  eq(selected, ['P1'], 'Sans projet has no pane');
 });

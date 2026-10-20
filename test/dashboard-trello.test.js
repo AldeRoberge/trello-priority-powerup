@@ -335,3 +335,22 @@ describe('DashboardTrello planning on the clock', () => {
     assert.equal(inputsOf().dueMode, 'vague');
   });
 });
+
+describe('DashboardTrello daily capacity', () => {
+  let DT;
+
+  before(() => {
+    loadComponent('dashboard/dashboard-model.js');
+    loadComponent('dashboard/dashboard-trello.js');
+    DT = global.DashboardTrello;
+  });
+
+  it('keeps a daily capacity and drops a value outside one minute to one day', () => {
+    DT.setCapacity(300);
+    assert.equal(DT.getCapacity(), 300);
+    DT.setCapacity(10);
+    assert.equal(DT.getCapacity(), global.DashboardModel.DEFAULT_CAPACITY);
+    DT.setCapacity(360);
+    assert.equal(DT.getCapacity(), 360);
+  });
+});

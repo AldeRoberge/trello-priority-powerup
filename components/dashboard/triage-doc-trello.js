@@ -189,7 +189,12 @@
     var nodes = ((goals && goals.nodes) || []).slice();
     var have = Object.create(null);
     nodes.forEach(function (n) { have[n.id] = true; });
-    made.forEach(function (m) { if (!have[m.nodeId]) nodes.push({ id: m.nodeId, level: 'project', name: m.name }); });
+    made.forEach(function (m) {
+      if (have[m.nodeId]) return;
+      var node = { id: m.nodeId, level: 'project', name: m.name };
+      if (m.icon) node.icon = m.icon;
+      nodes.push(node);
+    });
     var out = { nodes: nodes, links: ((goals && goals.links) || []).slice() };
     var WO = global.WorkOS;
     links.forEach(function (l) {
@@ -273,7 +278,12 @@
       var usedNode = Object.create(null);
       links.forEach(function (l) { usedNode[l.projectId] = true; });
       var madeUsed = madeNodes.filter(function (m) { return usedNode[m.nodeId]; });
-      return saveGoals(t, result.goalsBefore, madeUsed, links).then(function (r) {
+      var ready = global.ProjectIcon && typeof global.ProjectIcon.decorate === 'function'
+        ? global.ProjectIcon.decorate(t, madeUsed)
+        : Promise.resolve(madeUsed);
+      return ready.then(function (made) {
+        return saveGoals(t, result.goalsBefore, made, links);
+      }).then(function (r) {
         result.goalsSaved = true;
         result.madeProjects = r.made;
         result.goalsAfter = r.saved;

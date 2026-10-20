@@ -6842,12 +6842,22 @@
       try { sp = new URLSearchParams(global.location.search); } catch (e) { return null; }
       var task = DM().cleanId(sp.get('docTask'));
       var entity = DM().cleanId(sp.get('docEntity'));
-      var want = task ? { k: 'task', id: task } : entity ? { k: 'entity', id: entity } : null;
+      var project = DM().normalizeSubject({ k: 'project', id: sp.get('docProject') });
+      var person = DM().normalizeSubject({ k: 'person', id: sp.get('docPerson') });
+      var name = String(sp.get('docName') || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      var want = task ? { k: 'task', id: task }
+        : entity ? { k: 'entity', id: entity }
+        : project ? { k: 'project', id: project.id, name: name }
+        : person ? { k: 'person', id: person.id, name: name }
+        : null;
       if (!want) return null;
       try {
         var u = new URL(global.location.href);
         u.searchParams.delete('docTask');
         u.searchParams.delete('docEntity');
+        u.searchParams.delete('docProject');
+        u.searchParams.delete('docPerson');
+        u.searchParams.delete('docName');
         global.history.replaceState(null, '', u.pathname + u.search + u.hash);
       } catch (e2) { /* the param simply stays in the address */ }
       return want;
@@ -7188,7 +7198,7 @@
             if (want) {
               var existing = DM().docForSubject(docs, want.k, want.id);
               if (existing) return openDoc(existing.id, { skipSave: true });
-              return DT().ensureSubjectDoc(t, want.k, want.id).then(function (r) {
+              return DT().ensureSubjectDoc(t, want.k, want.id, want.name).then(function (r) {
                 state.docs = r.docs;
                 state.idx = DT().getFolderIndex();
                 paintList();

@@ -326,6 +326,8 @@
 
     function moreMenu(anchor, row) {
       var items = [
+        { id: 'archive', label: 'Archiver', icon: 'archive', danger: true, action: function () { archive(row); } },
+        { sep: true },
         { id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', action: function () { if (opts.onOpen) opts.onOpen(); } },
         { id: 'open-document', label: 'Document', icon: 'file-text', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', opts.cardId); } },
       ];
@@ -340,8 +342,6 @@
           },
         });
       }
-      items.push({ sep: true });
-      items.push({ id: 'archive', label: 'Archiver', icon: 'archive', danger: true, action: function () { archive(row); } });
       showMenu(anchor, items);
     }
 

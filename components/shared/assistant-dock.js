@@ -27,6 +27,23 @@
     return n;
   }
 
+  /** Same peach face as the assistant chat, still (no blink, no glow). */
+  function avatar() {
+    var face = el('span', 'ad-dock-avatar');
+    face.setAttribute('aria-hidden', 'true');
+    face.innerHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="28" height="28" focusable="false">' +
+      '<ellipse cx="20" cy="20" rx="19.2" ry="19.2" fill="#f5b58a"/>' +
+      '<ellipse cx="20" cy="20" rx="19.2" ry="19.2" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.4"/>' +
+      '<ellipse cx="14.2" cy="17.6" rx="2.35" ry="2.7" fill="#2a211c"/>' +
+      '<ellipse cx="25.8" cy="17.6" rx="2.35" ry="2.7" fill="#2a211c"/>' +
+      '<circle cx="15" cy="16.7" r="0.7" fill="#fff"/>' +
+      '<circle cx="26.6" cy="16.7" r="0.7" fill="#fff"/>' +
+      '<path d="M14.4 24.4c1.8 2.4 4.2 3.5 5.6 3.5s3.8-1.1 5.6-3.5" fill="none" stroke="#6b3f2a" stroke-width="1.55" stroke-linecap="round"/>' +
+      '</svg>';
+    return face;
+  }
+
   function icon(name) {
     var i = el('i', 'ti ti-' + name);
     i.setAttribute('aria-hidden', 'true');
@@ -97,6 +114,7 @@
     clip.setAttribute('aria-label', 'Joindre des fichiers');
     clip.appendChild(icon('paperclip'));
     var input = el('textarea', 'ad-dock-input');
+    input.setAttribute('data-ai', 'off');
     input.rows = 1;
     input.placeholder = 'Une tâche, une idée, une image…';
     input.setAttribute('aria-label', 'Message à l\'assistant');
@@ -109,7 +127,10 @@
     composer.appendChild(input);
     composer.appendChild(send);
     composer.appendChild(picker);
+    var loadHost = el('div', 'ad-dock-load');
+    loadHost.hidden = true;
     root.appendChild(logEl);
+    root.appendChild(loadHost);
     root.appendChild(attsEl);
     root.appendChild(composer);
 
@@ -125,7 +146,10 @@
       logEl.innerHTML = '';
       logEl.hidden = !log.length;
       log.forEach(function (m) {
-        logEl.appendChild(el('div', 'ad-dock-msg is-' + m.who, m.text));
+        var row = el('div', 'ad-dock-msg is-' + m.who);
+        if (m.who !== 'me') row.appendChild(avatar());
+        row.appendChild(el('span', 'ad-dock-msg-text', m.text));
+        logEl.appendChild(row);
       });
       logEl.scrollTop = logEl.scrollHeight;
     }
@@ -175,6 +199,33 @@
       renderAtts();
     }
 
+    var loadCtl = null;
+    var turnEstimate = 8000;
+
+    function stopLoad() {
+      if (loadCtl) {
+        var waited = loadCtl.elapsed();
+        if (waited > 400) turnEstimate = Math.round(turnEstimate * 0.35 + waited * 0.65);
+        loadCtl.stop();
+        loadCtl = null;
+      }
+      loadHost.hidden = true;
+      loadHost.textContent = '';
+    }
+
+    function startLoad() {
+      stopLoad();
+      var UI = global.AgentUI;
+      if (!UI || typeof UI.mountLoading !== 'function') return;
+      loadHost.hidden = false;
+      loadHost.appendChild(avatar());
+      loadCtl = UI.mountLoading(loadHost, {
+        estimateMs: turnEstimate,
+        phases: ['prepare', 'send', 'read', 'write'],
+        phase: 'prepare'
+      });
+    }
+
     function refreshSend() {
       send.disabled = busy || (!input.value.trim() && !files.length);
       input.disabled = busy;
@@ -198,6 +249,7 @@
       input.value = '';
       grow();
       refreshSend();
+      if (sending.length || !(AI.socialReply && AI.socialReply(text))) startLoad();
       var shots = sending.filter(function (a) { return IMG_RE.test(a.file.type); }).slice(0, MAX_SHOTS);
       Promise.all(shots.map(function (a) { return toDataUrl(a.file); })).then(function (urls) {
         var attachments = sending.map(function (a) {
@@ -205,12 +257,16 @@
           return { name: a.file.name, type: a.file.type, dataUrl: i >= 0 ? urls[i] : '' };
         });
         return TT.load(t).then(function (board) {
+          if (loadCtl) loadCtl.setPhase('send');
           return AI.run(t, {
             text: text,
             rows: board.rows,
             lists: board.lists,
             attachments: attachments,
             files: sending.map(function (a) { return a.file; }),
+            onStatus: function (phase) {
+              if (loadCtl) loadCtl.setPhase(phase);
+            }
           });
         });
       }).then(function (res) {
@@ -225,8 +281,8 @@
           files = [];
           renderAtts();
           if (typeof opts.onRefresh === 'function') try { opts.onRefresh(); } catch (e) { /* view gone */ }
-        } else if (!res.failed.length) {
-          input.value = text; // nothing happened (a question came back): keep the draft
+        } else if (!res.failed.length && AI.keepsDraft && AI.keepsDraft(text, res.message)) {
+          input.value = text; // a real question came back: keep the draft so it can be edited
           grow();
         }
       }, function (err) {
@@ -234,6 +290,7 @@
         grow();
         addLog('error', (err && (err.message || err.reason)) || 'Erreur de l’assistant.');
       }).then(function () {
+        stopLoad();
         busy = false;
         refreshSend();
         input.focus();

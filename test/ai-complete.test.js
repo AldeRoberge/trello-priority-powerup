@@ -80,6 +80,7 @@ describe('AiComplete', () => {
       assert.equal(AI.classifyField(el({ classes: ['dc-search-input'], type: 'search' })), '');
       assert.equal(AI.classifyField(el({ type: 'password' })), '');
       assert.equal(AI.classifyField(el({ classes: ['agent-composer-input'] })), '');
+      assert.equal(AI.classifyField(el({ tag: 'TEXTAREA', classes: ['ad-dock-input'] })), '');
       assert.equal(AI.classifyField(el({ classes: ['dc-title'], attrs: { 'data-ai': 'off' } })), '');
       assert.equal(AI.classifyField(el({ classes: ['dc-title'], disabled: true })), '');
       assert.equal(AI.classifyField(el({ classes: ['kb-ai-input'], tag: 'INPUT' })), '');
@@ -93,14 +94,17 @@ describe('AiComplete', () => {
   describe('shouldRequest', () => {
     it('waits for a real start and stays out of mentions', () => {
       assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bon', lineAfter: '' }), false);
-      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Réunion', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour', lineAfter: '' }), false);
       assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour ', lineAfter: 'suite' }), false);
       assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Voir @Mar', lineAfter: '' }), false);
       assert.equal(AI.shouldRequest({ kind: 'document', lineBefore: 'Bonjour', lineAfter: '', menuOpen: true }), false);
       assert.equal(AI.shouldRequest({ kind: 'task-name', lineBefore: 'P', lineAfter: '' }), false);
       assert.equal(AI.shouldRequest({ kind: 'task-name', lineBefore: 'Pré', lineAfter: '' }), true);
       assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'Bon', lineAfter: '' }), false);
-      assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'Bonjour', lineAfter: '' }), true);
+      assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'hello', lineAfter: '' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'hello!', lineAfter: '' }), false);
+      assert.equal(AI.shouldRequest({ kind: 'text', lineBefore: 'Réunion', lineAfter: '' }), true);
       assert.equal(AI.shouldRequest({ kind: 'tag', lineBefore: 'Ur', lineAfter: '' }), true);
       assert.equal(AI.shouldRequest(null), false);
     });
@@ -118,11 +122,19 @@ describe('AiComplete', () => {
 
     it('drops an echoed prefix, quotes and empty answers', () => {
       assert.equal(AI.parseCompletion('Préparer la réunion', 'Préparer', 'task-name'), ' la réunion');
-      assert.equal(AI.parseCompletion('"la suite"', 'Bonjour ', 'document'), 'la suite');
-      assert.equal(AI.parseCompletion('.', 'Bonjour ', 'document'), '');
-      assert.equal(AI.parseCompletion('Aucun', 'Bonjour ', 'document'), '');
+      assert.equal(AI.parseCompletion('"la suite"', 'Réunion ', 'document'), 'la suite');
+      assert.equal(AI.parseCompletion('.', 'Réunion ', 'document'), '');
+      assert.equal(AI.parseCompletion('Aucun', 'Réunion ', 'document'), '');
       assert.equal(AI.parseCompletion('{"text":" demain"}', 'Réunion', 'doc-name'), ' demain');
-      assert.equal(AI.parseCompletion('Voici une idée', 'Bonjour ', 'document'), '');
+      assert.equal(AI.parseCompletion('Voici une idée', 'Réunion ', 'document'), '');
+      assert.equal(
+        AI.parseCompletion('comprendre la suite exacte des étapes', 'hello', 'text'),
+        ''
+      );
+      assert.equal(
+        AI.parseCompletion(' comprendre la suite exacte des étapes', 'hello', 'task-name'),
+        ''
+      );
     });
 
     it('caps a long label', () => {

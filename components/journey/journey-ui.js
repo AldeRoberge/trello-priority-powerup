@@ -135,6 +135,7 @@
         var data = opts.load ? await opts.load() : await loadBoard();
         if (mine !== state.gen) return;
         state.board = data || state.board;
+        if (global.Isolation) global.Isolation.adopt(t, (state.board && state.board.cards) || [], state.board && state.board.goals);
         state.status = '';
         if (!state.didHl && global.location) {
           var hl = new URLSearchParams(global.location.search).get('hl');
@@ -703,6 +704,13 @@
       items.push({ id: 'open', label: 'Ouvrir la carte', icon: 'external-link', action: function () { openCard(n.parent); } });
       items.push({ sep: true });
       items.push({ id: 'delete', label: 'Supprimer', icon: 'trash', danger: true, action: function () { deleteSub(n); } });
+      if (global.Isolation && n.parent && n.itemId) {
+        items = items.concat(global.Isolation.menuItems({
+          cardId: n.parent,
+          subId: 'sub:' + n.parent + ':' + n.itemId,
+          subName: n.name || '',
+        }));
+      }
       global.ContextMenu.show(point, items);
     }
 
@@ -713,6 +721,10 @@
       if (!node) return;
       var items = [];
       if (rec) {
+        if (global.TableTrello && global.TableTrello.archiveCard) {
+          items.push({ id: 'archive', label: 'Archiver', icon: 'archive', danger: true, action: function () { archive(id); } });
+          items.push({ sep: true });
+        }
         items.push({ id: 'open', label: 'Ouvrir', icon: 'external-link', action: function () { openCard(id); } });
         var closed = !!(JM().isClosed && JM().isClosed(rec));
         items.push(closed
@@ -752,12 +764,20 @@
             { id: 'mindmap', label: 'Mindmap', action: function () { goView('./mindmap.html', id); } },
           ],
         });
-        if (global.TableTrello && global.TableTrello.archiveCard) {
-          items.push({ sep: true });
-          items.push({ id: 'archive', label: 'Archiver', icon: 'archive', danger: true, action: function () { archive(id); } });
-        }
       } else if (node.kind === 'goal') {
         items.push({ id: 'add', label: 'Nouvelle tâche', icon: 'plus', action: function () { createUnder(node); } });
+      }
+      if (global.Isolation) {
+        var iso = {};
+        if (rec) {
+          iso.cardId = id;
+          iso.cardName = rec.name || '';
+          iso.people = global.Isolation.peopleOf(rec);
+        } else if (node.kind === 'goal' && node.level === 'project') {
+          iso.projectId = node.id;
+          iso.projectName = node.name || '';
+        }
+        items = items.concat(global.Isolation.menuItems(iso));
       }
       if (items.length) global.ContextMenu.show(point, items);
     }
@@ -1460,6 +1480,11 @@
       node.style.width = n.w + 'px';
       node.style.height = n.h + 'px';
       node.dataset.id = n.id;
+      if (n.kind === 'task') node.setAttribute('data-iso-card', n.id);
+      else if (n.level === 'project') {
+        node.setAttribute('data-iso-project', n.id);
+        node.setAttribute('data-iso-label', n.name || '');
+      }
       node.setAttribute('role', 'button');
       node.tabIndex = 0;
       var top = el('div', 'jy-node-top');
@@ -1624,6 +1649,10 @@
       node.style.width = n.w + 'px';
       node.style.height = n.h + 'px';
       node.dataset.id = n.id;
+      if (n.parent && n.itemId) {
+        node.setAttribute('data-iso-sub', 'sub:' + n.parent + ':' + n.itemId);
+        node.setAttribute('data-iso-label', n.name || '');
+      }
       var top = el('div', 'jy-node-top');
       var ring = el('button', 'jy-node-ico jy-ico-btn gc-nodrag');
       ring.type = 'button';

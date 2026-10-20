@@ -101,6 +101,29 @@ describe('KanbanAI', () => {
     });
   });
 
+  describe('greetings', () => {
+    it('answers hello without a board question and does not call the model', async () => {
+      let n = 0;
+      global.PriorityAgent = {
+        getProvider: async () => ({ apiKey: 'k' }),
+        isConfigured: () => true,
+        chatCompletions: async () => {
+          n += 1;
+          return { content: '{"message":"Que souhaitez-vous faire sur le tableau ?","actions":[]}' };
+        },
+      };
+      assert.equal(AI.socialReply('crée une tâche'), '');
+      assert.equal(AI.socialReply('hello'), "Hey. I'm here.");
+      assert.equal(AI.socialReply('Bonjour !'), 'Allo! Je suis là.');
+      assert.equal(AI.keepsDraft('hello', 'Bonjour ! Que souhaitez-vous faire sur le tableau ?'), false);
+      assert.equal(AI.keepsDraft('range la bibliothèque', 'Quelle carte ?'), true);
+      const res = await AI.run({}, { text: 'hello', rows: [], lists: [] });
+      assert.equal(n, 0);
+      assert.deepEqual(res.applied, []);
+      assert.equal(res.message, "Hey. I'm here.");
+    });
+  });
+
   describe('suggestions', () => {
     it('picks a helpful, runnable sentence from the card state', () => {
       const row = (o) => Object.assign({ id: 'x', name: 'T', statutKey: 'started', progress: 0, desc: 'd' }, o);

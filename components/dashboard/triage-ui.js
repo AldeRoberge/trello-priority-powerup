@@ -417,17 +417,33 @@
   }
 
   /**
-   * The pane of a project (a node of the goal map) when its line is clicked in the tree: name and note editable
-   * in place, then what the map knows about it. `p` is a WorkOS.projectChain row plus `desc`.
-   *   host: { saveProject(id, { name?, desc? }), openTasks(), open }
+   * The pane of a project (a node of the goal map) when its line is clicked in the tree.
+   * Name, description, outcome and next step can be set here; open-task count and progress stay computed.
+   * `p` is a WorkOS.projectChain row plus `desc`.
+   *   host: {
+   *     saveProject(id, { name?, desc?, icon? }) -> Promise,
+   *     pickIcon(p, icon),                    // the glyph was chosen in the pane
+   *     openDesc(p, anchor),                 // rich description (CardFields)
+   *     pickOutcome(p, anchor),              // choose or create the objective this project serves
+   *     saveStep(p, text),                   // the next step, written on its card
+   *     saveMetric(p, number),               // the measured result, when the project has one
+   *   }
    */
   function projectDetail(p, host) {
     var root = h('div', { class: 'tri tri-project', 'data-project': p.id });
     var body = h('div', { class: 'tri-body' });
     root.appendChild(body);
-    body.appendChild(h('div', { class: 'tri-top' }, [
-      h('span', { class: 'tri-origin' }, [icon('stack-2'), text('Projet')]),
-    ]));
+    var origin = h('span', { class: 'tri-origin' });
+    if (global.IconPick && host.pickIcon) {
+      origin.appendChild(global.IconPick.button({
+        icon: p.icon,
+        fallback: 'stack-2',
+        className: 'ip-glyph',
+        onChoose: function (next) { host.pickIcon(p, next); },
+      }));
+    } else origin.appendChild(icon((p.icon && p.icon.i) || 'stack-2'));
+    origin.appendChild(text('Projet'));
+    body.appendChild(h('div', { class: 'tri-top' }, [origin]));
 
     function field(cls, label, value, placeholder, onSave, single) {
       var el = h('textarea', { class: cls, rows: '1', maxlength: single ? '120' : '2000', spellcheck: 'true', 'aria-label': label, placeholder: placeholder || null });
@@ -454,22 +470,145 @@
       return el;
     }
     body.appendChild(field('tri-title', 'Nom du projet', p.name, '', function (v) { host.saveProject(p.id, { name: v }); }, true));
-    body.appendChild(field('tri-note', 'Note du projet', p.desc, 'Cliquer pour ajouter…', function (v) { host.saveProject(p.id, { desc: v }); }, false));
 
-    function fact(iconName, label, value, empty) {
-      return h('div', { class: 'tri-fact' + (value ? '' : ' is-empty') }, [
+    var hasNote = !!clean(p.desc);
+    var note = h('div', {
+      class: 'tri-desc' + (hasNote ? '' : ' is-empty'),
+      role: 'button',
+      tabindex: '0',
+      title: hasNote ? 'Modifier la description' : 'Ajouter une description',
+      'data-fk': 'pdesc',
+    });
+    if (hasNote) {
+      var shown = h('div', { class: 'tri-desc-body agent-md' });
+      if (global.MarkdownDom) global.MarkdownDom.append(shown, p.desc);
+      else shown.textContent = p.desc;
+      note.appendChild(shown);
+    } else {
+      note.appendChild(icon('plus'));
+      note.appendChild(h('span', { text: 'Cliquer pour ajouter…' }));
+    }
+    function openNote(e) {
+      if (e && e.target && e.target.closest && e.target.closest('a')) return;
+      if (host.openDesc) host.openDesc(p, note);
+    }
+    note.addEventListener('click', openNote);
+    note.addEventListener('keydown', function (e) {
+      if (e.target !== note || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      openNote();
+    });
+    body.appendChild(note);
+
+    function fact(iconName, label, valueEl, empty) {
+      var editable = valueEl && (valueEl.tagName === 'BUTTON' || valueEl.tagName === 'INPUT');
+      var row = h('div', { class: 'tri-fact' + (empty ? ' is-empty' : '') + (editable ? ' tri-fact--edit' : '') }, [
         icon(iconName),
         h('span', { class: 'tri-fact-l', text: label }),
-        h('span', { class: 'tri-fact-v', text: value || empty }),
       ]);
+      row.appendChild(valueEl);
+      if (editable) {
+        row.addEventListener('click', function (e) {
+          if (e.target === valueEl || valueEl.contains(e.target)) return;
+          if (valueEl.tagName === 'BUTTON') valueEl.click();
+          else valueEl.focus();
+        });
+      }
+      return row;
     }
+    function valueText(text, empty) {
+      return h('span', { class: 'tri-fact-v', text: text || empty });
+    }
+    function valueButton(text, empty, title, fk, onClick) {
+      return h('button', {
+        class: 'tri-fact-v tri-fact-btn' + (text ? '' : ' is-empty'),
+        type: 'button',
+        title: title,
+        'data-fk': fk,
+        onclick: function (e) { onClick(e.currentTarget); },
+      }, [text || empty]);
+    }
+
+    var facts = h('div', { class: 'tri-facts' });
+    facts.appendChild(fact('flag', 'Résultat', valueButton(
+      p.outcome,
+      'Cliquer pour ajouter…',
+      p.outcome ? 'Changer le résultat' : 'Choisir un résultat',
+      'outcome',
+      function (b) { if (host.pickOutcome) host.pickOutcome(p, b); }
+    ), !p.outcome));
+
     var step = p.step && p.step.text ? p.step.text : '';
-    body.appendChild(h('div', { class: 'tri-facts' }, [
-      fact('flag', 'Résultat', p.outcome, 'Aucun'),
-      fact('player-track-next', 'Prochaine action', step, 'Aucune'),
-      fact('checklist', 'Tâches ouvertes', p.openCount ? String(p.openCount) : '', 'Aucune'),
-      fact('progress', 'Avancement', p.work == null ? '' : p.work + ' %', 'Aucun'),
-    ]));
+    var stepCard = p.step && p.step.cardId;
+    if (stepCard && host.saveStep) {
+      var stepInput = h('input', {
+        class: 'tri-fact-input' + (step ? '' : ' is-empty'),
+        type: 'text',
+        placeholder: 'Cliquer pour ajouter…',
+        'aria-label': 'Prochaine action',
+        'data-fk': 'pstep',
+        maxlength: '300',
+        autocomplete: 'off',
+      });
+      stepInput.value = step;
+      stepInput.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); stepInput.blur(); }
+        else if (e.key === 'Escape') { stepInput.value = step; stepInput.blur(); }
+      });
+      stepInput.addEventListener('input', function () {
+        stepInput.classList.toggle('is-empty', !clean(stepInput.value));
+      });
+      stepInput.addEventListener('blur', function () {
+        var v = clean(stepInput.value);
+        if (!v || v === step) { stepInput.value = step; stepInput.classList.toggle('is-empty', !step); return; }
+        host.saveStep(p, v);
+      });
+      facts.appendChild(fact('player-track-next', 'Prochaine action', stepInput, !step));
+    } else {
+      facts.appendChild(fact('player-track-next', 'Prochaine action', valueText(step, 'Aucune'), !step));
+    }
+
+    if (p.metricLabel && p.metricId && host.saveMetric) {
+      facts.appendChild(fact('chart-line', 'Mesure', valueButton(
+        p.metricLabel,
+        '',
+        'Mettre à jour la mesure',
+        'metric',
+        function (b) { editMetric(b); }
+      ), false));
+    }
+    facts.appendChild(fact('checklist', 'Tâches ouvertes', valueText(p.openCount ? String(p.openCount) : '', 'Aucune'), !p.openCount));
+    facts.appendChild(fact('progress', 'Avancement', valueText(p.work == null ? '' : p.work + ' %', 'Aucun'), p.work == null));
+    body.appendChild(facts);
+
+    function editMetric(btn) {
+      var input = h('input', {
+        class: 'tri-fact-input',
+        type: 'number',
+        step: 'any',
+        'aria-label': 'Mesure',
+        'data-fk': 'metric',
+        value: p.metricValue == null ? '' : String(p.metricValue),
+      });
+      btn.replaceWith(input);
+      input.focus();
+      input.select();
+      var done = false;
+      function finish(save) {
+        if (done) return;
+        done = true;
+        var n = Number(String(input.value).replace(',', '.'));
+        if (!save || !isFinite(n)) { input.replaceWith(btn); return; }
+        host.saveMetric(p, n);
+      }
+      input.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); done = true; input.replaceWith(btn); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+    }
     return root;
   }
 

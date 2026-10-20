@@ -79,6 +79,10 @@
           /* storage unavailable */
         }
         container.classList.add('is-leaving');
+        if (v.key === 'docs') {
+          var isoHref = isolationDocsHref();
+          if (isoHref) return global.location.assign(isoHref);
+        }
         if (!resolveCardId || VIEWS.indexOf(v) < 0) return global.location.assign(a.href);
         // From the task page: open the view on this card.
         Promise.resolve()
@@ -104,6 +108,10 @@
     UTILS.slice(1).forEach(function (v) {
       utils.appendChild(link(v, 'vt-util', false));
     });
+    if (global.Isolation && typeof global.Isolation.mountChip === 'function') global.Isolation.mountChip(utils);
+    if (global.Isolation && typeof global.Isolation.observe === 'function' && global.document && global.document.body) {
+      global.Isolation.observe(global.document.body);
+    }
     container.appendChild(nav);
     container.appendChild(utils);
     var on = container.querySelector('.is-on');
@@ -121,21 +129,40 @@
     return u.href;
   }
 
+  /** Documents URL for the active isolation, or '' when nothing is isolated. */
+  function isolationDocsHref() {
+    var Iso = global.Isolation;
+    if (!Iso || typeof Iso.docTarget !== 'function' || !global.location) return '';
+    var target = Iso.docTarget();
+    if (!target || !target.kind || !target.id) return '';
+    return hrefForSubject('./docs.html', global.location, target.kind, target.id, target.name || '');
+  }
+
   /**
-   * URL that opens the document page of a task (`docTask`) or an entity (`docEntity`).
+   * URL that opens the document page of a task (`docTask`), an entity (`docEntity`),
+   * a project (`docProject`) or a person (`docPerson`). `name` titles a new project or person page.
    * Pointing at Entités with kind `entity` selects that entity (`entity`) instead.
    */
-  function hrefForSubject(page, loc, kind, id) {
+  function hrefForSubject(page, loc, kind, id, name) {
     var u = new URL(page, loc.href);
     var sp = new URLSearchParams(loc.search || '');
     sp.delete('docTask');
     sp.delete('docEntity');
+    sp.delete('docProject');
+    sp.delete('docPerson');
+    sp.delete('docName');
     sp.delete('entity');
     var docs = /\/docs\.html$/.test(u.pathname) || u.pathname === 'docs.html';
     var entities = /\/entities\.html$/.test(u.pathname) || u.pathname === 'entities.html';
     if (kind === 'entity' && entities) sp.set('entity', id);
     else if (kind === 'entity') sp.set('docEntity', id);
-    else sp.set('docTask', id);
+    else if (kind === 'project') {
+      sp.set('docProject', id);
+      if (name) sp.set('docName', name);
+    } else if (kind === 'person') {
+      sp.set('docPerson', id);
+      if (name) sp.set('docName', name);
+    } else sp.set('docTask', id);
     var q = sp.toString();
     u.search = q ? '?' + q : '';
     u.hash = loc.hash || '';

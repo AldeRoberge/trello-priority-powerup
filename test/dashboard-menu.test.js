@@ -56,8 +56,9 @@ describe('Dashboard card menu', () => {
     ].forEach((k) => {
       assert.ok(id.indexOf(k) >= 0, 'missing ' + k);
     });
-    assert.equal(items[0].id, 'accept');
-    assert.equal(items[0].group, 'Trier');
+    assert.equal(items[0].id, 'archive', 'Archiver is always first');
+    assert.equal(items[1].id, 'accept');
+    assert.equal(items[1].group, 'Trier');
     assert.equal(id.indexOf('complete'), -1);
     const trello = items.filter((it) => it.id === 'open-trello')[0];
     assert.equal(!!trello.disabled, false);

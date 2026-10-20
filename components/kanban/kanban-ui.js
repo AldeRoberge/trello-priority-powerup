@@ -678,6 +678,8 @@
       });
       MENU().show({ x: x, y: y }, [
         { title: row.name || 'Carte' },
+        { icon: 'archive', label: 'Archiver', danger: true, action: function () { archiveRow(row); } },
+        { sep: true },
         { icon: 'external-link', label: 'Ouvrir la carte', action: function () { openCard(row); } },
         {
           icon: 'external-link',
@@ -694,9 +696,13 @@
           hint: (current && current.name) || row.statut || '',
           children: moveItems,
         },
-        { sep: true },
-        { icon: 'archive', label: 'Archiver', danger: true, action: function () { archiveRow(row); } },
-      ]);
+      ].concat(global.Isolation ? global.Isolation.menuItems({
+        cardId: row.id,
+        cardName: row.name,
+        projectId: row.projectId || '',
+        projectName: row.project || '',
+        people: global.Isolation.peopleOf(row),
+      }) : []));
     }
 
     function archiveRow(row) {
@@ -1010,6 +1016,7 @@
     }
 
     function renderBoard() {
+      if (global.Isolation) global.Isolation.adopt(t, state.rows);
       var scrollX = els.board.scrollLeft;
       var scrollY = els.board.scrollTop;
       var scrolls = {};

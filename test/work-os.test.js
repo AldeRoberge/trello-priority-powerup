@@ -85,6 +85,7 @@ describe('WorkOS', () => {
     const home = chain.filter((p) => p.id === 'p')[0];
     const orphan = chain.filter((p) => p.id === 'q')[0];
     assert.equal(home.outcome, 'Lancer le site');
+    assert.equal(home.outcomeId, 'o');
     assert.equal(home.missingOutcome, false);
     assert.equal(home.step.text, 'Rédiger le titre');
     assert.equal(home.work, 40);
@@ -92,7 +93,17 @@ describe('WorkOS', () => {
     assert.equal(home.outcomePct, 30);
     assert.equal(home.missingMeasure, false);
     assert.equal(orphan.missingOutcome, true);
+    assert.equal(orphan.outcomeId, '');
     assert.equal(orphan.missingStep, true);
+    const stuck = WO.projectChain(
+      { nodes: [{ id: 'p', level: 'project', name: 'P' }], links: [{ from: 'card', to: 'p' }] },
+      [row('card', { name: 'Tâche', items: [{ text: 'Fait', done: true, progress: 100 }] })],
+      [],
+      []
+    )[0];
+    assert.equal(stuck.step.cardId, 'card');
+    assert.equal(stuck.step.text, '');
+    assert.equal(stuck.missingStep, true);
     assert.equal(orphan.missingMeasure, false);
   });
 
@@ -154,6 +165,9 @@ describe('WorkOS', () => {
       const cleared = WO.withNodeEdit(named, 'p', { desc: '  ' });
       assert.equal('desc' in cleared.nodes.find((n) => n.id === 'p'), false);
       assert.equal(WO.withNodeEdit(goals(), 'p', { name: ' ' }).nodes.find((n) => n.id === 'p').name, 'Page d’accueil');
+      const marked = WO.withNodeEdit(goals(), 'p', { icon: { i: 'rocket', c: '#0c66e4' } });
+      assert.deepEqual(marked.nodes.find((n) => n.id === 'p').icon, { i: 'rocket', c: '#0c66e4' });
+      assert.equal('icon' in WO.withNodeEdit(marked, 'p', { icon: null }).nodes.find((n) => n.id === 'p'), false);
     });
 
     it('withTaskProject moves a task to another project and keeps its dependencies', () => {
@@ -178,6 +192,31 @@ describe('WorkOS', () => {
       assert.deepEqual(notProject.links.filter((l) => l.from === 'free'), []);
       const fresh = WO.withTaskProject(goals(), 'free', 'q');
       assert.equal(WO.projectOf(fresh, 'free').id, 'q');
+    });
+
+    it('withProjectOutcome links a project to an objective, or creates one, and can detach it', () => {
+      const linked = WO.withProjectOutcome(goals(), 'q', { id: 'o' });
+      assert.deepEqual(linked.links.filter((l) => l.from === 'q' || l.to === 'q'), [{ from: 'q', to: 'o' }]);
+      assert.equal(WO.projectChain(linked, [], [], []).find((p) => p.id === 'q').outcome, 'Lancer le site');
+      const made = WO.withProjectOutcome(goals(), 'q', { id: 'n1', name: '  Diffuser  ' });
+      assert.equal(made.nodes.find((n) => n.id === 'n1').name, 'Diffuser');
+      assert.equal(made.nodes.find((n) => n.id === 'n1').level, 'objective');
+      assert.equal(WO.projectChain(made, [], [], []).find((p) => p.id === 'q').outcomeId, 'n1');
+      const off = WO.withProjectOutcome(goals(), 'p', null);
+      assert.equal(WO.projectChain(off, [], [], []).find((p) => p.id === 'p').outcome, '');
+      assert.deepEqual(off.links.filter((l) => l.from === 'card').map((l) => l.to).sort(), ['other', 'p']);
+      assert.deepEqual(off.links.filter((l) => l.from === 'o'), [{ from: 'o', to: 'g' }]);
+    });
+
+    it('withProjectOutcome ignores a target that is not an objective, and does not mutate its input', () => {
+      const g = goals();
+      const before = JSON.stringify(g);
+      const same = WO.withProjectOutcome(g, 'q', { id: 'g' });
+      assert.equal(JSON.stringify(g), before);
+      assert.equal(same.links.some((l) => l.from === 'q'), false);
+      assert.equal(WO.withProjectOutcome(g, 'q', { id: 'missing' }).nodes.length, g.nodes.length);
+      assert.deepEqual(WO.withProjectOutcome(null, 'p', { id: 'o' }), { nodes: [], links: [] });
+      assert.equal(WO.withProjectOutcome(g, 'nope', { id: 'o' }).links.length, g.links.length);
     });
 
     it('withTaskProject never changes the data it was given, and copes with an empty map', () => {

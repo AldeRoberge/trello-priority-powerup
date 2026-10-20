@@ -136,7 +136,8 @@
     var done = !!row.dueDone || row.statutKey === 'completed';
     var canceled = row.statutKey === 'canceled';
     var open = !done && !canceled;
-    var items = [];
+    // Archiver is always the first entry of a card menu, in every view.
+    var items = [{ id: 'archive', label: 'Archiver', icon: 'archive', group: 'Trier', danger: true }];
 
     // The decisions: words, icon and key come from DashboardModel.TRIAGE_EXITS, the keys only work in the triage.
     function exitEntry(id, extra) {
@@ -256,7 +257,6 @@
     }
 
     items.push({ id: 'new-card', label: 'Nouvelle carte', icon: 'plus', group: 'Créer', hint: 'C', disabled: ctx.canCreate === false });
-    items.push({ id: 'archive', label: 'Archiver', icon: 'archive', group: 'Suppression', danger: true });
     return items;
   }
 
@@ -289,6 +289,8 @@
       selected: null, // triage selection (card id)
       undo: null, // takes back the last decision (a function while it can be)
       goals: { nodes: [], links: [] }, // the Mindmap goal map: projects and the tasks under them
+      objectifs: [],
+      metrics: [],
       capacity: DT().getCapacity(),
       scale: DT().getScale ? DT().getScale() : 'day',
       zoomP: 0, // pixels per day; 0 means "fit the saved scale" until the user zooms
@@ -472,22 +474,6 @@
       }));
       els.side.appendChild(global.SidePanel.search(els.filter));
       els.side.appendChild(els.nav);
-      els.side.appendChild(h('div', { class: 'db-side-foot sp-foot' }, [
-        h('label', { class: 'db-side-cap' }, [
-          h('span', { text: 'Capacité / jour' }),
-          h('select', {
-            class: 'db-select',
-            'aria-label': 'Capacité par jour',
-            onchange: function (e) {
-              state.capacity = Number(e.target.value);
-              DT().setCapacity(state.capacity);
-              render();
-            },
-          }, [3, 4, 5, 6, 7, 8].map(function (hrs) {
-            return h('option', { value: String(hrs * 60), selected: state.capacity === hrs * 60, text: hrs + ' h' });
-          })),
-        ]),
-      ]));
       global.SidePanel.resizable(els.side, 'dashboard');
     }
     buildSide();
@@ -610,21 +596,14 @@
       });
     }
 
-    /** Clickable "used / capacity" chip: sets the daily capacity. */
+    /** Used / capacity for the day. The value itself is set in Paramètres. */
     function capChip(used) {
       var over = used > state.capacity;
       var label = (used ? DM().formatMinutes(used) : '0') + ' / ' + DM().formatMinutes(state.capacity);
-      return menuChip(over ? 'is-late' : '', 'Cliquer pour changer la capacité par jour', '', label, function () {
-        return [3, 4, 5, 6, 7, 8].map(function (hrs) {
-          return {
-            id: 'cap:' + hrs,
-            label: hrs + ' h par jour',
-            icon: 'clock-hour-' + Math.min(hrs, 12),
-            checked: state.capacity === hrs * 60,
-            action: function () { state.capacity = hrs * 60; DT().setCapacity(state.capacity); render(); },
-          };
-        });
-      });
+      return h('span', {
+        class: 'db-chip' + (over ? ' is-late' : ''),
+        title: label,
+      }, [document.createTextNode(label)]);
     }
 
     function openCard(row) {
@@ -900,6 +879,40 @@
       return String(a.name || '').localeCompare(String(b.name || ''), 'fr', { sensitivity: 'base' });
     }
 
+    /** Rebuilds project rows and places from the goal map already in memory. */
+    function applyGoals(next) {
+      state.goals = next || { nodes: [], links: [] };
+      state.projects = WO() ? WO().projectChain(state.goals, state.rows, state.metrics || [], state.objectifs || []) : [];
+      state.places = WO() ? WO().places(state.goals) : {};
+    }
+
+    function goalsSaver() {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG || typeof GG.save !== 'function' || !WO()) {
+        setStatus('Projets indisponibles ici.', 'error');
+        return null;
+      }
+      return GG;
+    }
+
+    /** Writes the goal map, shows it at once, and reloads if the save is refused. */
+    function commitGoals(next, okMsg) {
+      var GG = goalsSaver();
+      if (!GG) return Promise.reject(new Error('Projets indisponibles ici.'));
+      applyGoals(next);
+      render();
+      return GG.save(t, next).then(function (saved) {
+        applyGoals(saved);
+        setStatus(okMsg || 'Projet enregistré', 'ok');
+        return saved;
+      }, function (err) {
+        if (err && err.reason === 'conflict') setStatus('Les projets ont changé ailleurs : rechargés.', 'error');
+        else fail(err);
+        reload({ quiet: true });
+        throw err;
+      });
+    }
+
     /** The project of a card, as the Mindmap goal map has it: { text, title } for the chip of the pane, or null. */
     function projectOfRow(row) {
       var p = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
@@ -910,21 +923,8 @@
 
     /** The card joins a project (null: leaves it). It is saved in the goal map of the Mindmap; a card may also stay free. */
     function setProject(row, projectId) {
-      var GG = global.MindmapGoalsTrello;
-      if (!GG || typeof GG.save !== 'function' || !WO() || !WO().withTaskProject) return setStatus('Projets indisponibles ici.', 'error');
-      var next = WO().withTaskProject(state.goals, row.id, projectId);
-      state.goals = next;
-      state.places = WO().places(next);
-      render();
-      GG.save(t, next).then(function (saved) {
-        state.goals = saved;
-        state.places = WO().places(saved);
-        setStatus(projectId ? 'Projet enregistré' : 'Projet retiré', 'ok');
-      }, function (err) {
-        if (err && err.reason === 'conflict') setStatus('Les projets ont changé ailleurs : rechargés.', 'error');
-        else fail(err);
-        reload({ quiet: true });
-      });
+      if (!WO() || !WO().withTaskProject) return setStatus('Projets indisponibles ici.', 'error');
+      commitGoals(WO().withTaskProject(state.goals, row.id, projectId), projectId ? 'Projet enregistré' : 'Projet retiré').catch(function () {});
     }
 
     function pickProject(row, anchor) {
@@ -1061,6 +1061,19 @@
       });
     }
 
+    function withIso(row, entries, anchor) {
+      var items = withActions(row, entries, anchor);
+      if (!row || !global.Isolation) return items;
+      var proj = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
+      return items.concat(global.Isolation.menuItems({
+        cardId: row.id,
+        cardName: row.name,
+        projectId: proj && proj.id,
+        projectName: (proj && proj.name) || row.project || '',
+        people: global.Isolation.peopleOf(row),
+      }));
+    }
+
     function pageHead(title, sub, right) {
       return h('header', { class: 'db-head' }, [
         h('div', {}, [h('h1', { class: 'db-title', text: title }), sub ? h('p', { class: 'db-sub', text: sub }) : null]),
@@ -1075,7 +1088,7 @@
       return global.TriageTree.build(q, {
         projectOf: function (r) {
           var p = WO() && WO().projectOf ? WO().projectOf(state.goals, r.id) : null;
-          return p ? { id: p.id, name: p.name } : null;
+          return p ? { id: p.id, name: p.name, icon: p.icon || null } : null;
         },
         collapsed: state.triageFold,
       });
@@ -1097,22 +1110,87 @@
       return Object.assign({}, p, { desc: node && node.desc ? node.desc : '' });
     }
 
-    /** Name or note of a project, saved in the goal map of the Mindmap (same path as setProject). */
+    /** Name or description of a project, saved in the goal map of the Mindmap (same path as setProject). */
     function saveProject(id, patch) {
-      var GG = global.MindmapGoalsTrello;
-      if (!GG || typeof GG.save !== 'function' || !WO() || !WO().withNodeEdit) return setStatus('Projets indisponibles ici.', 'error');
-      var next = WO().withNodeEdit(state.goals, id, patch);
-      state.goals = next;
-      (state.projects || []).forEach(function (p) { if (p.id === id && patch.name) p.name = patch.name; });
-      render();
-      GG.save(t, next).then(function (saved) {
-        state.goals = saved;
-        setStatus('Projet enregistré', 'ok');
-      }, function (err) {
-        if (err && err.reason === 'conflict') setStatus('Les projets ont changé ailleurs : rechargés.', 'error');
-        else fail(err);
-        reload({ quiet: true });
+      if (!WO() || !WO().withNodeEdit) {
+        setStatus('Projets indisponibles ici.', 'error');
+        return Promise.reject(new Error('Projets indisponibles ici.'));
+      }
+      return commitGoals(WO().withNodeEdit(state.goals, id, patch));
+    }
+
+    function foldName(s) {
+      return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    /** The objective this project serves: an existing one, a new name, or none. */
+    function pickOutcome(p, anchor) {
+      if (!global.LinearPick || !WO() || !WO().withProjectOutcome) return;
+      var nodes = ((state.goals && state.goals.nodes) || []).filter(function (n) { return n && n.level === 'objective'; });
+      var items = nodes.slice().sort(byName).map(function (n) { return { id: n.id, label: n.name, icon: 'flag' }; });
+      if (p.outcomeId) items.unshift({ id: '', label: 'Aucun', icon: 'circle-x' });
+      global.LinearPick.open({
+        anchor: anchor,
+        placeholder: 'Résultat…',
+        digits: false,
+        current: p.outcomeId || '',
+        items: items,
+        create: function (q) {
+          q = String(q || '').replace(/\s+/g, ' ').trim();
+          return q ? { id: 'new:' + q, label: 'Nouveau résultat « ' + q + ' »', icon: 'plus' } : null;
+        },
+        onPick: function (it) {
+          var done;
+          if (!it || !it.id) done = commitGoals(WO().withProjectOutcome(state.goals, p.id, null), 'Résultat retiré');
+          else if (it.id.indexOf('new:') === 0) {
+            var name = it.id.slice(4).replace(/\s+/g, ' ').trim().slice(0, 120);
+            if (!name) return;
+            var want = foldName(name);
+            var existing = nodes.filter(function (n) { return foldName(n.name) === want; })[0];
+            if (existing) done = commitGoals(WO().withProjectOutcome(state.goals, p.id, { id: existing.id }));
+            else {
+              var GG = global.MindmapGoalsTrello;
+              if (!GG || typeof GG.newId !== 'function') return setStatus('Projets indisponibles ici.', 'error');
+              done = commitGoals(WO().withProjectOutcome(state.goals, p.id, { id: GG.newId(), name: name }), 'Résultat enregistré');
+            }
+          } else done = commitGoals(WO().withProjectOutcome(state.goals, p.id, { id: it.id }), 'Résultat enregistré');
+          if (done && done.catch) done.catch(function () {});
+        },
       });
+    }
+
+    function openProjectDesc(p, anchor) {
+      if (!global.CardFields || !anchor) return;
+      global.CardFields.open('desc', {
+        anchor: anchor,
+        cardName: p.name || '',
+        value: p.desc || '',
+        save: function (text) { return saveProject(p.id, { desc: text }); },
+        onError: function (m) { setStatus(m, 'error'); },
+      });
+    }
+
+    /** The project's next step lives on the card that currently carries it. */
+    function saveProjectStep(p, text) {
+      var id = p.step && p.step.cardId;
+      var row = (state.rows || []).filter(function (r) { return r.id === id; })[0];
+      if (!row || !DT()) return;
+      row.items = DM().withNextStep(row.items, text);
+      applyGoals(state.goals);
+      render();
+      save(row, function () { return DT().saveNextStep(t, row.id, text); }, { ok: 'Prochaine action enregistrée' });
+    }
+
+    function saveProjectMetric(p, n) {
+      if (!p.metricId || !global.GoalsTrello || typeof global.GoalsTrello.updateMetric !== 'function') return;
+      (state.projects || []).forEach(function (x) {
+        if (x.id !== p.id) return;
+        x.metricValue = n;
+        var parts = String(x.metricLabel || '').split(' / ');
+        x.metricLabel = parts.length > 1 ? n + ' / ' + parts[1] : String(n);
+      });
+      render();
+      write(global.GoalsTrello.updateMetric(t, p.metricId, { currentValue: n }), 'Mesure enregistrée');
     }
 
     function treeCtx(selId) {
@@ -1124,6 +1202,7 @@
           state.docOpen = false;
           render();
         },
+        pickIcon: function (node, icon) { saveProject(node.id, { icon: icon }); },
         taskEl: function (row) { return triageRow(row, !picked && row.id === selId); },
         toggle: function (key) {
           if (state.triageFold[key]) delete state.triageFold[key];
@@ -1253,7 +1332,7 @@
           var CM = global.ContextMenu;
           if (!CM || typeof CM.show !== 'function' || !anchor) return;
           var r = anchor.getBoundingClientRect();
-          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, withActions(row, menuEntries(row, menuCtx(row)), anchor));
+          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, withIso(row, menuEntries(row, menuCtx(row)), anchor));
         },
       };
     }
@@ -1353,7 +1432,14 @@
       els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
         h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
         h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pickedProject() && global.TriageUI.projectDetail
-          ? global.TriageUI.projectDetail(pickedProject(), { saveProject: saveProject })
+          ? global.TriageUI.projectDetail(pickedProject(), {
+            saveProject: saveProject,
+            pickIcon: function (project, icon) { saveProject(project.id, { icon: icon }); },
+            openDesc: openProjectDesc,
+            pickOutcome: pickOutcome,
+            saveStep: saveProjectStep,
+            saveMetric: saveProjectMetric,
+          })
           : global.TriageUI.detail(sel, triageHost())]),
       ]));
     }
@@ -1932,27 +2018,12 @@
           h('span', { class: 'db-zoom-name', text: label }),
         ]),
       ]);
-      function capacityMenu(anchor) {
-        var CM = global.ContextMenu;
-        if (!CM || typeof CM.show !== 'function') return;
-        var r = anchor.getBoundingClientRect();
-        CM.show({ clientX: r.left, clientY: r.bottom + 4 }, [3, 4, 5, 6, 7, 8].map(function (hrs) {
-          return {
-            id: 'cap:' + hrs,
-            label: hrs + ' h par jour',
-            icon: 'clock-hour-' + Math.min(hrs, 12),
-            checked: state.capacity === hrs * 60,
-            action: function () { state.capacity = hrs * 60; DT().setCapacity(state.capacity); render(); },
-          };
-        }));
-      }
       function dayBar(d) {
         var pct = d.capacity > 0 ? Math.min(100, Math.round((d.used / d.capacity) * 100)) : 0;
-        var bar = h('button', {
+        var usedLabel = (d.used ? DM().formatMinutes(d.used) : '0') + ' / ' + DM().formatMinutes(d.capacity);
+        var bar = h('div', {
           class: 'db-meter-hit',
-          type: 'button',
-          title: (d.used ? DM().formatMinutes(d.used) : '0') + ' / ' + DM().formatMinutes(d.capacity),
-          onclick: function (e) { e.stopPropagation(); capacityMenu(bar); },
+          title: usedLabel,
         }, [
           h('span', { class: 'db-meter' + (d.over ? ' is-over' : ''), 'aria-hidden': 'true' }, [
             h('span', { class: 'db-meter-fill', style: 'width:' + pct + '%' }),
@@ -2333,6 +2404,7 @@
 
     /* ── Render + keys ─────────────────────────────────────────────── */
     function render() {
+      if (global.Isolation) global.Isolation.adopt(t, state.rows, state.goals);
       today = todayIso();
       if (state.section === 'review') state.section = 'today';
       var keepScroll = els.main.scrollTop;
@@ -2442,11 +2514,9 @@
         state.lists = res[0].lists;
         state.rows = res[0].rows;
         var goals = res[1][0] || { nodes: [], links: [] };
-        var objectifs = (res[1][1] && res[1][1][0]) || [];
-        var metrics = (res[1][1] && res[1][1][1]) || [];
-        state.goals = goals;
-        state.projects = WO() ? WO().projectChain(goals, state.rows, metrics, objectifs) : [];
-        state.places = WO() ? WO().places(goals) : {};
+        state.objectifs = (res[1][1] && res[1][1][0]) || [];
+        state.metrics = (res[1][1] && res[1][1][1]) || [];
+        applyGoals(goals);
         // Opening the Dashboard with work due answers "what now?" straight away; otherwise stay on Triage.
         if (!state.landed) {
           state.landed = true;
@@ -2549,7 +2619,7 @@
         return;
       }
       var entries = row ? menuEntries(row, menuCtx(row)) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
-      CM.show(e, withActions(row, entries, anchor || cardEl));
+      CM.show(e, withIso(row, entries, anchor || cardEl));
     });
 
     if (global.AssistantDock) {

@@ -1,0 +1,90 @@
+/* Same icon chooser as a document: search, a color, a grid. The glyph itself never changes size. */
+
+.ip-glyph {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--tp-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.ip-glyph { cursor: pointer; font-family: inherit; }
+button.ip-glyph:hover { background: var(--tp-surface-active); }
+.ip-glyph.is-empty { opacity: 0.35; }
+
+.ip-pop {
+  position: fixed;
+  z-index: 1100;
+  width: 274px;
+  max-width: 274px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.25);
+}
+.ip-input {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--tp-border-strong);
+  border-radius: 4px;
+  background: var(--tp-input-bg);
+  color: var(--tp-text);
+}
+.ip-input:focus { outline: 2px solid var(--tp-primary); outline-offset: -1px; }
+.ip-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+.ip-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+  cursor: pointer;
+  background: var(--tp-surface);
+}
+.ip-color:hover { filter: brightness(1.08); }
+.ip-color.is-on { border-color: var(--tp-text); }
+.ip-color--none {
+  border-color: var(--tp-border-strong);
+  background: linear-gradient(135deg, transparent 46%, var(--tp-text-muted) 46%, var(--tp-text-muted) 54%, transparent 54%);
+}
+.ip-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 28px);
+  gap: 2px;
+  max-height: 168px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.ip-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--tp-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.ip-btn:hover,
+.ip-btn.is-on { background: var(--tp-surface-active); }

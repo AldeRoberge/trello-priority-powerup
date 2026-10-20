@@ -194,6 +194,21 @@
     return -1;
   }
 
+  /** `{i, c}` kept on a goal node. DocsModel's catalog when the page has it; otherwise a plain glyph and a hex color. */
+  function cleanIcon(raw) {
+    if (global.DocsModel && typeof global.DocsModel.normalizeIcon === 'function') return global.DocsModel.normalizeIcon(raw);
+    if (!raw || typeof raw !== 'object') return null;
+    var name = String(raw.i == null ? '' : raw.i).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 40);
+    var color = String(raw.c == null ? '' : raw.c).trim().toLowerCase();
+    if (!/^[a-z][a-z0-9-]{0,39}$/.test(name)) name = '';
+    if (!/^#[0-9a-f]{6}$/.test(color)) color = '';
+    if (!name && !color) return null;
+    var out = {};
+    if (name) out.i = name;
+    if (color) out.c = color;
+    return out;
+  }
+
   /** Cleans the stored goal data: known levels, named nodes, unique ids, links without duplicates. */
   function normalizeGoals(raw) {
     var src = raw && typeof raw === 'object' ? raw : {};
@@ -207,6 +222,8 @@
       var node = { id: String(n.id), level: level, name: name };
       var desc = typeof n.desc === 'string' ? n.desc.replace(/\r\n?/g, '\n').trim().slice(0, 2000) : '';
       if (desc) node.desc = desc;
+      var icon = cleanIcon(n.icon);
+      if (icon) node.icon = icon;
       nodes.push(node);
     });
     var links = [];

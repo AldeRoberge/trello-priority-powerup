@@ -170,7 +170,17 @@
     });
   }
 
+  /** A finished hello / salut. Not the start of a longer sentence. */
+  function greetingTongue(text) {
+    var u = fold(text).replace(/[!?.\u2026,]+/g, '').replace(/\s+/g, ' ').trim();
+    if (/^(hello|hi|hey|yo|sup|good morning|good evening|good afternoon)( there| you)?$/.test(u)) return 'en';
+    if (/^(allo|all\u00f4|salut|bonjour|bonsoir|coucou|bon matin)( toi)?$/.test(u)) return 'fr';
+    return '';
+  }
+
   function tongue(text) {
+    var greeted = greetingTongue(text);
+    if (greeted) return greeted;
     var s = ' ' + fold(text) + ' ';
     var fr = (s.match(/\b(le|la|les|des|une|est|dans|pour|avec|pas|que|qui|sur|nous|vous|cette|sont)\b/g) || []).length;
     var en = (s.match(/\b(the|and|of|to|is|in|for|with|on|that|this|are|was|be|an|from)\b/g) || []).length;
@@ -273,6 +283,7 @@
     s = lead + body;
     if (s.length > maxChars) s = s.slice(0, maxChars).replace(/\s+\S*$/, '');
     if (!s.trim()) return '';
+    if (greetingTongue(before)) return '';
     if (driftsOff(before, s)) return '';
     if (answersOnTheLine(before, s)) return '';
     var fromTongue = tongue(before);
@@ -343,6 +354,7 @@
     if (/[@/][^\s]*$/.test(line)) return false;
     var trimmed = line.replace(/\u00a0/g, ' ').replace(/\s+$/, '');
     if (!trimmed) return false;
+    if (greetingTongue(trimmed)) return false;
     if (snap.kind === 'document' || snap.kind === 'text') return trimmed.length >= 6;
     return trimmed.length >= 2;
   }
@@ -397,6 +409,7 @@
     }
     if (
       classHas(el, 'agent-composer-input') ||
+      classHas(el, 'ad-dock-input') ||
       classHas(el, 'memory-ui-input') ||
       classHas(el, 'kb-ai-input') ||
       classHas(el, 'dc-search-input') ||
