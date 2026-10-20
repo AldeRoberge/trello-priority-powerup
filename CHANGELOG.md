@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Triage : la description d’une carte ou d’un projet reste dans le panneau, en texte riche. Elle ne s’ouvre plus dans une fenêtre.
 - Ctrl+F ouvre une recherche instantanée : un projet ou une tâche s’ouvre tout de suite, et « Demander à l’IA » pose la même question à l’assistant sans modifier le tableau.
 - Triage : coller une image dans la description d’un projet ou d’une carte la joint à la carte. Le texte de la carte des objectifs ne grossit pas.
 - Kanban : « Projets » montre chaque projet dans sa colonne, avec ses tâches et ses sous-tâches. Glisser le projet le déplace (Backlog, À faire, En cours, Terminé) sans déplacer ses tâches.

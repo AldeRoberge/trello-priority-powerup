@@ -12,7 +12,7 @@
 }
 .tri-body { flex: 1 1 auto; display: flex; flex-direction: column; padding-bottom: 20px; }
 .tri button:focus { outline: none; }
-.tri button:focus-visible, .tri .tri-desc:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
+.tri button:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
 
 /* ── Where it comes from ─────────────────────────────────────────────── */
 .tri-top { display: flex; align-items: center; gap: 6px; min-height: 28px; margin-bottom: 2px; }
@@ -73,23 +73,47 @@
 .tri-desc {
   box-sizing: border-box;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   width: calc(100% + 12px);
   margin: 2px -6px 0;
   padding: 5px 6px;
   border-radius: 6px;
-  color: var(--tp-text-subtle);
+  color: var(--tp-text);
   line-height: 1.45;
-  cursor: pointer;
+  cursor: text;
 }
 .tri-desc:hover { background: var(--tp-surface-hover); }
-.tri-desc.is-empty { align-items: center; color: var(--tp-text-muted); opacity: 0.55; }
-.tri-desc.is-empty:hover { opacity: 0.9; }
-.tri-desc:not(.is-empty) { flex-direction: column; }
+.tri-desc:focus-within { background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 2px var(--tp-primary); }
 .tri-desc.is-drop { background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 2px var(--tp-primary); }
-.tri-desc .ti { font-size: 14px; flex: none; }
-.tri-desc-img { margin: 0; max-width: 100%; }
+.tri-desc-rich {
+  min-width: 0;
+  outline: none;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.tri-desc-rich.is-blank { position: relative; }
+.tri-desc-rich.is-blank::before {
+  content: 'Cliquer pour ajouter…';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.tri-desc:hover .tri-desc-rich.is-blank::before,
+.tri-desc-rich.is-blank:focus::before { opacity: 0.9; }
+.tri-desc-rich p { margin: 0 0 0.35em; }
+.tri-desc-rich p:last-child { margin-bottom: 0; }
+.tri-desc-rich ul, .tri-desc-rich ol { margin: 0.2em 0 0.35em; padding-left: 1.25em; }
+.tri-desc-rich h1, .tri-desc-rich h2, .tri-desc-rich h3 { font-size: 13px; font-weight: 600; margin: 0.35em 0; }
+.tri-desc-rich blockquote { margin: 0.2em 0; padding-left: 8px; border-left: 2px solid var(--tp-border-strong, var(--tp-border)); color: var(--tp-text-subtle); }
+.tri-desc-rich pre { margin: 0.2em 0; padding: 6px 8px; border-radius: 4px; background: var(--tp-surface-subtle); overflow: auto; }
+.tri-desc-rich a { color: var(--tp-primary); }
+.tri-desc-rich .dc-image { margin: 6px 0; max-width: 100%; }
+.tri-desc-rich .dc-image img,
 .tri-desc-img img {
   display: block;
   max-width: 100%;
@@ -98,9 +122,13 @@
   border-radius: 6px;
   background: var(--tp-surface-subtle);
 }
-.tri-desc-img.is-loading { min-height: 72px; border-radius: 6px; background: var(--tp-surface-subtle); }
-.tri-desc-img.is-broken { min-height: 48px; border: 1px dashed var(--tp-border-strong); border-radius: 6px; }
-.tri-desc-body { min-width: 0; max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
+.tri-desc .ti { font-size: 14px; flex: none; }
+.tri-desc-img { margin: 0; max-width: 100%; }
+.tri-desc-img.is-loading,
+.tri-desc-rich .dc-image.is-loading { min-height: 72px; border-radius: 6px; background: var(--tp-surface-subtle); }
+.tri-desc-img.is-broken,
+.tri-desc-rich .dc-image.is-broken { min-height: 48px; border: 1px dashed var(--tp-border-strong); border-radius: 6px; }
+.tri-desc-body { min-width: 0; overflow-wrap: anywhere; }
 .tri-desc-body > :first-child { margin-top: 0; }
 
 /* ── Project pane (a project line clicked in the Triage tree) ─────────── */

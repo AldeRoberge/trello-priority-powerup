@@ -439,7 +439,7 @@
       reloadTimer = setTimeout(function tick() {
         // A re-render would drop the caret of a field being edited: wait until the user leaves it.
         var a = document.activeElement;
-        if (a && els.main.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) {
+        if (a && els.main.contains(a) && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable)) {
           reloadTimer = setTimeout(tick, 1500);
           return;
         }
@@ -987,7 +987,14 @@
       if (id === 'reopen') return exitComplete(row, false);
       if (id === 'archive') return exitArchive(row);
       if (id === 'blocked') return exitBlocked(row);
-      if (id === 'priority' || id === 'progress' || id === 'desc') return openEditor(row, id, anchor);
+      if (id === 'priority' || id === 'progress') return openEditor(row, id, anchor);
+      if (id === 'desc') {
+        if (state.section === 'triage' && row && state.selected === row.id && !pickedProject()) {
+          var descBox = els.main.querySelector('.tri-desc-rich[data-fk="desc"]');
+          if (descBox) { descBox.focus(); return; }
+        }
+        return openEditor(row, id, anchor);
+      }
       if (id === 'open-card') return openCard(row);
       if (id === 'open-document') {
         if (global.ViewTabs && typeof global.ViewTabs.openSubject === 'function') global.ViewTabs.openSubject('task', row.id);
@@ -1296,24 +1303,6 @@
       });
     }
 
-    function openProjectDesc(p, anchor) {
-      if (!global.CardFields || !anchor) return;
-      global.CardFields.open('desc', {
-        anchor: anchor,
-        t: t,
-        cardName: p.name || '',
-        value: p.desc || '',
-        uploadImage: function (file) {
-          return projectDocId(p).then(function (id) { return attachNote(id, file); }).then(function () {
-            render();
-            return null;
-          });
-        },
-        save: function (text) { return saveProject(p.id, { desc: text }); },
-        onError: function (m) { setStatus(m, 'error'); },
-      });
-    }
-
     /** The project's next step lives on the card that currently carries it. */
     function saveProjectStep(p, text) {
       var id = p.step && p.step.cardId;
@@ -1584,7 +1573,6 @@
           ? global.TriageUI.projectDetail(pickedProject(), {
             saveProject: saveProject,
             pickIcon: function (project, icon) { saveProject(project.id, { icon: icon }); },
-            openDesc: openProjectDesc,
             pasteImages: pasteProjectImages,
             resolveImage: resolveImage,
             imageError: imageError,
@@ -2628,7 +2616,7 @@
 
     shell.addEventListener('keydown', function (e) {
       var tag = (e.target && e.target.tagName) || '';
-      var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!(e.target && e.target.isContentEditable);
       // Ctrl+Z takes the last decision back (a text field keeps its own undo).
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing && state.undo) {
         e.preventDefault();

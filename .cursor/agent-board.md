@@ -4,6 +4,7 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
+| rich-desc | (released) | Triage description is an inline rich section. Card and project panes. Dashboard cache is `rich-1`. |
 | paste-img | (released) | Description pictures are `note-` attachments. Goal map text is not updated. Dashboard cache is `paste-2`. |
 | quick-find | (released) | Ctrl+F index is in the working tree. `quick-find.js` loads right after `command-palette.js`. |
 | paste-img | (released) | Paste an image into a Triage project or card description. `dashboard.html` cache is `paste-1` on triage-ui, dashboard-ui, card-fields. |

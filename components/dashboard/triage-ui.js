@@ -16,7 +16,7 @@
  *     save(row, factory, opts),            // queued write: factory() -> promise; opts { ok, then(result) }
  *     perform(row, id, anchor),            // a decision (DashboardModel.TRIAGE_EXITS) or a card action
  *     openCard(row), cardMenu(row, anchor),
- *     openEditor(row, kind, anchor),       // CardFields: desc | priority | due
+ *     openEditor(row, kind, anchor),       // CardFields: priority | due (the description is inline)
  *     openEntities(row, kind, anchor),     // CardEntities: people | places | labels
  *     pickProject(row, anchor), estimateMenu(row, anchor), plan(row, iso),
  *     projectOf(row) -> { text, title } | null,
@@ -214,38 +214,82 @@
   function applyShots(note, shots, resolve) {
     note.querySelectorAll('[data-shot]').forEach(function (n) { n.remove(); });
     if (!shots || !shots.length) return;
-    note.classList.remove('is-empty');
-    if (!note.querySelector('.tri-desc-body') && !note.querySelector('.tri-desc-img')) note.textContent = '';
+    var rich = note.querySelector('.tri-desc-rich');
+    if (rich) rich.classList.remove('is-blank');
     shots.forEach(function (s) { paintShot(note, s, resolve); });
   }
 
-  function showPending(note, desc, files, resolve, shots) {
-    fillNote(note, desc, resolve);
-    applyShots(note, shots, resolve);
-    note.classList.remove('is-empty');
-    if (!descBlocks(desc).length && !(shots && shots.length)) note.textContent = '';
+  function showPending(note, files) {
+    var rich = note.querySelector('.tri-desc-rich');
+    if (rich) rich.classList.remove('is-blank');
     files.forEach(function (file) {
       var url = global.URL && URL.createObjectURL ? URL.createObjectURL(file) : '';
       var img = h('img', { alt: imageAlt(file), draggable: 'false' });
       if (url) img.src = url;
-      note.appendChild(h('figure', { class: 'tri-desc-img' }, [img]));
+      note.appendChild(h('figure', { class: 'tri-desc-img', 'data-pending': '1' }, [img]));
     });
   }
 
+  function noteBlank(el) {
+    var t = (el.textContent || '').replace(/\u00a0/g, ' ').trim();
+    return !t && !el.querySelector('img, ul, ol, table, pre, hr, blockquote');
+  }
+
+  /** Fills the rich surface from Markdown. Pictures stored as `upload:` get their address from `resolve`. */
+  function paintRich(rich, desc, resolve) {
+    var DM = global.DocsModel;
+    if (!DM || typeof DM.mdToHtml !== 'function') {
+      fillNote(rich, desc, resolve);
+      rich.classList.toggle('is-blank', !descBlocks(desc).length);
+      return;
+    }
+    rich.innerHTML = DM.mdToHtml(desc || '');
+    if (typeof resolve === 'function') {
+      rich.querySelectorAll('figure[data-src]').forEach(function (fig) {
+        var src = fig.getAttribute('data-src') || '';
+        if (src.indexOf('upload:') !== 0) return;
+        var img = fig.querySelector('img');
+        if (!img) return;
+        fig.classList.add('is-loading');
+        Promise.resolve(resolve(src)).then(function (url) {
+          if (!img.isConnected) return;
+          fig.classList.remove('is-loading');
+          if (url) img.src = url;
+          else fig.classList.add('is-broken');
+        }, function () {
+          if (!fig.isConnected) return;
+          fig.classList.remove('is-loading');
+          fig.classList.add('is-broken');
+        });
+      });
+    }
+    rich.classList.toggle('is-blank', noteBlank(rich));
+  }
+
+  function noteMarkdown(el) {
+    var DM = global.DocsModel;
+    if (!DM || typeof DM.domToMd !== 'function') return (el.textContent || '').replace(/\u00a0/g, ' ').trim();
+    return DM.domToMd(el);
+  }
+
   /**
-   * The description. Click opens the text editor. A pasted or dropped image is handed to `opts.onImages`
-   * and shown at once.
-   * opts: { desc, fk, title, resolve(src), onOpen(), onImages(files) -> Promise, onImageError(msg) }
+   * The description, always in the pane: a rich text section. Typing edits it; leaving it saves.
+   * A pasted or dropped image is handed to `opts.onImages` and shown at once.
+   * opts: { desc, fk, resolve(src), shots, loadImages(cb), onSave(text), onImages(files) -> Promise, onImageError(msg) }
    */
   function noteField(opts) {
-    var note = h('div', {
-      class: 'tri-desc',
-      role: 'button',
-      tabindex: '0',
-      title: opts.title,
+    var saved = String(opts.desc || '');
+    var rich = h('div', {
+      class: 'tri-desc-rich',
+      contenteditable: 'true',
+      role: 'textbox',
+      'aria-multiline': 'true',
+      'aria-label': 'Description',
+      spellcheck: 'true',
       'data-fk': opts.fk,
     });
-    fillNote(note, opts.desc, opts.resolve);
+    paintRich(rich, saved, opts.resolve);
+    var note = h('div', { class: 'tri-desc' }, [rich]);
     var shown = opts.shots || [];
     if (shown.length) applyShots(note, shown, opts.resolve);
     if (typeof opts.loadImages === 'function') {
@@ -255,15 +299,31 @@
         applyShots(note, shown, opts.resolve);
       });
     }
-    function open(e) {
-      if (e && e.target && e.target.closest && e.target.closest('a')) return;
-      if (opts.onOpen) opts.onOpen();
+    function mark() { rich.classList.toggle('is-blank', noteBlank(rich)); }
+    function canon(md) {
+      var probe = h('div');
+      paintRich(probe, md, null);
+      return noteMarkdown(probe);
     }
-    note.addEventListener('click', open);
-    note.addEventListener('keydown', function (e) {
-      if (e.target !== note || (e.key !== 'Enter' && e.key !== ' ')) return;
+    function flush() {
+      var next = noteMarkdown(rich);
+      if (next === canon(saved)) return;
+      saved = next;
+      if (opts.onSave) opts.onSave(next);
+    }
+    rich.addEventListener('input', mark);
+    rich.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key !== 'Escape') return;
       e.preventDefault();
-      open();
+      paintRich(rich, saved, opts.resolve);
+      rich.blur();
+    });
+    rich.addEventListener('blur', flush);
+    note.addEventListener('mousedown', function (e) {
+      if (e.target !== note) return;
+      e.preventDefault();
+      rich.focus();
     });
     if (typeof opts.onImages === 'function') {
       function take(files) {
@@ -273,16 +333,17 @@
           if (opts.onImageError) opts.onImageError('Image trop lourde (10 Mo).');
           return;
         }
-        showPending(note, opts.desc, files, opts.resolve, shown);
+        flush();
+        showPending(note, files);
         var job;
         try { job = opts.onImages(files); } catch (err) {
-          fillNote(note, opts.desc, opts.resolve);
-          applyShots(note, shown, opts.resolve);
+          note.querySelectorAll('[data-pending]').forEach(function (n) { n.remove(); });
+          mark();
           return;
         }
         Promise.resolve(job).then(function () {}, function () {
-          fillNote(note, opts.desc, opts.resolve);
-          applyShots(note, shown, opts.resolve);
+          note.querySelectorAll('[data-pending]').forEach(function (n) { n.remove(); });
+          mark();
         });
       }
       note.addEventListener('paste', function (e) {
@@ -434,15 +495,22 @@
 
     /* ── Note (the description of the card) ──────────────────────── */
     var cardShots = host.shots ? host.shots(row) : [];
-    var hasNote = !!descBlocks(row.desc).length || cardShots.length;
     var note = noteField({
       desc: row.desc,
       fk: 'desc',
-      title: hasNote ? 'Modifier la note' : 'Ajouter une note',
       resolve: host.resolveImage,
       shots: cardShots,
       loadImages: host.loadImages ? function (cb) { host.loadImages(row, cb); } : null,
-      onOpen: function () { host.openEditor(row, 'desc', note); },
+      onSave: function (text) {
+        var prev = row.desc;
+        row.desc = text;
+        if (!host.save || !global.TableTrello || typeof global.TableTrello.saveDesc !== 'function') return;
+        host.save(row, function () {
+          return global.TableTrello.saveDesc(t, row, text).then(function (full) {
+            row.fullDesc = full;
+          }, function (err) { row.desc = prev; throw err; });
+        }, { ok: 'Enregistré' });
+      },
       onImages: host.pasteImages ? function (files) { return host.pasteImages(row, files); } : null,
       onImageError: host.imageError,
     });
@@ -654,9 +722,8 @@
    * Name, description, outcome and next step can be set here; open-task count and progress stay computed.
    * `p` is a WorkOS.projectChain row plus `desc`.
    *   host: {
-   *     saveProject(id, { name?, desc?, icon? }) -> Promise,
+   *     saveProject(id, { name?, desc?, icon? }, okMsg) -> Promise,
    *     pickIcon(p, icon),                    // the glyph was chosen in the pane
-   *     openDesc(p, anchor),                 // rich description (CardFields)
    *     pasteImages(p, files) -> Promise,    // a pasted or dropped picture
    *     resolveImage(src) -> Promise<url>,   // an upload: pointer, shown in the note
    *     imageError(message),
@@ -708,15 +775,13 @@
     body.appendChild(field('tri-title', 'Nom du projet', p.name, '', function (v) { host.saveProject(p.id, { name: v }); }, true));
 
     var projectShots = host.shots ? host.shots(p) : [];
-    var hasNote = !!descBlocks(p.desc).length || projectShots.length;
     var note = noteField({
       desc: p.desc,
       fk: 'pdesc',
-      title: hasNote ? 'Modifier la description' : 'Ajouter une description',
       resolve: host.resolveImage,
       shots: projectShots,
       loadImages: host.loadImages ? function (cb) { host.loadImages(p, cb); } : null,
-      onOpen: function () { if (host.openDesc) host.openDesc(p, note); },
+      onSave: function (text) { if (host.saveProject) host.saveProject(p.id, { desc: text }, 'Enregistré'); },
       onImages: host.pasteImages ? function (files) { return host.pasteImages(p, files); } : null,
       onImageError: host.imageError,
     });
