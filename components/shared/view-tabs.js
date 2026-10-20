@@ -4,7 +4,7 @@
  * carry the Trello iframe context, so the handshake works on the new page.
  *
  *   ViewTabs.mount(el, { active: 'dashboard' | 'gantt' | 'table' | 'kanban' | 'mindmap' | 'journey' | 'docs' | 'entities' | 'assistant' | 'settings' | 'task' } — one list (VIEWS) for every page; add a view there only)
- *     UTILS are the icon-only buttons pinned top right (Assistant, settings). The task page (popup.html) passes
+ *     UTILS[0] (Assistant) is a labelled tab after Dashboard; the rest are icon-only buttons pinned top right (settings). The task page (popup.html) passes
  *     { active: 'task', task: true, fixed: true, resolveCardId }: a first "Tâche" tab, and the views open on (and highlight) that card.
  */
 (function (global) {
@@ -98,8 +98,10 @@
     if (opts && opts.task) nav.appendChild(link(TASK, 'vt-tab', true));
     VIEWS.forEach(function (v) {
       nav.appendChild(link(v, 'vt-tab', true));
+      // The Assistant is a labelled tab right after the Dashboard (it is not a view of the cards).
+      if (v.key === 'dashboard') nav.appendChild(link(UTILS[0], 'vt-tab', true));
     });
-    UTILS.forEach(function (v) {
+    UTILS.slice(1).forEach(function (v) {
       utils.appendChild(link(v, 'vt-util', false));
     });
     container.appendChild(nav);
