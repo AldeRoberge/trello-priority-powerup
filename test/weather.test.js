@@ -252,8 +252,201 @@ describe('Weather', () => {
     });
   });
 
+  describe('city search', () => {
+    /** A geocoder row, as Open-Meteo sends it (country is missing for some territories). */
+    const geo = (name, admin1, country, code, population, feature, lat, lon) => ({
+      name, admin1, country, country_code: code, population, feature_code: feature || 'PPL', latitude: lat, longitude: lon,
+    });
+    const labels = (list) => list.map((p) => p.label);
+
+    // What geocoding-api.open-meteo.com really answered for "Val-d'Or" (language=fr, count=20).
+    const VAL_DOR = [
+      geo('Val Dor', 'Penang', 'Malaisie', 'MY', 88600, 'PPL', 5.25198, 100.49046),
+      geo('Val-d\'Or', 'Québec', 'Canada', 'CA', 25541, 'PPL', 48.0974, -77.79737),
+      geo('Val d\'Or', 'Martinique', undefined, 'MQ', undefined, 'PPL', 14.43648, -60.86391),
+      geo('Val d\'Or', 'Martinique', undefined, 'MQ', undefined, 'PPL', 14.52807, -60.94749),
+      geo('Val d\'Or', undefined, undefined, 'MQ', undefined, 'PPL', 14.70983, -61.15617),
+      geo('Val d\'Or', 'Martinique', undefined, 'MQ', undefined, 'PPLX', 14.43677, -60.87801),
+      geo('Val-d\'Ornain', 'Grand Est', 'France', 'FR', undefined, 'PPL', 48.7, 5.0),
+      geo('Aéroport de Val-d\'Or', 'Québec', 'Canada', 'CA', undefined, 'AIRP', 48.05018, -77.78279),
+    ];
+    const MONTREAL = [
+      geo('Montréal', 'Québec', 'Canada', 'CA', 1762949, 'PPLA2', 45.50884, -73.58781),
+      geo('Mont-ral', 'Catalogne', 'Espagne', 'ES', undefined, 'PPLA3', 41.28333, 1.1),
+      geo('Montréal', 'Occitanie', 'France', 'FR', 1932, 'PPL', 43.1998, 2.14122),
+      geo('Montréal', 'Occitanie', 'France', 'FR', 1302, 'PPL', 43.9502, 0.20217),
+      geo('Montreal', 'Wisconsin', 'États-Unis', 'US', 783, 'PPL', 46.428, -90.24601),
+      geo('Shipman', 'Virginie', 'États-Unis', 'US', 507, 'PPL', 37.72375, -78.83919),
+      geo('Montréal', 'Auvergne-Rhône-Alpes', 'France', 'FR', 496, 'PPL', 46.0, 4.0),
+      geo('Montreal', 'Missouri', 'États-Unis', 'US', undefined, 'PPL', 37.9, -92.6),
+      geo('Montreal', 'Arkansas', 'États-Unis', 'US', undefined, 'PPL', 35.0, -91.0),
+      geo('Montréal-Nord', 'Québec', 'Canada', 'CA', 86857, 'PPLA4', 45.6, -73.63),
+    ];
+    const QUEBEC = [
+      geo('Québec', 'Québec', 'Canada', 'CA', 531902, 'PPLA', 46.81228, -71.21454),
+      geo('Quebeck', 'Tennessee', 'États-Unis', 'US', undefined, 'PPL', 35.81673, -85.56692),
+      geo('Quebec', 'Saint Mary', 'Jamaïque', 'JM', undefined, 'PPL', 18.3485, -76.8821),
+      geo('Quebec', 'Louisiane', 'États-Unis', 'US', undefined, 'PPL', 32.42681, -91.30289),
+      geo('Quebec', 'Basse-Saxe', 'Allemagne', 'DE', undefined, 'AIRH', 53.0, 8.0),
+      geo('Quebec Citadel Peak', 'Colombie-Britannique', 'Canada', 'CA', undefined, 'PK', 50.0, -123.0),
+    ];
+    const rank = (rows, query) => W.rankPlaces(W.cleanResults(rows), query);
+
+    it('puts the real Val-d’Or first, once each place, every row with a region or a country', () => {
+      ['Val-d\'Or', 'Val d\'Or', 'Val-d’Or', 'val d or'].forEach((query) => {
+        const list = rank(VAL_DOR, query);
+        assert.equal(list[0].label, 'Val-d\'Or, Québec, Canada', query);
+        assert.deepEqual(labels(list), [
+          'Val-d\'Or, Québec, Canada',
+          'Val d\'Or, Martinique',
+          'Val Dor, Penang, Malaisie',
+          'Val-d\'Ornain, Grand Est, France',
+        ], query);
+        list.forEach((p) => assert.ok(p.region || p.country, p.label));
+      });
+    });
+
+    it('answers "Montreal" with the Québec city first and no twin rows', () => {
+      const list = rank(MONTREAL, 'Montreal');
+      assert.equal(list[0].label, 'Montréal, Québec, Canada');
+      assert.ok(list.length <= 6);
+      assert.equal(new Set(labels(list)).size, list.length);
+      assert.equal(labels(list).filter((l) => l.startsWith('Montréal, Occitanie')).length, 1);
+      assert.ok(!labels(list).some((l) => /Catalogne|Shipman/.test(l)), 'loose guesses are left out');
+    });
+
+    it('answers "Québec" with the city first, not the airports or peaks of the same name', () => {
+      const list = rank(QUEBEC, 'Québec');
+      assert.equal(list[0].label, 'Québec, Canada', 'the province is not repeated after the city');
+      assert.ok(!labels(list).some((l) => /Basse-Saxe|Citadel/.test(l)));
+    });
+
+    it('a much bigger city beats the preferred country, a similar one does not', () => {
+      const paris = [
+        geo('Paris', 'Texas', 'États-Unis', 'US', 24782, 'PPLA2', 33.66, -95.55),
+        geo('Paris', 'Ontario', 'Canada', 'CA', 12310, 'PPL', 43.19, -80.38),
+        geo('Paris', 'Île-de-France', 'France', 'FR', 2138551, 'PPLC', 48.85, 2.35),
+      ];
+      assert.deepEqual(labels(rank(paris, 'Paris')), ['Paris, Île-de-France, France', 'Paris, Ontario, Canada', 'Paris, Texas, États-Unis']);
+    });
+
+    it('finds a big city the geocoder knows under another name, ahead of small namesakes', () => {
+      const london = [
+        geo('Londres', 'Angleterre', 'Royaume-Uni', 'GB', 8961989, 'PPLC', 51.5, -0.12),
+        geo('London', 'Ontario', 'Canada', 'CA', 422324, 'PPL', 42.98, -81.25),
+        geo('London', 'Ohio', 'États-Unis', 'US', 10060, 'PPLA2', 39.89, -83.45),
+        geo('Lonton', 'État de Kachin', 'Birmanie', 'MM', undefined, 'PPL', 25.0, 97.0),
+      ];
+      const list = rank(london, 'London');
+      assert.deepEqual(labels(list).slice(0, 2), ['Londres, Angleterre, Royaume-Uni', 'London, Ontario, Canada']);
+      assert.ok(!labels(list).some((l) => l.startsWith('Lonton')));
+    });
+
+    it('prefers Canada between places that are otherwise equal, and the preference can change', () => {
+      const rows = [
+        geo('Sherbrooke', 'Dakota du Nord', 'États-Unis', 'US', undefined, 'PPL', 47.0, -97.0),
+        geo('Sherbrooke', 'Nouvelle-Écosse', 'Canada', 'CA', undefined, 'PPL', 45.1, -61.9),
+        geo('Sherbrooke', 'Québec', 'Canada', 'CA', 129447, 'PPL', 45.4, -71.9),
+        geo('Sherbrooke', 'Île-du-Prince-Édouard', 'Canada', 'CA', undefined, 'PPL', 46.2, -63.1),
+      ];
+      const list = rank(rows, 'Sherbrooke');
+      assert.equal(list[0].label, 'Sherbrooke, Québec, Canada');
+      assert.equal(list.length, 4, 'same name in another region is another place');
+      assert.equal(list[3].label, 'Sherbrooke, Dakota du Nord, États-Unis');
+      const us = W.rankPlaces(W.cleanResults(rows.slice(0, 2)), 'Sherbrooke', 'US');
+      assert.equal(us[0].country, 'États-Unis');
+    });
+
+    it('still shows what it has when nothing matches by name (a typo)', () => {
+      const list = rank([geo('Montréal', 'Québec', 'Canada', 'CA', 3000, 'PPL', 45.5, -73.6)], 'Montrael');
+      assert.deepEqual(labels(list), ['Montréal, Québec, Canada']);
+    });
+
+    it('lists at most six places', () => {
+      const rows = [];
+      for (let i = 0; i < 15; i++) rows.push(geo('Saint-Jean', 'Région ' + i, 'France', 'FR', 100 + i, 'PPL', 40 + i / 10, 2));
+      assert.equal(rank(rows, 'Saint-Jean').length, 6);
+      assert.equal(W.rankPlaces(W.cleanResults(rows), 'Saint-Jean', 'CA', 3).length, 3);
+    });
+
+    describe('cleanResults', () => {
+      it('keeps cities only: no airport, park, peak or island', () => {
+        const rows = ['PPL', 'PPLA', 'PPLX', 'AIRP', 'AIRH', 'PRK', 'MT', 'PK', 'ISLS'].map((f) => geo('X ' + f, 'R', 'C', 'CA', 1, f, 1, 1));
+        assert.deepEqual(W.cleanResults(rows).map((p) => p.name), ['X PPL', 'X PPLA', 'X PPLX']);
+      });
+
+      it('names the country from its code when the geocoder leaves it out', () => {
+        const p = W.cleanResults([geo('Val d\'Or', 'Martinique', undefined, 'MQ', undefined, 'PPL', 14.4, -60.9)])[0];
+        assert.equal(p.country, 'Martinique');
+        const q = W.cleanResults([geo('Ailleurs', undefined, undefined, 'JP', undefined, 'PPL', 35, 139)])[0];
+        assert.equal(q.country, 'Japon');
+      });
+
+      it('drops rows with no coordinates, no name, or nothing to tell them apart by', () => {
+        const rows = [
+          geo('Cassé', 'R', 'C', 'CA', 1, 'PPL', null, null),
+          geo('', 'R', 'C', 'CA', 1, 'PPL', 1, 1),
+          { name: 'Sans lieu', latitude: 1, longitude: 2, feature_code: 'PPL' },
+          null,
+          geo('Bon', 'R', 'C', 'CA', 1, 'PPL', 1, 1),
+        ];
+        assert.deepEqual(W.cleanResults(rows).map((p) => p.name), ['Bon']);
+      });
+
+      it('accepts rows with no feature code, and an answer that is not a list', () => {
+        const row = { name: 'Montréal', admin1: 'Québec', country: 'Canada', latitude: 45.5, longitude: -73.6 };
+        assert.equal(W.cleanResults([row]).length, 1);
+        assert.deepEqual(W.cleanResults(undefined), []);
+        assert.deepEqual(W.cleanResults({}), []);
+      });
+    });
+
+    describe('dedupe', () => {
+      it('keeps the most populated of identical names and fills a missing region', () => {
+        const rows = [
+          geo('Lieu', undefined, undefined, 'MQ', undefined, 'PPL', 14.7, -61.1),
+          geo('Lieu', 'Martinique', undefined, 'MQ', 50, 'PPL', 14.4, -60.9),
+          geo('Lieu', 'Martinique', undefined, 'MQ', 10, 'PPL', 14.5, -60.9),
+        ];
+        const list = rank(rows, 'Lieu');
+        assert.equal(list.length, 1);
+        assert.equal(list[0].label, 'Lieu, Martinique');
+        assert.equal(list[0].lat, 14.4);
+      });
+
+      it('keeps a region-less row when nothing else says where the place is', () => {
+        const list = rank([geo('London', undefined, 'Guinée équatoriale', 'GQ', undefined, 'PPL', 1.8, 9.7)], 'London');
+        assert.deepEqual(labels(list), ['London, Guinée équatoriale']);
+      });
+
+      it('ignores accents, hyphens and case when comparing names', () => {
+        const rows = [
+          geo('Trois-Rivières', 'Québec', 'Canada', 'CA', 144472, 'PPL', 46.34, -72.54),
+          geo('Trois Rivieres', 'Québec', 'Canada', 'CA', undefined, 'PPL', 46.35, -72.55),
+        ];
+        assert.equal(rank(rows, 'trois-rivieres').length, 1);
+      });
+    });
+
+    describe('query and name folding', () => {
+      it('turns curly apostrophes straight and collapses spaces', () => {
+        assert.equal(W.normalizeQuery('  Val-d’Or  '), 'Val-d\'Or');
+        assert.equal(W.normalizeQuery('Val  d‘Or'), 'Val d\'Or');
+        assert.equal(W.normalizeQuery(null), '');
+      });
+
+      it('folds accents, hyphens, apostrophes and case to plain words', () => {
+        assert.equal(W.foldName('Val-d’Or'), 'val d or');
+        assert.equal(W.foldName('Québec'), 'quebec');
+        assert.equal(W.foldName('Trois-Rivières'), 'trois rivieres');
+        assert.equal(W.foldName('Cœur d\'Alene'), 'coeur d alene');
+        assert.equal(W.foldName('東京'), '東京');
+      });
+    });
+  });
+
   describe('network', () => {
-    const json = (body) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    const json =(body) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
 
     it('asks for one place in km/h with the place’s own clock', () => {
       const url = W.forecastUrl({ lat: 45.51, lon: -73.59 });
@@ -277,14 +470,46 @@ describe('Weather', () => {
     it('searchPlaces maps cities and builds one readable label', async () => {
       const results = [
         { name: 'Montréal', admin1: 'Québec', country: 'Canada', latitude: 45.50884, longitude: -73.58781 },
-        { name: 'Paris', admin1: 'Paris', country: 'France', latitude: 48.85, longitude: 2.35 },
+        { name: 'Montpellier', admin1: 'Occitanie', country: 'France', latitude: 43.61, longitude: 3.87 },
+        { name: 'Montmagny', admin1: 'Montmagny', country: 'France', latitude: 46.0, longitude: 2.0 },
         { name: 'Cassé', latitude: null, longitude: null },
       ];
       const list = await W.searchPlaces('mont', json({ results }));
-      assert.equal(list.length, 2);
+      assert.equal(list.length, 3);
       assert.equal(list[0].label, 'Montréal, Québec, Canada');
-      assert.equal(list[1].label, 'Paris, France');
+      assert.equal(list[2].label, 'Montmagny, France');
       assert.equal(list[0].lat, 45.51);
+    });
+
+    it('searchPlaces asks worldwide and in Canada, with straight apostrophes', async () => {
+      const urls = [];
+      const spy = (url) => { urls.push(url); return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }); };
+      await W.searchPlaces('  Val-d’Or ', spy);
+      assert.equal(urls.length, 2);
+      assert.ok(urls.every((u) => u.includes('name=Val-d\'Or') || u.includes('name=Val-d%27Or')));
+      assert.ok(urls.every((u) => u.includes('language=fr')));
+      assert.equal(urls.filter((u) => u.includes('countryCode=CA')).length, 1);
+      assert.ok(urls.some((u) => u.includes('count=20') && !u.includes('countryCode')));
+    });
+
+    it('searchPlaces still answers when the Canadian request fails', async () => {
+      const world = { results: [{ name: 'Val-d\'Or', admin1: 'Québec', country: 'Canada', country_code: 'CA', latitude: 48.0974, longitude: -77.79737, population: 25541, feature_code: 'PPL' }] };
+      const fetchImpl = (url) => (url.includes('countryCode=CA')
+        ? Promise.resolve({ ok: false, status: 500 })
+        : Promise.resolve({ ok: true, json: () => Promise.resolve(world) }));
+      const list = await W.searchPlaces('Val-d\'Or', fetchImpl);
+      assert.deepEqual(list.map((p) => p.label), ['Val-d\'Or, Québec, Canada']);
+    });
+
+    it('searchPlaces fails when the worldwide request fails', async () => {
+      await assert.rejects(W.searchPlaces('Montréal', () => Promise.resolve({ ok: false, status: 500 })), /http-500/);
+    });
+
+    it('searchPlaces merges the Canadian answer in without twins', async () => {
+      const montreal = { name: 'Montréal', admin1: 'Québec', country: 'Canada', country_code: 'CA', latitude: 45.50884, longitude: -73.58781, population: 1762949, feature_code: 'PPLA2' };
+      const fetchImpl = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ results: [montreal] }) });
+      const list = await W.searchPlaces('Montreal', fetchImpl);
+      assert.equal(list.length, 1);
     });
 
     it('searchPlaces does not call the network for a one-letter query', async () => {

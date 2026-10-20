@@ -362,18 +362,154 @@
     });
   }
 
-  /** City search → [{ name, region, country, lat, lon, label }] (empty for a query shorter than 2 letters). */
-  function searchPlaces(query, fetchImpl) {
-    var q = String(query || '').replace(/\s+/g, ' ').trim();
+  /* ── City search: clean, de-duplicate, rank ───────────────────── */
+
+  // The geocoder returns airports and parks, the same village three times, rows with no country,
+  // and orders by population before spelling ("Val Dor" in Malaysia ahead of Val-d'Or).
+  // So we ask for more, clean what comes back, and order it ourselves.
+  var PREFERRED_COUNTRY = 'CA';
+  var SEARCH_SHOWN = 6;
+  var BIG_CITY = 100000;
+  var regionNames;
+
+  /** Straight apostrophes and single spaces: what the keyboard may type is not what the geocoder indexes. */
+  function normalizeQuery(query) {
+    return String(query || '').replace(/[‘’ʼ´`]/g, "'").replace(/\s+/g, ' ').trim();
+  }
+
+  /** Words only, lowercase, no accents: "Val-d’Or", "val d'or" and "VAL D OR" are the same. */
+  function foldName(text) {
+    var t = String(text || '');
+    try { t = t.normalize('NFD'); } catch (e) { /* very old engine: accents stay */ }
+    return t.replace(/[̀-ͯ]/g, '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  }
+
+  /** "MQ" → "Martinique" (the geocoder leaves the country out for some territories). */
+  function countryName(code) {
+    code = String(code || '').toUpperCase();
+    if (!code) return '';
+    try {
+      if (regionNames === undefined) {
+        regionNames = typeof Intl !== 'undefined' && Intl.DisplayNames ? new Intl.DisplayNames(['fr-CA', 'fr'], { type: 'region' }) : null;
+      }
+      return (regionNames && regionNames.of(code)) || code;
+    } catch (e) { return code; }
+  }
+
+  /** One geocoder row → a place with a `code` and a `population` for ranking, or null when it is no use as a city. */
+  function placeFromResult(r) {
+    if (!r || typeof r !== 'object') return null;
+    var feature = String(r.feature_code || '');
+    if (feature && feature.indexOf('PPL') !== 0) return null; // airports, parks, peaks, islands
+    var code = String(r.country_code || '').toUpperCase();
+    var place = cleanPlace({ name: r.name, region: r.admin1, country: r.country || countryName(code), lat: r.latitude, lon: r.longitude });
+    if (!place || !(place.region || place.country)) return null; // nothing to tell it apart by
+    place.code = code;
+    place.population = num(r.population) || 0;
+    return place;
+  }
+
+  function cleanResults(results) {
+    return (Array.isArray(results) ? results : []).map(placeFromResult).filter(Boolean);
+  }
+
+  /** Same name in the same country and region (or one of them has no region) is the same place to a person. Keeps the most populated. */
+  function dedupePlaces(places) {
+    var kept = [];
+    places.forEach(function (p) {
+      var name = foldName(p.name);
+      var where = p.code || foldName(p.country);
+      var region = foldName(p.region);
+      var twin = null;
+      for (var i = 0; i < kept.length && !twin; i++) {
+        var k = kept[i];
+        if (k.name === name && k.where === where && (!k.region || !region || k.region === region)) twin = k;
+      }
+      if (!twin) {
+        kept.push({ name: name, where: where, region: region, place: p, index: kept.length });
+        return;
+      }
+      if (p.population > twin.place.population) {
+        var regionKept = twin.place.region;
+        twin.place = p;
+        if (!p.region) p.region = regionKept;
+      } else if (!twin.place.region) {
+        twin.place.region = p.region;
+      }
+      twin.region = twin.region || region;
+    });
+    return kept.map(function (k) { return k.place; });
+  }
+
+  /**
+   * How well a place's name answers what was typed (`q` is folded):
+   * 0 the name itself, or a big city the geocoder found under another name (Londres for "London")
+   * 1 same letters with other spacing ("Val Dor" for "Val-d'Or")
+   * 2 starts with or contains it
+   * 3 unrelated and small: a loose guess
+   */
+  function nameGroup(place, q) {
+    var n = foldName(place.name);
+    if (!q) return 2;
+    if (n === q) return 0;
+    if (n.replace(/ /g, '') === q.replace(/ /g, '')) return 1;
+    if (n.indexOf(q) >= 0) return 2;
+    return place.population >= BIG_CITY ? 0 : 3;
+  }
+
+  /** Cleaned places → at most `limit` of them, the right city first, each with a `label`. */
+  function rankPlaces(places, query, preferred, limit) {
+    var q = foldName(normalizeQuery(query));
+    var country = preferred === undefined ? PREFERRED_COUNTRY : String(preferred || '').toUpperCase();
+    var rows = dedupePlaces(places || []).map(function (p, i) {
+      return {
+        place: p,
+        index: i,
+        group: nameGroup(p, q),
+        // a tenfold bigger city outweighs being in the preferred country, so "Paris" stays Paris, France
+        score: Math.log10(1 + p.population) + (country && p.code === country ? 1 : 0),
+      };
+    });
+    var close = rows.filter(function (r) { return r.group < 3; });
+    if (close.length) rows = close;
+    rows.sort(function (a, b) {
+      return a.group - b.group || b.score - a.score || a.index - b.index;
+    });
+    return rows.slice(0, limit > 0 ? limit : SEARCH_SHOWN).map(function (r) {
+      var p = r.place;
+      return {
+        name: p.name,
+        region: p.region,
+        country: p.country,
+        lat: p.lat,
+        lon: p.lon,
+        label: [p.name, p.region, p.country].filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(', '),
+      };
+    });
+  }
+
+  function geocodeUrl(q, count, country) {
+    return GEOCODE_URL + '?name=' + encodeURIComponent(q) + '&count=' + count + '&language=fr&format=json' +
+      (country ? '&countryCode=' + encodeURIComponent(country) : '');
+  }
+
+  /**
+   * City search → [{ name, region, country, lat, lon, label }], best first, no twins (empty for a query shorter than 2 letters).
+   * Asks worldwide and, as a second request, in `opts.country` (default Canada) so a local small town is never crowded out
+   * by the many same-named villages in France; if that second request fails the worldwide one still answers.
+   */
+  function searchPlaces(query, fetchImpl, opts) {
+    var q = normalizeQuery(query);
     if (q.length < 2) return Promise.resolve([]);
-    var url = GEOCODE_URL + '?name=' + encodeURIComponent(q) + '&count=6&language=fr&format=json';
-    return getJson(url, fetchImpl).then(function (json) {
-      return ((json && json.results) || []).map(function (r) {
-        var place = cleanPlace({ name: r.name, region: r.admin1, country: r.country, lat: r.latitude, lon: r.longitude });
-        if (!place) return null;
-        place.label = [place.name, place.region, place.country].filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(', ');
-        return place;
-      }).filter(Boolean);
+    var country = opts && opts.country !== undefined ? opts.country : PREFERRED_COUNTRY;
+    var world = getJson(geocodeUrl(q, 20), fetchImpl);
+    var local = country
+      ? getJson(geocodeUrl(q, 10, country), fetchImpl).then(null, function () { return null; })
+      : Promise.resolve(null);
+    return Promise.all([world, local]).then(function (both) {
+      var raw = [].concat((both[0] && both[0].results) || [], (both[1] && both[1].results) || []);
+      return rankPlaces(cleanResults(raw), q, country);
     });
   }
 
@@ -468,6 +604,10 @@
     forecastUrl: forecastUrl,
     fetchForecast: fetchForecast,
     searchPlaces: searchPlaces,
+    normalizeQuery: normalizeQuery,
+    foldName: foldName,
+    cleanResults: cleanResults,
+    rankPlaces: rankPlaces,
     loadPlace: loadPlace,
     hasChosenPlace: hasChosenPlace,
     recentPlaces: recentPlaces,
