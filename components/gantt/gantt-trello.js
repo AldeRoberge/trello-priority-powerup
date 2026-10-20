@@ -766,6 +766,25 @@
   }
 
   /**
+   * Pause or unpause a local subtask, then persist. A blocked subtask also
+   * blocks its parent card (completion.hasAnyBlocked).
+   * rowMeta is the same shape as setSubtaskDone.
+   */
+  async function setSubtaskBlocked(t, rowMeta, blocked) {
+    var ct = CT();
+    if (!ct) return { ok: false, reason: 'no-completion' };
+    rowMeta = rowMeta || {};
+    if (rowMeta.kind !== 'local') return { ok: false, reason: 'unsupported-kind' };
+    var parentId = rowMeta.parentCardId;
+    var itemId = rowMeta.itemId;
+    if (!parentId || !itemId) return { ok: false, reason: 'missing-ids' };
+    var data = await ct.getCardCompletionById(t, parentId);
+    var next = ct.setItemBlocked(data, itemId, !!blocked);
+    await ct.saveCardCompletionById(t, parentId, next);
+    return { ok: true, parentCardId: parentId, data: next };
+  }
+
+  /**
    * Set an arbitrary progress (0-100) on a local / checklist subtask or a card, then persist.
    * rowMeta is the same shape as setSubtaskDone.
    */
@@ -1292,6 +1311,7 @@
     setCardBlocked: setCardBlocked,
     clearCardBlocked: clearCardBlocked,
     setSubtaskDone: setSubtaskDone,
+    setSubtaskBlocked: setSubtaskBlocked,
     setSubtaskProgress: setSubtaskProgress,
     deleteSubtask: deleteSubtask,
     addSubtask: addSubtask,

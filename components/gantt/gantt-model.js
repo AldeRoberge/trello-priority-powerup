@@ -1031,6 +1031,7 @@
         progress:
           typeof item.progress === 'number' ? item.progress : item.done ? 100 : 0,
         done: !!item.done,
+        blocked: !!item.blocked && !item.done,
         depth: depth,
         expandable: false,
         children: [],

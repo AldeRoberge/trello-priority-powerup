@@ -815,6 +815,10 @@
   color: var(--tp-success, #216e4e);
 }
 
+.gantt-action-btn--block.is-on {
+  color: var(--tp-danger-text, #ae2e24);
+}
+
 .gantt-action-btn--delete:hover {
   color: var(--tp-danger-text, #ae2e24);
 }

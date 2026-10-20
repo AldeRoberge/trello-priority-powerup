@@ -3513,6 +3513,35 @@
       };
     }
 
+    function toggleSubtaskBlocked(row) {
+      if (state.saving || !canEditSubtask(row)) return;
+      state.saving = true;
+      var nextBlocked = !row.blocked;
+      setStatus(nextBlocked ? 'Blocage…' : 'Déblocage…');
+      ganttTrello
+        .setSubtaskBlocked(t, subtaskMeta(row), nextBlocked)
+        .then(function (res) {
+          state.saving = false;
+          if (!res || !res.ok) {
+            setStatus(
+              'Échec' + (res && res.reason ? ' (' + res.reason + ')' : ''),
+              true
+            );
+            return reload();
+          }
+          setStatus(nextBlocked ? 'Sous-tâche bloquée' : 'Sous-tâche débloquée');
+          return reload();
+        })
+        .catch(function (err) {
+          state.saving = false;
+          setStatus(
+            'Erreur : ' + (err && err.message ? err.message : String(err)),
+            true
+          );
+          return reload();
+        });
+    }
+
     function toggleSubtaskDone(row) {
       if (state.saving || !canEditSubtask(row)) return;
       state.saving = true;
@@ -3780,6 +3809,27 @@
         });
       }
       actions.appendChild(addBtn);
+
+      // Same pause glyph as the card row: a blocked subtask blocks its parent.
+      var blockBtn = el(
+        'button',
+        'gantt-action-btn gantt-action-btn--block' + (row.blocked ? ' is-on' : ''),
+        {
+          type: 'button',
+          title: row.blocked ? 'Débloquer' : 'Bloquer',
+        }
+      );
+      blockBtn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i>';
+      if (!editable || row.done || row.kind !== 'local') {
+        blockBtn.disabled = true;
+        blockBtn.classList.add('is-disabled');
+      } else {
+        blockBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleSubtaskBlocked(row);
+        });
+      }
+      actions.appendChild(blockBtn);
 
       var doneBtn = el(
         'button',
