@@ -628,7 +628,9 @@
       table.appendChild(h('thead', {}, [head]));
 
       var body = h('tbody');
-      rows.forEach(function (row, i) {
+      var rowNo = 0;
+      function renderRowTr(row) {
+        var i = rowNo++;
         var tr = h('tr', { 'data-id': row.id });
         tr.addEventListener('dragover', function (e) {
           if (!state.dragId || !canReorder()) return;
@@ -677,6 +679,12 @@
         shownColumns().forEach(function (key) { tr.appendChild(renderCell(row, key)); });
         body.appendChild(tr);
         if (state.expanded[row.id]) renderSubRows(row, body);
+      }
+      var sections = TM().groupByProject(rows, foldedSections());
+      if (!sections) rows.forEach(renderRowTr);
+      else sections.forEach(function (g) {
+        body.appendChild(sectionRow(g));
+        if (g.open) g.rows.forEach(renderRowTr);
       });
 
       if (!rows.length && state.filter) {
@@ -1767,6 +1775,33 @@
       var os = global.WorkOS;
       if (!goals || typeof goals.load !== 'function' || !os || typeof os.places !== 'function') return Promise.resolve({});
       return goals.load(t).then(function (g) { return os.places(g || {}); }).catch(function () { return {}; });
+    }
+
+    /* ── Project sections (same look as the Triage tree), folded state remembered in this browser ── */
+    function foldedSections() {
+      try {
+        var o = JSON.parse(localStorage.getItem('tp-table-folded') || '{}');
+        return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+      } catch (e) { return {}; }
+    }
+    function toggleSection(key) {
+      var f = foldedSections();
+      if (f[key]) delete f[key]; else f[key] = true;
+      try { localStorage.setItem('tp-table-folded', JSON.stringify(f)); } catch (e) { /* lasts until reload */ }
+      renderGrid();
+    }
+    function sectionRow(g) {
+      var inner = h('div', { class: 'tb-section-in' }, [
+        icon(g.open ? 'chevron-down' : 'chevron-right', 'tb-section-chev'),
+        icon(g.free ? 'inbox' : 'stack-2', 'tb-section-icon'),
+        h('span', { class: 'tb-section-name', text: g.name }),
+        h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
+      ]);
+      return h('tr', {
+        class: 'tb-section' + (g.free ? ' is-free' : ''),
+        'aria-expanded': String(g.open),
+        onclick: function () { toggleSection(g.key); },
+      }, [h('td', { colspan: String(state.columns.length + 1) }, [inner])]);
     }
 
     /** One-time: boards with saved columns get Projet and Tâche parente after Objet (hideable afterwards). */

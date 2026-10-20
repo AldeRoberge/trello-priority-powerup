@@ -252,4 +252,11 @@ describe('TableModel.subtaskRows', () => {
     TM.withHierarchy(rows, { b: { project: 'Site web' } });
     assert.deepEqual(rows.map((r) => [r.parent, r.project]), [['', ''], ['Parent', 'Site web'], ['', '']]);
   });
+
+  it('groupByProject makes sections in first-seen order, free cards last, null without projects', () => {
+    const r = (id, project) => ({ id, project });
+    const g = TM.groupByProject([r('a', 'B'), r('b', ''), r('c', 'A'), r('d', 'B')], { 'p:A': true });
+    assert.deepEqual(g.map((x) => [x.name, x.rows.length, x.open]), [['B', 2, true], ['A', 1, false], ['Sans projet', 1, true]]);
+    assert.equal(TM.groupByProject([r('a', '')]), null);
+  });
 });

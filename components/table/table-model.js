@@ -160,6 +160,26 @@
     return rows;
   }
 
+  /**
+   * Sections by project, in order of first appearance, "Sans projet" last. Rows keep their order inside a
+   * section. Null when no row has a project (the grid stays one flat list). folded: { key: true }.
+   */
+  function groupByProject(rows, folded) {
+    var by = {};
+    var list = [];
+    var free = [];
+    (rows || []).forEach(function (r) {
+      if (!r.project) { free.push(r); return; }
+      var g = by[r.project];
+      if (!g) { g = by[r.project] = { key: 'p:' + r.project, name: r.project, rows: [], free: false }; list.push(g); }
+      g.rows.push(r);
+    });
+    if (!list.length) return null;
+    if (free.length) list.push({ key: 'p:', name: 'Sans projet', rows: free, free: true });
+    list.forEach(function (g) { g.open = !(folded && folded[g.key]); });
+    return list;
+  }
+
   /** Adds { category, color, icon } to each board list from the board's Statut settings. */
   function enrichLists(lists, settings, statutMatch) {
     var cats = (settings && settings.listCategories) || {};
@@ -382,6 +402,7 @@
   global.TableModel = {
     subtaskRows: subtaskRows,
     withHierarchy: withHierarchy,
+    groupByProject: groupByProject,
     urgencyLabel: function (id) { return URGENCY_LABELS[id] || ''; },
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,
