@@ -115,7 +115,6 @@
 
   /**
    * SVG glyph for a kind of weather. `kind` comes from Weather.describe(...).kind.
-   * Add class wx-anim to a parent to make the rays turn, the rain fall, the flakes drift.
    */
   function glyph(kind, isDay, size) {
     var uid = 'wx' + ++seq;
@@ -139,7 +138,7 @@
     return svg;
   }
 
-  /* ── Sky: a gradient and a few moving things ───────────────────── */
+  /* ── Sky: a gradient and a few still things ────────────────────── */
 
   function rng(seed) {
     var s = seed >>> 0;
@@ -158,14 +157,6 @@
     return n >>> 0;
   }
 
-  /**
-   * Negative delay that keeps a looping animation on the same beat when the page is drawn again
-   * (every click rebuilds the page: without this the clouds would jump back to the start).
-   */
-  function beat(dur, offset) {
-    return '-' + (((Date.now() / 1000) + offset) % dur).toFixed(2) + 's';
-  }
-
   function sky(scene, isDay) {
     var name = scene || 'clear-day';
     var root = h('div', { class: 'wx-sky wx-sky--' + name, 'aria-hidden': 'true' });
@@ -180,33 +171,26 @@
     }
     function clouds(n, dark) {
       for (var i = 0; i < n; i++) {
-        var dur = 80 + r() * 90;
         add('wx-cloud' + (dark ? ' wx-cloud--dark' : ''),
-          'top:' + r1(r() * 62) + '%;width:' + Math.round(150 + r() * 190) + 'px;height:' + Math.round(40 + r() * 38) + 'px;' +
-          'opacity:' + r1(0.28 + r() * 0.26) + ';animation-duration:' + r1(dur) + 's;animation-delay:' + beat(dur, r() * dur));
+          'left:' + r1(-10 + r() * 90) + '%;top:' + r1(r() * 62) + '%;width:' + Math.round(150 + r() * 190) + 'px;height:' + Math.round(40 + r() * 38) + 'px;' +
+          'opacity:' + r1(0.28 + r() * 0.26));
       }
     }
     function rain(n, long) {
       for (var i = 0; i < n; i++) {
-        var dur = 0.6 + r() * 0.5;
-        add('wx-drop', 'left:' + r1(r() * 112) + '%;height:' + Math.round((long ? 20 : 14) + r() * 14) + 'px;' +
-          'animation-duration:' + r1(dur) + 's;animation-delay:' + beat(dur, r() * dur));
+        add('wx-drop', 'left:' + r1(r() * 112) + '%;top:' + r1(r() * 100) + '%;height:' + Math.round((long ? 20 : 14) + r() * 14) + 'px');
       }
     }
     function snow(n) {
       for (var i = 0; i < n; i++) {
-        var dur = 7 + r() * 8;
         var size = r1(3 + r() * 3.4);
-        add('wx-flake', 'left:' + r1(r() * 100) + '%;width:' + size + 'px;height:' + size + 'px;opacity:' + r1(0.55 + r() * 0.4) + ';' +
-          'animation-duration:' + r1(dur) + 's;animation-delay:' + beat(dur, r() * dur));
+        add('wx-flake', 'left:' + r1(r() * 100) + '%;top:' + r1(r() * 100) + '%;width:' + size + 'px;height:' + size + 'px;opacity:' + r1(0.55 + r() * 0.4));
       }
     }
     function stars(n) {
       for (var i = 0; i < n; i++) {
-        var dur = 2.4 + r() * 3.2;
         var size = r1(1 + r() * 1.7);
-        add('wx-star', 'left:' + r1(r() * 100) + '%;top:' + r1(r() * 78) + '%;width:' + size + 'px;height:' + size + 'px;' +
-          'animation-duration:' + r1(dur) + 's;animation-delay:' + beat(dur, r() * dur));
+        add('wx-star', 'left:' + r1(r() * 100) + '%;top:' + r1(r() * 78) + '%;width:' + size + 'px;height:' + size + 'px;opacity:' + r1(0.3 + r() * 0.7));
       }
     }
     if (name === 'clear-day') { add('wx-glow'); clouds(2, false); }
@@ -218,7 +202,7 @@
     else if (name === 'rain') { clouds(4, true); rain(46, false); }
     else if (name === 'sleet') { clouds(4, true); rain(26, false); snow(14); }
     else if (name === 'snow') { clouds(3, false); snow(34); }
-    else if (name === 'storm') { clouds(4, true); rain(40, true); add('wx-flash'); }
+    else if (name === 'storm') { clouds(4, true); rain(40, true); }
     else add('wx-glow');
     if (night) root.classList.add('is-night');
     return root;
@@ -270,7 +254,7 @@
     var Wx = W();
     var model = live && live.model;
     var place = (live && live.place) || (Wx && Wx.loadPlace()) || { name: '' };
-    var root = h('section', { class: 'wx wx-anim', 'aria-label': 'Météo' });
+    var root = h('section', { class: 'wx', 'aria-label': 'Météo' });
 
     var placeBtn = h('button', {
       class: 'wx-place',
