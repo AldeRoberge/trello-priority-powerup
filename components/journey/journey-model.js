@@ -35,6 +35,8 @@
   var PAD = 28;
   var BABY_INDENT = 32;
   var PROGRESS_H = 14; // the progress row every task box carries under its name and details
+  var BABY_CHARS = 20; // characters per line in a subtask box (its pause button takes the right-hand side)
+  var ADD_SIZE = 24; // the "+" under a task's subtasks
 
   function levelById(id) {
     for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
@@ -92,6 +94,20 @@
     var h = Math.floor(m / 60);
     var r = m % 60;
     return r ? h + ' h ' + r : h + ' h';
+  }
+
+  /** What a subtask box shows under its name: due day and effort (empty when it has neither). */
+  function subMeta(c, now) {
+    var bits = [];
+    var overdue = false;
+    var day = c.dueDate ? parseDay(c.dueDate) : null;
+    if (day) {
+      bits.push(formatDay(day, now));
+      var today = parseDay(asDate(now));
+      overdue = !c.done && dayKey(day) < dayKey(today);
+    }
+    if (c.minutes) bits.push(formatMinutes(c.minutes));
+    return { text: bits.join(' · '), overdue: overdue };
   }
 
   function isClosed(rec) {
@@ -162,9 +178,15 @@
       var checks = [];
       (Array.isArray(rec.items) ? rec.items : []).forEach(function (item) {
         if (!item || typeof item.text !== 'string' || !item.text.trim()) return;
+        var done = !!(item.done || (typeof item.progress === 'number' && item.progress >= 100));
         checks.push({
+          itemId: item.id != null ? String(item.id) : '',
           text: item.text.replace(/\s+/g, ' ').trim().slice(0, 160),
-          done: !!(item.done || (typeof item.progress === 'number' && item.progress >= 100)),
+          done: done,
+          blocked: !!item.blocked && !done,
+          progress: typeof item.progress === 'number' && isFinite(item.progress) ? item.progress : (done ? 100 : 0),
+          dueDate: typeof item.dueDate === 'string' ? item.dueDate : '',
+          minutes: typeof item.estimatedMinutes === 'number' && item.estimatedMinutes > 0 ? item.estimatedMinutes : 0,
           linkedId: item.linkedCardId ? String(item.linkedCardId) : '',
         });
       });
@@ -570,6 +592,7 @@
     var zoom = opts.zoom || 'overview';
     var focus = opts.focus || null;
     var hideDone = opts.hideDone !== false;
+    var now = asDate(opts.now);
     var query = fold(opts.query || '');
     var cap = opts.cap == null ? CAP : opts.cap;
     var show = Object.create(null);
@@ -817,21 +840,29 @@
         var below = n.y + n.h;
         (n.checks || []).forEach(function (c, i) {
           if (c.linkedId || (hideDone && c.done)) return;
-          var cl = Math.max(1, Math.ceil(String(c.text).length / 24));
+          var key = c.itemId || String(i);
+          var meta = subMeta(c, now);
+          var cl = Math.max(1, Math.ceil(String(c.text).length / BABY_CHARS));
           var b = {
-            id: 'chk:' + n.id + ':' + i,
+            id: 'chk:' + n.id + ':' + key,
             kind: 'check',
             level: 'check',
             name: c.text,
             rec: null,
             checks: [],
-            state: c.done ? 'done' : 'ready',
+            state: c.done ? 'done' : (c.blocked ? 'blocked' : 'ready'),
             counts: null,
             here: false,
             parent: n.id,
+            itemId: c.itemId,
+            progress: c.progress,
+            dueDate: c.dueDate,
+            minutes: c.minutes,
+            meta: meta.text,
+            overdue: meta.overdue,
             col: n.col,
             w: NODE_W - BABY_INDENT,
-            h: 14 + cl * 16,
+            h: 14 + cl * 16 + (meta.text ? 16 : 0),
             offX: BABY_INDENT,
             offY: below + 8 - n.y,
           };
@@ -839,10 +870,39 @@
           b.y = n.y + b.offY;
           below = b.y + b.h;
           babies.push(b);
-          babyEdges.push({ id: 'check:' + n.id + ':' + i, kind: 'check', dep: null, from: n.id, to: b.id, cross: false });
+          babyEdges.push({ id: 'check:' + n.id + ':' + key, kind: 'check', dep: null, from: n.id, to: b.id, cross: false });
           width = Math.max(width, b.x + b.w + PAD);
           height = Math.max(height, below + PAD);
         });
+        if (n.state !== 'done') {
+          // the "+" that adds a subtask: a small button under the last one, an input once it is clicked
+          var drafting = opts.adding != null && String(opts.adding) === n.id;
+          var adder = {
+            id: 'add:' + n.id,
+            kind: 'add',
+            level: 'check',
+            name: '',
+            rec: null,
+            checks: [],
+            state: 'ready',
+            counts: null,
+            here: false,
+            parent: n.id,
+            draft: drafting,
+            col: n.col,
+            w: drafting ? NODE_W - BABY_INDENT : ADD_SIZE,
+            h: drafting ? 30 : ADD_SIZE,
+            offX: BABY_INDENT,
+            offY: below + 8 - n.y,
+          };
+          adder.x = n.x + adder.offX;
+          adder.y = n.y + adder.offY;
+          below = adder.y + adder.h;
+          babies.push(adder);
+          babyEdges.push({ id: 'check:' + n.id + ':add', kind: 'check', dep: null, from: n.id, to: adder.id, cross: false });
+          width = Math.max(width, adder.x + adder.w + PAD);
+          height = Math.max(height, below + PAD);
+        }
         if (below > n.y + n.h) y = below + 16;
       });
     });

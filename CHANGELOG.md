@@ -12,6 +12,9 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Parcours : les sous-tâches (éléments de liste d’une carte) se déplacent à la main comme les cartes et ont un fond plein ; les liens vers les sous-tâches sont tracés comme une arborescence (tronc et branches coudées, sans flèche).
 - Parcours : double-clic sur le nom d’une tâche, d’un projet ou d’une mission pour le renommer sur place, comme dans la Mindmap (« Ouvrir » reste dans le clic droit et sous la carte).
 - Parcours : chaque tâche a sa barre de progrès (cliquer ou glisser règle le %) et sa pause « II » pour la bloquer ou la débloquer.
+- Parcours : le cercle d’une sous-tâche la termine (ou la rouvre) d’un clic, avec « Annuler ». Le cercle d’une tâche fait de même, sur la carte comme dans la liste « Maintenant ».
+- Parcours : les sous-tâches ont leur pause « II », se renomment par double-clic, montrent leur échéance et leur effort, et ont un clic droit (terminer, bloquer, renommer, progrès, échéance, effort, ouvrir la carte, supprimer).
+- Parcours : un « + » sous les sous-tâches d’une tâche en ajoute une (Entrée pour la suivante, Échap pour finir) ; « Sous-tâche » est aussi sous la carte et dans le clic droit de la tâche, qui peut maintenant être rouverte et renommée.
 - Kanban : le bouton « Par priorité » découpe le tableau en rangées, une par palier (Critique tout en haut, puis Urgente, Prioritaire… jusqu’à « Sans priorité »). Les colonnes restent celles du tableau ; une carte se glisse d’une colonne à l’autre dans sa propre rangée, et chaque rangée se replie.
 - Aujourd’hui : le bandeau « Bon matin » suit le mode sombre (ciel assombri, plus de fond éclatant) et plus rien n’y bouge (soleil, nuages, pluie, étoiles).
 - Assistant : un onglet « Assistant » apparaît en haut, juste après Dashboard (l’icône à droite est retirée).

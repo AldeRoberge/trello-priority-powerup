@@ -267,15 +267,75 @@ html[data-color-mode] body.tp-page.tp-page--journey {
 .jy-node.is-goal { border-radius: 12px; }
 /* Subtasks: solid like the cards (the tree line passes behind them), the hover tint is laid over the solid colour. */
 .jy-node.is-check {
-  padding: 6px 10px;
+  padding: 6px 30px 6px 10px; /* room on the right for the "II" */
   border-radius: 8px;
   background: var(--tp-surface);
   color: var(--tp-text-subtle);
 }
 .jy-node.is-check:hover { background: linear-gradient(var(--tp-surface-hover), var(--tp-surface-hover)), var(--tp-surface); }
 .jy-node.is-check .jy-node-name { font-size: 12px; font-weight: 400; }
+.jy-node.is-check .jy-node-meta { min-height: 0; font-size: 11px; }
+.jy-node.is-check .jy-pause { top: 5px; right: 5px; }
 .jy-node.is-check.is-done { color: var(--tp-text-muted); }
 .jy-node.is-check.is-done .jy-node-name { opacity: 0.7; }
+.jy-node.is-check.is-done .jy-pause { opacity: 0.25; cursor: default; pointer-events: none; }
+.jy-node.is-check .jy-name-edit { font-size: 12px; font-weight: 400; }
+
+/* The status circle of a task, a subtask or a queue row: a click completes it. Only the colour changes on hover. */
+.jy-ico-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-subtle);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.jy-ico-btn:hover:not(:disabled) { color: var(--tp-success, #22a06b); }
+.jy-ico-btn:disabled { cursor: default; opacity: 0.55; }
+.jy-node.is-blocked .jy-ico-btn,
+.jy-node.is-waiting .jy-ico-btn,
+.jy-row.is-blocked .jy-ico-btn,
+.jy-row.is-waiting .jy-ico-btn { color: var(--tp-danger-text); }
+.jy-node.is-here .jy-ico-btn,
+.jy-row.is-here .jy-ico-btn { color: var(--tp-primary); }
+.jy-node.is-blocked .jy-ico-btn:hover:not(:disabled),
+.jy-node.is-here .jy-ico-btn:hover:not(:disabled),
+.jy-row.is-blocked .jy-ico-btn:hover:not(:disabled),
+.jy-row.is-here .jy-ico-btn:hover:not(:disabled) { color: var(--tp-success, #22a06b); }
+
+/* "+" under a card's subtasks (dimmed, brighter on hover), and the field it opens. */
+.jy-node.is-add {
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-style: dashed;
+  color: var(--tp-text-muted);
+  font: inherit;
+  opacity: 0.55;
+}
+.jy-node.is-add:hover { opacity: 1; }
+.jy-node.is-add.is-draft {
+  align-items: stretch;
+  padding: 4px 10px;
+  border-style: solid;
+  border-color: var(--tp-primary);
+  background: var(--tp-surface);
+  opacity: 1;
+  cursor: text;
+}
+.jy-add-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 12px;
+}
+.jy-add-input::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
 
 .jy-node-top {
   display: flex;

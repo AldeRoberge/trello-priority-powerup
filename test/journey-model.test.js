@@ -324,4 +324,74 @@ describe('JourneyModel', () => {
     });
     assert.ok(other);
   });
+
+  describe('subtasks', () => {
+    const items = [
+      { id: 'i1', text: 'Tournage fait', done: true, progress: 100 },
+      { id: 'i2', text: 'Vidéo à déposer', done: false, progress: 25, dueDate: '2026-10-15', estimatedMinutes: 90 },
+      { id: 'i3', text: 'En pause', done: false, progress: 0, blocked: true },
+      { id: 'i4', text: 'En retard', done: false, progress: 0, dueDate: '2026-10-01' },
+    ];
+    const layoutOf = (cards, opts) => JM.layout(JM.prepare(cards, { nodes: [], links: [] }), Object.assign({ zoom: 'all', hideDone: false, now: NOW }, opts));
+
+    it('keys a subtask by its own id, so a deleted neighbour does not shift it', () => {
+      const all = layoutOf([card({ id: 'a', name: 'Semaine', items })]);
+      assert.deepEqual(all.nodes.filter((n) => n.kind === 'check').map((n) => n.id), ['chk:a:i1', 'chk:a:i2', 'chk:a:i3', 'chk:a:i4']);
+      const fewer = layoutOf([card({ id: 'a', name: 'Semaine', items: items.filter((i) => i.id !== 'i1') })]);
+      assert.ok(fewer.nodes.some((n) => n.id === 'chk:a:i2'));
+      assert.ok(fewer.edges.some((e) => e.kind === 'check' && e.to === 'chk:a:i2'));
+    });
+
+    it('carries what the box and its menu need: item id, state, progress, due day and effort', () => {
+      const all = layoutOf([card({ id: 'a', name: 'Semaine', items })]);
+      const by = (id) => all.nodes.find((n) => n.id === 'chk:a:' + id);
+      assert.equal(by('i1').state, 'done');
+      assert.equal(by('i2').itemId, 'i2');
+      assert.equal(by('i2').progress, 25);
+      assert.equal(by('i2').dueDate, '2026-10-15');
+      assert.equal(by('i2').minutes, 90);
+      assert.equal(by('i2').meta, '15 oct. · 1 h 30');
+      assert.equal(by('i3').state, 'blocked');
+      assert.equal(by('i1').meta, '');
+      assert.equal(by('i4').overdue, true);
+      assert.equal(by('i2').overdue, false);
+      assert.ok(by('i2').h > by('i1').h, 'a box with a details line is taller');
+    });
+
+    it('a done subtask is never blocked', () => {
+      const all = layoutOf([card({ id: 'a', name: 'Semaine', items: [{ id: 'x', text: 'Fini', progress: 100, done: true, blocked: true }] })]);
+      assert.equal(all.nodes.find((n) => n.id === 'chk:a:x').state, 'done');
+    });
+
+    it('ends a card’s subtasks with a "+", an input when that card is being added to, and none for a closed card', () => {
+      const cards = [card({ id: 'a', name: 'Semaine', items }), card({ id: 'b', name: 'Vide' }), card({ id: 'c', name: 'Fermée', progress: 100, items: [{ id: 'z', text: 'Fait', progress: 100, done: true }] })];
+      const plain = layoutOf(cards);
+      const adders = plain.nodes.filter((n) => n.kind === 'add');
+      assert.deepEqual(adders.map((n) => n.id).sort(), ['add:a', 'add:b']);
+      const last = plain.nodes.filter((n) => n.kind === 'check' && n.parent === 'a').pop();
+      const adder = adders.find((n) => n.parent === 'a');
+      assert.ok(adder.y >= last.y + last.h, 'the + sits under the last subtask');
+      assert.equal(adder.draft, false);
+      assert.ok(plain.edges.some((e) => e.kind === 'check' && e.to === 'add:a'));
+      assert.ok(adder.w < 40);
+
+      const drafting = layoutOf(cards, { adding: 'a' });
+      const input = drafting.nodes.find((n) => n.id === 'add:a');
+      assert.equal(input.draft, true);
+      assert.ok(input.w > 100, 'the input is as wide as a subtask');
+      assert.equal(drafting.nodes.find((n) => n.id === 'add:b').draft, false);
+    });
+
+    it('does not let the + or a subtask overlap the next card of the column', () => {
+      const cards = [card({ id: 'a', name: 'Semaine', items, priorityScore: 9 }), card({ id: 'b', name: 'Suivante', priorityScore: 1 })];
+      [undefined, 'a'].forEach((adding) => {
+        const all = layoutOf(cards, { adding });
+        const b = all.nodes.find((n) => n.id === 'b');
+        all.nodes.filter((n) => n.parent === 'a').forEach((n) => {
+          const clash = b.x < n.x + n.w && n.x < b.x + b.w && b.y < n.y + n.h && n.y < b.y + b.h;
+          assert.equal(clash, false, n.id + ' overlaps the next card');
+        });
+      });
+    });
+  });
 });

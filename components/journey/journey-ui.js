@@ -95,8 +95,11 @@
       fitNext: false,
       selectedEdge: null,
       pos: {},
+      adding: null, // id of the card whose "new subtask" input is open
+      draftText: '',
     };
     var live = null;
+    var blurGuard = false; // true while the map is torn down, so a field that loses focus then is not taken for a click-away
     state.pos = loadPos();
 
     if (global.HideDone && global.HideDone.subscribe) {
@@ -120,7 +123,9 @@
       setTimeout(function () {
         if (state.toastToken !== token) return;
         state.toast = '';
-        paint();
+        // only the toast goes: a full repaint would wipe a title or a new subtask being typed
+        var tip = container.querySelector('.jy-toast');
+        if (tip && tip.parentNode) tip.parentNode.removeChild(tip);
       }, 4000);
     }
 
@@ -354,6 +359,158 @@
       state.busy = false;
     }
 
+    /** Brings a closed card back: its subtasks go back to 0 %, and it leaves the completed list for the first open one. */
+    async function reopen(id) {
+      if (state.busy) return;
+      var rec = recOf(id);
+      var ct = CT();
+      var pt = PT();
+      if (!rec || !ct || !pt) return;
+      state.busy = true;
+      try {
+        if (!(await authorize())) { toast('Autorisation requise'); state.busy = false; return; }
+        var prev = typeof ct.getCardCompletionById === 'function' ? await ct.getCardCompletionById(t, id) : { items: [] };
+        var next = typeof ct.markNotFullyComplete === 'function' ? ct.markNotFullyComplete(prev) : prev;
+        if (typeof ct.saveCardCompletionById === 'function') await ct.saveCardCompletionById(t, id, next);
+        var body = { dueComplete: false };
+        var beforeList = rec.listId;
+        var beforeDue = !!rec.dueComplete;
+        if (rec.category === 'completed' && openListId()) body.idList = openListId();
+        if (typeof pt.restPutCard === 'function') await pt.restPutCard(t, id, body);
+        remember(rec.name, async function () {
+          if (typeof ct.saveCardCompletionById === 'function') await ct.saveCardCompletionById(t, id, prev);
+          if (typeof pt.restPutCard === 'function') await pt.restPutCard(t, id, { dueComplete: beforeDue, idList: beforeList });
+        });
+        toast('Rouverte');
+        await reload();
+      } catch (e) {
+        toast('Pas enregistré');
+      }
+      state.busy = false;
+    }
+
+    /* ── Subtasks (the card's own checklist items, kept in its completion data) ───────────────────────────── */
+
+    /** Puts a card's new completion data into the map at once, so a click does not wait for the whole board to reload. */
+    function patchItems(cardId, data) {
+      var rec = recOf(cardId);
+      var ct = CT();
+      if (!rec || !data) return;
+      rec.items = data.items || [];
+      if (ct && typeof ct.computeCardProgress === 'function') {
+        var p = ct.computeCardProgress(data);
+        if (p && typeof p.percent === 'number') rec.progress = p.percent;
+      }
+    }
+
+    /**
+     * Changes a card's subtasks: change(data) returns { data }. Saved, shown at once, undoable, then the board is
+     * reloaded in the background (blocking a subtask can block the card). Resolves to what change() returned, or null.
+     */
+    async function editItems(cardId, label, change) {
+      var ct = CT();
+      if (state.busy || !ct || !recOf(cardId) || typeof ct.getCardCompletionById !== 'function') return null;
+      state.busy = true;
+      var out = null;
+      try {
+        if (!(await authorize())) { toast('Autorisation requise'); state.busy = false; return null; }
+        var before = ct.normalizeCompletionData((await ct.getCardCompletionById(t, cardId)) || { items: [] });
+        out = change(before);
+        if (!out || !out.data) { state.busy = false; return null; }
+        await ct.saveCardCompletionById(t, cardId, out.data);
+        remember(label, async function () { await ct.saveCardCompletionById(t, cardId, before); });
+        patchItems(cardId, out.data);
+        toast(label);
+      } catch (e) {
+        out = null;
+        toast('Pas enregistré');
+      }
+      state.busy = false;
+      if (out) reload();
+      return out;
+    }
+
+    function itemOf(n) {
+      var rec = recOf(n.parent);
+      var items = (rec && rec.items) || [];
+      for (var i = 0; i < items.length; i++) if (items[i] && String(items[i].id) === n.itemId) return items[i];
+      return null;
+    }
+
+    function toggleSub(n) {
+      if (!n.itemId) return null;
+      var done = n.state !== 'done';
+      return editItems(n.parent, done ? 'Sous-tâche terminée' : 'Sous-tâche rouverte', function (data) {
+        return { data: CT().applyItemProgress(data, n.itemId, done ? 100 : 0) };
+      });
+    }
+
+    function setSubProgress(n, pct) {
+      if (!n.itemId) return null;
+      return editItems(n.parent, pct >= 100 ? 'Sous-tâche terminée' : 'Progrès ' + pct + ' %', function (data) {
+        return { data: CT().applyItemProgress(data, n.itemId, pct) };
+      });
+    }
+
+    function blockSub(n) {
+      if (!n.itemId || n.state === 'done') return null;
+      var next = n.state !== 'blocked';
+      return editItems(n.parent, next ? 'Sous-tâche bloquée' : 'Sous-tâche débloquée', function (data) {
+        return { data: CT().setItemBlocked(data, n.itemId, next) };
+      });
+    }
+
+    function renameSub(n, text) {
+      if (!n.itemId) return null;
+      return editItems(n.parent, 'Renommée', function (data) {
+        return { data: CT().applyItemText(data, n.itemId, text) };
+      });
+    }
+
+    function deleteSub(n) {
+      var gt = GT();
+      if (!n.itemId || !gt || typeof gt.removeTopLevelItem !== 'function') return null;
+      return editItems(n.parent, 'Sous-tâche supprimée', function (data) {
+        return { data: gt.removeTopLevelItem(data, n.itemId) };
+      });
+    }
+
+    /** Sets (or, with '', clears) a subtask's due day; its other schedule fields are kept. */
+    function setSubDue(n, day) {
+      if (!n.itemId) return null;
+      var item = itemOf(n) || {};
+      var parts = { startDate: item.startDate, startTime: item.startTime, dueDate: day, dueTime: day ? item.dueTime : '' };
+      return editItems(n.parent, day ? 'Échéance réglée' : 'Échéance retirée', function (data) {
+        return { data: CT().applyItemDates(data, n.itemId, null, parts) };
+      });
+    }
+
+    function setSubEstimate(n, minutes) {
+      if (!n.itemId) return null;
+      return editItems(n.parent, minutes ? 'Effort réglé' : 'Effort retiré', function (data) {
+        return { data: CT().applyItemEstimate(data, n.itemId, minutes || null, { lock: true }) };
+      });
+    }
+
+    /** Adds a subtask to a card; the input stays open for the next one. */
+    async function addSub(cardId, text) {
+      var title = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!title) return null;
+      var out = await editItems(cardId, 'Sous-tâche ajoutée', function (data) {
+        var added = CT().addLocalItem(data, title);
+        return added.item ? { data: added.data, item: added.item } : null;
+      });
+      return out;
+    }
+
+    /** Opens the "new subtask" input under a card (bringing the card into view first when the map does not show it). */
+    function startAdding(cardId) {
+      state.adding = String(cardId);
+      state.draftText = '';
+      if (live && live.byPos['add:' + cardId]) paint();
+      else selectNode(cardId, 'task');
+    }
+
     function openCard(id) {
       var rec = recOf(id);
       var pt = PT();
@@ -473,17 +630,18 @@
     function pickNode(n, node) {
       var again = pendingPick && pendingPick.id === n.id;
       if (pendingPick) { clearTimeout(pendingPick.timer); pendingPick = null; }
-      if (n.kind !== 'task' && n.kind !== 'goal') { selectNode(n.id, 'project'); return; }
+      if (n.kind !== 'task' && n.kind !== 'goal' && n.kind !== 'check') { selectNode(n.id, 'project'); return; }
       if (again) {
-        var live = node.isConnected ? node : container.querySelector('.jy-node[data-id="' + n.id + '"]');
-        if (live) editName(live, n);
+        var box = node.isConnected ? node : container.querySelector('.jy-node[data-id="' + n.id + '"]');
+        if (box) editName(box, n);
         return;
       }
       pendingPick = {
         id: n.id,
         timer: setTimeout(function () {
           pendingPick = null;
-          selectNode(n.id, n.kind === 'task' ? 'task' : 'project');
+          if (n.kind === 'check') selectNode(n.parent, 'task');
+          else selectNode(n.id, n.kind === 'task' ? 'task' : 'project');
         }, 260),
       };
     }
@@ -496,6 +654,58 @@
       paint();
     }
 
+    function dayOffset(days) {
+      var d = new Date();
+      d.setDate(d.getDate() + days);
+      return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    }
+
+    /** Right-click on a subtask: done, pause, rename, progress, due day, effort, open the card, delete. */
+    function subMenuFor(n, node, point) {
+      if (!global.ContextMenu || !n.itemId) return;
+      var done = n.state === 'done';
+      var items = [
+        { id: 'done', label: done ? 'Rouvrir' : 'Terminer', icon: done ? 'circle' : 'circle-check', action: function () { toggleSub(n); } },
+      ];
+      if (!done) {
+        items.push({
+          id: 'block',
+          label: n.state === 'blocked' ? 'Débloquer' : 'Bloquer',
+          icon: 'player-pause',
+          action: function () { blockSub(n); },
+        });
+      }
+      items.push({ id: 'rename', label: 'Renommer', icon: 'pencil', action: function () { editName(node, n); } });
+      items.push({ sep: true });
+      items.push({
+        id: 'progress',
+        label: 'Progrès',
+        icon: 'progress',
+        children: [0, 25, 50, 75, 100].map(function (p) {
+          return { id: 'p' + p, label: p + ' %', icon: 'progress', checked: Math.round(n.progress || 0) === p, action: function () { setSubProgress(n, p); } };
+        }),
+      });
+      var dues = [
+        { id: 'd0', label: 'Aujourd’hui', icon: 'circle-dot', day: dayOffset(0) },
+        { id: 'd1', label: 'Demain', icon: 'arrow-curve-right', day: dayOffset(1) },
+        { id: 'd7', label: 'Dans une semaine', icon: 'calendar-week', day: dayOffset(7) },
+      ].map(function (d) {
+        return { id: d.id, label: d.label, icon: d.icon, checked: n.dueDate === d.day, action: function () { setSubDue(n, d.day); } };
+      });
+      if (n.dueDate) dues.push({ id: 'dnone', label: 'Retirer la date', icon: 'calendar-off', action: function () { setSubDue(n, ''); } });
+      items.push({ id: 'due', label: 'Échéance', icon: 'calendar-event', children: dues });
+      var efforts = [5, 15, 30, 60, 120, 240].map(function (m) {
+        return { id: 'e' + m, label: JM().formatMinutes(m), icon: 'clock', checked: n.minutes === m, action: function () { setSubEstimate(n, m); } };
+      });
+      if (n.minutes) efforts.push({ id: 'enone', label: 'Non estimée', icon: 'clock-off', action: function () { setSubEstimate(n, 0); } });
+      items.push({ id: 'estimate', label: 'Effort', icon: 'clock', children: efforts });
+      items.push({ sep: true });
+      items.push({ id: 'open', label: 'Ouvrir la carte', icon: 'external-link', action: function () { openCard(n.parent); } });
+      items.push({ sep: true });
+      items.push({ id: 'delete', label: 'Supprimer', icon: 'trash', danger: true, action: function () { deleteSub(n); } });
+      global.ContextMenu.show(point, items);
+    }
+
     function menuFor(id, anchor, point) {
       if (!global.ContextMenu) return;
       var rec = recOf(id);
@@ -504,9 +714,15 @@
       var items = [];
       if (rec) {
         items.push({ id: 'open', label: 'Ouvrir', icon: 'external-link', action: function () { openCard(id); } });
-        if (node && JM().isClosed && !JM().isClosed(rec)) {
-          items.push({ id: 'done', label: 'Terminer', icon: 'check', action: function () { complete(id); } });
+        var closed = !!(JM().isClosed && JM().isClosed(rec));
+        items.push(closed
+          ? { id: 'done', label: 'Rouvrir', icon: 'circle', action: function () { reopen(id); } }
+          : { id: 'done', label: 'Terminer', icon: 'check', action: function () { complete(id); } });
+        if (!closed) {
+          items.push({ id: 'sub', label: 'Nouvelle sous-tâche', icon: 'plus', action: function () { startAdding(id); } });
         }
+        var box = container.querySelector('.jy-node[data-id="' + id + '"]');
+        if (box) items.push({ id: 'rename', label: 'Renommer', icon: 'pencil', action: function () { editName(box, { id: id, kind: 'task', name: rec.name || '' }); } });
         items.push({
           id: 'block',
           label: rec.blocked ? 'Débloquer' : 'Bloquer',
@@ -551,7 +767,9 @@
       var search = container.querySelector('.jy-search');
       var keepFocus = search && document.activeElement === search;
       var caret = keepFocus ? search.selectionStart : null;
+      blurGuard = true;
       container.textContent = '';
+      blurGuard = false;
       var empty = !(state.board.cards && state.board.cards.length);
       if (state.loading && empty) {
         container.innerHTML = global.Skeleton.html('journey');
@@ -573,6 +791,7 @@
         query: state.query,
         now: now,
         hereId: here,
+        adding: state.adding,
       });
       var byPos = Object.create(null);
       view.nodes.forEach(function (n) {
@@ -581,7 +800,7 @@
         byPos[n.id] = n;
       });
       view.nodes.forEach(function (n) {
-        var owner = n.kind === 'check' && byPos[n.parent];
+        var owner = (n.kind === 'check' || n.kind === 'add') && byPos[n.parent];
         if (!owner) return;
         var moved = state.pos[n.id]; // a subtask the user moved keeps its place relative to its card
         if (moved && isFinite(moved.dx) && isFinite(moved.dy)) { n.offX = moved.dx; n.offY = moved.dy; }
@@ -606,6 +825,14 @@
         if (again) {
           again.focus();
           if (caret != null && again.setSelectionRange) again.setSelectionRange(caret, caret);
+        }
+      } else if (state.adding) {
+        var draft = container.querySelector('.jy-add-input');
+        if (draft) {
+          draft.focus({ preventScroll: true });
+          draft.setSelectionRange(draft.value.length, draft.value.length);
+        } else {
+          state.adding = null; // the card is no longer on the map
         }
       }
       settleView();
@@ -856,14 +1083,19 @@
 
       var babiesOf = Object.create(null);
       view.nodes.forEach(function (n) {
-        if (n.kind === 'check') (babiesOf[n.parent] = babiesOf[n.parent] || []).push(n);
+        if (n.kind === 'check' || n.kind === 'add') (babiesOf[n.parent] = babiesOf[n.parent] || []).push(n);
       });
 
       view.nodes.forEach(function (n) {
         var node = nodeEl(n, graph);
         nodeEls[n.id] = node;
+        if (n.kind === 'add') {
+          // the "+" under a card's subtasks follows the card; it is not moved on its own
+          gc.world.appendChild(node);
+          return;
+        }
         if (n.kind === 'check') {
-          // a subtask moves on its own (the card's drag takes it along); a plain click selects its card
+          // a subtask moves on its own (the card's drag takes it along); a click selects its card (a double-click renames it)
           gc.dragNode(node, {
             node: n,
             onMove: function (x, y) {
@@ -880,7 +1112,7 @@
               state.pos[n.id] = { dx: n.offX, dy: n.offY };
               savePos();
             },
-            onClick: function () { selectNode(n.parent, 'task'); },
+            onClick: function () { pickNode(n, node); },
           });
           gc.world.appendChild(node);
           return;
@@ -1169,8 +1401,33 @@
       editLinks('Lien retiré', [{ op: 'drop', kind: e.kind, from: e.from, to: e.to }]);
     }
 
+    /**
+     * The status icon of a task: a button that completes the task (or brings it back when it is closed). A task that
+     * waits for another one keeps its lock, quieter and not clickable.
+     */
+    function statusIcon(id, stateName, here) {
+      var closed = stateName === 'done';
+      var btn = el('button', 'jy-node-ico jy-ico-btn gc-nodrag');
+      btn.type = 'button';
+      btn.appendChild(icon(taskIcon(stateName, here)));
+      if (stateName === 'waiting') {
+        btn.disabled = true;
+        btn.title = 'En attente d’une autre tâche';
+        return btn;
+      }
+      btn.title = closed ? 'Terminée — cliquer pour rouvrir' : 'Terminer';
+      btn.setAttribute('aria-label', closed ? 'Rouvrir' : 'Terminer');
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (closed) reopen(id);
+        else complete(id);
+      });
+      return btn;
+    }
+
     function nodeEl(n) {
       if (n.kind === 'check') return checkEl(n);
+      if (n.kind === 'add') return addEl(n);
       var node = el('div', 'jy-node is-' + (n.state || 'ready') + (n.here ? ' is-here' : '') + (n.id === state.selected ? ' is-on' : '') + (n.kind !== 'task' ? ' is-goal' : ''));
       node.style.left = n.x + 'px';
       node.style.top = n.y + 'px';
@@ -1180,8 +1437,12 @@
       node.setAttribute('role', 'button');
       node.tabIndex = 0;
       var top = el('div', 'jy-node-top');
-      var icoName = n.kind === 'task' ? taskIcon(n.state, n.here) : (n.kind === 'bucket' ? 'inbox' : levelIcon(n.level));
-      top.appendChild(el('span', 'jy-node-ico')).appendChild(icon(icoName));
+      if (n.kind === 'task') {
+        top.appendChild(statusIcon(n.id, n.state, n.here));
+      } else {
+        var icoName = n.kind === 'bucket' ? 'inbox' : levelIcon(n.level);
+        top.appendChild(el('span', 'jy-node-ico')).appendChild(icon(icoName));
+      }
       top.appendChild(el('span', 'jy-node-name', n.name));
       node.appendChild(top);
       var meta = n.kind === 'task' ? taskMeta(n) : countLabel(n.counts);
@@ -1189,7 +1450,8 @@
       node.appendChild(metaEl);
       if (n.kind === 'task') {
         node.appendChild(progressRow(n));
-        node.appendChild(pauseButton(n));
+        var blocked = !!(n.rec && n.rec.blocked);
+        node.appendChild(pauseButton(blocked, 'Bloquée', function () { toggleBlock(n.id); }));
       }
       if (n.kind === 'goal' && global.NewCard) {
         var plus = el('button', 'jy-plus');
@@ -1261,18 +1523,21 @@
       return isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 0;
     }
 
-    /** The "II" of a task box: blocks or unblocks the card. Quiet when it does not apply, red when the card is blocked. */
-    function pauseButton(n) {
-      var blocked = !!(n.rec && n.rec.blocked);
+    /**
+     * The "II" of a task or subtask box: blocks or unblocks it. Quiet when it does not apply (`disabled`), red when
+     * blocked.
+     */
+    function pauseButton(blocked, label, onToggle, disabled) {
       var b = el('button', 'jy-pause gc-nodrag' + (blocked ? ' is-on' : ''));
       b.type = 'button';
-      b.title = blocked ? 'Bloquée — cliquer pour débloquer' : 'Bloquer';
+      b.title = blocked ? label + ' — cliquer pour débloquer' : 'Bloquer';
       b.setAttribute('aria-label', b.title);
       b.setAttribute('aria-pressed', blocked ? 'true' : 'false');
       b.appendChild(icon('player-pause'));
+      if (disabled) b.disabled = true;
       b.addEventListener('click', function (ev) {
         ev.stopPropagation();
-        toggleBlock(n.id);
+        onToggle();
       });
       return b;
     }
@@ -1298,6 +1563,7 @@
         var v = input.value.replace(/\s+/g, ' ').trim();
         if (save && v && v !== n.name) {
           if (n.kind === 'task') rename(n.id, v);
+          else if (n.kind === 'check') renameSub(n, v);
           else renameGoal(n.id, v);
           return;
         }
@@ -1319,22 +1585,109 @@
       input.select();
     }
 
-    /** A checklist item of a card: a small node under it. */
+    /**
+     * A subtask of a card: a small node under it. Its circle completes it, a double-click renames it, "II" pauses it,
+     * and the right-click menu has the rest.
+     */
     function checkEl(n) {
-      var node = el('div', 'jy-node is-check is-' + (n.state === 'done' ? 'done' : 'open'));
+      var done = n.state === 'done';
+      var blocked = n.state === 'blocked';
+      var node = el('div', 'jy-node is-check is-' + (done ? 'done' : (blocked ? 'blocked' : 'open')));
       node.style.left = n.x + 'px';
       node.style.top = n.y + 'px';
       node.style.width = n.w + 'px';
       node.style.height = n.h + 'px';
       node.dataset.id = n.id;
       var top = el('div', 'jy-node-top');
-      top.appendChild(el('span', 'jy-node-ico')).appendChild(icon(n.state === 'done' ? 'circle-check' : 'circle'));
+      var ring = el('button', 'jy-node-ico jy-ico-btn gc-nodrag');
+      ring.type = 'button';
+      ring.title = done ? 'Faite — cliquer pour rouvrir' : 'Terminer';
+      ring.setAttribute('aria-label', done ? 'Rouvrir la sous-tâche' : 'Terminer la sous-tâche');
+      ring.setAttribute('aria-pressed', done ? 'true' : 'false');
+      ring.appendChild(icon(done ? 'circle-check' : 'circle'));
+      ring.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        toggleSub(n);
+      });
+      top.appendChild(ring);
       top.appendChild(el('span', 'jy-node-name', n.name));
       node.appendChild(top);
+      if (n.meta) node.appendChild(el('div', 'jy-node-meta' + (n.overdue ? ' is-overdue' : ''), n.meta));
+      node.appendChild(pauseButton(blocked, 'Bloquée', function () { blockSub(n); }, done));
       node.addEventListener('contextmenu', function (e) {
         e.preventDefault();
-        menuFor(n.parent, node, e);
+        subMenuFor(n, node, e);
       });
+      return node;
+    }
+
+    /** The "+" under a card's subtasks; once clicked, a field to type the next subtask (Enter adds it and stays open). */
+    function addEl(n) {
+      var node = el(n.draft ? 'div' : 'button', 'jy-node is-check is-add gc-nodrag' + (n.draft ? ' is-draft' : ''));
+      node.style.left = n.x + 'px';
+      node.style.top = n.y + 'px';
+      node.style.width = n.w + 'px';
+      node.style.height = n.h + 'px';
+      node.dataset.id = n.id;
+      if (!n.draft) {
+        node.type = 'button';
+        node.title = 'Nouvelle sous-tâche';
+        node.setAttribute('aria-label', 'Nouvelle sous-tâche');
+        node.appendChild(icon('plus'));
+        node.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          startAdding(n.parent);
+        });
+        return node;
+      }
+      var input = el('input', 'jy-add-input');
+      input.type = 'text';
+      input.maxLength = 300;
+      input.placeholder = 'Nouvelle sous-tâche…';
+      input.setAttribute('aria-label', 'Nouvelle sous-tâche');
+      input.value = state.draftText || '';
+      var finished = false;
+      /** Closes the field in place (no repaint: this may be a click on something else that must still land). */
+      function close() {
+        if (finished) return;
+        finished = true;
+        state.adding = null;
+        state.draftText = '';
+        var shown = container.querySelector('.jy-node[data-id="' + n.id + '"]');
+        if (shown && shown.parentNode) {
+          var pill = addEl(Object.assign({}, n, { draft: false, w: 24, h: 24 }));
+          shown.parentNode.replaceChild(pill, shown);
+          if (live && live.byPos[n.id]) { live.byPos[n.id].w = 24; live.byPos[n.id].h = 24; live.byPos[n.id].draft = false; }
+        }
+      }
+      async function submit(keepOpen) {
+        var text = input.value.replace(/\s+/g, ' ').trim();
+        if (!text) { if (!keepOpen) close(); return; }
+        if (state.busy) return;
+        if (!keepOpen) { finished = true; state.adding = null; }
+        state.draftText = '';
+        input.readOnly = true;
+        var out = await addSub(n.parent, text);
+        if (!out) { // not saved: the field comes back with what was typed
+          state.adding = n.parent;
+          state.draftText = text;
+          paint();
+        }
+      }
+      input.addEventListener('input', function () { state.draftText = input.value; });
+      input.addEventListener('keydown', function (ev) {
+        ev.stopPropagation();
+        if (ev.key === 'Enter') { ev.preventDefault(); submit(true); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); close(); }
+      });
+      input.addEventListener('blur', function () {
+        if (blurGuard || finished || !input.isConnected) return;
+        submit(false);
+      });
+      ['pointerdown', 'dblclick', 'wheel', 'click', 'contextmenu'].forEach(function (type) {
+        input.addEventListener(type, function (ev) { ev.stopPropagation(); });
+      });
+      node.appendChild(input);
       return node;
     }
 
@@ -1408,6 +1761,16 @@
           doneBtn.type = 'button';
           doneBtn.addEventListener('click', function () { complete(id); });
           row.appendChild(doneBtn);
+          var subBtn = el('button', 'jy-btn', 'Sous-tâche');
+          subBtn.type = 'button';
+          subBtn.insertBefore(icon('plus'), subBtn.firstChild);
+          subBtn.addEventListener('click', function () { startAdding(id); });
+          row.appendChild(subBtn);
+        } else {
+          var reopenBtn = el('button', 'jy-btn', 'Rouvrir');
+          reopenBtn.type = 'button';
+          reopenBtn.addEventListener('click', function () { reopen(id); });
+          row.appendChild(reopenBtn);
         }
         var blockBtn = el('button', 'jy-btn', (node.rec && node.rec.blocked) ? 'Débloquer' : 'Bloquer');
         blockBtn.type = 'button';
@@ -1436,8 +1799,20 @@
       var row = el('div', 'jy-row is-' + a.state + (a.id === here ? ' is-here' : '') + (a.id === state.selected ? ' is-on' : '') + (a.dueState === 'overdue' ? ' is-overdue' : ''));
       row.setAttribute('role', 'button');
       row.tabIndex = 0;
-      var ico = el('span', 'jy-row-ico');
+      var ico = el('button', 'jy-row-ico jy-ico-btn');
+      ico.type = 'button';
       ico.appendChild(icon(taskIcon(a.state, a.id === here)));
+      if (a.state === 'waiting') {
+        ico.disabled = true;
+        ico.title = 'En attente d’une autre tâche';
+      } else {
+        ico.title = 'Terminer';
+        ico.setAttribute('aria-label', 'Terminer');
+        ico.addEventListener('click', function (e) {
+          e.stopPropagation();
+          complete(a.id);
+        });
+      }
       row.appendChild(ico);
       row.appendChild(el('span', 'jy-row-name', a.name));
       row.appendChild(el('span', 'jy-row-effort', a.effortLabel || ''));

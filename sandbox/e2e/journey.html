@@ -25,11 +25,12 @@
   <script src="/components/shared/card-quick.js"></script>
   <script src="/components/shared/add-row.js"></script>
   <link rel="stylesheet" href="/components/shared/add-row.css" />
+  <script src="/components/completion/completion-trello.js"></script>
   <script src="/components/journey/journey-model.js"></script>
   <script src="/components/journey/journey-ui.js"></script>
   <script>
     var cards = [
-      { id: 'pick', name: "Choisir l'entrepreneur", category: 'started', blocked: false, progress: 0, dueDate: '2026-10-12', estimatedMinutes: 30, priorityScore: 6, inputs: { dependsOn: [], depTypes: {} }, items: [{ text: 'Demander trois soumissions', done: false }, { text: 'Comparer les prix', done: false }, { text: 'Appeler les références', done: true }, { text: 'Prévoir la visite', done: false, linkedCardId: 'visit' }], assignees: [{ name: 'Ada' }] },
+      { id: 'pick', name: "Choisir l'entrepreneur", category: 'started', blocked: false, progress: 0, dueDate: '2026-10-12', estimatedMinutes: 30, priorityScore: 6, inputs: { dependsOn: [], depTypes: {} }, items: [{ id: 'pick-1', text: 'Demander trois soumissions', done: false, progress: 0 }, { id: 'pick-2', text: 'Comparer les prix', done: false, progress: 0, dueDate: '2026-10-15', estimatedMinutes: 30 }, { id: 'pick-3', text: 'Appeler les références', done: true, progress: 100 }, { id: 'pick-4', text: 'Prévoir la visite', done: false, progress: 0, linkedCardId: 'visit' }], assignees: [{ name: 'Ada' }] },
       { id: 'visit', name: 'Visiter le chantier', category: 'started', blocked: false, progress: 40, priorityScore: 3, inputs: { dependsOn: [], depTypes: {} }, items: [] },
       { id: 'order', name: 'Commander les armoires', category: 'started', blocked: false, progress: 0, dueDate: '2026-10-14', priorityScore: 5, inputs: { dependsOn: ['pick'], depTypes: { pick: 'needs' } }, items: [] },
       { id: 'paint', name: 'Peindre', category: 'started', blocked: false, progress: 0, estimatedMinutes: 10, priorityScore: 2, inputs: { dependsOn: ['order'], depTypes: { order: 'after' } }, items: [] },
@@ -61,24 +62,19 @@
     ];
     var settings = { listCategories: { l1: 'started', l2: 'completed' } };
 
-    CompletionTrello = {
-      getCardCompletionById: function (_t, id) {
-        var rec = cards.filter(function (c) { return c.id === id; })[0];
-        return Promise.resolve({ items: (rec && rec.items) || [], progress: rec ? rec.progress : 0 });
-      },
-      saveCardCompletionById: function (_t, id, data) {
+    // The real CompletionTrello, on an in-memory store: the subtask actions use its helpers.
+    var store = {};
+    cards.forEach(function (c) { if (c.items && c.items.length) store[c.id] = { items: c.items.map(function (i) { return Object.assign({}, i); }) }; });
+    var realSave = CompletionTrello.saveCardCompletionById;
+    CompletionTrello.saveCardCompletionById = function (_t, id, data) {
+      return realSave(_t, id, data).then(function (out) {
         var rec = cards.filter(function (c) { return c.id === id; })[0];
         if (rec) {
-          var first = data && data.items && data.items[0];
-          var p = data && typeof data.progress === 'number' ? data.progress : (first && typeof first.progress === 'number' ? first.progress : 100);
-          rec.progress = p;
-          if (p >= 100) { rec.category = 'completed'; rec.dueComplete = true; }
+          rec.items = out.items;
+          rec.progress = CompletionTrello.computeCardProgress(out).percent;
         }
-        return Promise.resolve();
-      },
-      normalizeCompletionData: function (data) { return data; },
-      applyMasterProgress: function (items, pct) { return items.map(function (i) { return Object.assign({}, i, { progress: pct }); }); },
-      markFullyComplete: function (data) { return Object.assign({}, data, { progress: 100 }); }
+        return out;
+      });
     };
     TableTrello = {
       saveName: function (_t, id, name) {
@@ -107,6 +103,9 @@
     };
     GanttTrello = {
       ensureRestAuthorized: function () { return Promise.resolve({ ok: true }); },
+      removeTopLevelItem: function (data, itemId) {
+        return CompletionTrello.normalizeCompletionData(Object.assign({}, data, { items: data.items.filter(function (i) { return i.id !== itemId; }) }));
+      },
       setCardBlocked: function (_t, id, blocked) {
         var rec = cards.filter(function (c) { return c.id === id; })[0];
         if (rec) rec.blocked = !!blocked;
@@ -117,6 +116,8 @@
       save: function (_t, next) { goals = next; return Promise.resolve(); }
     };
     var t = {
+      get: function (id, _scope, key) { return Promise.resolve(key === 'cardCompletion' ? store[id] : undefined); },
+      set: function (id, _scope, key, val) { if (key === 'cardCompletion') store[id] = val; return Promise.resolve(); },
       modal: function (opts) {
         var note = document.getElementById('opened');
         if (note) note.textContent = 'Ouvert · ' + ((opts && opts.args && opts.args.cardName) || (opts && opts.title) || '');
