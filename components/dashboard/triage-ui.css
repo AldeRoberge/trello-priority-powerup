@@ -202,8 +202,12 @@
 /* Impact: a scale. Everything up to the value is tinted, the value itself is solid. */
 .tri-scale { gap: 1px; }
 .tri-scale .tri-opt { min-width: 28px; padding: 0; font-variant-numeric: tabular-nums; }
-/* Gradient: each step carries its own tint (--tri-g 0-100, cool to warm) so the filled range shows the impact heat. */
-.tri-scale .tri-opt { --tri-c: color-mix(in srgb, #4f8df5, #e8573f calc(var(--tri-g, 0) * 1%)); }
+/* Each step takes the colour of the priority tier its value falls in (same palette as .db-prio). */
+.tri-scale .tri-opt { --tri-c: #8590a2; }
+.tri-scale .tri-opt[data-tier="0"] { --tri-c: #c9372c; }
+.tri-scale .tri-opt[data-tier="1"] { --tri-c: #e2740b; }
+.tri-scale .tri-opt[data-tier="2"] { --tri-c: #b38600; }
+.tri-scale .tri-opt[data-tier="3"] { --tri-c: #5e6ad2; }
 .tri-scale .tri-opt.is-fill { background: color-mix(in srgb, var(--tri-c) 38%, transparent); color: var(--tp-text); }
 .tri-scale .tri-opt:hover { background: color-mix(in srgb, var(--tri-c) 55%, transparent); color: var(--tp-text); }
 .tri-scale .tri-opt[aria-checked="true"] { background: var(--tri-c); color: var(--tp-primary-text, #fff); box-shadow: none; }

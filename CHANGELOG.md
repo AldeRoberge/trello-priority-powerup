@@ -11,7 +11,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Tableau : les cartes sont regroupées en sections par projet (repliables, avec le nombre de cartes), « Sans projet » à la fin.
 - Tableau : deux nouvelles colonnes, « Projet » et « Tâche parente », à droite de l’Objet (masquables depuis « Colonnes »).
 - Triage : la liste s’affiche en arbre : les projets, sous eux leurs tâches, puis les sous-tâches (repliables, avec le « 2/5 » de sous-tâches faites). Le bouton arbre en haut revient à la liste simple ; J et K suivent l’ordre de l’arbre.
-- Triage : l’échelle d’Impact (0 à 10) se teinte en dégradé, du bleu au rouge, jusqu’à la valeur choisie.
+- Triage : l’échelle d’Impact (0 à 10) se teinte jusqu’à la valeur choisie, chaque chiffre prenant la couleur de son palier de priorité (gris, indigo, ambre, orange, rouge).
 - Triage, Orchestrateur, Aujourd’hui : la priorité s’affiche avec un « P » devant le chiffre (P5), pour qu’on ne la prenne plus pour un compteur.
 - Assistant : le visage reste immobile (plus de rebond, de clignement ni de lueur en boucle), et la pastille « nouveau message » et le point d’écoute ne pulsent plus.
 - Tableau : en mode sombre, le bandeau des cartes critiques est un rouge foncé au lieu d’une barre rouge vif.

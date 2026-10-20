@@ -83,6 +83,11 @@
    * spec: { label, key, options: [{ id, label, title?, icon?, tone? }], value, fill?, cls?, onPick(option) }
    * -> { el, buttons, set(value) }. `fill` also tints every option up to the value (a scale).
    */
+  /** Priority tier (same bands as the P badge: 8.6 / 7.2 / 5.8 / 4.3) an impact value falls in; 4 = below. */
+  function impactTier(n) {
+    return n >= 8.6 ? 0 : n >= 7.2 ? 1 : n >= 5.8 ? 2 : n >= 4.3 ? 3 : 4;
+  }
+
   function segmented(spec) {
     var el = h('div', { class: 'tri-seg' + (spec.cls ? ' ' + spec.cls : ''), role: 'radiogroup', 'aria-label': spec.label });
     var buttons = spec.options.map(function (o, i) {
@@ -95,7 +100,7 @@
         title: o.title || null,
         'data-fk': spec.key + ':' + o.id,
       }, [o.icon ? icon(o.icon) : null, h('span', { class: 'tri-opt-t', text: o.label })]);
-      if (spec.fill) b.style.setProperty('--tri-g', String(Math.round(100 * i / Math.max(1, spec.options.length - 1))));
+      if (spec.fill) b.setAttribute('data-tier', String(impactTier(Number(o.id))));
       b.addEventListener('click', function () { spec.onPick(o); });
       b.addEventListener('focus', function () {
         buttons.forEach(function (x) { x.tabIndex = x === b ? 0 : -1; });
