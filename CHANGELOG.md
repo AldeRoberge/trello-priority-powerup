@@ -4,6 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Cliquer une tâche l’ouvre dans la vue, en isolation, pour la modifier sans changer de page.
+- Assistant : l’interview de carte ne démarre plus et ne bloque plus les actions (mémoire de carte, etc.).
 - Assistant : pendant l’attente, la conversation montre l’étape (préparation, envoi, lecture), une barre et le temps estimé.
 - Paramètres : la capacité par jour se règle dans Journée. Le tableau de bord affiche seulement le temps déjà prévu.
 - Isolation : le clic droit « Isoler » retient une tâche, une sous-tâche, un projet ou une personne. Les autres tâches pâlissent (Tableau, Kanban, Gantt, Mindmap, Parcours, Triage) et Documents ouvre la page de ce sujet.

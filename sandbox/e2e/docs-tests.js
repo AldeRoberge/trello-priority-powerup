@@ -796,9 +796,9 @@
     ed().querySelector('.dc-mention--task').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     var openBtn = await waitFor(function () { return $('.dc-pop--task .cq-iconbtn[aria-label="Ouvrir la carte"]'); }, 'quick panel');
     openBtn.click();
-    await waitFor(function () { return fake.calls.some(function (c) { return c.method === 'MODAL'; }); }, 'card modal');
-    var modal = fake.calls.filter(function (c) { return c.method === 'MODAL'; })[0];
-    eq(modal.body.cardId, 'c2');
+    var focus = await waitFor(function () { return $('.tf-panel'); }, 'task in the view');
+    assert(/Refonte/.test(focus.getAttribute('aria-label') || focus.textContent), 'the task stays on this page');
+    assert(!fake.calls.some(function (c) { return c.method === 'MODAL'; }), 'no new page');
     ed().querySelector('.dc-mention--doc').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await waitFor(function () { return $('.dc-title').value === 'Plan de projet'; }, 'other document open', 7000);
   });

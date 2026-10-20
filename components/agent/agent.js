@@ -8305,60 +8305,6 @@
       parsed.color
     );
     actions = colorRewrite.actions;
-    // Interview may only apply a subset of tools.
-    var allowedTools = {
-      set_priority: true,
-      set_task_types: true,
-      set_due: true,
-      set_blocked: true,
-      set_members: true,
-      set_labels: true,
-      set_custom_assignees: true,
-      set_member_roles: true,
-      add_checklist_item: true,
-      remove_checklist_item: true,
-      rename_checklist_item: true,
-      set_checklist_progress: true,
-      history_undo: true,
-      history_redo: true,
-      history_revert: true,
-      set_progress: true,
-      set_project: true,
-      add_subtask: true,
-      rename_subtask: true,
-      remove_subtask: true,
-      toggle_subtask: true,
-      set_subtask_blocked: true,
-      set_subtask_progress: true,
-      set_subtask_estimate: true,
-      set_progress_estimate: true,
-      rename_card: true,
-      set_description: true,
-      trigger_effect: true,
-      set_agent_name: true,
-      set_agent_color: true,
-      set_agent_personality: true,
-      upsert_person: true,
-      remove_person: true,
-      upsert_place: true,
-      remove_place: true,
-      set_places: true
-    };
-    var droppedInterview = [];
-    actions = actions.filter(function (a) {
-      if (a && allowedTools[a.tool]) return true;
-      if (a && a.tool) {
-        droppedInterview.push({
-          tool: a.tool,
-          code: 'interview-disallowed',
-          reason: 'interview-disallowed',
-          error: a.tool + ': non autoris\u00e9 pendant l\'interview',
-          hint: 'Cet outil n\'est pas disponible pendant l\'interview de carte.'
-        });
-      }
-      return false;
-    });
-    parsed.droppedActions = (parsed.droppedActions || []).concat(droppedInterview);
 
     var message = polishAssistantVisibleText(
       stripScaleLegendParenthetical(
