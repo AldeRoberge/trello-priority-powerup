@@ -7859,8 +7859,9 @@
       notifyLayout();
     }
 
-    function setInterviewMode(active) {
-      interviewActive = !!active;
+    function setInterviewMode() {
+      // Card interview is retired: it blocked tools such as cardPatches.
+      interviewActive = false;
       if (!interviewActive) scheduleFaceSleep();
       interviewBar.hidden = !interviewActive;
       if (interviewActive) {

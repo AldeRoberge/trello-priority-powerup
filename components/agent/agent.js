@@ -2910,6 +2910,37 @@
     return w.toLocaleLowerCase('fr-FR');
   }
 
+  /**
+   * The model sometimes emits cardPatches / patches as action tools.
+   * Those are memory fields, not tools: fold them back so they apply.
+   */
+  function liftPatchTools(actions, cardPatches, boardPatches) {
+    var kept = [];
+    var cards = Array.isArray(cardPatches) ? cardPatches.slice() : [];
+    var boards = Array.isArray(boardPatches) ? boardPatches.slice() : [];
+    (actions || []).forEach(function (a) {
+      if (!a || typeof a.tool !== 'string') {
+        if (a) kept.push(a);
+        return;
+      }
+      var tool = a.tool.trim();
+      var args = a.args && typeof a.args === 'object' ? a.args : {};
+      if (tool === 'cardPatches' || tool === 'card_patches') {
+        if (Array.isArray(args.patches)) cards = cards.concat(args.patches);
+        else if (Array.isArray(args.cardPatches)) cards = cards.concat(args.cardPatches);
+        else if (args.op || args.text || args.query) cards.push(args);
+        return;
+      }
+      if (tool === 'patches' || tool === 'boardPatches' || tool === 'board_patches') {
+        if (Array.isArray(args.patches)) boards = boards.concat(args.patches);
+        else if (args.op || args.text || args.query) boards.push(args);
+        return;
+      }
+      kept.push(a);
+    });
+    return { actions: kept, cardPatches: cards, patches: boards };
+  }
+
   function normalizeCardPatches(raw) {
     var list = Array.isArray(raw) ? raw : [];
     var out = [];
@@ -8458,12 +8489,14 @@
     usage.latencyMs = Date.now() - t0;
     usage.historyTurns = (history || []).length;
 
-    var cardPatches = normalizeCardPatches(
-      (data && data.cardPatches) || (parsed && parsed.cardPatches)
-    );
-    var patches = normalizeBoardPatches(
+    var lifted = liftPatchTools(
+      actions,
+      (data && data.cardPatches) || (parsed && parsed.cardPatches),
       (data && data.patches) || (parsed && parsed.patches)
     );
+    actions = lifted.actions;
+    var cardPatches = normalizeCardPatches(lifted.cardPatches);
+    var patches = normalizeBoardPatches(lifted.patches);
 
     var suggestionEntries = normalizeSuggestionEntries(
       scoutRedirected
@@ -10629,6 +10662,10 @@
     actions = progressGuard.actions;
     actions = ensureQuebecLibreEffect(actions, userText);
     actions = ensureUnblockedIntent(actions, userText);
+    var liftedChat = liftPatchTools(actions, parsed.cardPatches, parsed.patches);
+    actions = liftedChat.actions;
+    parsed.cardPatches = normalizeCardPatches(liftedChat.cardPatches);
+    parsed.patches = normalizeBoardPatches(liftedChat.patches);
     var projectScope = isProjectScope(context && context.scope);
     if (projectScope) {
       var droppedForScope = [];
@@ -19183,6 +19220,7 @@
     normalizeBlocks: normalizeBlocks,
     enrichResultVisual: enrichResultVisual,
     normalizeCardPatches: normalizeCardPatches,
+    liftPatchTools: liftPatchTools,
     chatTurn: chatTurn,
     looksLikeSubtaskPickQuestion: looksLikeSubtaskPickQuestion,
     enrichSubtaskPickTurn: enrichSubtaskPickTurn,
