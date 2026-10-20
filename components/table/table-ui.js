@@ -1801,7 +1801,7 @@
         class: 'tb-section' + (g.free ? ' is-free' : ''),
         'aria-expanded': String(g.open),
         onclick: function () { toggleSection(g.key); },
-      }, [h('td', { colspan: String(state.columns.length + 1) }, [inner])]);
+      }, [h('td', { class: 'tb-num' }), h('td', { colspan: String(state.columns.length) }, [inner])]);
     }
 
     /** One-time: boards with saved columns get Projet and Tâche parente after Objet (hideable afterwards). */
