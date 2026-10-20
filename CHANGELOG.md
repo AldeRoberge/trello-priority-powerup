@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Parcours : les éléments de la liste d’une carte s’affichent comme de petits nœuds sous la carte, au lieu d’une liste dans le panneau du bas.
 - Sous-tâches : la liste des tâches terminées se replie comme une section, le panneau de progression reste ouvert après un glissement, et il a une coche pour terminer, une pause pour bloquer et un bouton « Ajouter une sous-tâche ». Le mode Nœuds est retiré.
 
 ## 2026-10-19

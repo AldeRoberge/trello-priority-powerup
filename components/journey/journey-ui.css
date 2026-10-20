@@ -261,6 +261,16 @@ html[data-color-mode] body.tp-page.tp-page--journey {
 .jy-node.is-waiting { --jy-mark: var(--tp-danger-text); }
 .jy-node.is-done { color: var(--tp-text-muted); }
 .jy-node.is-goal { border-radius: 12px; }
+.jy-node.is-check {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text-subtle);
+}
+.jy-node.is-check:hover { background: var(--tp-surface-hover); }
+.jy-node.is-check .jy-node-name { font-size: 12px; font-weight: 400; }
+.jy-node.is-check.is-done { color: var(--tp-text-muted); }
+.jy-node.is-check.is-done .jy-node-name { opacity: 0.7; }
 
 .jy-node-top {
   display: flex;
@@ -369,15 +379,6 @@ html[data-color-mode] body.tp-page.tp-page--journey {
   cursor: pointer;
 }
 .jy-link:hover { text-decoration: underline; }
-.jy-checks { margin-top: 6px; }
-.jy-check {
-  display: flex;
-  gap: 6px;
-  color: var(--tp-text-subtle);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.jy-check.is-done { color: var(--tp-text-muted); }
 
 .jy-queue {
   width: 320px;

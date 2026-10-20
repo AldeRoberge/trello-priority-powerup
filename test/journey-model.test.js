@@ -280,4 +280,38 @@ describe('JourneyModel', () => {
     const link = g.edges.find((e) => e.kind === 'depends' && e.from === 'order' && e.to === 'pick');
     assert.equal(JM.wouldCycle(g, 'pick', 'order', link.id), false);
   });
+  it('hangs a card’s own checklist items under it as small nodes', () => {
+    const cards = [
+      card({
+        id: 'a',
+        name: 'Semaine',
+        items: [
+          { text: 'Tournage fait', done: true },
+          { text: 'Vidéo à déposer', done: false },
+          { text: 'Liée', done: false, linkedCardId: 'b' },
+        ],
+      }),
+      card({ id: 'b', name: 'Autre' }),
+    ];
+    const g = JM.prepare(cards, { nodes: [], links: [] });
+    const shown = JM.layout(g, { zoom: 'all', hideDone: true, now: NOW });
+    const babies = shown.nodes.filter((n) => n.kind === 'check');
+    assert.deepEqual(babies.map((n) => n.name), ['Vidéo à déposer']);
+    const parent = shown.nodes.find((n) => n.id === 'a');
+    assert.equal(babies[0].parent, 'a');
+    assert.ok(babies[0].y >= parent.y + parent.h);
+    assert.ok(shown.edges.some((e) => e.kind === 'check' && e.from === 'a' && e.to === babies[0].id));
+
+    const all = JM.layout(g, { zoom: 'all', hideDone: false, now: NOW });
+    assert.equal(all.nodes.filter((n) => n.kind === 'check').length, 2);
+    const other = all.nodes.find((n) => n.id === 'b');
+    const column = all.nodes.filter((n) => n.col === parent.col && n.kind !== 'check');
+    column.forEach((n) => {
+      all.nodes.filter((c) => c.kind === 'check' && c.col === n.col).forEach((c) => {
+        const clash = n.id !== c.parent && n.x < c.x + c.w && c.x < n.x + n.w && n.y < c.y + c.h && c.y < n.y + n.h;
+        assert.equal(clash, false, n.id + ' overlaps ' + c.id);
+      });
+    });
+    assert.ok(other);
+  });
 });

@@ -486,6 +486,10 @@
         if (p && isFinite(p.x) && isFinite(p.y)) { n.x = p.x; n.y = p.y; }
         byPos[n.id] = n;
       });
+      view.nodes.forEach(function (n) {
+        var owner = n.kind === 'check' && byPos[n.parent];
+        if (owner) { n.x = owner.x + n.offX; n.y = owner.y + n.offY; }
+      });
 
       var root = el('div', 'jy');
       root.appendChild(bar(graph));
@@ -683,7 +687,7 @@
 
       function targetFor(selfId) {
         return function (elAt) {
-          var hit = elAt && elAt.closest && elAt.closest('.jy-node');
+          var hit = elAt && elAt.closest && elAt.closest('.jy-node:not(.is-check)');
           var id = hit && hit.getAttribute('data-id');
           return id && id !== selfId && id !== JM().ORPHAN_ID ? id : null;
         };
@@ -744,9 +748,19 @@
         drawHandles();
       }
 
+      var babiesOf = Object.create(null);
+      view.nodes.forEach(function (n) {
+        if (n.kind === 'check') (babiesOf[n.parent] = babiesOf[n.parent] || []).push(n);
+      });
+
       view.nodes.forEach(function (n) {
         var node = nodeEl(n, graph);
         nodeEls[n.id] = node;
+        if (n.kind === 'check') {
+          node.addEventListener('click', function () { selectNode(n.parent, 'task'); });
+          gc.world.appendChild(node);
+          return;
+        }
         ['top', 'right', 'bottom', 'left'].forEach(function (side) {
           var pin = el('span', 'jy-pin gc-nodrag is-' + side);
           pin.addEventListener('pointerdown', function (ev) { pinWire(ev, n, side); });
@@ -757,6 +771,13 @@
           onMove: function (x, y) {
             node.style.left = x + 'px';
             node.style.top = y + 'px';
+            (babiesOf[n.id] || []).forEach(function (b) {
+              b.x = x + b.offX;
+              b.y = y + b.offY;
+              nodeEls[b.id].style.left = b.x + 'px';
+              nodeEls[b.id].style.top = b.y + 'px';
+              redrawAround(b.id);
+            });
             redrawAround(n.id);
           },
           onEnd: function (moved) {
@@ -890,7 +911,7 @@
     function edgeClass(e, graph) {
       var base = 'jy-wire';
       if (e.kind === 'serves') return base + ' is-serves' + (e.cross ? ' is-cross' : '');
-      if (e.kind === 'sub') return base + ' is-sub';
+      if (e.kind === 'sub' || e.kind === 'check') return base + ' is-sub';
       if (e.dep === 'after') return base + ' is-after';
       if (e.dep === 'parts') return base + ' is-parts';
       var open = graph.state[e.to] && graph.state[e.to] !== 'done';
@@ -1021,6 +1042,7 @@
     }
 
     function nodeEl(n) {
+      if (n.kind === 'check') return checkEl(n);
       var node = el('div', 'jy-node is-' + (n.state || 'ready') + (n.here ? ' is-here' : '') + (n.id === state.selected ? ' is-on' : '') + (n.kind !== 'task' ? ' is-goal' : ''));
       node.style.left = n.x + 'px';
       node.style.top = n.y + 'px';
@@ -1057,6 +1079,25 @@
       node.addEventListener('contextmenu', function (e) {
         e.preventDefault();
         menuFor(n.id, node, e);
+      });
+      return node;
+    }
+
+    /** A checklist item of a card: a small node under it. */
+    function checkEl(n) {
+      var node = el('div', 'jy-node is-check is-' + (n.state === 'done' ? 'done' : 'open'));
+      node.style.left = n.x + 'px';
+      node.style.top = n.y + 'px';
+      node.style.width = n.w + 'px';
+      node.style.height = n.h + 'px';
+      node.dataset.id = n.id;
+      var top = el('div', 'jy-node-top');
+      top.appendChild(el('span', 'jy-node-ico')).appendChild(icon(n.state === 'done' ? 'circle-check' : 'circle'));
+      top.appendChild(el('span', 'jy-node-name', n.name));
+      node.appendChild(top);
+      node.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        menuFor(n.parent, node, e);
       });
       return node;
     }
@@ -1120,14 +1161,6 @@
             nxt.appendChild(b);
           });
           box.appendChild(nxt);
-        }
-        var local = (node.checks || []).filter(function (c) { return !c.linkedId; });
-        if (local.length) {
-          var checks = el('div', 'jy-checks');
-          local.forEach(function (c) {
-            checks.appendChild(el('div', 'jy-check' + (c.done ? ' is-done' : ''), (c.done ? '✓ ' : '· ') + c.text));
-          });
-          box.appendChild(checks);
         }
         var row = el('div', 'jy-detail-row');
         var openBtn = el('button', 'jy-btn is-primary', 'Ouvrir');

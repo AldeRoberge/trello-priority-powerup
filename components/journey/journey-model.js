@@ -33,6 +33,7 @@
   var NODE_H = 56;
   var STEP_X = 248;
   var PAD = 28;
+  var BABY_INDENT = 32;
 
   function levelById(id) {
     for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
@@ -793,6 +794,8 @@
 
     var width = PAD;
     var height = PAD;
+    var babies = [];
+    var babyEdges = [];
     Object.keys(byCol).forEach(function (key) {
       var list = byCol[key];
       list.sort(function (a, b) {
@@ -808,8 +811,41 @@
         y += n.h + 16;
         width = Math.max(width, n.x + n.w + PAD);
         height = Math.max(height, n.y + n.h + PAD);
+        if (n.kind !== 'task') return;
+        // The card's own checklist items hang under it as small nodes (items linked to a card are wired to that card instead).
+        var below = n.y + n.h;
+        (n.checks || []).forEach(function (c, i) {
+          if (c.linkedId || (hideDone && c.done)) return;
+          var cl = Math.max(1, Math.ceil(String(c.text).length / 24));
+          var b = {
+            id: 'chk:' + n.id + ':' + i,
+            kind: 'check',
+            level: 'check',
+            name: c.text,
+            rec: null,
+            checks: [],
+            state: c.done ? 'done' : 'ready',
+            counts: null,
+            here: false,
+            parent: n.id,
+            col: n.col,
+            w: NODE_W - BABY_INDENT,
+            h: 14 + cl * 16,
+            offX: BABY_INDENT,
+            offY: below + 8 - n.y,
+          };
+          b.x = n.x + b.offX;
+          b.y = n.y + b.offY;
+          below = b.y + b.h;
+          babies.push(b);
+          babyEdges.push({ id: 'check:' + n.id + ':' + i, kind: 'check', dep: null, from: n.id, to: b.id, cross: false });
+          width = Math.max(width, b.x + b.w + PAD);
+          height = Math.max(height, below + PAD);
+        });
+        if (below > n.y + n.h) y = below + 16;
       });
     });
+    babies.forEach(function (b) { laid.push(b); });
 
     var laidIds = Object.create(null);
     laid.forEach(function (n) { laidIds[n.id] = true; });
@@ -818,6 +854,7 @@
     }).map(function (e) {
       return { id: e.id, kind: e.kind, dep: e.dep, from: e.from, to: e.to, cross: !!e.cross };
     });
+    babyEdges.forEach(function (e) { outEdges.push(e); });
     orphans.forEach(function (id) {
       outEdges.push({ id: 'serves:' + id + '>' + ORPHAN, kind: 'serves', dep: null, from: id, to: ORPHAN, cross: false });
     });
