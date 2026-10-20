@@ -10501,3 +10501,70 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   font-weight: 400;
   color: var(--text-muted);
 }
+
+/* ── Calm card panel: quiet until set, detail on demand ── */
+/* The badge already names the tier; segments keep it as tooltip/aria. */
+.heat-seg-labels {
+  display: none;
+}
+
+/* Factor widgets are detail on demand: dim until hovered. "manuel" is the
+   default, so only the calculated state gets a tag. */
+.axis-factors {
+  margin: -6px 0 4px;
+}
+
+.axis-factors-toggle {
+  opacity: 0.55;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.axis-factors-toggle:hover,
+.axis-factors-toggle:focus-visible,
+.axis-factors.is-expanded .axis-factors-toggle {
+  opacity: 0.9;
+}
+
+.axis-factors-mode-tag:not(.is-calculated) {
+  display: none;
+}
+
+/* Statuses: one left-aligned row, same weight everywhere so selecting never
+   changes a chip's size; only the selected chip is filled. */
+.statut-chip-row {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.statut-list-option,
+.statut-list-option.is-selected {
+  font-weight: 600;
+}
+
+.statut-chip-row:has(.statut-list-option.is-selected)
+  .statut-list-option:not(.is-selected):not(:disabled) {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--text-muted) 28%, transparent);
+  opacity: 0.7;
+}
+
+.statut-settings-btn {
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+
+.statut-settings-btn:hover,
+.statut-settings-btn:focus-visible {
+  opacity: 1;
+}
+
+/* Empty place choices stay quiet until hovered. */
+.info-route-choose-btn {
+  opacity: 0.6;
+  transition: opacity 0.12s ease;
+}
+
+.info-route-choose-btn:hover,
+.info-route-choose-btn:focus-visible {
+  opacity: 1;
+}
