@@ -1,0 +1,290 @@
+/* Document pane of the Triage (triage-doc-ui.js). Colors come from trello-theme.css (--tp-*).
+   A hover, a press or a selection only changes a color or a background: nothing here changes a size. */
+.tdoc {
+  box-sizing: border-box;
+  min-height: 100%;
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 28px 0;
+  color: var(--tp-text);
+  font-size: 13px;
+}
+.tdoc button:focus { outline: none; }
+.tdoc button:focus-visible, .tdoc .tdoc-text:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
+.tdoc-spacer { flex: 1; }
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+.tdoc-top { display: flex; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 8px; }
+.tdoc-crumb { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--tp-text-muted); }
+.tdoc-crumb .ti { font-size: 14px; }
+.tdoc-count { font-size: 12px; color: var(--tp-text-muted); white-space: nowrap; }
+.tdoc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.tdoc-icon:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+
+/* ── The page ────────────────────────────────────────────────────────── */
+.tdoc-stage { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.tdoc-ed {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 300px;
+  padding: 16px 18px;
+  border-radius: 8px;
+  background: var(--tp-input-bg, var(--tp-surface));
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  color: var(--tp-text);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+  outline: none;
+  cursor: text;
+}
+.tdoc-ed:hover { box-shadow: inset 0 0 0 1px var(--tp-border-strong); }
+.tdoc-ed:focus { box-shadow: inset 0 0 0 2px var(--tp-primary); }
+.tdoc-ed.is-empty::before {
+  content: attr(data-ph);
+  position: absolute;
+  left: 18px;
+  top: 16px;
+  color: var(--tp-text-muted);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.tdoc-ed.is-drop { box-shadow: inset 0 0 0 2px var(--tp-primary); background: color-mix(in srgb, var(--tp-primary) 6%, var(--tp-input-bg, var(--tp-surface))); }
+.tdoc-ed.is-busy { opacity: 0.6; pointer-events: none; }
+.tdoc-img { position: relative; display: block; width: fit-content; max-width: 100%; margin: 6px 0; user-select: none; }
+.tdoc-img img { display: block; max-width: 100%; max-height: 260px; border-radius: 6px; box-shadow: 0 0 0 1px var(--tp-border); }
+.tdoc-img-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(9, 30, 66, 0.62);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.tdoc-img-x:hover { background: rgba(9, 30, 66, 0.9); opacity: 1; }
+
+/* ── Foot: stays at the bottom, in the same place ────────────────────── */
+.tdoc-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px -28px 0;
+  padding: 12px 28px 14px;
+  background: var(--tp-surface);
+  border-top: 1px solid var(--tp-border);
+}
+.tdoc-go { white-space: nowrap; }
+.tdoc-go .ti { font-size: 15px; }
+.tdoc-err { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--tp-danger-text); font-size: 12px; }
+.tdoc-err .ti { flex: none; font-size: 14px; }
+.tdoc-wait { display: inline-flex; align-items: center; gap: 6px; color: var(--tp-text-muted); }
+.tdoc-wait .ti { font-size: 15px; animation: tdoc-spin 1s linear infinite; }
+.tdoc-go .ti-refresh { animation: tdoc-spin 1s linear infinite; }
+@keyframes tdoc-spin { to { transform: rotate(360deg); } }
+.tdoc.is-busy .tdoc-plan { pointer-events: none; opacity: 0.7; }
+
+/* ── The plan: one grid, the same columns on every row ───────────────── */
+.tdoc-plan { display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
+.tdoc-note { display: flex; align-items: center; gap: 6px; color: var(--tp-text-muted); font-size: 12px; }
+.tdoc-note .ti { flex: none; font-size: 14px; }
+.tdoc-group { display: flex; flex-direction: column; }
+.tdoc-proj, .tdoc-task {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 92px 100px 74px;
+  column-gap: 6px;
+  align-items: start;
+}
+.tdoc-proj { align-items: center; padding: 4px 0; border-bottom: 1px solid var(--tp-border); }
+.tdoc-proj-main { grid-column: 2 / -1; display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; }
+.tdoc-proj-main > .ti { flex: none; color: var(--tp-text-muted); font-size: 15px; }
+.tdoc-loose { color: var(--tp-text-muted); font-weight: 500; font-size: 12px; }
+.tdoc-task { padding: 7px 0; border-bottom: 1px solid var(--tp-border); }
+.tdoc-task.is-off .tdoc-main, .tdoc-task.is-off .tdoc-prop { opacity: 0.45; }
+.tdoc-task.is-locked { opacity: 0.6; }
+
+.tdoc-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 17px;
+  cursor: pointer;
+}
+.tdoc-box:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tdoc-box.is-all, .tdoc-box.is-some { color: var(--tp-primary); }
+span.tdoc-box { cursor: default; }
+
+.tdoc-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tdoc-title-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tdoc-text { border-radius: 4px; cursor: text; overflow-wrap: anywhere; }
+.tdoc-text:hover { background: var(--tp-surface-hover); }
+.tdoc-title { font-weight: 500; line-height: 1.4; }
+.tdoc-proj-name { font-weight: 600; }
+.tdoc-edit {
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 1 1 160px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+  color: var(--tp-text);
+  font: inherit;
+  outline: none;
+}
+.tdoc-tag { padding: 0 6px; border-radius: 8px; background: color-mix(in srgb, var(--tp-text) 8%, transparent); color: var(--tp-text-muted); font-size: 11px; font-weight: 400; white-space: nowrap; }
+.tdoc-tag--new { background: color-mix(in srgb, var(--tp-primary) 14%, transparent); color: var(--tp-primary); }
+.tdoc-tag--ok { background: color-mix(in srgb, var(--tp-success) 16%, transparent); color: var(--tp-success); }
+
+/* People, places, labels and the project of a task */
+.tdoc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.tdoc-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--tp-border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--tp-text-subtle);
+  font: inherit;
+  font-size: 12px;
+}
+.tdoc-chip .ti { flex: none; font-size: 13px; color: var(--tp-text-muted); }
+.tdoc-chip-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdoc-chip.is-new { border-style: dashed; border-color: var(--tp-border-strong); }
+button.tdoc-chip { cursor: pointer; padding-right: 8px; }
+button.tdoc-chip:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tdoc-chip--project.is-empty { border-style: dashed; border-color: var(--tp-border-strong); color: var(--tp-text-muted); opacity: 0.55; }
+.tdoc-chip--project.is-empty:hover { opacity: 0.9; }
+.tdoc-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.4;
+}
+.tdoc-chip-x .ti { font-size: 11px; }
+.tdoc-chip-x:hover { background: var(--tp-surface-hover); color: var(--tp-text); opacity: 1; }
+
+/* Subtasks */
+.tdoc-subs { display: flex; flex-direction: column; gap: 1px; margin-top: 2px; }
+.tdoc-sub { display: flex; align-items: flex-start; gap: 6px; color: var(--tp-text-subtle); line-height: 1.4; }
+.tdoc-sub > .ti { flex: none; margin-top: 3px; font-size: 11px; color: var(--tp-text-muted); }
+.tdoc-sub--nested { padding-left: 18px; }
+.tdoc-sub-t { flex: 0 1 auto; min-width: 0; }
+.tdoc-sub-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.35;
+}
+.tdoc-sub-x:hover { background: var(--tp-surface-hover); color: var(--tp-text); opacity: 1; }
+
+/* Jour, Urgence, Durée: a value or nothing, the column stays */
+.tdoc-prop {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tdoc-prop .ti { flex: none; font-size: 14px; color: var(--tp-text-muted); }
+.tdoc-prop-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tdoc-prop.is-empty { opacity: 0.55; }
+.tdoc-prop:hover { background: var(--tp-surface-hover); }
+.tdoc-prop.is-empty:hover { opacity: 0.9; }
+.tdoc-prop.is-inert { cursor: default; pointer-events: none; }
+.tdoc-prop input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+
+/* Text read in the images */
+.tdoc-reads { color: var(--tp-text-muted); font-size: 12px; }
+.tdoc-reads summary { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; list-style: none; padding: 2px 4px; border-radius: 4px; }
+.tdoc-reads summary::-webkit-details-marker { display: none; }
+.tdoc-reads summary:hover { background: var(--tp-surface-hover); color: var(--tp-text); }
+.tdoc-read { display: flex; gap: 10px; margin-top: 8px; }
+.tdoc-read img { flex: none; width: 72px; height: 72px; object-fit: cover; border-radius: 6px; box-shadow: 0 0 0 1px var(--tp-border); }
+.tdoc-read-t { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow: auto; color: var(--tp-text-subtle); }
+
+/* On a narrow pane the three values sit under the title, still in the same order. */
+.tdoc-props { display: contents; }
+@container (max-width: 560px) {
+  .tdoc-proj, .tdoc-task { grid-template-columns: 22px minmax(0, 1fr); }
+  .tdoc-props { display: flex; grid-column: 2; gap: 4px; }
+  .tdoc-props .tdoc-prop { width: 92px; flex: none; }
+}
+@media (max-width: 760px) {
+  .tdoc { padding: 14px 16px 0; }
+  .tdoc-foot { margin: 12px -16px 0; padding: 10px 16px 12px; }
+  .tdoc-ed { min-height: 220px; }
+}

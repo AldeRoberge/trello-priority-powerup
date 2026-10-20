@@ -247,6 +247,7 @@
   function pageEntries(ctx) {
     ctx = ctx || {};
     var items = [{ id: 'new-card', label: 'Nouvelle carte', icon: 'plus', group: 'Créer', hint: 'C', disabled: ctx.canCreate === false }];
+    items.push({ id: 'new-document', label: 'Nouveau document', icon: 'file-plus', group: 'Créer', disabled: ctx.canCreate === false });
     (ctx.sections || SECTIONS).forEach(function (s) {
       items.push({
         id: 'go:' + s.key,
@@ -287,7 +288,9 @@
       composer: null, // orchestrator column open for a new task ('pool', 'cal:ISO', 'vague:id')
       composerText: '',
       filter: '', // side-panel search: narrows every section
+      docOpen: false, // the Document pane (paste text and images, get tasks) replaces the card pane of the Triage
     };
+    var docUI = null; // built on first use, kept so the draft survives opening a card
     var statusTimer = null;
     var reloadTimer = null;
     var today = todayIso();
@@ -944,6 +947,7 @@
       }
       if (id === 'copy-link') return copyLink(row && row.link);
       if (id === 'new-card') return createCard();
+      if (id === 'new-document') return openDoc();
       if (id === 'reload') return reload();
       if (id.indexOf('go:') === 0) return go(id.slice(3));
       if (id === 'waiting' || id === 'wait:') return askWaiting(row, anchor);
@@ -1016,6 +1020,7 @@
         'data-card': r.id,
         onclick: function () {
           state.selected = r.id;
+          state.docOpen = false;
           render();
           // On a phone the pane is above the list: bring it into view.
           if (global.matchMedia && global.matchMedia('(max-width: 760px)').matches) els.main.scrollTop = 0;
@@ -1094,12 +1099,90 @@
       };
     }
 
+    /** What the Document pane needs from this page (see triage-doc-ui.js). */
+    function docHost() {
+      return {
+        t: t,
+        today: function () { return today; },
+        rows: function () { return state.rows; },
+        lists: function () { return state.lists; },
+        goals: function () { return state.goals; },
+        projects: function () { return state.projects.map(function (p) { return { id: p.id, name: p.name }; }); },
+        onClose: function () { closeDoc(); },
+        onCreated: docCreated,
+        status: setStatus,
+      };
+    }
+
+    function openDoc() {
+      if (!global.TriageDocUI || !global.TriageDocModel) return setStatus('Document indisponible ici.', 'error');
+      if (!hasTriage()) return setStatus('Ce tableau n’a pas de liste de triage.', 'error');
+      state.section = 'triage';
+      state.docOpen = true;
+      render();
+      if (docUI) docUI.focus();
+    }
+
+    function closeDoc() {
+      state.docOpen = false;
+      render();
+    }
+
+    /** The cards of the document are written: show them in the list, one undo takes the whole batch back. */
+    function docCreated(result, plan, finished) {
+      var made = result.created.filter(function (c) { return plan.tasks.some(function (x) { return x.id === c.taskId && x.createdId === c.cardId; }); });
+      var n = made.length;
+      var msg = n === 1 ? '« ' + made[0].title + ' » créée dans le triage' : n + ' cartes créées dans le triage';
+      if (result.failed.length) msg += ' · à revoir : ' + result.failed.slice(0, 2).join(' ; ');
+      if (finished) {
+        state.docOpen = false;
+        if (made[0]) state.selected = made[0].cardId;
+      }
+      var undo = function () {
+        if (state.undo !== undo) return;
+        state.undo = null;
+        setStatus('Annulation…', 'busy');
+        global.TriageDocTrello.undo(t, result).then(function () {
+          setStatus('Création annulée', 'ok');
+          reload({ quiet: true });
+        });
+      };
+      state.undo = undo;
+      setStatus(msg, result.failed.length ? 'error' : 'ok', 9000, { label: 'Annuler', run: undo });
+      reload({ quiet: true });
+      setTimeout(function () { reload({ quiet: true }); }, 1200);
+    }
+
+    function docButton() {
+      return h('button', {
+        class: 'db-icon-btn',
+        type: 'button',
+        title: 'Nouveau document',
+        'aria-label': 'Nouveau document',
+        'data-fk': 'new-document',
+        onclick: openDoc,
+      }, [icon('file-plus')]);
+    }
+
+    function docPane() {
+      if (!docUI) docUI = global.TriageDocUI.create(docHost());
+      return docUI.el;
+    }
+
     function renderTriage() {
       var q = DM().triageQueue(viewRows());
+      if (state.docOpen && global.TriageDocUI) {
+        var open = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, false); }));
+        els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
+          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
+          h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [docPane()]),
+        ]));
+        return;
+      }
       if (!q.length) {
         var none = !hasTriage() ? 'Aucune liste de triage sur ce tableau.' : state.filter ? 'Aucune carte ne correspond.' : 'Boîte de triage vide. Bien joué.';
         els.main.appendChild(h('div', { class: 'db-page' }, [
-          pageHead('Triage'),
+          pageHead('Triage', '', hasTriage() && global.TriageDocUI ? h('div', { class: 'db-head-tools' }, [docButton()]) : null),
           hasTriage() ? null : inboxBanner(),
           h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: none })]),
         ]));
@@ -1109,7 +1192,7 @@
       state.selected = sel.id;
       var list = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === sel.id); }));
       els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
-        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('span', { class: 'db-badge', text: String(q.length) })), list]),
+        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
         h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [global.TriageUI.detail(sel, triageHost())]),
       ]));
     }
@@ -2002,6 +2085,7 @@
       els.main.querySelectorAll('[data-keep]').forEach(function (n) { kept[n.getAttribute('data-keep')] = n.scrollTop; });
       var had = document.activeElement;
       var focusKey = had && had !== document.body && els.main.contains(had) ? had.getAttribute('data-fk') : null;
+      if (docUI) docUI.park();
       els.main.textContent = '';
       renderSide();
       if (state.section === 'triage') renderTriage();
@@ -2035,6 +2119,7 @@
       var now = document.activeElement;
       if (back) back.focus({ preventScroll: true });
       else if (!now || now === document.body) shell.focus({ preventScroll: true });
+      if (docUI) docUI.unpark();
     }
 
     shell.addEventListener('keydown', function (e) {
@@ -2053,6 +2138,15 @@
       if (state.section !== 'triage') return;
       var q = DM().triageQueue(viewRows());
       var i = q.map(function (r) { return r.id; }).indexOf(state.selected);
+      // The Document pane shows no card: J / K go back to the list, the decision keys wait.
+      if (state.docOpen) {
+        if ((k === 'j' || k === 'k' || e.key === 'ArrowDown' || e.key === 'ArrowUp') && q.length) {
+          e.preventDefault();
+          state.docOpen = false;
+          render();
+        }
+        return;
+      }
       if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); if (q[i + 1]) { state.selected = q[i + 1].id; render(); } return; }
       if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); if (q[i - 1]) { state.selected = q[i - 1].id; render(); } return; }
       var ex = DM().exitForKey(e.key);
@@ -2154,7 +2248,7 @@
           render();
           global.CommandPalette.reveal('.db-row[data-id="' + id + '"]');
         },
-        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: createCard }]; },
+        actions: function () { return [{ label: 'Nouvelle carte', icon: 'plus', run: createCard }, { label: 'Nouveau document', icon: 'file-plus', run: openDoc }]; },
         isBusy: function () { return global.CardFields && global.CardFields.isOpen(); },
       });
     }

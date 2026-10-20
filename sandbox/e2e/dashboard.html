@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="/components/shared/card-entities.css" />
   <link rel="stylesheet" href="/components/dashboard/dashboard-ui.css" />
   <link rel="stylesheet" href="/components/dashboard/triage-ui.css" />
+  <link rel="stylesheet" href="/components/dashboard/triage-doc-ui.css" />
   <link rel="stylesheet" href="/components/shared/assistant-dock.css" />
   <link rel="stylesheet" href="/components/shared/context-menu.css" />
   <link rel="stylesheet" href="/components/shared/view-shell.css?v=narrow-2" />
@@ -78,6 +79,9 @@
   <script src="/components/dashboard/dashboard-model.js"></script>
   <script src="/components/dashboard/dashboard-trello.js"></script>
   <script src="/components/dashboard/triage-ui.js"></script>
+  <script src="/components/dashboard/triage-doc-model.js"></script>
+  <script src="/components/dashboard/triage-doc-trello.js"></script>
+  <script src="/components/dashboard/triage-doc-ui.js"></script>
   <script src="/components/shared/hide-done.js"></script>
   <script src="/components/shared/progress-ring.js"></script>
   <script src="/components/shared/add-row.js"></script>
@@ -261,6 +265,54 @@
       load: function () { return Promise.resolve(JSON.parse(JSON.stringify(goals))); },
       save: function (t, g) { goals = JSON.parse(JSON.stringify(g)); log.push(['goals', goals.links]); return later(goals); }
     };
+    // ---- Triage document: a canned AI reply (the harness has no provider; ?noai gives the offline outline) and cards kept in memory ----
+    window.__doc = { asked: [], created: [] };
+    PriorityAgent.getProvider = function () { return Promise.resolve({ ok: true }); };
+    PriorityAgent.isConfigured = function () { return !new URLSearchParams(location.search).has('noai'); };
+    PriorityAgent.chatCompletions = function (provider, messages) {
+      window.__doc.asked.push(messages);
+      var user = messages[messages.length - 1].content;
+      var seen = Array.isArray(user) && user.some(function (c) { return c.type === 'image_url'; });
+      var plan = {
+        summary: 'Un projet de jardin et deux tâches.',
+        images: seen ? [{ id: 'img1', text: 'Liste de courses\n- terreau\n- semences de tomates\n- tuteurs' }] : [],
+        projects: [{ name: 'Potager 2027' }],
+        tasks: [
+          { title: 'Préparer le potager', project: 'Potager 2027', desc: 'Avant la fin de semaine.', due: DashboardModel.addDays(NOW, 3), urgency: 'vite', people: ['Marie', 'Sylvain Roy'], places: ['Maison'], labels: ['Perso'], images: seen ? ['img1'] : [],
+            subtasks: [{ text: 'Acheter le terreau', estimate: 30 }, { text: 'Planter les tomates', items: ['Tuteurs', 'Arrosage'] }] },
+          { title: 'Appeler le notaire', project: 'Refonte du site', estimate: 15, people: ['Paul'] },
+          { title: 'Renouveler le passeport' },
+          { title: 'Commander les semences', due: DashboardModel.addDays(NOW, 1) }
+        ]
+      };
+      return later({ content: JSON.stringify(plan) });
+    };
+    TableTrello.createRow = function (t, name, listId) {
+      var id = 'doc' + (seq++);
+      rows.push(mk(id, name, listId, { impact: null }));
+      window.__doc.created.push(name);
+      log.push(['create', id, name]);
+      return later({ cardId: id });
+    };
+    PriorityTrello.restPutCard = function (t, id, body) {
+      var r = find(id);
+      if (r && body.desc) { r.desc = body.desc; r.fullDesc = body.desc; }
+      if (r && body.idMembers) r.assignees = String(body.idMembers).split(',').map(function (m) { var mem = members.filter(function (x) { return x.id === m; })[0]; return { id: m, name: mem ? mem.fullName : m, custom: false, trelloId: m }; });
+      if (r && body.idLabels) r.labels = String(body.idLabels).split(',').map(function (l) { return boardLabels.filter(function (x) { return x.id === l; })[0] || { id: l, name: l, color: '' }; });
+      log.push(['put', id, body]);
+      return Promise.resolve({ ok: true });
+    };
+    var baseSaveInputs = PriorityTrello.saveCardInputsById;
+    PriorityTrello.saveCardInputsById = function (t, id, patch) {
+      var r = find(id);
+      if (r && patch.customAssignees) r.assignees = (r.assignees || []).concat(patch.customAssignees.map(function (c) { return { id: c.id, name: c.name, custom: true, trelloId: '' }; }));
+      if (r && patch.empressement) { r.urgency = DashboardModel.URGENCIES.filter(function (u) { return u[0] === patch.empressement; })[0][1]; }
+      return baseSaveInputs(t, id, patch);
+    };
+    PriorityTrello.saveCustomAssigneeCatalog = function (t, list) { log.push(['customs', list.map(function (c) { return c.name; })]); return Promise.resolve(list); };
+    PriorityTrello.savePlaceCatalog = function (t, list) { return Promise.resolve(list); };
+    CompletionTrello.saveCardCompletionById = function (t, id, data) { var r = find(id); if (r) r.items = data.items; log.push(['items', id, data.items.length]); return Promise.resolve(data); };
+    DashboardTrello.attachFile = function (t, id, file) { log.push(['attach', id, file.name]); return Promise.resolve(); };
     var t = {
       get: function () { return Promise.resolve(null); },
       set: function () { return Promise.resolve(); },

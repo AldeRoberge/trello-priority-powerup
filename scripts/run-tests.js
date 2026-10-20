@@ -108,6 +108,8 @@ const UNIT_FILES = [
   'graph-canvas.test.js',
   'skeleton.test.js',
   'add-row.test.js',
+  'triage-doc-model.test.js',
+  'triage-doc-trello.test.js',
 ];
 
 function listTests() {

@@ -281,5 +281,6 @@
     return { root: root, focus: focus, toggle: focus };
   }
 
-  global.AssistantDock = { mount: mount };
+  // toDataUrl / named are shared with the Triage document (images pasted there are read the same way).
+  global.AssistantDock = { mount: mount, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE };
 })(typeof window !== 'undefined' ? window : this);

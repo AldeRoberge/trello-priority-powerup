@@ -136,6 +136,7 @@ describe('Dashboard card menu', () => {
     const items = UI.pageEntries({ section: 'triage', canCreate: true });
     const id = ids(items);
     assert.ok(id.indexOf('new-card') >= 0);
+    assert.ok(id.indexOf('new-document') >= 0);
     assert.ok(id.indexOf('go:triage') >= 0);
     assert.ok(id.indexOf('go:today') >= 0);
     assert.ok(id.indexOf('reload') >= 0);
