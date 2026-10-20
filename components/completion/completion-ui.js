@@ -1057,25 +1057,6 @@
     } catch (e) { /* ignore quota / private mode */ }
   }
 
-  var VIEW_MODE_STORAGE_KEY = 'trello-priority-powerup/completion-view';
-
-  /** 'nodes' (default) or 'list'. */
-  function loadViewModePreference() {
-    try {
-      if (typeof localStorage === 'undefined') return 'nodes';
-      return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'nodes';
-    } catch (e) {
-      return 'nodes';
-    }
-  }
-
-  function saveViewModePreference(mode) {
-    try {
-      if (typeof localStorage === 'undefined') return;
-      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode === 'list' ? 'list' : 'nodes');
-    } catch (e) { /* ignore quota / private mode */ }
-  }
-
   function durationTicks() {
     var CT = getCompletionTrello();
     if (CT && typeof CT.getEstimateScaleTicks === 'function') {
@@ -2292,215 +2273,6 @@
     containerEl.appendChild(bulkBarMount.firstChild);
     containerEl.appendChild(progressSection);
 
-    // Node view (CompletionTree) replaces the classic list by default; the
-    // list stays one click away for bulk select, search and fine sliders.
-    var treeApi = global.CompletionTree || null;
-    var viewMode = treeApi ? loadViewModePreference() : 'list';
-    var nodeView = null;
-    var viewSection = document.createElement('section');
-    viewSection.className = 'tp-completion-view-section';
-    var nodeHostEl = document.createElement('div');
-    nodeHostEl.className = 'ct-view-host';
-    if (treeApi) {
-      var viewSwitchRow = document.createElement('div');
-      viewSwitchRow.className = 'ct-viewswitch-row';
-      var viewSwitch = document.createElement('div');
-      viewSwitch.className = 'ct-viewswitch';
-      viewSwitch.setAttribute('role', 'group');
-      viewSwitch.setAttribute('aria-label', 'Affichage des sous-tâches');
-      [
-        { mode: 'nodes', label: 'Nœuds', icon: 'hierarchy-2' },
-        { mode: 'list', label: 'Liste', icon: 'list' },
-      ].forEach(function (spec) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'ct-viewswitch-btn';
-        btn.dataset.mode = spec.mode;
-        btn.innerHTML =
-          '<i class="ti ti-' + spec.icon + '" aria-hidden="true"></i>' +
-          '<span>' + spec.label + '</span>';
-        btn.addEventListener('click', function () {
-          setViewMode(spec.mode);
-        });
-        viewSwitch.appendChild(btn);
-      });
-      viewSwitchRow.appendChild(viewSwitch);
-      viewSection.appendChild(viewSwitchRow);
-    }
-    viewSection.appendChild(nodeHostEl);
-    containerEl.appendChild(viewSection);
-    containerEl.classList.toggle('is-node-view', viewMode === 'nodes');
-
-    function syncViewSwitchUi() {
-      viewSection.querySelectorAll('.ct-viewswitch-btn').forEach(function (btn) {
-        btn.setAttribute('aria-pressed', btn.dataset.mode === viewMode ? 'true' : 'false');
-      });
-    }
-
-    function setViewMode(mode) {
-      var next = mode === 'nodes' && treeApi ? 'nodes' : 'list';
-      if (next === viewMode) return;
-      viewMode = next;
-      saveViewModePreference(next);
-      containerEl.classList.toggle('is-node-view', next === 'nodes');
-      syncViewSwitchUi();
-      renderList();
-      onResize();
-    }
-
-    function nodeViewApi() {
-      function nestedLive(parentId, nestedId) {
-        var parent = findLiveItem(parentId);
-        if (!parent || !Array.isArray(parent.items)) return null;
-        for (var i = 0; i < parent.items.length; i++) {
-          if (parent.items[i].id === nestedId) return parent.items[i];
-        }
-        return null;
-      }
-      return {
-        CT: CT,
-        getData: function () {
-          return data;
-        },
-        getCardName: function () {
-          return masterTitle;
-        },
-        getLinkedSnapshots: function () {
-          return linkedSnapshots;
-        },
-        onResize: onResize,
-        createEstimateChip: function (cfg) {
-          return createEstimateChip(
-            CT,
-            Object.assign(
-              { t: trelloT, scales: currentEstimateScales(), compact: true },
-              cfg
-            )
-          );
-        },
-        createBlockedMotif: createBlockedMotifField,
-        openLinked: openLinkedCard,
-        toggleDone: function (node, origin) {
-          if (node.linked) {
-            openLinkedCard(node.linkedCardId);
-            return;
-          }
-          if (node.depth === 1) {
-            var live = findLiveItem(node.id);
-            if (!live) return;
-            if (CT.isItemBlocked(live)) {
-              data = CT.setItemBlocked(data, live.id, false);
-              playCompletionUiSound('unblock');
-              emitChange();
-              notifyBlockedChange('item-check');
-              onResize();
-              return;
-            }
-            var wasDone = !!live.done;
-            data = CT.applyItemProgress(data, live.id, wasDone ? 0 : 100);
-            emitChange();
-            if (wasDone) playCompletionUiSound('uncomplete');
-            else playSubtaskCompletePop(origin, { sound: true });
-            onResize();
-            return;
-          }
-          var nested = nestedLive(node.parentId, node.id);
-          if (!nested) return;
-          var nestedWasDone = !!nested.done;
-          data = CT.applyChecklistItemProgress(
-            data,
-            node.parentId,
-            node.id,
-            nestedWasDone ? 0 : 100
-          );
-          emitChange();
-          if (nestedWasDone) playCompletionUiSound('uncomplete');
-          else playSubtaskCompletePop(origin, { sound: true });
-          onResize();
-        },
-        toggleBlocked: function (node) {
-          toggleItemBlocked(node.id);
-        },
-        remove: function (node) {
-          if (node.depth === 1) {
-            removeItem(node.id);
-            return;
-          }
-          data = CT.removeChecklistItem(data, node.parentId, node.id);
-          playCompletionUiSound('trash');
-          emitChange();
-          onResize();
-        },
-        add: function (parentId, text) {
-          var trimmed = (text || '').trim();
-          if (!trimmed) return;
-          if (parentId) {
-            var result = CT.addChecklistItem(data, parentId, trimmed);
-            if (!result || !result.item) return;
-            data = result.data;
-            playCompletionUiSound('add');
-            emitChange();
-            onResize();
-            return;
-          }
-          var item = addItem(trimmed);
-          if (item) refineItemAfterCommit(item.id, trimmed);
-        },
-        move: function (node, dir) {
-          var list =
-            node.depth === 1
-              ? data.items
-              : (findLiveItem(node.parentId) || {}).items;
-          if (!Array.isArray(list)) return;
-          var from = -1;
-          for (var i = 0; i < list.length; i++) {
-            if (list[i].id === node.id) {
-              from = i;
-              break;
-            }
-          }
-          var to = from + (dir < 0 ? -1 : 1);
-          if (from < 0 || to < 0 || to >= list.length) return;
-          var moved = list.splice(from, 1)[0];
-          list.splice(to, 0, moved);
-          emitChange();
-          onResize();
-        },
-        rename: function (node, text) {
-          data =
-            node.depth === 1
-              ? CT.applyItemText(data, node.id, text)
-              : CT.applyChecklistItemText(data, node.parentId, node.id, text);
-          emitChange();
-        },
-        setEstimate: function (node, minutes) {
-          if (node.depth === 1) {
-            delete estimatingItemIds[node.id];
-            data = CT.applyItemEstimate(data, node.id, minutes, { lock: true });
-          } else {
-            data = CT.applyChecklistItemEstimate(data, node.parentId, node.id, minutes, {
-              lock: true,
-            });
-          }
-          emitChange();
-          onResize();
-        },
-        setReasons: function (node, reasons) {
-          data = CT.setItemBlockedReasons(data, node.id, reasons);
-          emitChange();
-          notifyBlockedChange('item-reason');
-          onResize();
-        },
-      };
-    }
-
-    function renderNodeView() {
-      if (viewMode !== 'nodes' || !treeApi) return;
-      if (!nodeView) nodeView = treeApi.mountNodeView(nodeHostEl, nodeViewApi());
-      else nodeView.render();
-    }
-    syncViewSwitchUi();
-
     var listSection = document.createElement('section');
     listSection.className = 'tp-completion-list-section';
     listSection.innerHTML =
@@ -2522,10 +2294,11 @@
     var doneSection = document.createElement('section');
     doneSection.className = 'tp-completion-done-section is-empty';
     doneSection.innerHTML =
-      '<label class="tp-completion-show-done" id="completionShowDoneLabel">' +
-      '<input type="checkbox" class="tp-completion-show-done-checkbox" id="completionShowDone" />' +
+      '<button type="button" class="tp-completion-show-done" id="completionShowDone" ' +
+      'aria-expanded="false" aria-controls="completionDoneList">' +
+      '<i class="ti ti-chevron-down tp-completion-show-done-chevron" aria-hidden="true"></i>' +
       '<span class="tp-completion-show-done-text">Afficher les t\u00e2ches termin\u00e9es</span>' +
-      '</label>' +
+      '</button>' +
       '<ul class="tp-completion-list tp-completion-done-list" id="completionDoneList" ' +
       'aria-label="T\u00e2ches termin\u00e9es" hidden></ul>';
     containerEl.appendChild(doneSection);
@@ -2580,8 +2353,7 @@
     var searchInput = containerEl.querySelector('#completionSearch');
     var filterSelect = containerEl.querySelector('#completionFilter');
     var filterEmptyEl = containerEl.querySelector('#completionFilterEmpty');
-    var showDoneCheckbox = containerEl.querySelector('#completionShowDone');
-    var showDoneLabel = containerEl.querySelector('#completionShowDoneLabel');
+    var showDoneToggle = containerEl.querySelector('#completionShowDone');
     // masterTitleEl created above in progress panel
     var addInput = containerEl.querySelector('#completionAddInput');
     var addBtn = containerEl.querySelector('#completionAddBtn');
@@ -2601,9 +2373,10 @@
     var suggestionsLoading = false;
     var suggestionsSeq = 0;
     var showCompleted = loadShowDonePreference();
+    // Item ids whose progress panel is open; survives list rebuilds.
+    var openItemDetailIds = Object.create(null);
     var searchQuery = '';
     var statusFilter = 'all';
-    showDoneCheckbox.checked = showCompleted;
 
     function syncMasterTitleUi(options) {
       options = options || {};
@@ -3255,9 +3028,8 @@
       var showList = shouldShowDoneList(doneCount);
       doneSection.classList.toggle('is-empty', !hasDone);
       doneSection.classList.toggle('is-showing', showList);
-      showDoneLabel.hidden = !hasDone;
-      showDoneCheckbox.disabled = !hasDone;
-      showDoneCheckbox.checked = showCompleted;
+      showDoneToggle.hidden = !hasDone;
+      showDoneToggle.setAttribute('aria-expanded', showList ? 'true' : 'false');
       doneListEl.hidden = !showList;
     }
 
@@ -3827,7 +3599,7 @@
       ) {
         showCompleted = true;
         saveShowDonePreference(true);
-        showDoneCheckbox.checked = true;
+        showDoneToggle.setAttribute('aria-expanded', 'true');
       }
       if (opts.animateItemId) {
         renderListWithFlip(opts.animateItemId, opts.flipWasDone);
@@ -4217,7 +3989,7 @@
         if (data.items.length && !showCompleted) {
           showCompleted = true;
           saveShowDonePreference(true);
-          showDoneCheckbox.checked = true;
+          showDoneToggle.setAttribute('aria-expanded', 'true');
           // Sliders defer rebuild until change/emitChange (avoid tearing mid-drag).
           if (!opts.deferDoneListReveal) {
             renderList();
@@ -5237,17 +5009,65 @@
         itemValEl.textContent = itemProgressVal + '\u00a0%';
         if (itemBlocked) itemValEl.style.color = BLOCKED_ACCENT;
 
+        // Complete and pause act through the circle's own buttons, so the
+        // rules (unblock first, reasons, sounds) stay in one place.
+        var checkMiniBtn = document.createElement('button');
+        checkMiniBtn.type = 'button';
+        checkMiniBtn.className = 'tp-completion-item-row-check';
+        checkMiniBtn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>';
+        checkMiniBtn.setAttribute('aria-label', 'Marquer comme terminée');
+        checkMiniBtn.title = 'Terminer';
+        checkMiniBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (completeBtn && !completeBtn.disabled) completeBtn.click();
+        });
+
+        var pauseMiniBtn = document.createElement('button');
+        pauseMiniBtn.type = 'button';
+        pauseMiniBtn.className = 'tp-completion-item-row-pause' + (itemBlocked ? ' is-blocked' : '');
+        pauseMiniBtn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i>';
+        pauseMiniBtn.setAttribute('aria-pressed', itemBlocked ? 'true' : 'false');
+        pauseMiniBtn.setAttribute('aria-label', itemBlocked ? 'Débloquer la sous-tâche' : 'Bloquer la sous-tâche');
+        pauseMiniBtn.title = itemBlocked ? 'Débloquer' : 'Bloquer';
+        pauseMiniBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (blockedBtn && !blockedBtn.disabled) blockedBtn.click();
+        });
+
+        var addSubBtn = document.createElement('button');
+        addSubBtn.type = 'button';
+        addSubBtn.className = 'tp-completion-item-row-add';
+        addSubBtn.innerHTML = '<i class="ti ti-plus" aria-hidden="true"></i><span>Ajouter une sous-tâche</span>';
+        addSubBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (checklistUi && checklistUi.addBtn) checklistUi.addBtn.click();
+        });
+
         sliderWrap.appendChild(itemSlider);
+        sliderRow.appendChild(checkMiniBtn);
         sliderRow.appendChild(sliderWrap);
         sliderRow.appendChild(itemValEl);
+        sliderRow.appendChild(pauseMiniBtn);
         details.appendChild(sliderRow);
+        details.appendChild(addSubBtn);
         li.appendChild(details);
 
+        // Remember which progress panels are open so a rebuild (after a drag)
+        // does not fold them back.
+        var detailsOpen = !!openItemDetailIds[item.id];
+        details.hidden = !detailsOpen;
         if (detailsBtn) {
+          detailsBtn.setAttribute('aria-expanded', detailsOpen ? 'true' : 'false');
+          detailsBtn.classList.toggle('is-open', detailsOpen);
           detailsBtn.addEventListener('click', function (e) {
             e.preventDefault();
             var open = details.hidden;
             details.hidden = !open;
+            if (open) openItemDetailIds[item.id] = true;
+            else delete openItemDetailIds[item.id];
             detailsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
             detailsBtn.classList.toggle('is-open', open);
             onResize();
@@ -5784,7 +5604,6 @@
         );
       } finally {
         endSuppressEmptyDraftDiscard();
-        renderNodeView();
         if (global.InsertGap && listEl) {
           global.InsertGap.watch(listEl, {
             item: '.tp-completion-item--depth1',
@@ -5810,8 +5629,8 @@
       }
     }
 
-    showDoneCheckbox.addEventListener('change', function () {
-      showCompleted = !!showDoneCheckbox.checked;
+    showDoneToggle.addEventListener('click', function () {
+      showCompleted = !showCompleted;
       saveShowDonePreference(showCompleted);
       renderList();
       onResize();
@@ -6477,13 +6296,8 @@
       },
       refreshSuggestions: refreshSuggestions,
       focusAddInput: function () {
-        if (viewMode === 'nodes' && nodeView) nodeView.focusAdd();
-        else addInput.focus();
+        addInput.focus();
       },
-      getViewMode: function () {
-        return viewMode;
-      },
-      setViewMode: setViewMode,
       completeAllTasks: completeAllTasks,
       resetAllTasks: resetAllTasks,
       el: containerEl,

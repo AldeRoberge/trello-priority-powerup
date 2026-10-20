@@ -4555,16 +4555,18 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   display: none;
 }
 
-/* Afficher les tâches terminées — quiet checkbox row */
+/* "Afficher les tâches terminées": collapsible section header */
 .tp-completion-show-done {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: fit-content;
   max-width: 100%;
   margin: 0;
   padding: 6px 8px;
+  border: 0;
   border-radius: var(--completion-control-radius, 8px);
+  background: transparent;
   color: var(--tp-text-subtle);
   font: inherit;
   font-size: 14px;
@@ -4583,26 +4585,58 @@ html[data-color-mode="dark"] .tp-completion-item--nested {
   color: var(--tp-text);
 }
 
-.tp-completion-show-done:has(.tp-completion-show-done-checkbox:focus-visible) {
+.tp-completion-show-done:focus-visible {
+  outline: none;
   box-shadow: var(--slider-focus-ring, 0 0 0 3px rgba(12, 102, 228, 0.28));
 }
 
-.tp-completion-show-done-checkbox {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  flex: none;
-  accent-color: var(--tp-primary, #0c66e4);
-  cursor: pointer;
+.tp-completion-show-done-chevron {
+  font-size: 14px;
+  transition: transform 0.15s ease;
 }
 
-.tp-completion-show-done-checkbox:disabled {
-  cursor: default;
+.tp-completion-done-section.is-showing .tp-completion-show-done-chevron {
+  transform: rotate(-180deg);
 }
 
 .tp-completion-show-done-text {
   min-width: 0;
   line-height: 1.3;
+}
+
+/* Progress row of a subtask: check · slider · % · pause, then "Ajouter une sous-tâche" */
+.tp-completion-item-row-check,
+.tp-completion-item-row-pause,
+.tp-completion-item-row-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-subtle);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tp-completion-item-row-check:hover,
+.tp-completion-item-row-pause:hover,
+.tp-completion-item-row-add:hover {
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.08));
+  color: var(--tp-text);
+}
+
+.tp-completion-item-row-pause.is-blocked {
+  color: var(--tp-danger, #c9372c);
+}
+
+.tp-completion-item-row-add {
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .tp-completion-done-list {

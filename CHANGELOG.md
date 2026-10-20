@@ -3,6 +3,9 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-10-20
+- Sous-tâches : la liste des tâches terminées se replie comme une section, le panneau de progression reste ouvert après un glissement, et il a une coche pour terminer, une pause pour bloquer et un bouton « Ajouter une sous-tâche ». Le mode Nœuds est retiré.
+
 ## 2026-10-19
 - Assistant : un bouton copie la conversation avec le détail technique (requêtes, réponses brutes, contexte envoyé) pour le déboguer.
 - Tableau : les sous-tâches d’une carte s’affichent en lignes filles sous la carte, avec une flèche pour les déplier ou replier.
