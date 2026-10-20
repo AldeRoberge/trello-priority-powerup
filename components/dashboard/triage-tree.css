@@ -41,6 +41,7 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   cursor: pointer;
 }
 .tt-project:hover { background: var(--tp-surface-hover); }
+.tt-project.is-sel, .tt-project.is-sel:hover { background: var(--tp-surface-active); }
 .tt-project > .ti { flex: none; font-size: 15px; color: var(--tp-text-muted); }
 .tt-project .tt-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .tt-project.is-free { font-weight: 500; color: var(--tp-text-muted); }

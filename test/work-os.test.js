@@ -146,6 +146,16 @@ describe('WorkOS', () => {
       assert.equal(WO.projectOf(null, 'card'), null);
     });
 
+    it('withNodeEdit renames a project and sets or clears its note, leaving the links alone', () => {
+      const named = WO.withNodeEdit(goals(), 'p', { name: 'Accueil 2', desc: 'Refonte' });
+      assert.equal(named.nodes.find((n) => n.id === 'p').name, 'Accueil 2');
+      assert.equal(named.nodes.find((n) => n.id === 'p').desc, 'Refonte');
+      assert.equal(named.links.length, goals().links.length);
+      const cleared = WO.withNodeEdit(named, 'p', { desc: '  ' });
+      assert.equal('desc' in cleared.nodes.find((n) => n.id === 'p'), false);
+      assert.equal(WO.withNodeEdit(goals(), 'p', { name: ' ' }).nodes.find((n) => n.id === 'p').name, 'Page d’accueil');
+    });
+
     it('withTaskProject moves a task to another project and keeps its dependencies', () => {
       const next = WO.withTaskProject(goals(), 'card', 'q');
       assert.equal(WO.projectOf(next, 'card').name, 'Newsletter');

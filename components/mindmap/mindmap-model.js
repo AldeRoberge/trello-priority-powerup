@@ -204,7 +204,10 @@
       var level = n && LEVEL_ALIASES[n.level] ? LEVEL_ALIASES[n.level] : n && n.level;
       if (!name || !n.id || ids[n.id] || !levelById(level)) return;
       ids[n.id] = true;
-      nodes.push({ id: String(n.id), level: level, name: name });
+      var node = { id: String(n.id), level: level, name: name };
+      var desc = typeof n.desc === 'string' ? n.desc.replace(/\r\n?/g, '\n').trim().slice(0, 2000) : '';
+      if (desc) node.desc = desc;
+      nodes.push(node);
     });
     var links = [];
     var seen = Object.create(null);

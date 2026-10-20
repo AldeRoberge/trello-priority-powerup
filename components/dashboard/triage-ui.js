@@ -411,5 +411,62 @@
     return root;
   }
 
-  global.TriageUI = { detail: detail, segmented: segmented };
+  /**
+   * The pane of a project (a node of the goal map) when its line is clicked in the tree: name and note editable
+   * in place, then what the map knows about it. `p` is a WorkOS.projectChain row plus `desc`.
+   *   host: { saveProject(id, { name?, desc? }), openTasks(), open }
+   */
+  function projectDetail(p, host) {
+    var root = h('div', { class: 'tri tri-project', 'data-project': p.id });
+    var body = h('div', { class: 'tri-body' });
+    root.appendChild(body);
+    body.appendChild(h('div', { class: 'tri-top' }, [
+      h('span', { class: 'tri-origin' }, [icon('stack-2'), text('Projet')]),
+    ]));
+
+    function field(cls, label, value, placeholder, onSave, single) {
+      var el = h('textarea', { class: cls, rows: '1', maxlength: single ? '120' : '2000', spellcheck: 'true', 'aria-label': label, placeholder: placeholder || null });
+      el.value = value || '';
+      function fit() {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+      }
+      el.addEventListener('input', fit);
+      el.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Escape') { el.value = value || ''; fit(); el.blur(); }
+        else if (e.key === 'Enter' && !e.isComposing && (single || e.ctrlKey || e.metaKey)) { e.preventDefault(); el.blur(); }
+      });
+      el.addEventListener('blur', function () {
+        var v = single ? clean(el.value) : el.value.trim();
+        if (single && !v) { el.value = value || ''; fit(); return; }
+        if (v === (value || '')) return;
+        value = v;
+        el.value = v;
+        onSave(v);
+      });
+      setTimeout(fit, 0);
+      return el;
+    }
+    body.appendChild(field('tri-title', 'Nom du projet', p.name, '', function (v) { host.saveProject(p.id, { name: v }); }, true));
+    body.appendChild(field('tri-note', 'Note du projet', p.desc, 'Cliquer pour ajouter…', function (v) { host.saveProject(p.id, { desc: v }); }, false));
+
+    function fact(iconName, label, value, empty) {
+      return h('div', { class: 'tri-fact' + (value ? '' : ' is-empty') }, [
+        icon(iconName),
+        h('span', { class: 'tri-fact-l', text: label }),
+        h('span', { class: 'tri-fact-v', text: value || empty }),
+      ]);
+    }
+    var step = p.step && p.step.text ? p.step.text : '';
+    body.appendChild(h('div', { class: 'tri-facts' }, [
+      fact('flag', 'Résultat', p.outcome, 'Aucun'),
+      fact('player-track-next', 'Prochaine action', step, 'Aucune'),
+      fact('checklist', 'Tâches ouvertes', p.openCount ? String(p.openCount) : '', 'Aucune'),
+      fact('progress', 'Avancement', p.work == null ? '' : p.work + ' %', 'Aucun'),
+    ]));
+    return root;
+  }
+
+  global.TriageUI = { detail: detail, projectDetail: projectDetail, segmented: segmented };
 })(typeof window !== 'undefined' ? window : this);

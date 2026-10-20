@@ -10,7 +10,8 @@
  *                 'task'    { key, row, depth, open, kids, done, total }
  *                 'sub'     { key, taskId, text, done, blocked, linked, depth, open, kids }
  *   TriageTree.render(built, ctx) -> DocumentFragment
- *     ctx: { taskEl(row) -> element (the existing Triage row), toggle(key), select(taskId) }
+ *     ctx: { taskEl(row) -> element (the existing Triage row), toggle(key), select(taskId),
+ *            selectProject(projectId), selectedProject (id of the project shown in the pane) }
  *   TriageTree.carryOver(oldEl, newEl, ctx)  puts the tree decoration of a redrawn task row back
  *   TriageTree.prefs.{treeOn, setTreeOn, collapsed, setCollapsed}  remembered in localStorage
  *
@@ -97,7 +98,7 @@
     groups.forEach(function (g) {
       var key = 'p:' + g.id;
       var open = !collapsed[key];
-      nodes.push({ kind: 'project', key: key, name: g.name, count: g.rows.length, open: open, free: !!g.free });
+      nodes.push({ kind: 'project', key: key, id: g.id, name: g.name, count: g.rows.length, open: open, free: !!g.free });
       if (!open) return;
       g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks); });
     });
@@ -139,13 +140,18 @@
   }
 
   function projectEl(n, ctx) {
-    var row = el('div', 'tt-project' + (n.free ? ' is-free' : ''), { role: 'treeitem', 'aria-level': '1', 'aria-expanded': String(n.open), 'data-key': n.key, tabindex: '-1' });
+    var pickable = !n.free && n.id && typeof ctx.selectProject === 'function';
+    var row = el('div', 'tt-project' + (n.free ? ' is-free' : '') + (pickable && ctx.selectedProject === n.id ? ' is-sel' : ''), { role: 'treeitem', 'aria-level': '1', 'aria-expanded': String(n.open), 'data-key': n.key, tabindex: '-1' });
     indent(row, 0);
     row.appendChild(chevron(n.open, true, function () { ctx.toggle(n.key); }));
     row.appendChild(icon(n.free ? 'inbox' : 'stack-2'));
     row.appendChild(el('span', 'tt-name', { text: n.name, title: n.name }));
     row.appendChild(el('span', 'tt-count', { text: String(n.count) }));
-    row.addEventListener('click', function () { ctx.toggle(n.key); });
+    // The arrow folds; the rest of the line opens the project in the pane (the free group has none: it folds).
+    row.addEventListener('click', function () {
+      if (pickable) ctx.selectProject(n.id);
+      else ctx.toggle(n.key);
+    });
     return row;
   }
 

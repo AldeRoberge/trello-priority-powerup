@@ -1087,9 +1087,44 @@
       return built ? built.tasks : q;
     }
 
+    /** The project shown in the pane (clicked in the tree), with its note; null once another task is selected. */
+    function pickedProject() {
+      var ps = state.projectSel;
+      if (!ps || ps.at !== state.selected) return null;
+      var p = (state.projects || []).filter(function (x) { return x.id === ps.id; })[0];
+      if (!p) return null;
+      var node = ((state.goals && state.goals.nodes) || []).filter(function (n) { return n && n.id === p.id; })[0];
+      return Object.assign({}, p, { desc: node && node.desc ? node.desc : '' });
+    }
+
+    /** Name or note of a project, saved in the goal map of the Mindmap (same path as setProject). */
+    function saveProject(id, patch) {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG || typeof GG.save !== 'function' || !WO() || !WO().withNodeEdit) return setStatus('Projets indisponibles ici.', 'error');
+      var next = WO().withNodeEdit(state.goals, id, patch);
+      state.goals = next;
+      (state.projects || []).forEach(function (p) { if (p.id === id && patch.name) p.name = patch.name; });
+      render();
+      GG.save(t, next).then(function (saved) {
+        state.goals = saved;
+        setStatus('Projet enregistré', 'ok');
+      }, function (err) {
+        if (err && err.reason === 'conflict') setStatus('Les projets ont changé ailleurs : rechargés.', 'error');
+        else fail(err);
+        reload({ quiet: true });
+      });
+    }
+
     function treeCtx(selId) {
+      var picked = pickedProject();
       return {
-        taskEl: function (row) { return triageRow(row, row.id === selId); },
+        selectedProject: picked ? picked.id : '',
+        selectProject: function (id) {
+          state.projectSel = { id: id, at: state.selected };
+          state.docOpen = false;
+          render();
+        },
+        taskEl: function (row) { return triageRow(row, !picked && row.id === selId); },
         toggle: function (key) {
           if (state.triageFold[key]) delete state.triageFold[key];
           else state.triageFold[key] = true;
@@ -1098,6 +1133,7 @@
         },
         select: function (id) {
           state.selected = id;
+          state.projectSel = null;
           state.docOpen = false;
           render();
         },
@@ -1139,6 +1175,7 @@
         'data-card': r.id,
         onclick: function () {
           state.selected = r.id;
+          state.projectSel = null;
           state.docOpen = false;
           render();
           // On a phone the pane is above the list: bring it into view.
@@ -1315,7 +1352,9 @@
       var list = triageListEl(q, sel.id);
       els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
         h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
-        h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [global.TriageUI.detail(sel, triageHost())]),
+        h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pickedProject() && global.TriageUI.projectDetail
+          ? global.TriageUI.projectDetail(pickedProject(), { saveProject: saveProject })
+          : global.TriageUI.detail(sel, triageHost())]),
       ]));
     }
 

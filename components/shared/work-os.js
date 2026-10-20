@@ -212,6 +212,21 @@
     return { nodes: nodes, links: links };
   }
 
+  /** The goal map with the node `id` changed: patch.name and/or patch.desc (an empty desc clears it). */
+  function withNodeEdit(goals, id, patch) {
+    var nodes = ((goals && goals.nodes) || []).map(function (n) {
+      if (!n || n.id !== id) return n;
+      var next = Object.assign({}, n);
+      if (patch && typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name;
+      if (patch && typeof patch.desc === 'string') {
+        if (patch.desc.trim()) next.desc = patch.desc;
+        else delete next.desc;
+      }
+      return next;
+    });
+    return { nodes: nodes, links: ((goals && goals.links) || []).slice() };
+  }
+
   /** The project node a task sits under (nearest first), or null. */
   function projectOf(goals, taskId) {
     var chain = indexGoals(goals).chain(taskId);
@@ -407,6 +422,7 @@
     places: places,
     withTaskProject: withTaskProject,
     projectOf: projectOf,
+    withNodeEdit: withNodeEdit,
     placeLabel: placeLabel,
     wip: wip,
     review: review,
