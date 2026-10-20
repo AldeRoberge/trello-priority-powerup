@@ -296,16 +296,49 @@ describe('TodayModel', () => {
     });
   });
 
+  describe('offRanges', () => {
+    const WED = '2026-10-14'; // mercredi
+    const FRI = '2026-10-16';
+    const SAT = '2026-10-17';
+    const SUN = '2026-10-18';
+
+    it('strikes early morning and late afternoon on a weekday', () => {
+      assert.deepEqual(TM.offRanges(WED, at(6), at(19)), [
+        { start: at(6), end: TM.WORK_START },
+        { start: TM.AFTERNOON_OFF, end: at(19) },
+      ]);
+      assert.equal(TM.WORK_START, at(8, 15));
+      assert.equal(TM.AFTERNOON_OFF, at(16, 45));
+    });
+
+    it('strikes Friday from noon, and the whole weekend', () => {
+      assert.deepEqual(TM.offRanges(FRI, at(6), at(19)), [
+        { start: at(6), end: TM.WORK_START },
+        { start: TM.FRIDAY_OFF, end: at(19) },
+      ]);
+      assert.equal(TM.FRIDAY_OFF, at(12));
+      assert.deepEqual(TM.offRanges(SAT, at(8), at(18)), [{ start: at(8), end: at(18) }]);
+      assert.deepEqual(TM.offRanges(SUN, at(8), at(18)), [{ start: at(8), end: at(18) }]);
+    });
+
+    it('drops a band that the window does not show, and treats a bad day as a weekday', () => {
+      assert.deepEqual(TM.offRanges(WED, at(9), at(16)), []);
+      assert.deepEqual(TM.offRanges(FRI, at(9), at(12)), []);
+      assert.deepEqual(TM.offRanges('', at(6), at(19)), TM.offRanges(WED, at(6), at(19)));
+      assert.deepEqual(TM.offRanges(WED, at(10), at(10)), []);
+    });
+  });
+
   describe('windowRange and freeGaps', () => {
-    it('shows at least 8 h to 18 h', () => {
-      assert.deepEqual(TM.windowRange([], null), { from: at(8), to: at(18) });
+    it('shows at least 6 h to 19 h, so early morning and late afternoon stay on screen', () => {
+      assert.deepEqual(TM.windowRange([], null), { from: at(6), to: at(19) });
     });
 
     it('widens for blocks outside that and for the clock', () => {
       assert.deepEqual(TM.windowRange([{ start: at(6, 30), end: at(7) }, { start: at(19), end: at(21, 15) }], null), { from: at(6), to: at(22) });
       assert.equal(TM.windowRange([], at(20, 10)).to, at(22));
       assert.equal(TM.windowRange([], at(6, 30)).from, at(6));
-      assert.equal(TM.windowRange([], at(2)).from, at(8));
+      assert.equal(TM.windowRange([], at(2)).from, at(6));
     });
 
     it('lists free stretches of at least the asked length', () => {

@@ -108,6 +108,7 @@
       nameAsked: false,
       started: false,
       blockById: {},
+      preview: null,
     };
 
     /* ── Things that live longer than one render ──────────────────── */
@@ -117,7 +118,7 @@
       var typing = a && ui.root && ui.root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
       var menu = document.querySelector('.tp-context-menu, .wx-pop');
       var fields = global.CardFields && typeof global.CardFields.isOpen === 'function' && global.CardFields.isOpen();
-      return !!(typing || ui.drag || ui.resizing || menu || fields);
+      return !!(typing || ui.drag || ui.resizing || menu || fields || ui.preview);
     }
 
     function start() {
@@ -136,6 +137,18 @@
           if (api.section() === 'today') api.rerender();
         });
       }
+      document.addEventListener('mousedown', function (e) {
+        if (!ui.preview || ui.preview.hold) return;
+        var t = e.target;
+        if (ui.preview.el.contains(t)) return;
+        if (t.closest && t.closest('.td-block, .tp-context-menu, .cf-pop')) return;
+        closePreview();
+      }, true);
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || !ui.preview || ui.preview.hold) return;
+        if (global.CardFields && typeof global.CardFields.isOpen === 'function' && global.CardFields.isOpen()) return;
+        closePreview();
+      });
     }
 
     function askName() {
@@ -627,6 +640,60 @@
       if (d) d.hidden = true;
     }
 
+    function closePreview() {
+      var p = ui.preview;
+      if (!p) return;
+      ui.preview = null;
+      if (p.ro) p.ro.disconnect();
+      if (p.quick && typeof p.quick.destroy === 'function') p.quick.destroy();
+      if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el);
+    }
+
+    /** The task stays on this page: the same quick card as the Kanban, beside the block. */
+    function openPreview(row, anchor) {
+      if (!row) return;
+      if (ui.preview && ui.preview.id === row.id) { closePreview(); return; }
+      closePreview();
+      var el = h('div', { class: 'td-pop', role: 'dialog', 'aria-label': row.name || 'Carte' });
+      document.body.appendChild(el);
+      var box = { id: row.id, el: el, quick: null, hold: false, anchor: anchor };
+      ui.preview = box;
+      function place() {
+        if (ui.preview !== box || !anchor.isConnected) return;
+        var rect = anchor.getBoundingClientRect();
+        if (!(rect.width > 0)) return;
+        var w = el.offsetWidth || 320;
+        var hh = el.offsetHeight || 120;
+        var left = rect.right + 8;
+        if (left + w > window.innerWidth - 8) left = Math.max(8, rect.left - w - 8);
+        var top = rect.top;
+        if (top + hh > window.innerHeight - 8) top = Math.max(8, window.innerHeight - hh - 8);
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+      }
+      if (!global.CardQuick) {
+        el.appendChild(h('div', { class: 'td-pop-name', text: row.name || 'Carte' }));
+        place();
+        return;
+      }
+      box.quick = global.CardQuick.mount(el, {
+        t: api.t,
+        cardId: row.id,
+        name: row.name || '',
+        onOpen: function () { closePreview(); api.openCard(findRow(row.id) || row); },
+        onChange: function () { api.rerender(); },
+        onHold: function (on) { if (ui.preview === box) box.hold = !!on; },
+        onToast: function (m, kind) { if (api.setStatus) api.setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
+        onGone: function () { closePreview(); api.rerender(); },
+      });
+      place();
+      if (global.ResizeObserver) {
+        var ro = new global.ResizeObserver(function () { place(); });
+        ro.observe(el);
+        box.ro = ro;
+      }
+    }
+
     function blockTitle(b) {
       var row = b.row;
       var when = TM().fmtRange(b.start, b.end);
@@ -672,9 +739,12 @@
         title: blockTitle(b),
         style: 'top:' + top + 'px;height:' + height + 'px;left:calc(' + (lane * 100 / lanes) + '% + 2px);width:calc(' + (100 / lanes) + '% - 4px)' + (accent ? ';--ac:' + accent : ''),
       }, kids);
+      el.addEventListener('pointerdown', function (e) { el._py = e.clientY; });
       el.addEventListener('click', function (e) {
+        if (Math.abs(e.clientY - el._py) > 4) return;
         if (e.target.closest && e.target.closest('button, .td-grip')) return;
-        api.openCard(row);
+        e.stopPropagation();
+        openPreview(row, el);
       });
       if (!done) draggable(el, row, function () { return b.end - b.start; }, b.explicit);
       if (resizable) bindResize(el, el.querySelector('.td-grip'), b, scale);
@@ -808,11 +878,26 @@
       ui.scale = scale;
       var grid = h('div', { class: 'td-grid', style: 'height:' + Math.ceil(scale.height) + 'px' });
 
+      var off = TM().offRanges(day.today, scale.from, scale.to);
+      function minuteOff(minute) {
+        for (var i = 0; i < off.length; i++) {
+          if (minute >= off[i].start && minute < off[i].end) return true;
+          if (minute === scale.to && minute === off[i].end) return true;
+        }
+        return false;
+      }
+      grid.appendChild(h('div', { class: 'td-past', style: 'height:' + scale.yOf(ui.nowMin) + 'px' }));
+      off.forEach(function (iv) {
+        var top = scale.yOf(iv.start);
+        var height = scale.yOf(iv.end) - top;
+        if (height < 1) return;
+        grid.appendChild(h('div', { class: 'td-off', style: 'top:' + top + 'px;height:' + height + 'px' }));
+      });
       scale.ticks(30).forEach(function (tk) {
         var hour = tk.minute % 60 === 0;
-        grid.appendChild(h('div', { class: 'td-hr' + (hour ? '' : ' td-hr--half'), style: 'top:' + tk.y + 'px' }, hour ? [h('span', { class: 'td-hr-t', text: TM().fmtClock(tk.minute) })] : []));
+        var cls = 'td-hr' + (hour ? '' : ' td-hr--half') + (minuteOff(tk.minute) ? ' td-hr--off' : '');
+        grid.appendChild(h('div', { class: cls, style: 'top:' + tk.y + 'px' }, hour ? [h('span', { class: 'td-hr-t', text: TM().fmtClock(tk.minute) })] : []));
       });
-      grid.appendChild(h('div', { class: 'td-past', style: 'height:' + scale.yOf(ui.nowMin) + 'px' }));
       ui.wxLayer = buildGutterWeather(scale);
       grid.appendChild(ui.wxLayer);
       blocks.forEach(function (b) { grid.appendChild(blockEl(b, scale, grid)); });

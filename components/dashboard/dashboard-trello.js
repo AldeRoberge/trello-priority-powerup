@@ -4,6 +4,7 @@
  *  - ingest      creates cards in the board's triage list (TableTrello.createRow)
  *  - triage      moves a card to the list of a Statut category, sets priority inputs / estimate
  *  - plan        writes a card's planned day as start + due (GanttTrello.saveCardDates)
+ *  - assign      writes who has a card (members by REST, "Hors Trello" contacts in the stored inputs)
  *  - complete    dueComplete + move to the completed list
  */
 (function (global) {
@@ -262,6 +263,22 @@
     });
   }
 
+  /**
+   * Writes who has a card: change = { members: [Trello member id] | null, contacts: [{ id, name, trelloMemberId? }] | null }.
+   * Members go through the REST API (idMembers), "Hors Trello" contacts into the card's stored inputs;
+   * null leaves that part alone (PeopleBoardModel.handover says which changed).
+   */
+  async function setAssignees(t, cardId, change) {
+    change = change || {};
+    if (change.members) {
+      var st = global.SheetsTrello;
+      if (!st || typeof st.trelloRest !== 'function') throw Object.assign(new Error('rest-unavailable'), { reason: 'rest-unavailable' });
+      var res = await st.trelloRest(t, '/cards/' + encodeURIComponent(cardId), 'PUT', { idMembers: change.members.join(',') });
+      if (res && res.ok === false) throw Object.assign(new Error(res.reason || 'members-failed'), { reason: res.reason });
+    }
+    if (change.contacts) await PT().saveCardInputsById(t, cardId, { customAssignees: change.contacts });
+  }
+
   async function complete(t, row, lists, done) {
     var auth = await GT().ensureRestAuthorized(t);
     if (!auth.ok) throw Object.assign(new Error(auth.reason || 'not-authorized'), { reason: auth.reason });
@@ -458,6 +475,7 @@
     planDay: planDay,
     planAt: planAt,
     restoreDates: restoreDates,
+    setAssignees: setAssignees,
     complete: complete,
     cancel: cancel,
     saveNextStep: saveNextStep,

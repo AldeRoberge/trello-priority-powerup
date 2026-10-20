@@ -3,6 +3,7 @@
  *   Triage        the list of captured cards and, beside it, TriageUI: what the card is, its priority / estimate / day / place,
  *                 then the decision: accept, backlog, waiting, someday, reference, cancel (an undo stays one click away)
  *   Orchestrateur zoom glides from minutes to Vague (wheel eases, columns stretch, the instant under the cursor stays). Each column creates a task in place.
+ *                 Under my row, one row per other person (PeopleBoardUI): drag a card onto theirs to hand it over; the wheel over them scrolls the list.
  *   Aujourd'hui   focus list, the hour-by-hour timeline, and the revue (triage, next step, waiting, work in progress, project outcome).
  * Data and writes: DashboardTrello (Trello is the source of truth); logic: DashboardModel + WorkOS (pure).
  * Keys: 1-3 section · J/K move · A accept · B backlog · E waiting · U someday · R reference · X cancel (Triage).
@@ -16,6 +17,10 @@
   var DT = function () { return global.DashboardTrello; };
   var TM = function () { return global.TableModel; };
   var WO = function () { return global.WorkOS; };
+  var PB = function () { return global.PeopleBoardModel; };
+  // What a dragged card carries besides its id: the row it left ('me' or a person key).
+  var OWNER_TYPE = 'application/x-tp-owner';
+  var ME = 'me'; // the key of my own row (PeopleBoardModel.ME)
 
   var SECTIONS = [
     { key: 'triage', label: 'Triage', icon: 'circle-arrow-down', hint: '1' },
@@ -209,6 +214,18 @@
       icon: row.blocked ? 'player-play' : 'player-pause',
       group: 'Modifier',
     });
+    // Hand the card to someone: the people of the board, "Moi" first (ctx.people = PeopleBoardModel.menuPeople).
+    if (open && (ctx.people || []).length) {
+      items.push({
+        id: 'assign',
+        label: 'Confier à',
+        icon: 'user-share',
+        group: 'Modifier',
+        children: ctx.people.map(function (p) {
+          return { id: 'assign:' + p.key, label: p.name, icon: p.key === 'me' ? 'user-check' : 'user', checked: !!p.on };
+        }),
+      });
+    }
 
     items.push({ id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', group: 'Ouvrir' });
     items.push({
@@ -287,6 +304,9 @@
       landed: false, // first load decides the landing section once
       composer: null, // orchestrator column open for a new task ('pool', 'cal:ISO', 'vague:id')
       composerText: '',
+      me: null, // the viewer as a person (PeopleBoardModel.meOf): my row of the Orchestrateur
+      teamRaw: null, // { members, catalog }: who can be handed a card (see teamList)
+      teamAt: 0,
       filter: '', // side-panel search: narrows every section
       docOpen: false, // the Document pane (paste text and images, get tasks) replaces the card pane of the Triage
       triageTree: !global.TriageTree || global.TriageTree.prefs.treeOn(), // projects > tasks > subtasks, or the flat list
@@ -640,14 +660,45 @@
       return out;
     }
 
-    function menuCtx() {
+    function menuCtx(row) {
+      var team = teamList();
       return {
         today: today,
         lists: state.lists,
         waitingNames: namesForWaiting(),
         canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard),
         vagues: vagueOptions().map(function (v) { return { id: v.id, label: VAGUE_SHORT[v.id] || v.label }; }),
+        people: row && team.length ? PB().menuPeople(row, team, state.me) : [],
       };
+    }
+
+    /** Everyone a card can be handed to besides me (empty when the viewer is unknown or alone on the board). */
+    function teamList() {
+      if (!PB() || !state.me || !state.teamRaw) return [];
+      return PB().people({ members: state.teamRaw.members, catalog: state.teamRaw.catalog, me: state.me, rows: state.rows });
+    }
+
+    /** Who is on the board: me, its members and the "Hors Trello" contacts. Soft: a failure only hides the people rows. */
+    function loadTeam() {
+      var pt = global.PriorityTrello;
+      if (!pt || !PB()) return Promise.resolve();
+      if (state.teamRaw && Date.now() - state.teamAt < 30000) return Promise.resolve();
+      function soft(fn, fallback) {
+        try {
+          return Promise.resolve(fn()).then(function (v) { return v; }, function () { return fallback; });
+        } catch (e) {
+          return Promise.resolve(fallback);
+        }
+      }
+      return Promise.all([
+        soft(function () { return pt.getCurrentMember(t); }, null),
+        soft(function () { return pt.getBoardMembers(t); }, []),
+        soft(function () { return pt.getCustomAssigneeCatalog(t); }, []),
+      ]).then(function (r) {
+        state.me = PB().meOf(r[0]);
+        state.teamRaw = { members: r[1] || [], catalog: r[2] || [] };
+        state.teamAt = Date.now();
+      });
     }
 
     function advanceSelection(row) {
@@ -956,6 +1007,11 @@
       if (id.indexOf('wait:') === 0) return exitWait(row, id.slice(5));
       if (id.indexOf('plan:') === 0) return plan(row, id.slice(5));
       if (id.indexOf('vague:') === 0) return plan(row, '', id.slice(6));
+      if (id.indexOf('assign:') === 0) {
+        var heir = PB().byKey(teamList(), state.me, id.slice(7));
+        if (heir && PB().needsHandover(row, 'all', heir)) handOver(row, 'all', heir, null);
+        return;
+      }
       if (id.indexOf('urg:') === 0) {
         var uid = id.slice(4);
         var lab = uid;
@@ -1160,7 +1216,7 @@
           var CM = global.ContextMenu;
           if (!CM || typeof CM.show !== 'function' || !anchor) return;
           var r = anchor.getBoundingClientRect();
-          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, withActions(row, menuEntries(row, menuCtx()), anchor));
+          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, withActions(row, menuEntries(row, menuCtx(row)), anchor));
         },
       };
     }
@@ -1377,6 +1433,43 @@
       render();
     }
 
+    /**
+     * Hands a card from the row `from` ('all' = every current person) to `to` (a person of PeopleBoardModel), and
+     * plans it at the same time when `when` = { iso, vague, time } (a drop on another day). One message, one undo
+     * (button or Ctrl+Z) puts the people and the day back.
+     */
+    function handOver(row, from, to, when) {
+      var change = PB().handover(row, from, to);
+      var was = {
+        assignees: (row.assignees || []).map(function (a) { return Object.assign({}, a); }),
+        customs: ((row.inputs && row.inputs.customAssignees) || []).map(function (c) { return Object.assign({}, c); }),
+        dates: { due: row.due || '', start: row.start || '', startTime: row.startTime || '', dueTime: row.dueTime || '', dueVague: row.dueVague || '', dueMode: row.dueMode || '' },
+      };
+      var backMembers = was.assignees.filter(function (a) { return !a.custom; }).map(function (a) { return String(a.id); });
+      PB().applyHandover(row, change);
+      save(row, function () { return DT().setAssignees(t, row.id, { members: change.members, contacts: change.contacts }); });
+      // plan() paints and writes the day after the people (the writes of one card run in order).
+      if (when && when.vague) plan(row, '', when.vague);
+      else if (when) plan(row, when.iso, '', when.time || '');
+      function undo() {
+        if (state.undo !== undo) return;
+        state.undo = null;
+        var cur = state.rows.filter(function (r) { return r.id === row.id; })[0] || row;
+        cur.assignees = was.assignees.map(function (a) { return Object.assign({}, a); });
+        cur.inputs = Object.assign({}, cur.inputs || {}, { customAssignees: was.customs.map(function (c) { return Object.assign({}, c); }) });
+        save(cur, function () { return DT().setAssignees(t, cur.id, { members: change.members ? backMembers : null, contacts: change.contacts ? was.customs : null }); });
+        if (when) {
+          Object.assign(cur, was.dates);
+          save(cur, function () { return DT().restoreDates(t, cur.id, was.dates); });
+        }
+        setStatus('Remis comme avant', 'ok');
+        render();
+      }
+      state.undo = undo;
+      setStatus('« ' + row.name + ' »' + (to.key === ME ? ' reprise' : ' confiée à ' + to.name), 'ok', 9000, { label: 'Défaire', run: undo });
+      render();
+    }
+
     function stepLine(row) {
       var text = WO() && WO().stepText ? WO().stepText(row) : '';
       if (!text) return null;
@@ -1389,7 +1482,8 @@
       return h('span', { class: 'db-place', text: label });
     }
 
-    function taskCard(row, showDue) {
+    // owner: the row the card is drawn on ('me' by default, a person key under the people rows).
+    function taskCard(row, showDue, owner) {
       var late = !!(DM().plannedDay(row) && DM().plannedDay(row) < today);
       var hard = WO() && WO().dateKind(row) === 'hard';
       var el = h('div', { class: 'db-task' + (late ? ' is-late' : '') + (hard ? ' is-hard' : ''), draggable: 'true', title: row.name, 'data-id': row.id, 'data-card': row.id }, [
@@ -1406,6 +1500,7 @@
       ]);
       el.addEventListener('dragstart', function (e) {
         e.dataTransfer.setData('text/plain', row.id);
+        e.dataTransfer.setData(OWNER_TYPE, typeof owner === 'string' ? owner : ME);
         e.dataTransfer.effectAllowed = 'move';
         el.classList.add('is-drag');
       });
@@ -1417,6 +1512,7 @@
     function dropZone(el, spec) {
       var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
       var vague = spec && spec.vague ? spec.vague : '';
+      var owner = spec && spec.owner ? spec.owner : ME; // the row this zone belongs to
       el.addEventListener('dragover', function (e) { e.preventDefault(); el.classList.add('is-drop'); });
       el.addEventListener('dragleave', function () { el.classList.remove('is-drop'); });
       el.addEventListener('drop', function (e) {
@@ -1426,12 +1522,22 @@
         var row = state.rows.filter(function (r) { return r.id === id; })[0];
         if (!row) return;
         var wantTime = spec && spec.time ? spec.time : '';
-        if (vague) {
-          if (row.dueVague !== vague) plan(row, '', vague);
+        var curDay = row.dueVague ? '' : (row.start || row.due || '');
+        var moves = vague ? row.dueVague !== vague : (row.dueVague || curDay !== iso || (row.startTime || '') !== wantTime);
+        // Dropped on another person's row: the card changes hands (and day, when the cell is another day's).
+        var from = e.dataTransfer.getData(OWNER_TYPE) || ME;
+        var team = from !== owner && PB() ? teamList() : [];
+        var heir = team.length ? PB().byKey(team, state.me, owner) : null;
+        var giver = heir ? PB().byKey(team, state.me, from) : null;
+        if (heir && PB().needsHandover(row, giver, heir)) {
+          handOver(row, giver, heir, moves ? { iso: iso, vague: vague, time: wantTime } : null);
           return;
         }
-        var curDay = row.dueVague ? '' : (row.start || row.due || '');
-        if (row.dueVague || curDay !== iso || (row.startTime || '') !== wantTime) plan(row, iso, '', wantTime);
+        if (vague) {
+          if (moves) plan(row, '', vague);
+          return;
+        }
+        if (moves) plan(row, iso, '', wantTime);
       });
       return el;
     }
@@ -1596,6 +1702,7 @@
       if (strip && layout.scale !== 'vague' && prevCol > 0) {
         strip.style.gridTemplateColumns = 'repeat(' + strip.children.length + ', ' + layout.colPx + 'px)';
         anchorScroll(strip, x, prevCol, layout.colPx);
+        if (global.PeopleBoardUI) global.PeopleBoardUI.sync(els.main);
       }
       paintZoom(layout);
     }
@@ -1631,6 +1738,18 @@
       if (e.ctrlKey || e.metaKey) return;
       var node = e.target;
       if (node && node.closest && node.closest('input, textarea, select, .db-zoom-range')) return;
+      // Over the people rows the wheel scrolls through the people (sideways it moves the columns with my row).
+      // Without more people than fit, it zooms like everywhere else on the board.
+      var crowd = node && node.closest ? node.closest('.pb-people') : null;
+      if (crowd) {
+        var days = els.main.querySelector('.db-board-days');
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+          if (days) days.scrollLeft += e.deltaX * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 120 : 1);
+          e.preventDefault();
+          return;
+        }
+        if (crowd.scrollHeight > crowd.clientHeight + 1) return;
+      }
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       if (!e.deltaY || !(state.zoomP > 0)) return;
       e.preventDefault();
@@ -1645,20 +1764,20 @@
     var MIDDLE = 1;
     els.main.addEventListener('mousedown', function (e) {
       if (e.button !== MIDDLE || state.section !== 'orchestrator') return;
-      if (!e.target.closest || !e.target.closest('.db-board')) return;
+      if (!e.target.closest || !e.target.closest('.db-board, .pb-people')) return;
       e.preventDefault();
     }, true);
     els.main.addEventListener('pointerdown', function (e) {
       if (e.button !== MIDDLE || state.section !== 'orchestrator') return;
       if (!e.target.closest) return;
       if (e.target.closest('input, textarea, select, .db-zoom')) return;
-      var board = e.target.closest('.db-board');
+      var board = e.target.closest('.db-board, .pb-people');
       if (!board) return;
-      var strip = board.querySelector('.db-board-days');
+      var strip = els.main.querySelector('.db-board-days');
       if (!strip) return;
       e.preventDefault();
       e.stopPropagation();
-      var body = e.target.closest('.db-col-body');
+      var body = e.target.closest('.db-col-body') || e.target.closest('.pb-people');
       var pan = {
         id: e.pointerId,
         x: e.clientX,
@@ -1703,12 +1822,16 @@
       })();
       var manual = scale === 'vague' || scale === 'hour' || scale === 'minute';
       var planFrom = (scale === 'hour' || scale === 'minute') ? (state.zoomDay || today) : today;
-      var buckets = DM().horizonPlan(viewRows(), planFrom, scale, state.capacity, vagueOptions(), nowM);
-      var pool = DM().unplanned(viewRows());
-      if (manual && scale !== 'vague' && DM().untimed) pool = pool.concat(DM().untimed(viewRows(), today));
+      // My row is what is mine or nobody's; with other people on the board they get a row each, below.
+      var team = teamList();
+      var everyRow = viewRows();
+      var boardRows = team.length ? PB().mineRows(everyRow, state.me) : everyRow;
+      var buckets = DM().horizonPlan(boardRows, planFrom, scale, state.capacity, vagueOptions(), nowM);
+      var pool = DM().unplanned(boardRows);
+      if (manual && scale !== 'vague' && DM().untimed) pool = pool.concat(DM().untimed(boardRows, today));
       var moves = manual ? [] : (scale === 'day'
-        ? DM().autoPlan(viewRows(), today, HORIZON, state.capacity)
-        : DM().placeAuto(viewRows(), today, scale, state.capacity, vagueOptions()));
+        ? DM().autoPlan(boardRows, today, HORIZON, state.capacity)
+        : DM().placeAuto(boardRows, today, scale, state.capacity, vagueOptions()));
       var autoBtn = moves.length ? h('button', {
         class: 'db-btn db-btn--primary db-auto',
         type: 'button',
@@ -1922,9 +2045,19 @@
         h('span', { class: 'db-col-name', text: 'À planifier' }),
         h('span', { class: 'db-col-count', text: String(pool.length) }),
       ], spacer, poolBody, '');
-      var days = buckets.map(function (b) {
+      function isCurrent(b) {
         var slotNow = b.time && b.date === today && DM().parseClock(b.time) <= nowM && nowM < DM().parseClock(b.endTime);
-        var current = b.time ? slotNow : (b.date && today >= b.date && today < b.end);
+        return b.time ? slotNow : (b.date && today >= b.date && today < b.end);
+      }
+      function bucketSpec(b) {
+        return scale === 'vague'
+          ? { vague: b.vague }
+          : b.time
+            ? { iso: b.date, time: b.time }
+            : { iso: b.date < today ? today : b.date };
+      }
+      var days = buckets.map(function (b) {
+        var current = isCurrent(b);
         var extra = (current ? 'is-today' : '') + (scale === 'day' && isWeekend(b.date) ? ' is-weekend' : '');
         var head = [
           h('span', { class: 'db-col-name', title: scale === 'vague' ? (b.label || null) : null }, [
@@ -1934,11 +2067,7 @@
         ];
         if (scale === 'vague') head.push(h('span', { class: 'db-col-count', text: String(b.tasks.length) }));
         else if (b.used) head.push(h('span', { class: 'db-cap-n' + (b.over ? ' is-over' : ''), text: DM().formatMinutes(b.used) }));
-        var spec = scale === 'vague'
-          ? { vague: b.vague }
-          : b.time
-            ? { iso: b.date, time: b.time }
-            : { iso: b.date < today ? today : b.date };
+        var spec = bucketSpec(b);
         var node = column(extra.trim(), head, scale === 'vague' ? spacer.cloneNode(true) : dayBar(b), b.tasks.map(taskCard), spec);
         var span = bucketRange(b);
         if (span) {
@@ -1950,14 +2079,41 @@
       var colTrack = scale === 'vague'
         ? 'repeat(' + days.length + ',minmax(168px,1fr))'
         : 'repeat(' + days.length + ',' + layout.colPx + 'px)';
+      // One row per other person, on the same columns: what they have, cell by cell, and where a card is handed over.
+      var crowd = team.length && global.PeopleBoardUI ? global.PeopleBoardUI.build({
+        people: team,
+        poolSpec: function (p) { return { iso: '', owner: p.key }; },
+        card: function (r, p) { return taskCard(r, false, p.key); },
+        zone: dropZone,
+        plan: function (p) {
+          var theirs = PB().personRows(everyRow, p);
+          var theirBuckets = DM().horizonPlan(theirs, planFrom, scale, state.capacity, vagueOptions(), nowM);
+          var theirPool = DM().unplanned(theirs);
+          if (manual && scale !== 'vague' && DM().untimed) theirPool = theirPool.concat(DM().untimed(theirs, today));
+          return {
+            count: theirs.filter(function (r) { return DM().isOpen(r) && r.statutKey !== 'triage'; }).length,
+            pool: theirPool,
+            cells: theirBuckets.map(function (b) {
+              var spec = bucketSpec(b);
+              spec.owner = p.key;
+              return { spec: spec, tasks: b.tasks, current: !!isCurrent(b), weekend: scale === 'day' && isWeekend(b.date) };
+            }),
+          };
+        },
+      }) : null;
       var page = h('div', { class: 'db-page db-page--board' }, [
         pageHead('Orchestrateur', null, h('div', { class: 'db-head-tools' }, [scales])),
         h('div', { class: 'db-board' }, [
           poolCol,
           h('div', { class: 'db-board-days', style: 'grid-template-columns:' + colTrack }, days),
         ]),
+        crowd,
       ]);
       els.main.appendChild(page);
+      if (crowd) {
+        var lead = page.querySelector('.db-board-days');
+        if (lead) lead.addEventListener('scroll', function () { global.PeopleBoardUI.sync(page); }, { passive: true });
+      }
       if (!state.zoomTouched && scale !== 'vague') {
         var strip0 = page.querySelector('.db-board-days');
         var n0 = strip0 ? strip0.children.length : 0;
@@ -1993,6 +2149,7 @@
         state.zoomFocalMs = null;
         state.zoomFocalX = null;
       }
+      if (crowd) global.PeopleBoardUI.sync(page);
     }
 
     /* ── 4. Today ──────────────────────────────────────────────────── */
@@ -2024,6 +2181,7 @@
           reopen: function (row) { exitComplete(row, false); },
           unblock: exitBlocked,
           openCard: openCard,
+          setStatus: setStatus,
           createHere: createHere,
           review: reviewBlock,
         });
@@ -2240,7 +2398,7 @@
       if (!opts.quiet) {
         root.innerHTML = global.Skeleton.html('dashboard');
       }
-      return Promise.all([DT().load(t), loadChain()]).then(function (res) {
+      return Promise.all([DT().load(t), loadChain(), loadTeam()]).then(function (res) {
         if (!root.contains(shell)) { root.innerHTML = ''; root.appendChild(shell); }
         state.lists = res[0].lists;
         state.rows = res[0].rows;
@@ -2351,7 +2509,7 @@
         ].concat(field));
         return;
       }
-      var entries = row ? menuEntries(row, menuCtx()) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
+      var entries = row ? menuEntries(row, menuCtx(row)) : pageEntries({ section: state.section, canCreate: !!(DT().listFor(state.lists, ['triage']) && global.NewCard) });
       CM.show(e, withActions(row, entries, anchor || cardEl));
     });
 

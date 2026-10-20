@@ -6,8 +6,8 @@
  * order) into something readable at a glance:
  *   - buildTreeModel        pure data → tree with statuses, order, "next step"
  *   - renderSummaryTree     compact read-only outline for the collapsed header
- *   - mountNodeView         interactive node flow (numbered steps, wires,
- *                           branches) used inside the expanded Progrès section
+ *   - mountNodeView         Parcours: pannable, zoomable step canvas (like the
+ *                           Mindmap) used inside the expanded Progrès section
  * All mutations go through the `api` passed by CompletionUI, so persistence,
  * sounds and celebrations stay in one place.
  */
@@ -259,17 +259,139 @@
    *   createEstimateChip(cfg), createBlockedMotif(cfg), onResize(),
    *   toggleDone(node, anchorRect), toggleBlocked(node), remove(node),
    *   add(parentId|null, text), move(node, dir), rename(node, text),
-   *   setEstimate(node, minutes), setReasons(node, reasons), openLinked(cardId)
+   *   setEstimate(node, minutes), setReasons(node, reasons), openLinked(cardId),
+   *   attach(nodeId, parentId) → bool, openLinker()
    * }
    */
   function mountNodeView(host, api) {
     var CT = api.CT || global.CompletionTrello;
+    var SVGNS = 'http://www.w3.org/2000/svg';
     var root = el('div', 'ct-view');
     host.appendChild(root);
 
     var selectedId = '';
     var openAddFor = '';
     var pendingFocus = null; // { kind: 'root-add' | 'sub-add' | 'title', id }
+    var view = { x: 12, y: 12, k: 1 };
+    var viewTouched = false;
+    var fitted = false;
+    var linking = null;
+
+    var stage = el('div', 'ct-stage');
+    var bar = el('div', 'ct-stage-bar');
+    var barLeft = el('div', 'ct-stage-bar-left');
+    var barRight = el('div', 'ct-stage-bar-right');
+    var overviewHost = el('div', 'ct-stage-overview');
+    var viewport = el('div', 'ct-viewport');
+    var world = el('div', 'ct-world');
+    var wire = document.createElementNS(SVGNS, 'svg');
+    var wireLine = document.createElementNS(SVGNS, 'line');
+    wire.setAttribute('class', 'ct-wire');
+    wire.setAttribute('aria-hidden', 'true');
+    wire.style.display = 'none';
+    wire.style.pointerEvents = 'none';
+    wire.appendChild(wireLine);
+    viewport.appendChild(world);
+    viewport.appendChild(wire);
+    bar.appendChild(barLeft);
+    bar.appendChild(barRight);
+    stage.appendChild(bar);
+    stage.appendChild(overviewHost);
+    stage.appendChild(viewport);
+    root.appendChild(stage);
+
+    function toolBtn(iconName, label, onClick) {
+      var btn = el('button', 'ct-tool');
+      btn.type = 'button';
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+      btn.appendChild(icon(iconName));
+      btn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      });
+      return btn;
+    }
+
+    var zoomPct = el('button', 'ct-tool ct-zoom-pct');
+    zoomPct.type = 'button';
+    zoomPct.title = 'Zoom 100 %';
+    zoomPct.setAttribute('aria-label', 'Zoom 100 %');
+    zoomPct.addEventListener('click', function (event) {
+      event.preventDefault();
+      zoomTo(1);
+    });
+
+    function applyView() {
+      world.style.transform =
+        'translate(' + view.x.toFixed(1) + 'px,' + view.y.toFixed(1) + 'px) scale(' + view.k.toFixed(3) + ')';
+      var grid = (18 * view.k).toFixed(2);
+      viewport.style.backgroundSize = grid + 'px ' + grid + 'px';
+      viewport.style.backgroundPosition = view.x.toFixed(1) + 'px ' + view.y.toFixed(1) + 'px';
+      zoomPct.textContent = Math.round(view.k * 100) + ' %';
+      wire.setAttribute('width', String(viewport.clientWidth || 0));
+      wire.setAttribute('height', String(viewport.clientHeight || 0));
+    }
+
+    function zoomAt(clientX, clientY, factor) {
+      var rect = viewport.getBoundingClientRect();
+      var px = clientX - rect.left;
+      var py = clientY - rect.top;
+      var k = Math.max(0.35, Math.min(2.5, view.k * factor));
+      view.x = px - ((px - view.x) / view.k) * k;
+      view.y = py - ((py - view.y) / view.k) * k;
+      view.k = k;
+      viewTouched = true;
+      applyView();
+    }
+
+    function zoomTo(k) {
+      var rect = viewport.getBoundingClientRect();
+      zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, k / view.k);
+    }
+
+    function fit() {
+      var w = viewport.clientWidth || 1;
+      var h = viewport.clientHeight || 1;
+      var ww = world.scrollWidth || w;
+      var wh = world.scrollHeight || h;
+      var pad = 24;
+      var k = Math.min(1, (w - pad) / Math.max(1, ww), (h - pad) / Math.max(1, wh));
+      k = Math.max(0.35, k);
+      view.k = k;
+      view.x = Math.max(8, (w - ww * k) / 2);
+      view.y = Math.max(8, (h - wh * k) / 2);
+      applyView();
+    }
+
+    function reveal(node) {
+      if (!node || !node.getBoundingClientRect) return;
+      var vr = viewport.getBoundingClientRect();
+      var er = node.getBoundingClientRect();
+      if (er.top < vr.top + 12) view.y += vr.top + 12 - er.top;
+      if (er.bottom > vr.bottom - 12) view.y -= er.bottom - (vr.bottom - 12);
+      if (er.left < vr.left + 12) view.x += vr.left + 12 - er.left;
+      if (er.right > vr.right - 12) view.x -= er.right - (vr.right - 12);
+      applyView();
+    }
+
+    function focusRootAdd() {
+      pendingFocus = { kind: 'root-add' };
+      render();
+    }
+
+    barLeft.appendChild(toolBtn('plus', 'Nouvelle étape', focusRootAdd));
+    if (typeof api.openLinker === 'function') {
+      barLeft.appendChild(toolBtn('link', 'Lier une carte', function () { api.openLinker(); }));
+    }
+    barRight.appendChild(toolBtn('zoom-out', 'Dézoomer', function () { zoomTo(view.k / 1.2); }));
+    barRight.appendChild(zoomPct);
+    barRight.appendChild(toolBtn('zoom-in', 'Zoomer', function () { zoomTo(view.k * 1.2); }));
+    barRight.appendChild(toolBtn('focus-2', 'Recentrer', function () {
+      viewTouched = true;
+      fit();
+    }));
 
     function nodeMeta(node) {
       var meta = el('div', 'ct-node-meta');
@@ -323,8 +445,19 @@
           (selectedId === node.id ? ' is-selected' : '')
       );
       card.dataset.id = node.id;
+      card.dataset.depth = String(node.depth);
       if (node.parentId) card.dataset.parentId = node.parentId;
       card.appendChild(el('span', 'ct-port ct-port--in'));
+      if (!node.linked && !(node.depth === 1 && (node.children.length || node.status === 'blocked'))) {
+        var out = el('button', 'ct-port ct-port--out');
+        out.type = 'button';
+        out.title = 'Glisser sur une étape';
+        out.setAttribute('aria-label', 'Glisser sur une étape');
+        out.addEventListener('pointerdown', function (event) {
+          startLink(event, node);
+        });
+        card.appendChild(out);
+      }
 
       var head = el('div', 'ct-node-head');
 
@@ -544,10 +677,11 @@
         cardName: api.getCardName(),
         linkedSnapshots: api.getLinkedSnapshots ? api.getLinkedSnapshots() : null,
       });
-      root.replaceChildren();
+      world.replaceChildren();
       root.classList.toggle('is-empty', !model.children.length);
-
-      if (model.children.length) root.appendChild(buildOverview(model));
+      overviewHost.replaceChildren();
+      if (model.children.length) overviewHost.appendChild(buildOverview(model));
+      overviewHost.hidden = !model.children.length;
 
       var steps = el('ol', 'ct-steps');
       var focusEl = null;
@@ -619,7 +753,16 @@
       steps.appendChild(addStep);
       if (pendingFocus && pendingFocus.kind === 'root-add') focusEl = rootGhost.input;
 
-      root.appendChild(steps);
+      world.appendChild(steps);
+      applyView();
+
+      if (!viewTouched && !fitted) {
+        setTimeout(function () {
+          if (viewTouched || fitted) return;
+          fit();
+          fitted = true;
+        }, 0);
+      }
 
       if (focusEl) {
         var target = focusEl;
@@ -627,12 +770,120 @@
         setTimeout(function () {
           try {
             target.focus();
+            reveal(target);
           } catch (e) {
             /* ignore */
           }
         }, 0);
       }
     }
+
+    function clearDrops() {
+      world.querySelectorAll('.ct-node.is-drop').forEach(function (node) {
+        node.classList.remove('is-drop');
+      });
+    }
+
+    function endLink() {
+      linking = null;
+      wire.style.display = 'none';
+      viewport.classList.remove('is-linking');
+      clearDrops();
+    }
+
+    function startLink(event, node) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      var origin = event.currentTarget.getBoundingClientRect();
+      var bounds = viewport.getBoundingClientRect();
+      linking = { id: node.id };
+      viewport.classList.add('is-linking');
+      wire.style.display = '';
+      wireLine.setAttribute('x1', String(origin.left + origin.width / 2 - bounds.left));
+      wireLine.setAttribute('y1', String(origin.top + origin.height / 2 - bounds.top));
+      try { viewport.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+
+      function hitCard(me) {
+        var hit = document.elementFromPoint(me.clientX, me.clientY);
+        var card = hit && hit.closest ? hit.closest('.ct-node[data-id]') : null;
+        if (!card || card.dataset.depth !== '1' || !CT.attachStep) return null;
+        var trial = CT.attachStep(api.getData(), node.id, card.dataset.id);
+        return trial && trial.ok ? card : null;
+      }
+
+      function move(me) {
+        var rect = viewport.getBoundingClientRect();
+        wireLine.setAttribute('x2', String(me.clientX - rect.left));
+        wireLine.setAttribute('y2', String(me.clientY - rect.top));
+        clearDrops();
+        var card = hitCard(me);
+        if (card) card.classList.add('is-drop');
+      }
+
+      function up(me) {
+        viewport.removeEventListener('pointermove', move);
+        viewport.removeEventListener('pointerup', up);
+        viewport.removeEventListener('pointercancel', up);
+        var card = hitCard(me);
+        var targetId = card ? card.dataset.id : '';
+        endLink();
+        if (targetId && typeof api.attach === 'function') api.attach(node.id, targetId);
+      }
+
+      move(event);
+      viewport.addEventListener('pointermove', move);
+      viewport.addEventListener('pointerup', up);
+      viewport.addEventListener('pointercancel', up);
+    }
+
+    viewport.addEventListener('mousedown', function (event) {
+      if (event.button === 1) event.preventDefault();
+    });
+    viewport.addEventListener('pointerdown', function (event) {
+      if (linking) return;
+      if (event.button !== 0 && event.button !== 1) return;
+      if (event.button === 1) event.preventDefault();
+      var onBackground = event.button === 1 ||
+        !(event.target.closest && event.target.closest('.ct-node, button, input, textarea, select, a'));
+      if (!onBackground) return;
+      var start = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+      var moved = false;
+      try { viewport.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+      function move(me) {
+        var dx = me.clientX - start.x;
+        var dy = me.clientY - start.y;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        moved = true;
+        viewTouched = true;
+        viewport.classList.add('is-panning');
+        view.x = start.vx + dx;
+        view.y = start.vy + dy;
+        applyView();
+      }
+      function up() {
+        viewport.removeEventListener('pointermove', move);
+        viewport.removeEventListener('pointerup', up);
+        viewport.removeEventListener('pointercancel', up);
+        viewport.classList.remove('is-panning');
+      }
+      viewport.addEventListener('pointermove', move);
+      viewport.addEventListener('pointerup', up);
+      viewport.addEventListener('pointercancel', up);
+    });
+    viewport.addEventListener('dblclick', function (event) {
+      if (event.target.closest && event.target.closest('.ct-node, button, input, textarea, select, a')) return;
+      event.preventDefault();
+      focusRootAdd();
+    });
+    viewport.addEventListener('wheel', function (event) {
+      if (event.target.closest && event.target.closest('input, textarea, select')) return;
+      event.preventDefault();
+      zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }, { passive: false });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && linking) endLink();
+    });
 
     render();
     return {

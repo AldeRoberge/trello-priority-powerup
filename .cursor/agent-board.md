@@ -83,3 +83,6 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 | genre-type | (released) | Typed genre searches the catalog; a new word creates the genre |
 | block-align | (done) `docs-ui.js` `firstLineCenter`/`showBlockUi`, `docs-ui.css` `.dc-block-ui` height, `docs.html` `?v=align-1`, changelog | Handle centered on the first line. Code block was ~10px high. |
 | quiet-gap | (done) `stepText` + painters in table, kanban, card-quick, dashboard; `contextFlags` empty | Missing structure is no longer painted on the item. Revue count stays. |
+| off-hours | (released) | Planning hatch: early morning, late afternoon, Friday from noon, weekends |
+| imp-click | (done) heat click writes the Importante preset | Clicking Imp saves impact, ease and empressement |
+| plan-pop | (released) | Planner click opens the card beside the block |

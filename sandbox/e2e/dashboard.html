@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/components/shared/linear-pick.css" />
   <link rel="stylesheet" href="/components/shared/card-entities.css" />
   <link rel="stylesheet" href="/components/dashboard/dashboard-ui.css" />
+  <link rel="stylesheet" href="/components/dashboard/people-board-ui.css" />
   <link rel="stylesheet" href="/components/dashboard/triage-ui.css" />
   <link rel="stylesheet" href="/components/dashboard/triage-tree.css" />
   <link rel="stylesheet" href="/components/dashboard/triage-doc-ui.css" />
@@ -28,6 +29,7 @@
   <link rel="stylesheet" href="/components/shared/progress-ring.css" />
   <link rel="stylesheet" href="/components/shared/add-row.css" />
   <link rel="stylesheet" href="/components/shared/weather-ui.css" />
+  <link rel="stylesheet" href="/components/shared/card-quick.css" />
   <link rel="stylesheet" href="/components/dashboard/today-ui.css" />
   <script src="/components/shared/skeleton.js"></script>
 </head>
@@ -79,6 +81,8 @@
   <script src="/components/docs/docs-model.js"></script>
   <script src="/components/dashboard/dashboard-model.js"></script>
   <script src="/components/dashboard/dashboard-trello.js"></script>
+  <script src="/components/dashboard/people-board-model.js"></script>
+  <script src="/components/dashboard/people-board-ui.js"></script>
   <script src="/components/dashboard/triage-ui.js"></script>
   <script src="/components/dashboard/triage-tree.js"></script>
   <script src="/components/dashboard/triage-doc-model.js"></script>
@@ -90,6 +94,7 @@
   <script src="/components/shared/weather.js"></script>
   <script src="/components/shared/weather-ui.js"></script>
   <script src="/components/dashboard/today-model.js"></script>
+  <script src="/components/shared/card-quick.js"></script>
   <script src="/components/dashboard/today-ui.js"></script>
   <script src="/components/shared/work-os.js"></script>
   <script src="/components/shared/assistant-dock.js"></script>
@@ -139,6 +144,18 @@
       mk('c7', 'Revoir la vision', 'lb', { priority: 3, dueVague: 'long-terme', dueMode: 'vague' }),
       mk('c8', 'Bloquer 14 h', 'l1', { priority: 6, due: DashboardModel.isoOf(new Date()), start: DashboardModel.isoOf(new Date()), startTime: '14:00', dueTime: '14:00', estimate: 45 })
     ];
+    // Cards that belong to other people: their rows under the Orchestrateur are not empty (the viewer is Paul, m1).
+    function who(id, name) { return { id: id, name: name, custom: false, trelloId: id }; }
+    rows.push(
+      mk('o1', 'Relire le contrat du fournisseur', 'l1', { priority: 6.2, tierI: 1, tier: 'Haute', estimate: 45, due: fromNow(1), start: fromNow(1), assignees: [who('m2', 'Marie Gagnon')] }),
+      mk('o2', 'Préparer le budget du comité', 'l2', { priority: 7.4, tierI: 1, tier: 'Haute', estimate: 90, due: fromNow(2), start: fromNow(2), assignees: [who('m2', 'Marie Gagnon')] }),
+      mk('o3', 'Valider les plans de la salle', 'l1', { priority: 4.5, estimate: 30, assignees: [who('m2', 'Marie Gagnon')] }),
+      mk('o4', 'Installer les nouveaux postes', 'l2', { priority: 5.5, estimate: 120, due: fromNow(1), start: fromNow(1), assignees: [who('m3', 'Sylvain Roy')] }),
+      mk('o5', 'Appeler le client de Rouyn', 'l1', { priority: 8.1, tierI: 0, tier: 'Critique', estimate: 15, due: fromNow(3), start: fromNow(3), assignees: [who('m3', 'Sylvain Roy'), who('m1', 'Paul Tremblay')] }),
+      mk('o6', 'Mettre à jour le registre', 'l1', { priority: 3.2, tierI: 3, tier: 'Basse', estimate: 20, due: fromNow(4), start: fromNow(4), assignees: [who('m4', 'Léa Côté')] }),
+      mk('o7', 'Organiser la visite des élus', 'lb', { priority: 6.8, estimate: 60, assignees: [who('m6', 'Julie Fortin')] }),
+      mk('o8', 'Rédiger le communiqué', 'l1', { priority: 5.9, estimate: 40, due: fromNow(2), start: fromNow(2), assignees: [{ id: 'person-nadia', name: 'Nadia Pelletier', custom: true, trelloId: '' }], inputs: { places: null, customAssignees: [{ id: 'person-nadia', name: 'Nadia Pelletier' }] } })
+    );
     var log = (window.__log = []);
     var graveyard = {}; // cards a decision took out of the board, kept so that an undo can bring them back
     function find(id) { return rows.filter(function (r) { return r.id === id; })[0]; }
@@ -229,10 +246,12 @@
     TableTrello.archiveCard = function (t, id) { var r = find(id); if (r) graveyard[id] = r; rows = rows.filter(function (x) { return x.id !== id; }); log.push(['archive', id]); return later(); };
     TableTrello.unarchiveCard = function (t, id) { log.push(['unarchive', id]); return Promise.resolve(); };
     // The people, places and labels pickers read the board through these.
-    var members = [{ id: 'm1', fullName: 'Paul Tremblay', username: 'paul' }, { id: 'm2', fullName: 'Marie Gagnon', username: 'marie' }];
+    var members = [{ id: 'm1', fullName: 'Paul Tremblay', username: 'paul' }, { id: 'm2', fullName: 'Marie Gagnon', username: 'marie' }, { id: 'm3', fullName: 'Sylvain Roy', username: 'sylvain' }, { id: 'm4', fullName: 'Léa Côté', username: 'lea' }, { id: 'm5', fullName: 'Karim Benali', username: 'karim' }, { id: 'm6', fullName: 'Julie Fortin', username: 'julie' }, { id: 'm7', fullName: 'Étienne Morin', username: 'etienne' }, { id: 'm8', fullName: 'Camille Lavoie', username: 'camille' }];
+    // The viewer is Paul: his row is the top one of the Orchestrateur, everyone else gets a row below.
+    PriorityTrello.getCurrentMember = function () { return Promise.resolve({ id: 'm1', fullName: 'Paul Tremblay', username: 'paul', initials: 'PT' }); };
     var boardLabels = [{ id: 'lb1', name: 'Urgent', color: 'red' }, { id: 'lb2', name: 'Perso', color: 'blue' }, { id: 'lb3', name: 'Finances', color: 'green' }];
     PriorityTrello.getBoardMembers = function () { return Promise.resolve(members); };
-    PriorityTrello.getCustomAssigneeCatalog = function () { return Promise.resolve([]); };
+    PriorityTrello.getCustomAssigneeCatalog = function () { return Promise.resolve([{ id: 'person-nadia', name: 'Nadia Pelletier' }]); };
     PriorityTrello.getPlaceCatalog = function () { return Promise.resolve([{ id: 'p1', name: 'Bureau' }, { id: 'p2', name: 'Maison' }]); };
     PriorityTrello.getBoardLabels = function () { return Promise.resolve(boardLabels); };
     PriorityTrello.getCardInputsById = function () { return Promise.resolve({ impact: 5, ease: 5, empressement: 'aucun' }); };
@@ -307,7 +326,10 @@
     var baseSaveInputs = PriorityTrello.saveCardInputsById;
     PriorityTrello.saveCardInputsById = function (t, id, patch) {
       var r = find(id);
-      if (r && patch.customAssignees) r.assignees = (r.assignees || []).concat(patch.customAssignees.map(function (c) { return { id: c.id, name: c.name, custom: true, trelloId: '' }; }));
+      if (r && patch.customAssignees) {
+        r.inputs = Object.assign({}, r.inputs, { customAssignees: patch.customAssignees });
+        r.assignees = (r.assignees || []).filter(function (a) { return !a.custom; }).concat(patch.customAssignees.map(function (c) { return { id: c.id, name: c.name, custom: true, trelloId: '' }; }));
+      }
       if (r && patch.empressement) { r.urgency = DashboardModel.URGENCIES.filter(function (u) { return u[0] === patch.empressement; })[0][1]; }
       return baseSaveInputs(t, id, patch);
     };

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trello (fake) · Cerveau (test)</title>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; font: 14px system-ui, sans-serif; background: #0079bf; color: #172b4d; }
+    #bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(0,0,0,.32); color: #fff; flex-wrap: wrap; }
+    #bar h1 { font-size: 16px; margin: 0 12px 0 0; }
+    #bar button, #bar select { border: 0; border-radius: 3px; padding: 6px 10px; background: rgba(255,255,255,.25); color: #fff; font: inherit; cursor: pointer; }
+    #bar button:hover { background: rgba(255,255,255,.4); }
+    #lists { display: flex; gap: 8px; padding: 12px; align-items: flex-start; overflow-x: auto; }
+    .fk-list { background: #ebecf0; border-radius: 3px; width: 272px; flex: none; padding: 8px; }
+    .fk-list h2 { font-size: 14px; margin: 0 0 8px; }
+    .fk-card { background: #fff; border-radius: 3px; box-shadow: 0 1px 0 rgba(9,30,66,.25); padding: 6px 8px; margin-bottom: 8px; cursor: pointer; text-align: left; width: 100%; border: 0; font: inherit; display: block; }
+    .fk-card:hover { background: #f4f5f7; }
+    .fk-labels { display: flex; gap: 4px; margin-bottom: 4px; }
+    .fk-label { height: 8px; width: 40px; border-radius: 4px; background: #888; }
+    .fk-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+    .fk-badge { font-size: 12px; padding: 1px 6px; border-radius: 3px; background: #dfe1e6; }
+    #cardBack { position: fixed; inset: 0; background: rgba(9,30,66,.54); display: flex; justify-content: center; align-items: flex-start; padding-top: 48px; z-index: 1000; }
+    #cardBack[hidden] { display: none; }
+    #cardBackBox { background: #f4f5f7; border-radius: 3px; width: 768px; max-width: calc(100vw - 16px); max-height: calc(100vh - 80px); overflow: auto; padding: 16px; position: relative; }
+    #cardBackBox h2 { margin: 0 0 8px; }
+    #cardBackClose { position: absolute; top: 8px; right: 8px; border: 0; background: none; font-size: 22px; cursor: pointer; }
+    .fk-section { margin-top: 12px; }
+    .fk-section iframe { border: 0; width: 100%; background: transparent; }
+    .fk-detail { display: inline-block; margin: 0 6px 6px 0; padding: 4px 8px; border: 0; border-radius: 3px; background: #dfe1e6; cursor: pointer; font: inherit; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <h1 id="boardName">Cerveau (test)</h1>
+    <span id="buttons"></span>
+    <button type="button" id="enable">Activer le Power-Up</button>
+    <select id="theme" aria-label="Thème">
+      <option value="light">Clair</option>
+      <option value="dark">Sombre</option>
+    </select>
+  </div>
+  <main id="lists"></main>
+  <div id="cardBack" hidden>
+    <div id="cardBackBox" role="dialog" aria-label="Carte">
+      <button type="button" id="cardBackClose" aria-label="Fermer la carte">&times;</button>
+      <div id="cardBackBody"></div>
+    </div>
+  </div>
+  <iframe id="connector" src="/index.html" title="connecteur" hidden></iframe>
+  <script src="/__fake/board.js"></script>
+</body>
+</html>

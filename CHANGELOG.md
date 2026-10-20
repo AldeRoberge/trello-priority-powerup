@@ -4,13 +4,15 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
-- Triage : l’échelle d’Impact (0 à 10) se teinte en dégradé, du bleu au rouge, jusqu’à la valeur choisie.
+- Tableau : deux nouvelles colonnes, « Projet » et « Tâche parente », à droite de l’Objet (masquables depuis « Colonnes »).
 - Triage : la liste s’affiche en arbre : les projets, sous eux leurs tâches, puis les sous-tâches (repliables, avec le « 2/5 » de sous-tâches faites). Le bouton arbre en haut revient à la liste simple ; J et K suivent l’ordre de l’arbre.
+- Triage : l’échelle d’Impact (0 à 10) se teinte en dégradé, du bleu au rouge, jusqu’à la valeur choisie.
 - Triage, Orchestrateur, Aujourd’hui : la priorité s’affiche avec un « P » devant le chiffre (P5), pour qu’on ne la prenne plus pour un compteur.
 - Assistant : le visage reste immobile (plus de rebond, de clignement ni de lueur en boucle), et la pastille « nouveau message » et le point d’écoute ne pulsent plus.
 - Tableau : en mode sombre, le bandeau des cartes critiques est un rouge foncé au lieu d’une barre rouge vif.
 - Météo : la recherche de ville met d’abord la bonne (Val-d’Or au Québec avant « Val Dor » en Malaisie), préfère le Canada à nom égal, et retire les doublons, les aéroports et les lignes sans région ni pays.
 - Tableau : « Colonnes… » dans le clic droit ouvre enfin le panneau des colonnes (il se refermait aussitôt).
+- Triage : le bouton « Nouveau document » ouvre une page où l’on écrit, colle ou glisse du texte et des images. L’IA lit tout (images comprises) et propose des projets, des tâches et des sous-tâches avec jour, urgence, durée, personnes, lieux et étiquettes. On relit le plan, on corrige ce qu’on veut, puis « Créer » écrit les cartes dans le triage (annulable). Sans IA, le plan vient des puces et des retraits du texte.
 - Onglets : l’onglet actif (Assistant, Gantt…) garde toujours son soulignement bleu, même quand il a le focus clavier ; le cadre de focus reste à l’intérieur de l’onglet.
 - Parcours : les sous-tâches (éléments de liste d’une carte) se déplacent à la main comme les cartes et ont un fond plein ; les liens vers les sous-tâches sont tracés comme une arborescence (tronc et branches coudées, sans flèche).
 - Parcours : double-clic sur le nom d’une tâche, d’un projet ou d’une mission pour le renommer sur place, comme dans la Mindmap (« Ouvrir » reste dans le clic droit et sous la carte).
@@ -20,15 +22,19 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Parcours : un « + » sous les sous-tâches d’une tâche en ajoute une (Entrée pour la suivante, Échap pour finir) ; « Sous-tâche » est aussi sous la carte et dans le clic droit de la tâche, qui peut maintenant être rouverte et renommée.
 - Kanban : le bouton « Par priorité » découpe le tableau en rangées, une par palier (Critique tout en haut, puis Urgente, Prioritaire… jusqu’à « Sans priorité »). Les colonnes restent celles du tableau ; une carte se glisse d’une colonne à l’autre dans sa propre rangée, et chaque rangée se replie.
 - Aujourd’hui : le bandeau « Bon matin » suit le mode sombre (ciel assombri, plus de fond éclatant) et plus rien n’y bouge (soleil, nuages, pluie, étoiles).
-- Assistant : un onglet « Assistant » apparaît en haut, juste après Dashboard (l’icône à droite est retirée).
-- Parcours : les éléments de la liste d’une carte s’affichent comme de petits nœuds sous la carte, au lieu d’une liste dans le panneau du bas.
+- Gantt : chaque sous-tâche a la pause (bloquer / débloquer), comme les tâches parentes. Une sous-tâche bloquée bloque la tâche parente.
 - Sous-tâches : la liste des tâches terminées se replie comme une section, le panneau de progression reste ouvert après un glissement, et il a une coche pour terminer, une pause pour bloquer et un bouton « Ajouter une sous-tâche ». Le mode Nœuds est retiré.
 
 ## 2026-10-19
 - Assistant : un bouton copie la conversation avec le détail technique (requêtes, réponses brutes, contexte envoyé) pour le déboguer.
 - Tableau : les sous-tâches d’une carte s’affichent en lignes filles sous la carte, avec une flèche pour les déplier ou replier.
+- Assistant : en corrigeant une liste de sous-tâches, il modifie l’élément existant au lieu d’en ajouter un doublon, et dit clairement quand il ne peut pas corriger.
+- Assistant : pendant l’interview d’une carte, il peut renommer et supprimer une sous-tâche (avant, ces actions étaient refusées).
 
 ## 2026-10-16
+- Priorité : cliquer Imp (ou un autre niveau) règle vraiment la carte sur ce niveau, empressement compris.
+- Planning : cliquer une tâche l’ouvre ici, à côté de l’heure, au lieu d’un autre onglet.
+- Planning : les heures hors travail sont barrées (tôt le matin, fin d’après-midi, vendredi après-midi, samedi et dimanche).
 - Dashboard : le menu du jour prévu (Orchestrateur) propose maintenant les horizons vagues (Bientôt, Sous peu, Éventuellement…) dans « Plus tard », et le prochain lundi s’écrit « Lundi prochain » au lieu de sa date.
 
 ## 2026-10-15

@@ -160,6 +160,99 @@
   color: var(--ct-text);
 }
 
+.ct-stage {
+  display: flex;
+  flex-direction: column;
+  height: min(420px, 58vh);
+  min-height: 240px;
+  border: 1px solid var(--ct-node-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--tp-surface, #fff);
+}
+.ct-stage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--ct-node-border);
+}
+.ct-stage-bar-left,
+.ct-stage-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ct-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ct-text-subtle);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.ct-tool:hover {
+  background: var(--tp-surface-hover, rgba(9, 30, 66, 0.08));
+  color: var(--ct-text);
+}
+.ct-zoom-pct {
+  min-width: 52px;
+}
+.ct-stage-overview:empty,
+.ct-stage-overview[hidden] {
+  display: none;
+}
+.ct-stage-overview .ct-overview {
+  padding: 4px 8px 2px;
+}
+.ct-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background-image: radial-gradient(color-mix(in srgb, var(--tp-text, #172b4d) 11%, transparent) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+.ct-viewport.is-panning {
+  cursor: grabbing;
+}
+.ct-viewport.is-linking {
+  cursor: crosshair;
+}
+.ct-world {
+  transform-origin: 0 0;
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 18px 28px 4px;
+}
+.ct-wire {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.ct-wire line {
+  stroke: var(--ct-active);
+  stroke-width: 2;
+}
+.ct-node.is-drop {
+  border-color: var(--ct-active);
+  box-shadow: inset 3px 0 0 var(--ct-active), 0 0 0 2px color-mix(in srgb, var(--ct-active) 40%, transparent);
+}
+
 .ct-node {
   --ct-accent: var(--ct-todo);
   position: relative;
@@ -395,6 +488,20 @@ input.ct-title:focus {
 .ct-port--in {
   left: -5px;
   top: calc(50% - 4px);
+}
+.ct-port--out {
+  left: auto;
+  right: -7px;
+  top: calc(50% - 7px);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  cursor: crosshair;
+  color: transparent;
+}
+.ct-port--out:hover {
+  border-color: var(--ct-active);
+  background: color-mix(in srgb, var(--ct-active) 18%, var(--ct-node-bg));
 }
 .ct-node.is-done .ct-port,
 .ct-node.is-active .ct-port { border-color: var(--ct-accent); }

@@ -126,4 +126,48 @@ describe('Gantt mini editors', () => {
     assert.equal(next.impact, 4);
     assert.equal(next.places.at.name, 'Home');
   });
+
+  it('clicking Imp snaps to the Importante preset, even inside that band', () => {
+    const dim = PriorityTrello.PRIORITY_DIMENSIONS.find((d) => d.key === 'empressement');
+    assert.equal(PriorityUI.sliderAxisValue(dim, 'assez-vite'), 2);
+    const delta = PriorityUI.heatSegmentDelta(
+      { impact: 4, ease: 6, empressement: 'assez-vite' },
+      5,
+      PriorityUI.FORMULAS.baseline.override
+    );
+    assert.equal(delta.impact, 5);
+    assert.equal(delta.ease, 5);
+    assert.equal(delta.empressement, 0);
+    const inBand = PriorityUI.heatSegmentDelta(
+      { impact: 4, ease: 6, empressement: 0 },
+      5,
+      PriorityUI.FORMULAS.baseline.override
+    );
+    assert.equal(inBand.impact, 5);
+    assert.equal(inBand.ease, 5);
+  });
+
+  it('saveCardInputsById keeps empressement 0 as aucun', async () => {
+    const store = Object.create(null);
+    const t = {
+      get: async function (scope, visibility, key) {
+        return store[scope + ':' + key] || null;
+      },
+      set: async function (scope, visibility, key, value) {
+        store[scope + ':' + key] = value;
+      },
+    };
+    store['card4:cardPriority'] = {
+      impact: 5,
+      ease: 5,
+      empressement: 'assez-vite',
+      axesScaledTo10: true,
+    };
+    const next = await PriorityTrello.saveCardInputsById(t, 'card4', {
+      impact: 5,
+      ease: 5,
+      empressement: 0,
+    });
+    assert.equal(next.empressement, 'aucun');
+  });
 });

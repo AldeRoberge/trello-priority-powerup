@@ -192,7 +192,12 @@
           defaults: pair[0] || {},
           dimensions: PT.PRIORITY_DIMENSIONS,
           onStateChange: function (next) {
-            PT.saveCardInputsById(o.t, o.cardId, { urgency: next.urgency, impact: next.impact, ease: next.ease }).then(
+            PT.saveCardInputsById(o.t, o.cardId, {
+              urgency: next.urgency,
+              impact: next.impact,
+              ease: next.ease,
+              empressement: next.empressement,
+            }).then(
               function () {
                 c.saved('priority');
               },

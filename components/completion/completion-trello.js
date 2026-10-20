@@ -2077,6 +2077,98 @@
     return normalizeCompletionData(normalized);
   }
 
+  function locateStep(items, id) {
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item) continue;
+      if (item.id === id) return { item: item, parent: null, index: i };
+      var kids = item.items || [];
+      for (var j = 0; j < kids.length; j++) {
+        if (kids[j] && kids[j].id === id) return { item: kids[j], parent: item, index: j };
+      }
+    }
+    return null;
+  }
+
+  function stepPayload(item) {
+    var raw = { id: item.id, text: item.text, progress: item.progress };
+    copyEstimateFields(item, raw);
+    copyScheduleFields(item, raw);
+    return raw;
+  }
+
+  /**
+   * Move a step under another top-level step (parentId) or back to the top (parentId null).
+   * Checklist items cannot hold a link, a block, or their own children.
+   */
+  function attachStep(data, nodeId, parentId) {
+    var id = typeof nodeId === 'string' ? nodeId : '';
+    var pid = parentId == null || parentId === '' ? '' : String(parentId);
+    var normalized = normalizeCompletionData(data);
+    if (!id) return { data: normalized, ok: false, reason: 'missing-id' };
+    var loc = locateStep(normalized.items, id);
+    if (!loc) return { data: normalized, ok: false, reason: 'no-item' };
+    var currentParent = loc.parent ? loc.parent.id : '';
+    if (currentParent === pid) return { data: normalized, ok: false, reason: 'same' };
+    if (pid) {
+      if (pid === id) return { data: normalized, ok: false, reason: 'cycle' };
+      var parent = null;
+      for (var p = 0; p < normalized.items.length; p++) {
+        if (normalized.items[p].id === pid) parent = normalized.items[p];
+      }
+      if (!parent) return { data: normalized, ok: false, reason: 'no-parent' };
+      if (isLinkedItem(parent)) return { data: normalized, ok: false, reason: 'parent-linked' };
+      if (!loc.parent) {
+        if (isLinkedItem(loc.item)) return { data: normalized, ok: false, reason: 'linked' };
+        if (itemHasChecklist(loc.item)) return { data: normalized, ok: false, reason: 'has-children' };
+        if (loc.item.blocked) return { data: normalized, ok: false, reason: 'blocked' };
+      }
+    }
+
+    var items = normalized.items.map(function (item) {
+      return Object.assign({}, item, item.items ? { items: item.items.slice() } : {});
+    });
+    if (loc.parent) {
+      var oldIdx = findItemIndex(items, loc.parent.id);
+      if (oldIdx < 0) return { data: normalized, ok: false, reason: 'no-item' };
+      var old = items[oldIdx];
+      var kids = (old.items || []).filter(function (child) { return child.id !== id; });
+      if (kids.length) {
+        old.items = kids;
+        var rolled = computeWeightedProgress(kids);
+        old.progress = rolled.percent;
+        syncDoneFromProgress(old);
+      } else {
+        delete old.items;
+        syncDoneFromProgress(old);
+      }
+    } else {
+      items = items.filter(function (item) { return item.id !== id; });
+    }
+
+    if (!pid) {
+      items.push(normalizeItem(stepPayload(loc.item)));
+    } else {
+      var destIdx = findItemIndex(items, pid);
+      if (destIdx < 0) return { data: normalized, ok: false, reason: 'no-parent' };
+      var dest = items[destIdx];
+      var child = normalizeChecklistItem(stepPayload(loc.item));
+      if (!child) return { data: normalized, ok: false, reason: 'invalid' };
+      dest.items = (dest.items || []).concat([child]);
+      var rolledDest = computeWeightedProgress(dest.items);
+      dest.progress = rolledDest.percent;
+      syncDoneFromProgress(dest);
+      if (dest.done) {
+        delete dest.blocked;
+        delete dest.blockedReasons;
+      }
+    }
+    return {
+      data: normalizeCompletionData(Object.assign({}, normalized, { items: items })),
+      ok: true,
+    };
+  }
+
   /**
    * Child cardCompletion payload when promoting a local subtask to a real card.
    */
@@ -3139,6 +3231,7 @@
     addChecklistItem: addChecklistItem,
     addLocalItem: addLocalItem,
     removeChecklistItem: removeChecklistItem,
+    attachStep: attachStep,
     buildChildCompletionFromSubtask: buildChildCompletionFromSubtask,
     replaceSubtaskWithLinkedCard: replaceSubtaskWithLinkedCard,
     promoteSubtaskToCard: promoteSubtaskToCard,

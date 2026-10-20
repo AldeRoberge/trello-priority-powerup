@@ -1,0 +1,105 @@
+/* People rows under the Orchestrateur. Same columns as the row above (the grid template and the scroll are copied by JS). */
+/* My row keeps room to work: the people list gives way first. */
+.db-page--board:has(.pb-people) .db-board { min-height: 220px; }
+.pb-people {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 46%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  margin-top: 4px;
+  border-top: 1px solid var(--tp-border);
+}
+.pb-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 64px;
+  max-height: 200px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-border) 60%, transparent);
+}
+.pb-row:last-child { border-bottom: 0; }
+.pb-row .pb-who,
+.pb-row .pb-cell {
+  height: auto;
+  align-self: stretch;
+  min-height: 0;
+}
+.pb-row .pb-who { padding-top: 8px; }
+.pb-row .pb-cell { padding-top: 8px; padding-bottom: 6px; }
+.pb-days {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(168px, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  gap: 4px;
+  overflow: hidden;
+  padding: 0 2px 0 8px;
+}
+.pb-cell { background: color-mix(in srgb, var(--tp-text) 2%, transparent); }
+.pb-cell.is-weekend { background: color-mix(in srgb, var(--tp-text) 1%, transparent); }
+.pb-cell.is-today { background: color-mix(in srgb, var(--tp-primary) 4%, transparent); }
+.pb-who.is-drop,
+.pb-cell.is-drop { background: color-mix(in srgb, var(--tp-primary) 12%, transparent); }
+.pb-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  min-width: 0;
+}
+.pb-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+/* Less relevant means less present: a person with nothing to do is quieter. */
+.pb-who.is-empty .pb-name { font-weight: 500; color: var(--tp-text-muted); }
+.pb-who.is-empty .pb-avatar { opacity: 0.6; }
+.pb-avatar {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: hsl(var(--pb-hue, 210) 38% 40%);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.pb-avatar.is-custom { background: transparent; color: hsl(var(--pb-hue, 210) 38% 40%); box-shadow: inset 0 0 0 1.5px hsl(var(--pb-hue, 210) 38% 40%); }
+:root[data-color-mode="dark"] .pb-avatar.is-custom,
+[data-color-mode="dark"] .pb-avatar.is-custom { color: hsl(var(--pb-hue, 210) 45% 70%); box-shadow: inset 0 0 0 1.5px hsl(var(--pb-hue, 210) 45% 70%); }
+.pb-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Narrow: my row and the people stack up and the page scrolls; the cells are as wide as the columns of my row. */
+@media (max-width: 760px) {
+  .db-page--board:has(.pb-people) { height: auto; }
+  .db-page--board:has(.pb-people) .db-board { flex: none; min-height: 0; }
+  .db-page--board:has(.pb-people) .db-board-days .db-col-card { max-height: 56vh; }
+  .pb-people { max-height: none; overflow: visible; }
+  .pb-row { flex-direction: column; max-height: none; }
+  .pb-row .pb-who { flex: none; width: auto; margin-right: 0; padding-right: 8px; border-right: 0; border-radius: 0; }
+  .pb-days { display: flex; padding-left: 0; }
+  .pb-row .pb-days .pb-cell { flex: 0 0 200px; min-height: 64px; }
+}
+@media (max-width: 640px) {
+  .pb-row .pb-days .pb-cell { flex-basis: min(280px, calc(100vw - 80px)); }
+}

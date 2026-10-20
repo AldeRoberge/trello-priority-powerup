@@ -90,6 +90,40 @@ describe('CompletionTree model', () => {
     assert.equal(model.minutesLeft, 60);
   });
 
+  it('nests a step under another and keeps its estimate', () => {
+    const data = CT.normalizeCompletionData({
+      items: [
+        { id: 'a', text: 'Mesurer', progress: 0, estimatedMinutes: 30, estimatedMinutesLocked: true },
+        { id: 'b', text: 'Choisir', progress: 0 },
+      ],
+    });
+    const moved = CT.attachStep(data, 'a', 'b');
+    assert.equal(moved.ok, true);
+    assert.deepEqual(moved.data.items.map((n) => n.id), ['b']);
+    assert.equal(moved.data.items[0].items[0].id, 'a');
+    assert.equal(moved.data.items[0].items[0].text, 'Mesurer');
+    assert.equal(moved.data.items[0].items[0].estimatedMinutes, 30);
+  });
+
+  it('refuses to nest a step that already has children', () => {
+    const moved = CT.attachStep(sample(), 'b', 'a');
+    assert.equal(moved.ok, false);
+    assert.equal(moved.reason, 'has-children');
+  });
+
+  it('moves a sub-step onto another step', () => {
+    const data = CT.normalizeCompletionData({
+      items: [
+        { id: 'a', text: 'Un', items: [{ id: 'a1', text: 'Détail', progress: 0 }] },
+        { id: 'b', text: 'Deux', progress: 0 },
+      ],
+    });
+    const moved = CT.attachStep(data, 'a1', 'b');
+    assert.equal(moved.ok, true);
+    assert.equal(moved.data.items[0].items, undefined);
+    assert.equal(moved.data.items[1].items[0].id, 'a1');
+  });
+
   it('handles empty data', () => {
     const model = Tree.buildTreeModel({ items: [] }, { CT });
     assert.equal(model.children.length, 0);

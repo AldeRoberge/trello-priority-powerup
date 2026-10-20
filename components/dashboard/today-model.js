@@ -16,6 +16,11 @@
   var WORK_END = 18 * 60; // a flow block that starts at or after this is flagged late
   var FLOW_LIMIT = 22 * 60; // nothing is projected past this: the rest is "overflow"
   var STEP = 5; // minutes: the grid of every time the page writes
+  var WORK_START = 8 * 60 + 15; // before this is early morning (same start as the Gantt)
+  var AFTERNOON_OFF = 16 * 60 + 45; // late afternoon, same end as the Gantt
+  var FRIDAY_OFF = 12 * 60; // Friday afternoon
+  var WINDOW_FROM = 6 * 60; // the clock shows early morning
+  var WINDOW_TO = 19 * 60; // …and late afternoon
 
   var DAYS_LONG = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
   var MONTHS_LONG = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -346,10 +351,40 @@
     return { from: from, to: to, height: total, yOf: yOf, minOf: minOf, ticks: ticks };
   }
 
-  /** Hours the timeline shows: at least 8 h to 18 h, widened for blocks and for "now". */
+  /**
+   * Minutes that are off the clock for `iso` (local day), clipped to [from, to).
+   * Weekdays: before 8 h 15 and from 16 h 45. Friday: also from noon. Saturday and Sunday: the whole day.
+   * Returns [{ start, end }].
+   */
+  function offRanges(iso, from, to) {
+    var lo = from == null ? 0 : from;
+    var hi = to == null ? 24 * 60 : to;
+    if (!(hi > lo)) return [];
+    var dow = weekdayIndex(iso);
+    var raw = dow === 0 || dow === 6
+      ? [[0, 24 * 60]]
+      : dow === 5
+        ? [[0, WORK_START], [FRIDAY_OFF, 24 * 60]]
+        : [[0, WORK_START], [AFTERNOON_OFF, 24 * 60]];
+    var out = [];
+    raw.forEach(function (sp) {
+      var a = Math.max(sp[0], lo);
+      var b = Math.min(sp[1], hi);
+      if (b > a) out.push({ start: a, end: b });
+    });
+    return out;
+  }
+
+  function weekdayIndex(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return -1;
+    return new Date(+m[1], +m[2] - 1, +m[3]).getDay();
+  }
+
+  /** Hours the timeline shows: at least 6 h to 19 h, widened for blocks and for "now". */
   function windowRange(blocks, nowMin) {
-    var from = 8 * 60;
-    var to = 18 * 60;
+    var from = WINDOW_FROM;
+    var to = WINDOW_TO;
     (blocks || []).forEach(function (b) {
       from = Math.min(from, Math.floor(b.start / 60) * 60);
       to = Math.max(to, Math.ceil(b.end / 60) * 60);
@@ -514,6 +549,9 @@
 
   global.TodayModel = {
     WORK_END: WORK_END,
+    WORK_START: WORK_START,
+    AFTERNOON_OFF: AFTERNOON_OFF,
+    FRIDAY_OFF: FRIDAY_OFF,
     FLOW_LIMIT: FLOW_LIMIT,
     STEP: STEP,
     hello: hello,
@@ -533,6 +571,7 @@
     layoutLanes: layoutLanes,
     elasticScale: elasticScale,
     windowRange: windowRange,
+    offRanges: offRanges,
     freeGaps: freeGaps,
     isDone: isDone,
     buildDay: buildDay,

@@ -7210,14 +7210,42 @@
     return seg && seg.preset ? seg.preset : null;
   }
 
+  function comparableAxis(key, value) {
+    if (key === 'empressement') return empressementIndex({ empressement: value });
+    var n = Number(value);
+    return isFinite(n) ? n : 0;
+  }
+
   function pickOverrideDelta(current, next) {
     var delta = {};
     ['impact', 'ease', 'empressement', 'urgency'].forEach(function (key) {
-      var cur = current[key] != null ? current[key] : 0;
-      var nxt = next[key] != null ? next[key] : cur;
+      var cur = comparableAxis(key, current[key] != null ? current[key] : 0);
+      var nxt = next[key] != null ? comparableAxis(key, next[key]) : cur;
       if (Math.abs(cur - nxt) >= 1e-9) delta[key] = nxt;
     });
     return delta;
+  }
+
+  /** Slider targets for a clicked heat segment (Opt … Crit). Always the preset, even inside the same band. */
+  function heatSegmentDelta(state, targetP, overrideFn) {
+    var clickedSeg = heatSegmentForTarget(targetP);
+    var next = clickedSeg && clickedSeg.preset
+      ? Object.assign({}, state, clickedSeg.preset)
+      : overrideFn(targetP, state);
+    return pickOverrideDelta(state, next);
+  }
+
+  function sliderAxisValue(dim, raw) {
+    var fallback = dim && dim.value != null ? dim.value : 0;
+    var min = dim && dim.min != null ? dim.min : 0;
+    var max = dim && dim.max != null ? dim.max : fallback;
+    if (dim && dim.key === 'empressement') {
+      if (raw == null || raw === '') return clamp(fallback, min, max);
+      return clamp(empressementIndex({ empressement: raw }), min, max);
+    }
+    var n = typeof raw === 'number' ? raw : Number(raw);
+    if (!isFinite(n)) return clamp(fallback, min, max);
+    return clamp(n, min, max);
   }
 
   /** Searches Impact/Facilité/Empressement (échéance stays as-is) for a target score. */
@@ -10661,6 +10689,63 @@
   }
 
   /**
+   * True when `el` or an ancestor up to (not including) `root` is hidden.
+   * A search field inside a closed picker must not steal the empty-row gesture.
+   */
+  function isHiddenBranch(el, root) {
+    var node = el;
+    while (node && node !== root) {
+      if (node.hidden) return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  /**
+   * 'field' = focus it; 'open' = click it to start adding; '' = ignore.
+   * Opener buttons are the + / pick controls, not chip remove or create-inside-picker.
+   */
+  function rowEditControlKind(el) {
+    if (!el || el.disabled || el.hidden || el.readOnly) return '';
+    var tag = String(el.tagName || '').toUpperCase();
+    if (tag === 'TEXTAREA' || tag === 'INPUT') return 'field';
+    if (
+      el.isContentEditable ||
+      el.contentEditable === 'true' ||
+      el.contentEditable === true
+    ) {
+      return 'field';
+    }
+    if (tag !== 'BUTTON') return '';
+    var cls = typeof el.className === 'string' ? el.className : '';
+    if (
+      /(?:^|\s)info-[\w-]*-add-btn(?:\s|$)/.test(cls) ||
+      /(?:^|\s)info-parent-pick-btn(?:\s|$)/.test(cls) ||
+      /(?:^|\s)info-route-choose-btn(?:\s|$)/.test(cls)
+    ) {
+      return 'open';
+    }
+    return '';
+  }
+
+  /** First visible field, else the first visible add/pick button. */
+  function firstRowEditControl(root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return null;
+    var nodes = root.querySelectorAll(
+      'textarea, input, [contenteditable="true"], button'
+    );
+    var opener = null;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (isHiddenBranch(el, root)) continue;
+      var kind = rowEditControlKind(el);
+      if (kind === 'field') return el;
+      if (kind === 'open' && !opener) opener = el;
+    }
+    return opener;
+  }
+
+  /**
    * Unified card header: title, description, creator, assignees.
    * Secondary props live in a separate « Plus de détails » section (returned as
    * moreDetailsEl for the popup to place after Priorité / Progrès / Échéance).
@@ -11016,13 +11101,10 @@
     };
 
     function startRowEdit(value) {
-      var el = value.querySelector(
-        'textarea:not([hidden]), input:not([hidden]), [contenteditable="true"]'
-      );
-      if (!el) el = value.querySelector('button[class*="add"], [class*="-add-btn"]');
+      var el = firstRowEditControl(value);
       if (!el) return;
       try {
-        if (el.tagName === 'BUTTON') el.click();
+        if (String(el.tagName || '').toUpperCase() === 'BUTTON') el.click();
         else el.focus();
       } catch (e) {}
     }
@@ -25808,7 +25890,10 @@
 
     var defaultState = {};
     variantConfig.dimensions.forEach(function (dim) {
-      defaultState[dim.key] = defaults[dim.key] != null ? defaults[dim.key] : dim.value;
+      defaultState[dim.key] = sliderAxisValue(
+        dim,
+        defaults[dim.key] != null ? defaults[dim.key] : dim.value
+      );
     });
     state = typeof variantConfig.loadState === 'function'
       ? variantConfig.loadState(defaultState)
@@ -26158,20 +26243,7 @@
       onSegmentClick: function (targetP) {
         if (state.priorityEnabled === false) return;
         syncStateFromFields();
-        var clickedSeg = heatSegmentForTarget(targetP);
-        var display = resolveDisplay(calcFn(state), state);
-        if (
-          clickedSeg &&
-          !display.inutile &&
-          display.tierI != null &&
-          display.tierI === clickedSeg.i
-        ) {
-          return;
-        }
-        var next = (clickedSeg && clickedSeg.preset)
-          ? Object.assign({}, state, clickedSeg.preset)
-          : overrideFn(targetP, state);
-        var delta = pickOverrideDelta(state, next);
+        var delta = heatSegmentDelta(state, targetP, overrideFn);
         if (!Object.keys(delta).length) return;
         var preview = resolveDisplay(calcFn(Object.assign({}, state, delta)), state);
         maybePlayPriorityTierSound(preview);
@@ -26765,9 +26837,10 @@
 
     var state = {};
     dimensions.forEach(function (dim) {
-      var v = defaults[dim.key];
-      if (typeof v !== 'number' || !isFinite(v)) v = dim.value;
-      state[dim.key] = clamp(v, dim.min, dim.max);
+      state[dim.key] = sliderAxisValue(
+        dim,
+        defaults[dim.key] != null ? defaults[dim.key] : dim.value
+      );
     });
     state.priorityEnabled = true;
 
@@ -26785,8 +26858,8 @@
       });
     }
 
-    function emitChange() {
-      syncStateFromFields();
+    function emitChange(skipFieldSync) {
+      if (!skipFieldSync) syncStateFromFields();
       onStateChange(Object.assign({}, state));
     }
 
@@ -26817,13 +26890,15 @@
           if (fields[key]) fields[key].setValue(targets[key]);
         });
         repaint();
-        emitChange();
+        emitChange(true);
         return;
       }
       keys.forEach(function (key) {
         state[key] = targets[key];
       });
-      emitChange();
+      // Save the preset before the sliders animate. emitChange() would read the
+      // still-old fields and the card would keep its previous level.
+      emitChange(true);
       var startTime = null;
       function step(ts) {
         if (startTime == null) startTime = ts;
@@ -26862,20 +26937,7 @@
       hideSegments: formulaKey === 'eisenhower',
       onSegmentClick: function (targetP) {
         syncStateFromFields();
-        var clickedSeg = heatSegmentForTarget(targetP);
-        var display = resolveDisplay(calcFn(state), state);
-        if (
-          clickedSeg &&
-          !display.inutile &&
-          display.tierI != null &&
-          display.tierI === clickedSeg.i
-        ) {
-          return;
-        }
-        var next = clickedSeg && clickedSeg.preset
-          ? Object.assign({}, state, clickedSeg.preset)
-          : overrideFn(targetP, state);
-        var delta = pickOverrideDelta(state, next);
+        var delta = heatSegmentDelta(state, targetP, overrideFn);
         if (!Object.keys(delta).length) return;
         animateFieldsTo(delta);
       }
@@ -26914,10 +26976,9 @@
       setState: function (next) {
         if (!next || typeof next !== 'object') return;
         dimensions.forEach(function (dim) {
-          if (typeof next[dim.key] === 'number' && isFinite(next[dim.key])) {
-            state[dim.key] = clamp(next[dim.key], dim.min, dim.max);
-            if (fields[dim.key]) fields[dim.key].setValue(state[dim.key]);
-          }
+          if (next[dim.key] == null) return;
+          state[dim.key] = sliderAxisValue(dim, next[dim.key]);
+          if (fields[dim.key]) fields[dim.key].setValue(state[dim.key]);
         });
         repaint();
       },
@@ -27101,6 +27162,8 @@
     TIER_LABEL_SHORT: TIER_LABEL_SHORT,
     TIER_SURFACE_MIX: TIER_SURFACE_MIX,
     HEAT_SEGMENTS: HEAT_SEGMENTS,
+    heatSegmentDelta: heatSegmentDelta,
+    sliderAxisValue: sliderAxisValue,
     shortTierLabel: shortTierLabel,
     tierLabelForSpace: tierLabelForSpace,
     FORMULAS: FORMULAS,
@@ -27360,6 +27423,7 @@
     buildOverviewEnrichment: buildOverviewEnrichment,
     createOverviewField: createOverviewField,
     createInfoField: createInfoField,
+    firstRowEditControl: firstRowEditControl,
     renderMarkdownToHtml: renderMarkdownToHtml,
     markdownFromRichRoot: markdownFromRichRoot,
     wrapMarkdownInlineSelection: wrapMarkdownInlineSelection,
