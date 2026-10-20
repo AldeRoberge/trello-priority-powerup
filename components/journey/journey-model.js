@@ -34,6 +34,7 @@
   var STEP_X = 248;
   var PAD = 28;
   var BABY_INDENT = 32;
+  var PROGRESS_H = 14; // the progress row every task box carries under its name and details
 
   function levelById(id) {
     for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
@@ -805,7 +806,7 @@
       var y = PAD;
       list.forEach(function (n) {
         var lines = Math.max(1, Math.ceil(String(n.name || '').length / 26));
-        n.h = 28 + lines * 16 + 18;
+        n.h = 28 + lines * 16 + 18 + (n.kind === 'task' ? PROGRESS_H : 0);
         n.x = PAD + n.col * STEP_X;
         n.y = y;
         y += n.h + 16;

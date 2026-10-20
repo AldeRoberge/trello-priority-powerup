@@ -3,7 +3,7 @@
  *  - GraphCanvas.create(host, opts): an infinite canvas (dot grid) that pans (drag the background or the middle button)
  *    and zooms (wheel, around the pointer). Put your nodes in `gc.world` (absolute pixels) and your wires in `gc.svg`
  *    (same world space). `gc.dragNode` moves a node with grid snapping, `gc.wire` drags a new link out of a pin.
- *  - Pure helpers (anchor, facing, wirePath, arrowJoin, zoomAt, fitView, snap) are exported for any view and for tests.
+ *  - Pure helpers (anchor, facing, wirePath, treeWire, arrowJoin, zoomAt, fitView, snap) are exported for any view and for tests.
  * Nodes are { x, y, w, h } with (x, y) the top-left corner.
  */
 (function (global) {
@@ -79,6 +79,62 @@
     p1.x += p1.nx * g; p1.y += p1.ny * g;
     p2.x += p2.nx * g; p2.y += p2.ny * g;
     return { d: wirePath(p1, p2), p1: p1, p2: p2 };
+  }
+
+  /** Polyline through `pts` with each inner corner rounded by up to `r` (a quadratic curve). */
+  function roundedPath(pts, r) {
+    var f = function (v) { return v.toFixed(1); };
+    var d = 'M' + f(pts[0].x) + ',' + f(pts[0].y);
+    for (var i = 1; i < pts.length - 1; i++) {
+      var a = pts[i - 1];
+      var b = pts[i];
+      var c = pts[i + 1];
+      var l1 = Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2));
+      var l2 = Math.sqrt(Math.pow(c.x - b.x, 2) + Math.pow(c.y - b.y, 2));
+      var k = Math.min(r, l1 / 2, l2 / 2);
+      if (k < 0.5) { d += ' L' + f(b.x) + ',' + f(b.y); continue; }
+      d += ' L' + f(b.x + (a.x - b.x) / l1 * k) + ',' + f(b.y + (a.y - b.y) / l1 * k) +
+        ' Q' + f(b.x) + ',' + f(b.y) + ' ' + f(b.x + (c.x - b.x) / l2 * k) + ',' + f(b.y + (c.y - b.y) / l2 * k);
+    }
+    var last = pts[pts.length - 1];
+    return d + ' L' + f(last.x) + ',' + f(last.y);
+  }
+
+  /**
+   * Tree connector from a parent box to one of its children, like a file tree: a trunk drops from the parent's bottom
+   * edge (a little in from the left) and a short branch turns into the child's left edge. That is for a child indented
+   * under the parent; a child in the same column but not indented is reached with a bracket on the left, and any
+   * other child with a square elbow between the two facing sides. No arrowhead.
+   * Children of one parent share the trunk, so draw it with an opaque stroke. Returns { d, p1, p2 }.
+   * opts: { spine (trunk offset from the parent's left, default 16), radius (corner, default 8), bracket (default 14) }
+   */
+  function treeWire(parent, child, opts) {
+    opts = opts || {};
+    var radius = opts.radius == null ? 8 : opts.radius;
+    var sx = parent.x + (opts.spine == null ? Math.min(16, parent.w / 2) : opts.spine);
+    var cy = child.y + child.h / 2;
+    var bottom = parent.y + parent.h;
+    var pts;
+    if (child.x > sx + 4 && child.x < parent.x + parent.w - 8 && cy > bottom + 4) {
+      pts = [{ x: sx, y: bottom }, { x: sx, y: cy }, { x: child.x, y: cy }];
+    } else if (Math.abs(child.x - parent.x) < parent.w / 2) {
+      // same column: a bracket on the left, so the line does not run behind the boxes in between
+      var bx = Math.min(parent.x, child.x) - (opts.bracket == null ? 14 : opts.bracket);
+      var py = parent.y + parent.h / 2;
+      pts = [{ x: parent.x, y: py }, { x: bx, y: py }, { x: bx, y: cy }, { x: child.x, y: cy }];
+    } else {
+      var sides = facing(parent, child);
+      var a = anchor(parent, sides[0]);
+      var b = anchor(child, sides[1]);
+      if (a.nx) {
+        var mx = (a.x + b.x) / 2;
+        pts = [a, { x: mx, y: a.y }, { x: mx, y: b.y }, b];
+      } else {
+        var my = (a.y + b.y) / 2;
+        pts = [a, { x: a.x, y: my }, { x: b.x, y: my }, b];
+      }
+    }
+    return { d: roundedPath(pts, radius), p1: pts[0], p2: pts[pts.length - 1] };
   }
 
   /** New view after zooming by factor f around the screen point (px, py). */
@@ -313,6 +369,7 @@
     facing: facing,
     wirePath: wirePath,
     wireBetween: wireBetween,
+    treeWire: treeWire,
     arrowJoin: arrowJoin,
     zoomAt: zoomAt,
     fitView: fitView,

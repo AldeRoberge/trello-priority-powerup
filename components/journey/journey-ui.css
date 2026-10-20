@@ -195,6 +195,10 @@ html[data-color-mode] body.tp-page.tp-page--journey {
 .jy-wire.is-parts .jy-arrow { opacity: 0.7; }
 .jy-wire.is-sub .jy-edge { stroke-width: 1.5; opacity: 0.55; }
 .jy-wire.is-sub .jy-arrow { opacity: 0.55; }
+/* Links to subtasks read as a tree: square elbows, no arrowhead, opaque so the shared trunk does not darken where lines overlap. */
+.jy-wire.is-tree .jy-edge { stroke-width: 1.5; stroke-linejoin: round; opacity: 1; }
+.jy-wire.is-tree .jy-arrow { display: none; }
+.jy-wire.is-check .jy-edge-hit { display: none; }
 .jy-wire.is-cross .jy-edge { stroke-dasharray: 1 4; }
 .jy-wire:hover .jy-edge { stroke: var(--tp-primary); }
 .jy-wire:hover .jy-arrow { fill: var(--tp-primary); }
@@ -261,13 +265,14 @@ html[data-color-mode] body.tp-page.tp-page--journey {
 .jy-node.is-waiting { --jy-mark: var(--tp-danger-text); }
 .jy-node.is-done { color: var(--tp-text-muted); }
 .jy-node.is-goal { border-radius: 12px; }
+/* Subtasks: solid like the cards (the tree line passes behind them), the hover tint is laid over the solid colour. */
 .jy-node.is-check {
   padding: 6px 10px;
   border-radius: 8px;
-  background: transparent;
+  background: var(--tp-surface);
   color: var(--tp-text-subtle);
 }
-.jy-node.is-check:hover { background: var(--tp-surface-hover); }
+.jy-node.is-check:hover { background: linear-gradient(var(--tp-surface-hover), var(--tp-surface-hover)), var(--tp-surface); }
 .jy-node.is-check .jy-node-name { font-size: 12px; font-weight: 400; }
 .jy-node.is-check.is-done { color: var(--tp-text-muted); }
 .jy-node.is-check.is-done .jy-node-name { opacity: 0.7; }
@@ -297,6 +302,7 @@ html[data-color-mode] body.tp-page.tp-page--journey {
 }
 .jy-node.is-done .jy-node-name { font-weight: 400; }
 .jy-node-meta {
+  min-height: 16px;
   padding-left: 22px;
   color: var(--tp-text-muted);
   font-size: 12px;
@@ -307,7 +313,59 @@ html[data-color-mode] body.tp-page.tp-page--journey {
 .jy-node-meta.is-empty { opacity: 0.55; }
 .jy-node-meta.is-overdue { color: var(--tp-danger-text); opacity: 1; }
 
-.jy-plus {
+/* Progress row of a task box: bar (click or drag) and %, under the details, aligned with them. */
+.jy-node-prog {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 12px;
+  padding-left: 22px;
+}
+.jy-prog-bar {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tp-surface-active);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.jy-prog-bar::before { content: ''; position: absolute; inset: -6px 0; } /* taller grab area than the 4px track */
+.jy-prog-bar i { display: block; height: 100%; border-radius: 2px; background: var(--tp-primary); }
+.jy-node-prog.is-done .jy-prog-bar i { background: var(--tp-success, #22a06b); }
+.jy-node-prog.is-blocked .jy-prog-bar i { background: var(--tp-danger-text); }
+.jy-node-prog.is-dragging { user-select: none; }
+.jy-prog-num {
+  min-width: 28px;
+  text-align: right;
+  color: var(--tp-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Title field that replaces a box's name while it is renamed (double-click). */
+.jy-name-edit {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 3px;
+  border: 1px solid var(--tp-primary);
+  border-radius: 4px;
+  outline: none;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  resize: none;
+  overflow: hidden;
+}
+
+.jy-plus,
+.jy-pause {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -324,7 +382,10 @@ html[data-color-mode] body.tp-page.tp-page--journey {
   opacity: 0.55;
   cursor: pointer;
 }
-.jy-plus:hover { opacity: 1; background: var(--tp-surface-hover); color: var(--tp-text); }
+.jy-plus:hover,
+.jy-pause:hover { opacity: 1; background: var(--tp-surface-hover); color: var(--tp-text); }
+.jy-pause.is-on { opacity: 1; color: var(--tp-danger-text); }
+.jy-pause.is-on:hover { color: var(--tp-danger-text); }
 
 .jy-detail {
   flex: none;

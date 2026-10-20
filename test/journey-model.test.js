@@ -98,6 +98,16 @@ describe('JourneyModel', () => {
     ];
   }
 
+  it('gives every task box a row for its progress bar, and only task boxes', () => {
+    const g = JM.prepare(records(), goals);
+    const shown = JM.layout(g, { zoom: 'all', hideDone: false, now: NOW });
+    const task = shown.nodes.find((n) => n.id === 'loose');
+    const goal = shown.nodes.find((n) => n.id === 'g:toit');
+    const lines = (n) => Math.max(1, Math.ceil(String(n.name).length / 26));
+    assert.equal(task.h, 28 + lines(task) * 16 + 18 + 14);
+    assert.equal(goal.h, 28 + lines(goal) * 16 + 18);
+  });
+
   it('keeps contribution, sequence and dependency as different edges', () => {
     const g = JM.prepare(records(), goals);
     const serves = g.edges.filter((e) => e.kind === 'serves');

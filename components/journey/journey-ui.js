@@ -264,6 +264,76 @@
       state.busy = false;
     }
 
+    /** Sets a card's progress in place (reaching 100 % also moves it to the completed list, like the Tableau). */
+    async function setProgress(id, pct, prev) {
+      var rec = recOf(id);
+      var cq = global.CardQuick;
+      var pt = PT();
+      if (!rec || !cq || typeof cq.setProgress !== 'function') { paint(); return; }
+      if (state.busy) { paint(); return; }
+      state.busy = true;
+      try {
+        if (!(await authorize())) { toast('Autorisation requise'); state.busy = false; return; }
+        var beforeList = rec.listId;
+        var moved = await cq.setProgress(t, rec, listsForNew(), pct);
+        rec.progress = pct;
+        remember(rec.name, async function () {
+          await cq.setProgress(t, { id: id }, [], prev);
+          if (moved && pt && typeof pt.restPutCard === 'function') await pt.restPutCard(t, id, { idList: beforeList });
+        });
+        toast(pct >= 100 ? 'Terminée' : 'Progrès ' + pct + ' %');
+        await reload();
+      } catch (e) {
+        toast('Pas enregistré');
+      }
+      state.busy = false;
+    }
+
+    async function rename(id, name) {
+      var rec = recOf(id);
+      var tt = global.TableTrello;
+      if (!rec || !tt || typeof tt.saveName !== 'function' || state.busy) { paint(); return; }
+      var before = rec.name || '';
+      state.busy = true;
+      try {
+        await tt.saveName(t, id, name);
+        rec.name = name;
+        remember(name, async function () { await tt.saveName(t, id, before); });
+        toast('Renommée');
+        await reload();
+      } catch (e) {
+        toast('Pas enregistré');
+      }
+      state.busy = false;
+    }
+
+    /** Renames a mission or project (kept with the goals, like the Mindmap). */
+    async function renameGoal(id, name) {
+      var gg = GG();
+      var goals = state.board.goals || { nodes: [], links: [] };
+      if (state.busy || !gg || typeof gg.save !== 'function') { paint(); return; }
+      if (state.authGoals === false) { toast('Autorisez Trello pour modifier les objectifs'); return; }
+      var before = null;
+      var nodes = (goals.nodes || []).map(function (g) {
+        if (g.id !== id) return g;
+        before = g.name;
+        return Object.assign({}, g, { name: name });
+      });
+      if (before == null) { paint(); return; }
+      state.busy = true;
+      try {
+        await gg.save(t, { nodes: nodes, links: goals.links || [] });
+        remember(name, async function () {
+          await gg.save(t, { nodes: (nodes || []).map(function (g) { return g.id === id ? Object.assign({}, g, { name: before }) : g; }), links: goals.links || [] });
+        });
+        toast('Renommé');
+        await reload();
+      } catch (e) {
+        toast('Pas enregistré');
+      }
+      state.busy = false;
+    }
+
     async function archive(id) {
       if (state.busy) return;
       var rec = recOf(id);
@@ -394,6 +464,30 @@
     }
     document.addEventListener('keydown', onKey);
 
+    var pendingPick = null;
+
+    /**
+     * A click on a box selects it (which re-centers the map), but only after a short wait: a second click in that time
+     * is a double-click and renames the box in place instead, as in the Mindmap.
+     */
+    function pickNode(n, node) {
+      var again = pendingPick && pendingPick.id === n.id;
+      if (pendingPick) { clearTimeout(pendingPick.timer); pendingPick = null; }
+      if (n.kind !== 'task' && n.kind !== 'goal') { selectNode(n.id, 'project'); return; }
+      if (again) {
+        var live = node.isConnected ? node : container.querySelector('.jy-node[data-id="' + n.id + '"]');
+        if (live) editName(live, n);
+        return;
+      }
+      pendingPick = {
+        id: n.id,
+        timer: setTimeout(function () {
+          pendingPick = null;
+          selectNode(n.id, n.kind === 'task' ? 'task' : 'project');
+        }, 260),
+      };
+    }
+
     function selectNode(id, zoom) {
       state.selected = id;
       state.focus = id;
@@ -488,7 +582,11 @@
       });
       view.nodes.forEach(function (n) {
         var owner = n.kind === 'check' && byPos[n.parent];
-        if (owner) { n.x = owner.x + n.offX; n.y = owner.y + n.offY; }
+        if (!owner) return;
+        var moved = state.pos[n.id]; // a subtask the user moved keeps its place relative to its card
+        if (moved && isFinite(moved.dx) && isFinite(moved.dy)) { n.offX = moved.dx; n.offY = moved.dy; }
+        n.x = owner.x + n.offX;
+        n.y = owner.y + n.offY;
       });
 
       var root = el('div', 'jy');
@@ -646,6 +744,14 @@
         var a = byPos[ref.e.from];
         var b = byPos[ref.e.to];
         if (!a || !b) return;
+        if (isTree(ref.e)) {
+          var tw = gcm.treeWire(a, b);
+          ref.line.setAttribute('d', tw.d);
+          ref.hit.setAttribute('d', tw.d);
+          ref.arrow.setAttribute('d', '');
+          ref.ends = [tw.p1, tw.p2];
+          return;
+        }
         var w = gcm.wireBetween(a, b);
         var dist = Math.sqrt(Math.pow(w.p2.x - w.p1.x, 2) + Math.pow(w.p2.y - w.p1.y, 2));
         var j = gcm.arrowJoin(w.p2, dist);
@@ -757,7 +863,25 @@
         var node = nodeEl(n, graph);
         nodeEls[n.id] = node;
         if (n.kind === 'check') {
-          node.addEventListener('click', function () { selectNode(n.parent, 'task'); });
+          // a subtask moves on its own (the card's drag takes it along); a plain click selects its card
+          gc.dragNode(node, {
+            node: n,
+            onMove: function (x, y) {
+              node.style.left = x + 'px';
+              node.style.top = y + 'px';
+              redrawAround(n.id);
+            },
+            onEnd: function (moved) {
+              if (!moved) return;
+              var owner = byPos[n.parent];
+              if (!owner) return;
+              n.offX = n.x - owner.x;
+              n.offY = n.y - owner.y;
+              state.pos[n.id] = { dx: n.offX, dy: n.offY };
+              savePos();
+            },
+            onClick: function () { selectNode(n.parent, 'task'); },
+          });
           gc.world.appendChild(node);
           return;
         }
@@ -785,7 +909,7 @@
             state.pos[n.id] = { x: n.x, y: n.y };
             savePos();
           },
-          onClick: function () { selectNode(n.id, n.kind === 'task' ? 'task' : 'project'); },
+          onClick: function () { pickNode(n, node); },
         });
         gc.world.appendChild(node);
       });
@@ -908,10 +1032,14 @@
       toast('Boîtes réorganisées');
     }
 
+    /** Links to subtasks (checklist items and linked cards) are drawn as a tree, without arrowheads. */
+    function isTree(e) { return e.kind === 'check' || e.kind === 'sub'; }
+
     function edgeClass(e, graph) {
       var base = 'jy-wire';
       if (e.kind === 'serves') return base + ' is-serves' + (e.cross ? ' is-cross' : '');
-      if (e.kind === 'sub' || e.kind === 'check') return base + ' is-sub';
+      if (e.kind === 'check') return base + ' is-sub is-tree is-check';
+      if (e.kind === 'sub') return base + ' is-sub is-tree';
       if (e.dep === 'after') return base + ' is-after';
       if (e.dep === 'parts') return base + ' is-parts';
       var open = graph.state[e.to] && graph.state[e.to] !== 'done';
@@ -1059,6 +1187,10 @@
       var meta = n.kind === 'task' ? taskMeta(n) : countLabel(n.counts);
       var metaEl = el('div', 'jy-node-meta' + (meta ? '' : ' is-empty') + (n.rec && n.rec.duePast ? ' is-overdue' : ''), meta || '');
       node.appendChild(metaEl);
+      if (n.kind === 'task') {
+        node.appendChild(progressRow(n));
+        node.appendChild(pauseButton(n));
+      }
       if (n.kind === 'goal' && global.NewCard) {
         var plus = el('button', 'jy-plus');
         plus.type = 'button';
@@ -1070,9 +1202,6 @@
         });
         node.appendChild(plus);
       }
-      node.addEventListener('dblclick', function () {
-        if (n.kind === 'task') openCard(n.id);
-      });
       node.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); selectNode(n.id, n.kind === 'task' ? 'task' : 'project'); }
       });
@@ -1081,6 +1210,113 @@
         menuFor(n.id, node, e);
       });
       return node;
+    }
+
+    /** Progress bar of a task box (same as the Tableau and the Kanban): click or drag it to set the %, saved on release. */
+    function progressRow(n) {
+      var rec = n.rec || {};
+      var pct = n.state === 'done' ? 100 : clampPct(rec.progress);
+      var row = el('div', 'jy-node-prog' + (pct >= 100 ? ' is-done' : '') + (rec.blocked ? ' is-blocked' : ''));
+      var bar = el('span', 'jy-prog-bar gc-nodrag');
+      bar.title = 'Cliquer ou glisser pour régler le progrès';
+      var fill = el('i');
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      var num = el('span', 'jy-prog-num', pct + '%');
+      row.appendChild(bar);
+      row.appendChild(num);
+      bar.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var next = pct;
+        function at(x) {
+          var r = bar.getBoundingClientRect();
+          return r.width ? clampPct(((x - r.left) / r.width) * 100) : next;
+        }
+        function move(e) {
+          next = at(e.clientX);
+          fill.style.width = next + '%';
+          num.textContent = next + '%';
+          row.classList.toggle('is-done', next >= 100);
+        }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          document.removeEventListener('pointercancel', up);
+          row.classList.remove('is-dragging');
+          if (next !== pct) setProgress(n.id, next, pct);
+        }
+        row.classList.add('is-dragging');
+        move(ev);
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+      });
+      return row;
+    }
+
+    function clampPct(v) {
+      v = Number(v);
+      return isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 0;
+    }
+
+    /** The "II" of a task box: blocks or unblocks the card. Quiet when it does not apply, red when the card is blocked. */
+    function pauseButton(n) {
+      var blocked = !!(n.rec && n.rec.blocked);
+      var b = el('button', 'jy-pause gc-nodrag' + (blocked ? ' is-on' : ''));
+      b.type = 'button';
+      b.title = blocked ? 'Bloquée — cliquer pour débloquer' : 'Bloquer';
+      b.setAttribute('aria-label', b.title);
+      b.setAttribute('aria-pressed', blocked ? 'true' : 'false');
+      b.appendChild(icon('player-pause'));
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        toggleBlock(n.id);
+      });
+      return b;
+    }
+
+    /** Double-click a task or goal box: edit its title in place (Enter or leaving the field saves, Escape cancels). */
+    function editName(node, n) {
+      if (node.querySelector('.jy-name-edit')) return;
+      var nameEl = node.querySelector('.jy-node-name');
+      if (!nameEl) return;
+      var input = el('textarea', 'jy-name-edit gc-nodrag');
+      input.rows = 1;
+      input.maxLength = 300;
+      input.setAttribute('aria-label', 'Titre');
+      input.value = n.name || '';
+      function fit() {
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
+      }
+      var finished = false;
+      function finish(save) {
+        if (finished) return;
+        finished = true;
+        var v = input.value.replace(/\s+/g, ' ').trim();
+        if (save && v && v !== n.name) {
+          if (n.kind === 'task') rename(n.id, v);
+          else renameGoal(n.id, v);
+          return;
+        }
+        if (input.parentNode) input.replaceWith(nameEl);
+      }
+      input.addEventListener('input', fit);
+      input.addEventListener('keydown', function (ev) {
+        ev.stopPropagation();
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); finish(true); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+      ['pointerdown', 'dblclick', 'wheel', 'click'].forEach(function (type) {
+        input.addEventListener(type, function (ev) { ev.stopPropagation(); });
+      });
+      nameEl.replaceWith(input);
+      fit();
+      input.focus();
+      input.select();
     }
 
     /** A checklist item of a card: a small node under it. */

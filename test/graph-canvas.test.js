@@ -37,6 +37,38 @@ describe('GraphCanvas helpers', () => {
     assert.match(w.d, /^M106\.0,25\.0 C/);
   });
 
+  it('draws a subtask line as a trunk from the parent bottom into the child left edge, without an arrowhead', () => {
+    const parent = { x: 100, y: 100, w: 200, h: 60 };
+    const child = { x: 132, y: 180, w: 168, h: 30 };
+    const w = GC.treeWire(parent, child);
+    assert.deepEqual({ x: w.p1.x, y: w.p1.y }, { x: 116, y: 160 });
+    assert.deepEqual({ x: w.p2.x, y: w.p2.y }, { x: 132, y: 195 });
+    assert.match(w.d, /^M116\.0,160\.0 L116\.0,187\.0 Q116\.0,195\.0 124\.0,195\.0 L132\.0,195\.0$/);
+    // a second child shares the trunk: same x, same start
+    const other = GC.treeWire(parent, { x: 132, y: 230, w: 168, h: 30 });
+    assert.equal(other.p1.x, w.p1.x);
+    assert.equal(other.p1.y, w.p1.y);
+  });
+
+  it('reaches a child in the same column with a bracket on the left, not through the boxes between', () => {
+    const parent = { x: 100, y: 100, w: 200, h: 60 };
+    const child = { x: 100, y: 400, w: 200, h: 60 };
+    const w = GC.treeWire(parent, child);
+    assert.deepEqual({ x: w.p1.x, y: w.p1.y }, { x: 100, y: 130 });
+    assert.deepEqual({ x: w.p2.x, y: w.p2.y }, { x: 100, y: 430 });
+    assert.equal(w.d, 'M100.0,130.0 L93.0,130.0 Q86.0,130.0 86.0,137.0 L86.0,423.0 Q86.0,430.0 93.0,430.0 L100.0,430.0');
+  });
+
+  it('reaches a child in another column with a square elbow between the facing sides', () => {
+    const parent = { x: 0, y: 0, w: 100, h: 50 };
+    const child = { x: 300, y: 120, w: 100, h: 50 };
+    const w = GC.treeWire(parent, child);
+    assert.deepEqual({ x: w.p1.x, y: w.p1.y }, { x: 100, y: 25 });
+    assert.deepEqual({ x: w.p2.x, y: w.p2.y }, { x: 300, y: 145 });
+    assert.match(w.d, /^M100\.0,25\.0 L/);
+    assert.match(w.d, / L300\.0,145\.0$/);
+  });
+
   it('zooms around the pointer without moving the point under it', () => {
     const v = { x: 40, y: 30, k: 1 };
     const next = GC.zoomAt(v, 200, 100, 2);

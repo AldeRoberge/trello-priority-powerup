@@ -22,13 +22,15 @@
   <script src="/components/shared/view-tabs.js"></script>
   <script src="/components/shared/view-shell.js?v=narrow-2"></script>
   <script src="/components/shared/graph-canvas.js"></script>
+  <script src="/components/shared/card-quick.js"></script>
   <script src="/components/shared/add-row.js"></script>
   <link rel="stylesheet" href="/components/shared/add-row.css" />
   <script src="/components/journey/journey-model.js"></script>
   <script src="/components/journey/journey-ui.js"></script>
   <script>
     var cards = [
-      { id: 'pick', name: "Choisir l'entrepreneur", category: 'started', blocked: false, progress: 0, dueDate: '2026-10-12', estimatedMinutes: 30, priorityScore: 6, inputs: { dependsOn: [], depTypes: {} }, items: [{ text: 'Demander trois soumissions', done: false }], assignees: [{ name: 'Ada' }] },
+      { id: 'pick', name: "Choisir l'entrepreneur", category: 'started', blocked: false, progress: 0, dueDate: '2026-10-12', estimatedMinutes: 30, priorityScore: 6, inputs: { dependsOn: [], depTypes: {} }, items: [{ text: 'Demander trois soumissions', done: false }, { text: 'Comparer les prix', done: false }, { text: 'Appeler les références', done: true }, { text: 'Prévoir la visite', done: false, linkedCardId: 'visit' }], assignees: [{ name: 'Ada' }] },
+      { id: 'visit', name: 'Visiter le chantier', category: 'started', blocked: false, progress: 40, priorityScore: 3, inputs: { dependsOn: [], depTypes: {} }, items: [] },
       { id: 'order', name: 'Commander les armoires', category: 'started', blocked: false, progress: 0, dueDate: '2026-10-14', priorityScore: 5, inputs: { dependsOn: ['pick'], depTypes: { pick: 'needs' } }, items: [] },
       { id: 'paint', name: 'Peindre', category: 'started', blocked: false, progress: 0, estimatedMinutes: 10, priorityScore: 2, inputs: { dependsOn: ['order'], depTypes: { order: 'after' } }, items: [] },
       { id: 'call', name: "Appeler l'assureur", category: 'started', blocked: true, progress: 0, priorityScore: 8, inputs: { dependsOn: [], depTypes: {} }, items: [] },
@@ -64,12 +66,31 @@
         var rec = cards.filter(function (c) { return c.id === id; })[0];
         return Promise.resolve({ items: (rec && rec.items) || [], progress: rec ? rec.progress : 0 });
       },
-      saveCardCompletionById: function (_t, id) {
+      saveCardCompletionById: function (_t, id, data) {
         var rec = cards.filter(function (c) { return c.id === id; })[0];
-        if (rec) { rec.progress = 100; rec.category = 'completed'; rec.dueComplete = true; }
+        if (rec) {
+          var first = data && data.items && data.items[0];
+          var p = data && typeof data.progress === 'number' ? data.progress : (first && typeof first.progress === 'number' ? first.progress : 100);
+          rec.progress = p;
+          if (p >= 100) { rec.category = 'completed'; rec.dueComplete = true; }
+        }
         return Promise.resolve();
       },
-      markFullyComplete: function (data) { return data; }
+      normalizeCompletionData: function (data) { return data; },
+      applyMasterProgress: function (items, pct) { return items.map(function (i) { return Object.assign({}, i, { progress: pct }); }); },
+      markFullyComplete: function (data) { return Object.assign({}, data, { progress: 100 }); }
+    };
+    TableTrello = {
+      saveName: function (_t, id, name) {
+        var rec = cards.filter(function (c) { return c.id === id; })[0];
+        if (rec) rec.name = name;
+        return Promise.resolve();
+      },
+      moveCard: function (_t, id, listId) {
+        var rec = cards.filter(function (c) { return c.id === id; })[0];
+        if (rec) { rec.listId = listId; rec.category = listId === 'l2' ? 'completed' : 'started'; }
+        return Promise.resolve();
+      }
     };
     PriorityTrello = {
       pageUrl: function (u) { return u; },
@@ -91,6 +112,9 @@
         if (rec) rec.blocked = !!blocked;
         return Promise.resolve({ ok: true });
       }
+    };
+    MindmapGoalsTrello = {
+      save: function (_t, next) { goals = next; return Promise.resolve(); }
     };
     var t = {
       modal: function (opts) {
