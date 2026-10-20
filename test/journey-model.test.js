@@ -195,10 +195,11 @@ describe('JourneyModel', () => {
     assert.ok(both.open + both.blocked + both.waiting >= 4);
   });
 
-  it('overview shows landmarks, and a project focus shows its tasks', () => {
+  it('overview shows landmarks and every open task, and a project focus shows its tasks', () => {
     const g = JM.prepare(records(), goals);
     const overview = JM.layout(g, { zoom: 'overview', hideDone: true, now: NOW });
-    assert.equal(overview.nodes.some((n) => n.kind === 'task'), false);
+    assert.ok(overview.nodes.some((n) => n.id === 'pick'));
+    assert.equal(overview.nodes.some((n) => n.id === 'done'), false);
     assert.ok(overview.nodes.some((n) => n.id === 'g:mis'));
     assert.ok(overview.nodes.some((n) => n.id === JM.ORPHAN_ID));
     const project = JM.layout(g, { zoom: 'project', focus: 'g:cui', hideDone: true, now: NOW });

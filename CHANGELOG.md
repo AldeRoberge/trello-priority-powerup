@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-20
 
+- Parcours : la carte montre maintenant toutes les tâches ouvertes d'emblée, plus besoin de cliquer un projet pour les voir.
 - Parcours : cliquer une boîte ne recentre plus la carte si elle est déjà bien visible; sinon la caméra glisse doucement.
 - Triage : cliquer sur un projet de l’arbre l’ouvre dans le panneau de droite, comme une tâche (nom et note modifiables, résultat, prochaine action, tâches ouvertes, avancement). La flèche sert toujours à replier.
 - Tableau : les cartes sont regroupées en sections par projet (repliables, avec le nombre de cartes), « Sans projet » à la fin.

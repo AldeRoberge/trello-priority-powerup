@@ -619,6 +619,7 @@
     } else if (zoom === 'overview') {
       graph.nodes.forEach(function (n) {
         if (n.kind !== 'task') show[n.id] = true;
+        else if (!hiddenDone(n.id)) show[n.id] = true;
       });
     } else if (zoom === 'task' && focus && graph.byId[focus] && graph.byId[focus].kind === 'task') {
       reveal(focus);
