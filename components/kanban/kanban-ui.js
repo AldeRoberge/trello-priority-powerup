@@ -281,22 +281,7 @@
     }
 
     function openCard(row) {
-      if (!row || typeof t.modal !== 'function') return;
-      t.modal({
-        title: row.name || 'Carte',
-        url: global.PriorityTrello.pageUrl('./popup.html'),
-        args: { cardId: row.id, cardName: row.name || '', openSection: null },
-        fullscreen: true,
-        accentColor: '#22272B',
-        callback: function () {
-          return t.modal({
-            title: 'Kanban',
-            url: global.PriorityTrello.pageUrl('./kanban.html'),
-            fullscreen: true,
-            accentColor: '#22272B',
-          });
-        },
-      });
+      openDetail(row);
     }
 
     /** Opens the shared CardFields editor (progress / priority / due) hanging from `anchor`. */

@@ -643,10 +643,16 @@
     function closePreview() {
       var p = ui.preview;
       if (!p) return;
+      var id = p.id;
       ui.preview = null;
       if (p.ro) p.ro.disconnect();
       if (p.quick && typeof p.quick.destroy === 'function') p.quick.destroy();
       if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el);
+      var Iso = global.Isolation;
+      if (id && Iso && typeof Iso.read === 'function' && typeof Iso.clear === 'function') {
+        var cur = Iso.read();
+        if (cur && cur.kind === 'task' && cur.id === id && !(global.TaskFocus && global.TaskFocus.currentId && global.TaskFocus.currentId() === id)) Iso.clear();
+      }
     }
 
     /** The task stays on this page: the same quick card as the Kanban, beside the block. */
@@ -654,6 +660,9 @@
       if (!row) return;
       if (ui.preview && ui.preview.id === row.id) { closePreview(); return; }
       closePreview();
+      if (global.Isolation && typeof global.Isolation.set === 'function') {
+        global.Isolation.set({ kind: 'task', id: row.id, label: row.name || '' });
+      }
       var el = h('div', { class: 'td-pop', role: 'dialog', 'aria-label': row.name || 'Carte' });
       document.body.appendChild(el);
       var box = { id: row.id, el: el, quick: null, hold: false, anchor: anchor };
