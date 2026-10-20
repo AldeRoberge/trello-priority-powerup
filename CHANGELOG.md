@@ -4,6 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+
+- Parcours : cliquer une boîte ne recentre plus la carte si elle est déjà bien visible; sinon la caméra glisse doucement.
 - Triage : cliquer sur un projet de l’arbre l’ouvre dans le panneau de droite, comme une tâche (nom et note modifiables, résultat, prochaine action, tâches ouvertes, avancement). La flèche sert toujours à replier.
 - Tableau : les cartes sont regroupées en sections par projet (repliables, avec le nombre de cartes), « Sans projet » à la fin.
 - Tableau : deux nouvelles colonnes, « Projet » et « Tâche parente », à droite de l’Objet (masquables depuis « Colonnes »).

@@ -1215,6 +1215,33 @@
       live.gc.setView(GC().fitView(box, s.w, s.h, 40, 1, 0.3));
     }
 
+    /** Leaves the camera alone while the box is well inside the screen; otherwise glides just far enough to bring it back in. */
+    function revealSmoothly(gc, n) {
+      var s = gc.size();
+      var v = gc.view;
+      var mx = s.w * 0.2, my = s.h * 0.2;
+      var x0 = n.x * v.k + v.x, x1 = (n.x + n.w) * v.k + v.x;
+      var y0 = n.y * v.k + v.y, y1 = (n.y + n.h) * v.k + v.y;
+      var dx = 0, dy = 0;
+      if (x0 < mx) dx = mx - x0; else if (x1 > s.w - mx) dx = s.w - mx - x1;
+      if (y0 < my) dy = my - y0; else if (y1 > s.h - my) dy = s.h - my - y1;
+      if (x1 - x0 > s.w - 2 * mx) dx = s.w / 2 - (x0 + x1) / 2;
+      if (y1 - y0 > s.h - 2 * my) dy = s.h / 2 - (y0 + y1) / 2;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      var from = { x: v.x, y: v.y, k: v.k };
+      var t0 = null;
+      var dur = 320;
+      var step = function (now) {
+        if (!live || live.gc !== gc) return;
+        if (t0 === null) t0 = now;
+        var p = Math.min(1, (now - t0) / dur);
+        var e = 1 - Math.pow(1 - p, 3);
+        gc.setView({ x: from.x + dx * e, y: from.y + dy * e, k: from.k });
+        if (p < 1) global.requestAnimationFrame(step);
+      };
+      global.requestAnimationFrame(step);
+    }
+
     /** After the map is in the page (sizes are known): center the focused box, or fit everything the first time. */
     function settleView() {
       if (!live) return;
@@ -1223,8 +1250,7 @@
         var n = live.byPos[state.scrollTo];
         state.scrollTo = null;
         if (n) {
-          var s = gc.size();
-          gc.setView(GC().centerOn(n.x + n.w / 2, n.y + n.h / 2, s.w, s.h, gc.view.k));
+          if (state.view) revealSmoothly(gc, n); else gc.setView(GC().centerOn(n.x + n.w / 2, n.y + n.h / 2, gc.size().w, gc.size().h, gc.view.k));
           return;
         }
       }
