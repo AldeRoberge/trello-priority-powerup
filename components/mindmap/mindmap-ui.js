@@ -663,7 +663,29 @@
       if (n.kind !== 'task') {
         var cy = y0 + n.headH / 2;
         textX = x0 + 42;
-        if (n.kind === 'person' || n.kind === 'goal') {
+        if (n.kind === 'goal' && n.level === 'project' && global.ProjectIcon) {
+          var projBtn = global.ProjectIcon.button({
+            t: t,
+            id: n.id,
+            icon: n.icon,
+            goals: function () { return state.goals; },
+            className: 'ip-glyph mm-proj-ico',
+            onSaved: function (saved) {
+              if (saved) state.goals = saved;
+              renderGraph();
+            },
+          });
+          if (projBtn) {
+            var fo = s('foreignObject', { x: x0 + 15, y: cy - 9, width: 18, height: 18 });
+            fo.appendChild(projBtn);
+            g.appendChild(fo);
+          } else {
+            g.appendChild(s('circle', { class: 'mm-avatar', cx: x0 + 24, cy: cy, r: 13 }));
+            var miss = s('text', { class: 'mm-initials', 'text-anchor': 'middle', x: x0 + 24, y: cy + 4 });
+            miss.textContent = lv ? lv.label.charAt(0) : initials(n.label);
+            g.appendChild(miss);
+          }
+        } else if (n.kind === 'person' || n.kind === 'goal') {
           g.appendChild(s('circle', { class: 'mm-avatar', cx: x0 + 24, cy: cy, r: 13 }));
           var it = s('text', { class: 'mm-initials', 'text-anchor': 'middle', x: x0 + 24, y: cy + 4 });
           it.textContent = lv ? lv.label.charAt(0) : initials(n.label);
@@ -2003,7 +2025,7 @@
       name = String(name || '').replace(/\s+/g, ' ').trim();
       var cur = state.goals.nodes.filter(function (n) { return n.id === id; })[0];
       if (!cur || !name || name === cur.name || !goalsEditable()) return Promise.resolve();
-      return saveGoals(goalsWith({ nodes: state.goals.nodes.map(function (n) { return n.id === id ? { id: n.id, level: n.level, name: name } : n; }) }));
+      return saveGoals(goalsWith({ nodes: state.goals.nodes.map(function (n) { return n.id === id ? Object.assign({}, n, { name: name }) : n; }) }));
     }
 
     function deleteGoal(id) {

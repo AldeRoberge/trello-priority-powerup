@@ -2407,6 +2407,8 @@
     safeHref: safeHref,
     RICH_INKS: RICH_INKS,
     imageSrc: imageSrc,
+    parseImageLine: parseImageLine,
+    imageMd: imageMd,
     mdToHtml: mdToHtml,
     inlineToHtml: inlineToHtml,
     mentionHtml: mentionHtml,

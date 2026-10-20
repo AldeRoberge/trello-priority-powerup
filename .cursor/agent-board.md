@@ -4,7 +4,12 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
-| proj-everywhere | `project-icon.js` (`save`/`button`/`of`), `work-os.js` (`placeOf` id+icon), `table-model.js` (hierarchy id+icon), `table-ui.js` (section + project cell, not `openCard`), `kanban-ui.js` (place line, not `openDetail`), `dashboard-ui.js` (`placeLine` + project menu icon, not sidebar/openCard), `triage-ui.js` (chip glyph), `mindmap-model.js` (copy `icon` in `buildGraph` only), `mindmap-ui.js` (project avatar in `buildNodeEl` only), `journey-model.js` (keep icon), `journey-ui.js` (project glyph, not `openCard`), `docs-ui.js` (`itemIcon`/`applyIcon` only), `docs-trello.js` (`ensureProjectDocs` icon only), page script tags, `test/project-icon.test.js`, `CHANGELOG.md` one line | Same project icon and chooser on every view tab |
+| paste-img | (released) | Description pictures are `note-` attachments. Goal map text is not updated. Dashboard cache is `paste-2`. |
+| quick-find | (released) | Ctrl+F index is in the working tree. `quick-find.js` loads right after `command-palette.js`. |
+| paste-img | (released) | Paste an image into a Triage project or card description. `dashboard.html` cache is `paste-1` on triage-ui, dashboard-ui, card-fields. |
+| math-reply | (released) | « 1+1 » and « do 1+1 » answer 2 in the assistant dock, no model call |
+| kb-proj | (released) | Kanban Projets: project shell, tasks and subtasks. Dragging the project changes its column only. |
+| proj-everywhere | (released) | Project icon and chooser on Tableau, Kanban, Mindmap, Parcours, Documents, Triage and the orchestrator. Entités has no goal-map project. |
 | no-interview | (released) | Card interview no longer starts. cardPatches actions fold into card memory. |
 | task-click | (released) | Clicking a task opens it in the view (`task-focus.js`). Dashboard script cache is `dashboard-ui.js?v=focus-1` and `today-ui.js?v=focus-1`. |
 | cap-set | (released) | Capacité / jour is in Paramètres → Journée. Dashboard only shows the load. |

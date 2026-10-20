@@ -154,7 +154,15 @@
 
   function projectEl(n, ctx) {
     var pickable = !n.free && n.id && typeof ctx.selectProject === 'function';
-    var row = el('div', 'tt-project' + (n.free ? ' is-free' : '') + (pickable && ctx.selectedProject === n.id ? ' is-sel' : ''), { role: 'treeitem', 'aria-level': '1', 'aria-expanded': String(n.open), 'data-key': n.key, tabindex: '-1' });
+    var row = el('div', 'tt-project' + (n.free ? ' is-free' : '') + (pickable && ctx.selectedProject === n.id ? ' is-sel' : ''), {
+      role: 'treeitem',
+      'aria-level': '1',
+      'aria-expanded': String(n.open),
+      'data-key': n.key,
+      tabindex: '-1',
+      'data-iso-project': n.free ? null : (n.id || null),
+      'data-iso-label': n.free ? null : (n.name || null),
+    });
     indent(row, 0);
     row.appendChild(chevron(n.open, true, function () { ctx.toggle(n.key); }));
     row.appendChild(projectGlyph(n, ctx));

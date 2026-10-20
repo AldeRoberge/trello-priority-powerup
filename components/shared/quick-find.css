@@ -1,0 +1,72 @@
+/* Ctrl+F index. Row height stays fixed: hover and the active row only change the background. */
+.qf-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.45);
+}
+.qf-card {
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(440px, 70dvh);
+  display: flex;
+  flex-direction: column;
+  background: var(--tp-surface, #fff);
+  color: var(--tp-text, #172b4d);
+  border: 1px solid var(--tp-border-strong, rgba(9, 30, 66, 0.3));
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  font: 13px/1.3 system-ui, sans-serif;
+}
+.qf-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--tp-border, rgba(9, 30, 66, 0.15));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 12px 14px;
+  outline: none;
+}
+.qf-input::placeholder { color: var(--tp-text-subtle, #626f86); opacity: 0.55; }
+.qf-list { overflow-y: auto; padding: 4px; }
+.qf-hit {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 76px minmax(0, 140px);
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.qf-hit.is-active { background: var(--tp-surface-hover, rgba(9, 30, 66, 0.08)); }
+.qf-hit .ti { font-size: 16px; color: var(--tp-text-subtle, #626f86); }
+.qf-name,
+.qf-kind,
+.qf-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qf-kind,
+.qf-hint { color: var(--tp-text-subtle, #626f86); font-size: 12px; }
+.qf-ask { box-shadow: inset 0 1px 0 var(--tp-border, rgba(9, 30, 66, 0.12)); }
+@media (max-width: 640px) {
+  .qf-scrim { padding-top: 8px; }
+  .qf-hint { display: none; }
+  .qf-hit { grid-template-columns: 18px minmax(0, 1fr) 76px; }
+}

@@ -13,6 +13,7 @@
 (function (global) {
   'use strict';
 
+  var live = null; // the dock on this page, so Ctrl+F can ask without opening a second chat
   var MAX_FILE_BYTES = 10 * 1048576; // Trello's attachment limit
   var MAX_SHOTS = 4; // images sent to the model
   var SHOT_EDGE = 1600; // longest edge sent to the model, in px
@@ -249,7 +250,8 @@
       input.value = '';
       grow();
       refreshSend();
-      if (sending.length || !(AI.socialReply && AI.socialReply(text))) startLoad();
+      var instant = !sending.length && ((AI.socialReply && AI.socialReply(text)) || (AI.arithmeticReply && AI.arithmeticReply(text)));
+      if (!instant) startLoad();
       var shots = sending.filter(function (a) { return IMG_RE.test(a.file.type); }).slice(0, MAX_SHOTS);
       Promise.all(shots.map(function (a) { return toDataUrl(a.file); })).then(function (urls) {
         var attachments = sending.map(function (a) {
@@ -335,9 +337,25 @@
     renderLog();
     renderAtts();
     function focus() { try { input.focus(); } catch (e) { /* ignore */ } }
-    return { root: root, focus: focus, toggle: focus };
+    /** Send one search question. The board is not edited; the model only answers. */
+    function ask(text) {
+      var q = String(text || '').trim();
+      if (!q || busy) return false;
+      input.value = 'Cherche dans le tableau, sans rien modifier : ' + q;
+      grow();
+      refreshSend();
+      focus();
+      submit();
+      return true;
+    }
+    live = { ask: ask };
+    return { root: root, focus: focus, toggle: focus, ask: ask };
+  }
+
+  function ask(text) {
+    return !!(live && live.ask(text));
   }
 
   // toDataUrl / named are shared with the Triage document (images pasted there are read the same way).
-  global.AssistantDock = { mount: mount, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE };
+  global.AssistantDock = { mount: mount, ask: ask, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE };
 })(typeof window !== 'undefined' ? window : this);

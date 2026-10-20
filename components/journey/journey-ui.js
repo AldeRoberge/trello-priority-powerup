@@ -1480,6 +1480,20 @@
       var top = el('div', 'jy-node-top');
       if (n.kind === 'task') {
         top.appendChild(statusIcon(n.id, n.state, n.here));
+      } else if (n.level === 'project' && n.kind !== 'bucket' && global.ProjectIcon) {
+        var projBtn = global.ProjectIcon.button({
+          t: t,
+          id: n.id,
+          icon: n.icon,
+          className: 'ip-glyph jy-node-ico',
+          goals: function () { return state.board && state.board.goals; },
+          onSaved: function (saved) {
+            if (saved && state.board) state.board.goals = saved;
+            paint();
+          },
+        });
+        if (projBtn) top.appendChild(projBtn);
+        else top.appendChild(el('span', 'jy-node-ico')).appendChild(icon(levelIcon(n.level)));
       } else {
         var icoName = n.kind === 'bucket' ? 'inbox' : levelIcon(n.level);
         top.appendChild(el('span', 'jy-node-ico')).appendChild(icon(icoName));

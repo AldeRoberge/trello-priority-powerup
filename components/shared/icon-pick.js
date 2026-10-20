@@ -152,13 +152,18 @@
     opts = opts || {};
     var cat = DM();
     var mark = cat ? cat.normalizeIcon(opts.icon) : null;
-    var name = (mark && mark.i) || opts.fallback || 'stack-2';
     var b = el('button', (opts.className || 'ip-glyph') + (mark && mark.c ? ' has-color' : ''));
     b.type = 'button';
     b.title = 'Icône';
     b.setAttribute('aria-label', 'Changer l’icône');
     if (mark && mark.c) b.style.color = mark.c;
-    b.appendChild(glyph(name));
+    function paintBtn() {
+      b.className = (opts.className || 'ip-glyph') + (mark && mark.c ? ' has-color' : '');
+      b.style.color = mark && mark.c ? mark.c : '';
+      b.textContent = '';
+      b.appendChild(glyph((mark && mark.i) || opts.fallback || 'stack-2'));
+    }
+    paintBtn();
     b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
     b.addEventListener('click', function (e) {
       e.preventDefault();
@@ -169,6 +174,7 @@
         fallback: opts.fallback || 'stack-2',
         onChoose: function (next) {
           mark = next;
+          paintBtn();
           if (typeof opts.onChoose === 'function') opts.onChoose(next);
         },
       });

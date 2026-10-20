@@ -7,6 +7,7 @@
  *   CardFields.open('progress' | 'priority' | 'due' | 'blocked' | 'desc', {
  *     t, cardId, cardName, anchor,        // anchor: element the popover hangs from
  *     value, save,                        // 'desc' only: initial text + save(text) → Promise
+ *     uploadImage(file) → Promise<line>,  // 'desc' only: a pasted picture becomes a markdown line
  *     onSaved(kind), onError(message),    // optional feedback hooks
  *     onClose(changed),                   // optional; changed=true when something was saved
  *   })
@@ -334,6 +335,45 @@
       });
   }
 
+  var IMG_TYPE = /^image\/(jpeg|png|webp|gif)$/;
+  var MAX_IMAGE_BYTES = 10 * 1048576;
+
+  function imageFilesOf(dt) {
+    var out = [];
+    if (!dt) return out;
+    var files = dt.files;
+    var i;
+    if (files && files.length) {
+      for (i = 0; i < files.length; i++) if (files[i] && IMG_TYPE.test(files[i].type)) out.push(files[i]);
+      if (out.length) return out;
+    }
+    var items = dt.items;
+    if (!items) return out;
+    for (i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || it.kind !== 'file' || !IMG_TYPE.test(it.type) || typeof it.getAsFile !== 'function') continue;
+      var f = it.getAsFile();
+      if (f) out.push(f);
+    }
+    return out;
+  }
+
+  /** Puts each line on its own line at the selection. */
+  function insertLines(value, start, end, lines) {
+    var ins = (lines || []).filter(Boolean).join('\n');
+    value = String(value || '');
+    start = start == null ? value.length : start;
+    end = end == null ? start : end;
+    if (!ins) return { text: value, start: start, end: end };
+    var before = value.slice(0, start);
+    var after = value.slice(end);
+    var lead = before && !/\n$/.test(before) ? '\n' : '';
+    var trail = after && !/^\n/.test(after) ? '\n' : '';
+    var text = before + lead + ins + trail + after;
+    var caret = (before + lead + ins).length;
+    return { text: text, start: caret, end: caret };
+  }
+
   var TOOLS = [
     { icon: 'bold', title: 'Gras (Ctrl+B)', run: function (v, s, e) { return wrapSelection(v, s, e, '**'); } },
     { icon: 'italic', title: 'Italique (Ctrl+I)', run: function (v, s, e) { return wrapSelection(v, s, e, '_'); } },
@@ -360,6 +400,8 @@
     var bar = el('div', 'cf-toolbar');
     var area = el('textarea', 'cf-textarea', { rows: '10', placeholder: 'Écrire…' });
     area.value = value;
+    var strip = el('div', 'cf-imgs');
+    var blobs = {};
     var preview = el('div', 'cf-preview agent-md');
     preview.hidden = true;
     var status = el('span', 'cf-hint');
@@ -418,6 +460,129 @@
       );
     }
     saveBtn.addEventListener('click', commit);
+
+    function paintImages() {
+      strip.textContent = '';
+      var parse = global.DocsModel && global.DocsModel.parseImageLine;
+      if (!parse) { strip.hidden = true; return; }
+      var any = false;
+      String(area.value || '').split('\n').forEach(function (line) {
+        var img = parse(line);
+        if (!img) return;
+        any = true;
+        var fig = el('figure', 'cf-img' + (img.src.indexOf('upload:') === 0 && !blobs[img.src] ? ' is-loading' : ''));
+        var node = document.createElement('img');
+        node.alt = img.alt || '';
+        node.draggable = false;
+        if (blobs[img.src]) node.src = blobs[img.src];
+        else if (img.src.indexOf('upload:') !== 0) node.src = img.src;
+        else if (o.t && global.DocsTrello && typeof global.DocsTrello.coverBlobUrl === 'function') {
+          var parts = img.src.slice(7).split('/');
+          if (parts.length === 3) {
+            global.DocsTrello.coverBlobUrl(o.t, { k: 'upload', c: parts[0], a: parts[1], n: parts[2] }).then(function (url) {
+              if (!node.isConnected) return;
+              fig.classList.remove('is-loading');
+              if (url) node.src = url;
+            }, function () { fig.classList.remove('is-loading'); });
+          }
+        }
+        fig.appendChild(node);
+        strip.appendChild(fig);
+      });
+      strip.hidden = !any;
+    }
+
+    function persistImages() {
+      paintImages();
+      if (o.anchor && o.anchor.isConnected) position(c.pop, o.anchor);
+      if (area.value === saved || typeof o.save !== 'function') {
+        status.textContent = '';
+        return Promise.resolve();
+      }
+      saveBtn.disabled = true;
+      status.textContent = 'Enregistrement…';
+      return Promise.resolve(o.save(area.value)).then(function () {
+        saved = area.value;
+        saveBtn.disabled = false;
+        status.textContent = '';
+        c.saved('desc');
+      }, function (err) {
+        saveBtn.disabled = false;
+        status.textContent = '';
+        c.fail(err);
+      });
+    }
+
+    var imageChain = Promise.resolve();
+    function takeImages(files, target) {
+      if (!files.length || typeof o.uploadImage !== 'function') return;
+      var heavy = files.some(function (f) { return f && f.size > MAX_IMAGE_BYTES; });
+      if (heavy) {
+        status.textContent = 'Image trop lourde (10 Mo).';
+        if (typeof o.onError === 'function') o.onError('Image trop lourde (10 Mo).');
+        return;
+      }
+      var start = target && target.selectionStart != null ? target.selectionStart : area.value.length;
+      var end = target && target.selectionEnd != null ? target.selectionEnd : start;
+      status.textContent = 'Image…';
+      files.forEach(function (file) {
+        imageChain = imageChain.then(function () {
+          return Promise.resolve(o.uploadImage(file)).then(function (line) {
+            if (!line) {
+              if (global.URL && URL.createObjectURL) {
+                var preview = document.createElement('img');
+                preview.alt = '';
+                preview.draggable = false;
+                preview.src = URL.createObjectURL(file);
+                var held = el('figure', 'cf-img');
+                held.appendChild(preview);
+                strip.hidden = false;
+                strip.appendChild(held);
+              }
+              return;
+            }
+            var parsed = global.DocsModel && global.DocsModel.parseImageLine ? global.DocsModel.parseImageLine(line) : null;
+            if (parsed && global.URL && URL.createObjectURL) blobs[parsed.src] = URL.createObjectURL(file);
+            var placed = insertLines(area.value, start, end, [line]);
+            area.value = placed.text;
+            start = placed.start;
+            end = placed.end;
+          });
+        });
+      });
+      imageChain = imageChain.then(function () {
+        area.focus();
+        area.setSelectionRange(start, end);
+        return persistImages();
+      }, function (err) {
+        status.textContent = '';
+        c.fail(err);
+      });
+    }
+
+    function imagesFrom(data) {
+      if (typeof o.uploadImage !== 'function') return [];
+      return imageFilesOf(data);
+    }
+    area.addEventListener('paste', function (e) {
+      var files = imagesFrom(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      takeImages(files, area);
+    });
+    area.addEventListener('dragover', function (e) {
+      if (typeof o.uploadImage !== 'function') return;
+      if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') < 0) return;
+      e.preventDefault();
+    });
+    area.addEventListener('drop', function (e) {
+      var files = imagesFrom(e.dataTransfer);
+      if (!files.length) return;
+      e.preventDefault();
+      takeImages(files, area);
+    });
+    paintImages();
+
     area.addEventListener('keydown', function (e) {
       var mod = e.ctrlKey || e.metaKey;
       if (mod && e.key === 'Enter') { e.preventDefault(); commit(); }
@@ -436,6 +601,7 @@
     head.appendChild(tabs);
     head.appendChild(bar);
     c.body.appendChild(head);
+    c.body.appendChild(strip);
     c.body.appendChild(area);
     c.body.appendChild(preview);
     c.body.appendChild(foot);
@@ -509,5 +675,6 @@
     formatMinutes: formatMinutes,
     wrapSelection: wrapSelection,
     formatLines: formatLines,
+    insertLines: insertLines,
   };
 })(typeof window !== 'undefined' ? window : this);

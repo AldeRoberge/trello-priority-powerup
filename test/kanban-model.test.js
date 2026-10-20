@@ -158,3 +158,75 @@ describe('KanbanModel', () => {
     });
   });
 });
+
+describe('KanbanModel projects', () => {
+  let KM;
+  before(() => {
+    loadComponent('shared/desc-meta.js');
+    loadComponent('table/table-model.js');
+    loadComponent('kanban/kanban-model.js');
+    loadComponent('mindmap/mindmap-model.js');
+    loadComponent('shared/work-os.js');
+    KM = global.KanbanModel;
+  });
+
+  const lists = [
+    { id: 'back', name: 'Backlog', category: 'backlog' },
+    { id: 'todo', name: 'À faire', category: 'unstarted' },
+    { id: 'doing', name: 'En cours', category: 'started' },
+    { id: 'done', name: 'Terminé', category: 'completed' },
+  ];
+
+  it('puts a project in its saved column and keeps tasks of other columns as guests', () => {
+    const rows = [
+      { id: 'a', projectId: 'p1', listId: 'todo', pos: 1 },
+      { id: 'b', projectId: 'p1', listId: 'doing', pos: 2 },
+      { id: 'c', projectId: '', listId: 'back', pos: 1 },
+    ];
+    const projects = [{ id: 'p1', name: 'Lancement', listId: 'todo' }];
+    const cols = KM.buildProjectColumns(rows, lists, projects);
+    const todo = cols.filter((c) => c.list.id === 'todo')[0];
+    const doing = cols.filter((c) => c.list.id === 'doing')[0];
+    const back = cols.filter((c) => c.list.id === 'back')[0];
+    assert.deepEqual(todo.blocks.map((b) => b.project.id), ['p1']);
+    assert.deepEqual(todo.blocks[0].tasks.map((r) => r.id), ['a']);
+    assert.equal(todo.blocks[0].guest, false);
+    assert.equal(doing.blocks.length, 0);
+    assert.deepEqual(doing.guests[0].tasks.map((r) => r.id), ['b']);
+    assert.equal(doing.guests[0].guest, true);
+    assert.deepEqual(back.loose.map((r) => r.id), ['c']);
+  });
+
+  it('follows the least-finished task when the project has no column yet', () => {
+    const rows = [
+      { id: 'a', projectId: 'p1', listId: 'done', pos: 1 },
+      { id: 'b', projectId: 'p1', listId: 'doing', pos: 1 },
+      { id: 'c', projectId: 'p1', listId: 'todo', pos: 1 },
+    ];
+    assert.equal(KM.projectListId({ id: 'p1' }, rows, lists), 'doing');
+    const cols = KM.buildProjectColumns(rows, lists, [{ id: 'p1', name: 'Site' }]);
+    const doing = cols.filter((c) => c.list.id === 'doing')[0];
+    assert.deepEqual(doing.blocks[0].tasks.map((r) => r.id), ['b']);
+    assert.equal(cols.filter((c) => c.list.id === 'todo')[0].guests[0].tasks[0].id, 'c');
+  });
+
+  it('parks an empty project in Backlog and keeps a saved column that still exists', () => {
+    assert.equal(KM.projectListId({ id: 'p1', listId: 'gone' }, [], lists), 'back');
+    assert.equal(KM.projectListId({ id: 'p1', listId: 'done' }, [], lists), 'done');
+    const cols = KM.buildProjectColumns([], lists, [{ id: 'p1', name: 'Vide' }]);
+    assert.equal(cols.filter((c) => c.list.id === 'back')[0].blocks[0].project.name, 'Vide');
+  });
+
+  it('remembers the project column on the goal map', () => {
+    const goals = {
+      nodes: [{ id: 'p1', level: 'project', name: 'Site', icon: { i: 'rocket', c: '#112233' } }],
+      links: [],
+    };
+    const next = global.WorkOS.withProjectList(goals, 'p1', 'doing');
+    const clean = global.MindmapModel.normalizeGoals(next);
+    assert.equal(clean.nodes[0].listId, 'doing');
+    assert.equal(clean.nodes[0].icon.i, 'rocket');
+    const cleared = global.MindmapModel.normalizeGoals(global.WorkOS.withProjectList(clean, 'p1', ''));
+    assert.equal(cleared.nodes[0].listId, undefined);
+  });
+});

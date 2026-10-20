@@ -224,6 +224,8 @@
       if (desc) node.desc = desc;
       var icon = cleanIcon(n.icon);
       if (icon) node.icon = icon;
+      var listId = level === 'project' && typeof n.listId === 'string' ? n.listId.trim().slice(0, 32) : '';
+      if (listId && /^[A-Za-z0-9]+$/.test(listId)) node.listId = listId;
       nodes.push(node);
     });
     var links = [];
@@ -358,6 +360,7 @@
       goals.nodes.forEach(function (g) {
         var n = addNode(g.id, 'goal', g.name);
         n.level = g.level;
+        if (g.icon) n.icon = g.icon;
       });
       goals.links.forEach(function (l) {
         var a = nodeById[l.from];

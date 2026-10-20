@@ -66,6 +66,253 @@
     return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
   }
 
+  var IMG_TYPE = /^image\/(jpeg|png|webp|gif)$/;
+  var MAX_IMAGE_BYTES = 10 * 1048576;
+  var NOTE_NAME = /^note-\d+\.(jpg|png|webp|gif)$/;
+
+  /**
+   * Description pictures from a card's attachments. Covers (`couverture-…`) and other files are ignored.
+   * Ordered by the timestamp in the file name. Nothing here is stored in pluginData.
+   */
+  function noteShots(cardId, atts) {
+    var id = String(cardId || '');
+    return (atts || []).filter(function (a) {
+      return a && (a.id || a.a) && NOTE_NAME.test(String(a.name || a.n || ''));
+    }).slice().sort(function (a, b) {
+      var an = String(a.name || a.n || '');
+      var bn = String(b.name || b.n || '');
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    }).map(function (a) {
+      return { src: 'upload:' + id + '/' + (a.id || a.a) + '/' + (a.name || a.n), alt: a.alt || '' };
+    });
+  }
+
+  /** Image files on a clipboard or a drop. Items are read only while the event is still running. */
+  function imageFilesOf(dt) {
+    var out = [];
+    if (!dt) return out;
+    var files = dt.files;
+    var i;
+    if (files && files.length) {
+      for (i = 0; i < files.length; i++) if (files[i] && IMG_TYPE.test(files[i].type)) out.push(files[i]);
+      if (out.length) return out;
+    }
+    var items = dt.items;
+    if (!items) return out;
+    for (i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || it.kind !== 'file' || !IMG_TYPE.test(it.type) || typeof it.getAsFile !== 'function') continue;
+      var f = it.getAsFile();
+      if (f) out.push(f);
+    }
+    return out;
+  }
+
+  /** A file name worth keeping as the picture’s label. A bare “image” from the clipboard is left blank. */
+  function imageAlt(file) {
+    var name = String((file && file.name) || '').replace(/\.[^.]+$/, '').replace(/\s+/g, ' ').trim();
+    if (!name || /^image$/i.test(name) || /^clipboard/i.test(name)) return '';
+    return name.slice(0, 200);
+  }
+
+  /** Description split into text and picture lines (`DocsModel.parseImageLine`). */
+  function descBlocks(text) {
+    var parse = global.DocsModel && global.DocsModel.parseImageLine;
+    var lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+    var blocks = [];
+    var buf = [];
+    function flush() {
+      var t = buf.join('\n').trim();
+      buf = [];
+      if (t) blocks.push({ type: 'text', text: t });
+    }
+    lines.forEach(function (line) {
+      var img = parse ? parse(line) : null;
+      if (!img) { buf.push(line); return; }
+      flush();
+      blocks.push({ type: 'image', alt: img.alt, src: img.src });
+    });
+    flush();
+    return blocks;
+  }
+
+  /** Adds one markdown line, on its own line. */
+  function appendLine(desc, line) {
+    line = String(line || '').trim();
+    if (!line) return String(desc || '');
+    var base = String(desc || '').replace(/\s+$/g, '');
+    return base ? base + '\n' + line : line;
+  }
+
+  /** Adds a picture line when `src` is a safe image address or an `upload:` pointer. */
+  function appendImage(desc, alt, src) {
+    var DM = global.DocsModel;
+    if (!DM || typeof DM.imageSrc !== 'function' || typeof DM.imageMd !== 'function') return String(desc || '');
+    var safe = DM.imageSrc(src);
+    if (!safe) return String(desc || '');
+    return appendLine(desc, DM.imageMd(alt, safe));
+  }
+
+  function fillNote(note, desc, resolve) {
+    note.textContent = '';
+    var blocks = descBlocks(desc);
+    note.classList.toggle('is-empty', !blocks.length);
+    if (!blocks.length) {
+      note.appendChild(icon('plus'));
+      note.appendChild(h('span', { text: 'Cliquer pour ajouter…' }));
+      return;
+    }
+    blocks.forEach(function (b) {
+      if (b.type === 'text') {
+        var shown = h('div', { class: 'tri-desc-body agent-md' });
+        if (global.MarkdownDom) global.MarkdownDom.append(shown, b.text);
+        else shown.textContent = b.text;
+        note.appendChild(shown);
+        return;
+      }
+      var fig = h('figure', { class: 'tri-desc-img', 'data-src': b.src });
+      var img = h('img', { alt: b.alt || '', draggable: 'false' });
+      fig.appendChild(img);
+      note.appendChild(fig);
+      if (b.src.indexOf('upload:') !== 0) { img.src = b.src; return; }
+      if (typeof resolve !== 'function') return;
+      fig.classList.add('is-loading');
+      Promise.resolve(resolve(b.src)).then(function (url) {
+        if (!img.isConnected) return;
+        fig.classList.remove('is-loading');
+        if (url) img.src = url;
+        else fig.classList.add('is-broken');
+      }, function () {
+        if (!fig.isConnected) return;
+        fig.classList.remove('is-loading');
+        fig.classList.add('is-broken');
+      });
+    });
+  }
+
+  function paintShot(note, shot, resolve) {
+    var fig = h('figure', { class: 'tri-desc-img', 'data-shot': '1', 'data-src': shot.src });
+    var img = h('img', { alt: shot.alt || '', draggable: 'false' });
+    fig.appendChild(img);
+    note.appendChild(fig);
+    if (!shot.src || shot.src.indexOf('upload:') !== 0) { if (shot.src) img.src = shot.src; return; }
+    if (typeof resolve !== 'function') return;
+    fig.classList.add('is-loading');
+    Promise.resolve(resolve(shot.src)).then(function (url) {
+      if (!img.isConnected) return;
+      fig.classList.remove('is-loading');
+      if (url) img.src = url;
+      else fig.classList.add('is-broken');
+    }, function () {
+      if (!fig.isConnected) return;
+      fig.classList.remove('is-loading');
+      fig.classList.add('is-broken');
+    });
+  }
+
+  /** Attachment pictures under the text. The placeholder goes away once a picture is there. */
+  function applyShots(note, shots, resolve) {
+    note.querySelectorAll('[data-shot]').forEach(function (n) { n.remove(); });
+    if (!shots || !shots.length) return;
+    note.classList.remove('is-empty');
+    if (!note.querySelector('.tri-desc-body') && !note.querySelector('.tri-desc-img')) note.textContent = '';
+    shots.forEach(function (s) { paintShot(note, s, resolve); });
+  }
+
+  function showPending(note, desc, files, resolve, shots) {
+    fillNote(note, desc, resolve);
+    applyShots(note, shots, resolve);
+    note.classList.remove('is-empty');
+    if (!descBlocks(desc).length && !(shots && shots.length)) note.textContent = '';
+    files.forEach(function (file) {
+      var url = global.URL && URL.createObjectURL ? URL.createObjectURL(file) : '';
+      var img = h('img', { alt: imageAlt(file), draggable: 'false' });
+      if (url) img.src = url;
+      note.appendChild(h('figure', { class: 'tri-desc-img' }, [img]));
+    });
+  }
+
+  /**
+   * The description. Click opens the text editor. A pasted or dropped image is handed to `opts.onImages`
+   * and shown at once.
+   * opts: { desc, fk, title, resolve(src), onOpen(), onImages(files) -> Promise, onImageError(msg) }
+   */
+  function noteField(opts) {
+    var note = h('div', {
+      class: 'tri-desc',
+      role: 'button',
+      tabindex: '0',
+      title: opts.title,
+      'data-fk': opts.fk,
+    });
+    fillNote(note, opts.desc, opts.resolve);
+    var shown = opts.shots || [];
+    if (shown.length) applyShots(note, shown, opts.resolve);
+    if (typeof opts.loadImages === 'function') {
+      opts.loadImages(function (images) {
+        shown = images || [];
+        if (!note.isConnected) return;
+        applyShots(note, shown, opts.resolve);
+      });
+    }
+    function open(e) {
+      if (e && e.target && e.target.closest && e.target.closest('a')) return;
+      if (opts.onOpen) opts.onOpen();
+    }
+    note.addEventListener('click', open);
+    note.addEventListener('keydown', function (e) {
+      if (e.target !== note || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      open();
+    });
+    if (typeof opts.onImages === 'function') {
+      function take(files) {
+        if (!files.length) return;
+        var heavy = files.some(function (f) { return f && f.size > MAX_IMAGE_BYTES; });
+        if (heavy) {
+          if (opts.onImageError) opts.onImageError('Image trop lourde (10 Mo).');
+          return;
+        }
+        showPending(note, opts.desc, files, opts.resolve, shown);
+        var job;
+        try { job = opts.onImages(files); } catch (err) {
+          fillNote(note, opts.desc, opts.resolve);
+          applyShots(note, shown, opts.resolve);
+          return;
+        }
+        Promise.resolve(job).then(function () {}, function () {
+          fillNote(note, opts.desc, opts.resolve);
+          applyShots(note, shown, opts.resolve);
+        });
+      }
+      note.addEventListener('paste', function (e) {
+        var files = imageFilesOf(e.clipboardData);
+        if (!files.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        take(files);
+      });
+      note.addEventListener('dragover', function (e) {
+        if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') < 0) return;
+        e.preventDefault();
+        note.classList.add('is-drop');
+      });
+      note.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && note.contains(e.relatedTarget)) return;
+        note.classList.remove('is-drop');
+      });
+      note.addEventListener('drop', function (e) {
+        note.classList.remove('is-drop');
+        var files = imageFilesOf(e.dataTransfer);
+        if (!files.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        take(files);
+      });
+    }
+    return note;
+  }
+
   function iconButton(name, title, onclick) {
     return h('button', { class: 'tri-icon', type: 'button', title: title, 'aria-label': title, onclick: onclick }, [icon(name)]);
   }
@@ -186,32 +433,18 @@
     setTimeout(fitTitle, 0); // the height can only be measured once the pane is in the page
 
     /* ── Note (the description of the card) ──────────────────────── */
-    var hasNote = !!clean(row.desc);
-    var note = h('div', {
-      class: 'tri-desc' + (hasNote ? '' : ' is-empty'),
-      role: 'button',
-      tabindex: '0',
+    var cardShots = host.shots ? host.shots(row) : [];
+    var hasNote = !!descBlocks(row.desc).length || cardShots.length;
+    var note = noteField({
+      desc: row.desc,
+      fk: 'desc',
       title: hasNote ? 'Modifier la note' : 'Ajouter une note',
-      'data-fk': 'desc',
-    });
-    if (hasNote) {
-      var shown = h('div', { class: 'tri-desc-body agent-md' });
-      if (global.MarkdownDom) global.MarkdownDom.append(shown, row.desc);
-      else shown.textContent = row.desc;
-      note.appendChild(shown);
-    } else {
-      note.appendChild(icon('plus'));
-      note.appendChild(h('span', { text: 'Cliquer pour ajouter…' }));
-    }
-    function openNote(e) {
-      if (e && e.target && e.target.closest && e.target.closest('a')) return; // links inside the note keep working
-      host.openEditor(row, 'desc', note);
-    }
-    note.addEventListener('click', openNote);
-    note.addEventListener('keydown', function (e) {
-      if (e.target !== note || (e.key !== 'Enter' && e.key !== ' ')) return;
-      e.preventDefault();
-      openNote();
+      resolve: host.resolveImage,
+      shots: cardShots,
+      loadImages: host.loadImages ? function (cb) { host.loadImages(row, cb); } : null,
+      onOpen: function () { host.openEditor(row, 'desc', note); },
+      onImages: host.pasteImages ? function (files) { return host.pasteImages(row, files); } : null,
+      onImageError: host.imageError,
     });
     body.appendChild(note);
 
@@ -390,7 +623,7 @@
       entity('people', 'user', 'Personnes', found.people, function (b) { host.openEntities(row, 'people', b); }),
       entity('places', 'map-pin', 'Lieux', found.places, function (b) { host.openEntities(row, 'places', b); }),
       entity('labels', 'tag', 'Étiquettes', found.labels, function (b) { host.openEntities(row, 'labels', b); }),
-      entity('project', 'stack-2', 'Projet', project ? [project] : [], function (b) { host.pickProject(row, b); }),
+      entity('project', (project && project.glyph) || 'stack-2', 'Projet', project ? [project] : [], function (b) { host.pickProject(row, b); }),
     ]));
 
     /* ── Decision: always at the bottom of the pane ──────────────── */
@@ -424,6 +657,9 @@
    *     saveProject(id, { name?, desc?, icon? }) -> Promise,
    *     pickIcon(p, icon),                    // the glyph was chosen in the pane
    *     openDesc(p, anchor),                 // rich description (CardFields)
+   *     pasteImages(p, files) -> Promise,    // a pasted or dropped picture
+   *     resolveImage(src) -> Promise<url>,   // an upload: pointer, shown in the note
+   *     imageError(message),
    *     pickOutcome(p, anchor),              // choose or create the objective this project serves
    *     saveStep(p, text),                   // the next step, written on its card
    *     saveMetric(p, number),               // the measured result, when the project has one
@@ -471,32 +707,18 @@
     }
     body.appendChild(field('tri-title', 'Nom du projet', p.name, '', function (v) { host.saveProject(p.id, { name: v }); }, true));
 
-    var hasNote = !!clean(p.desc);
-    var note = h('div', {
-      class: 'tri-desc' + (hasNote ? '' : ' is-empty'),
-      role: 'button',
-      tabindex: '0',
+    var projectShots = host.shots ? host.shots(p) : [];
+    var hasNote = !!descBlocks(p.desc).length || projectShots.length;
+    var note = noteField({
+      desc: p.desc,
+      fk: 'pdesc',
       title: hasNote ? 'Modifier la description' : 'Ajouter une description',
-      'data-fk': 'pdesc',
-    });
-    if (hasNote) {
-      var shown = h('div', { class: 'tri-desc-body agent-md' });
-      if (global.MarkdownDom) global.MarkdownDom.append(shown, p.desc);
-      else shown.textContent = p.desc;
-      note.appendChild(shown);
-    } else {
-      note.appendChild(icon('plus'));
-      note.appendChild(h('span', { text: 'Cliquer pour ajouter…' }));
-    }
-    function openNote(e) {
-      if (e && e.target && e.target.closest && e.target.closest('a')) return;
-      if (host.openDesc) host.openDesc(p, note);
-    }
-    note.addEventListener('click', openNote);
-    note.addEventListener('keydown', function (e) {
-      if (e.target !== note || (e.key !== 'Enter' && e.key !== ' ')) return;
-      e.preventDefault();
-      openNote();
+      resolve: host.resolveImage,
+      shots: projectShots,
+      loadImages: host.loadImages ? function (cb) { host.loadImages(p, cb); } : null,
+      onOpen: function () { if (host.openDesc) host.openDesc(p, note); },
+      onImages: host.pasteImages ? function (files) { return host.pasteImages(p, files); } : null,
+      onImageError: host.imageError,
     });
     body.appendChild(note);
 
@@ -612,5 +834,15 @@
     return root;
   }
 
-  global.TriageUI = { detail: detail, projectDetail: projectDetail, segmented: segmented };
+  global.TriageUI = {
+    detail: detail,
+    projectDetail: projectDetail,
+    segmented: segmented,
+    appendImage: appendImage,
+    appendLine: appendLine,
+    descBlocks: descBlocks,
+    imageFilesOf: imageFilesOf,
+    imageAlt: imageAlt,
+    noteShots: noteShots,
+  };
 })(typeof window !== 'undefined' ? window : this);

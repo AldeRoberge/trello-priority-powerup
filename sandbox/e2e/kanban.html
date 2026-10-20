@@ -72,6 +72,8 @@
   <script src="/components/shared/new-card.js"></script>
   <script src="/components/shared/linear-keys.js"></script>
   <script src="/components/shared/command-palette.js"></script>
+  <link rel="stylesheet" href="/components/shared/quick-find.css" />
+  <script src="/components/shared/quick-find.js"></script>
   <script src="/components/shared/quick-parse.js"></script>
   <script src="/components/table/table-menu.js"></script>
   <script src="/components/shared/hide-done.js"></script>
@@ -80,13 +82,14 @@
   <script src="/components/kanban/kanban-ai.js"></script>
   <script src="/components/shared/assistant-dock.js"></script>
   <script src="/components/kanban/kanban-model.js"></script>
+  <script src="/components/mindmap/mindmap-model.js"></script>
   <script src="/components/shared/work-os.js"></script>
   <script src="/components/kanban/kanban-ui.js"></script>
   <script src="/components/shared/context-menu.js"></script>
   <script>
     // ---- mock Trello data (no network) ----
     var recs = [
-      { id: 'c1', name: 'Préparer la réunion de lancement', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 1, progress: 0, priorityScore: 7.4, priorityTierI: 2, priorityLabel: 'Haute', inputs: { empressement: 'vite', impact: 8 }, dueDate: '2026-09-01', desc: 'Inviter **tout le monde**\n- ordre du jour\n- salle', url: 'https://trello.com/c/1' },
+      { id: 'c1', name: 'Préparer la réunion de lancement', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 1, progress: 0, priorityScore: 7.4, priorityTierI: 2, priorityLabel: 'Haute', inputs: { empressement: 'vite', impact: 8 }, dueDate: '2026-09-01', desc: 'Inviter **tout le monde**\n- ordre du jour\n- salle', url: 'https://trello.com/c/1', items: [{ text: 'Ordre du jour', done: true }, { text: 'Réserver la salle', done: false, items: [{ text: 'Confirmer l’heure', done: false }] }] },
       { id: 'c2', name: 'Refonte du tableau de bord', listId: 'l2', listName: 'En cours', category: 'started', color: '#1d7afc', pos: 2, progress: 45, priorityScore: 5.1, priorityTierI: 3, priorityLabel: 'Moyenne', inputs: { empressement: 'assez-vite', impact: 6 }, dueDate: '2026-11-20', desc: 'Nouvelle maquette', url: 'https://trello.com/c/2' },
       { id: 'c3', name: 'Publier la version 2', listId: 'l2', listName: 'En cours', category: 'started', color: '#1d7afc', pos: 3, progress: 100, priorityScore: 9.2, priorityTierI: 0, priorityLabel: 'Critique', inputs: { empressement: 'au-plus-vite', impact: 9 }, dueDate: '2026-10-05', desc: '', url: 'https://trello.com/c/3' },
       { id: 'c4', name: 'Archiver les anciennes cartes', listId: 'l1', listName: 'À faire', category: 'unstarted', color: '#626f86', pos: 4, progress: 10, blocked: true, priorityScore: 2.0, priorityTierI: 6, priorityLabel: 'Basse', inputs: { empressement: 'aucun', impact: 2 }, dueDate: '', desc: 'Rien de spécial', url: 'https://trello.com/c/4' },
@@ -106,6 +109,26 @@
     TableTrello.getTableSettings = function () { return Promise.resolve({ columns: TableModel.DEFAULT_COLUMNS.slice() }); };
     SheetsTrello.getSettings = function () { return Promise.resolve({}); };
     PriorityTrello.isRestAuthorized = function () { return Promise.resolve(true); };
+    var goals = {
+      nodes: [
+        { id: 'g:launch', level: 'project', name: 'Lancement', listId: 'l1', icon: { i: 'rocket', c: '#5e6ad2' } },
+        { id: 'g:board', level: 'project', name: 'Tableau de bord' },
+      ],
+      links: [
+        { from: 'c1', to: 'g:launch' },
+        { from: 'c5', to: 'g:launch' },
+        { from: 'c7', to: 'g:launch' },
+        { from: 'c2', to: 'g:board' },
+        { from: 'c3', to: 'g:board' },
+      ],
+    };
+    window.MindmapGoalsTrello = {
+      load: function () { return Promise.resolve(goals); },
+      save: function (_t, data) {
+        goals = MindmapModel.normalizeGoals(data);
+        return Promise.resolve(goals);
+      },
+    };
     // Writes of the Linear-style composer / keys (mock: edit the in-memory records).
     window.__writes = [];
     TableTrello.moveCard = function (t_, id, listId) { var r = recs.filter(function (x) { return x.id === id; })[0]; var l = lists.filter(function (x) { return x.id === listId; })[0]; if (r && l) { r.listId = l.id; r.listName = l.name; r.category = l.category; r.color = l.color; } window.__writes.push(['move', id, listId]); return Promise.resolve(); };

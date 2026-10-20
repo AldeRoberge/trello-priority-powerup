@@ -124,6 +124,40 @@ describe('KanbanAI', () => {
     });
   });
 
+  describe('arithmetic', () => {
+    it('answers a calculation with the number and does not call the model', async () => {
+      let n = 0;
+      global.PriorityAgent = {
+        getProvider: async () => ({ apiKey: 'k' }),
+        isConfigured: () => true,
+        chatCompletions: async () => {
+          n += 1;
+          return { content: '{"message":"Je n\'ai pas compris l\'instruction.","actions":[]}' };
+        },
+      };
+      assert.equal(AI.arithmeticReply('1+1'), '2');
+      assert.equal(AI.arithmeticReply('do 1+1'), '2');
+      assert.equal(AI.arithmeticReply('1 + 1'), '2');
+      assert.equal(AI.arithmeticReply('1+1?'), '2');
+      assert.equal(AI.arithmeticReply('(2+3)*4'), '20');
+      assert.equal(AI.arithmeticReply('10/2'), '5');
+      assert.equal(AI.arithmeticReply('2x3'), '6');
+      assert.equal(AI.arithmeticReply('1.5+1'), '2.5');
+      assert.equal(AI.arithmeticReply('1,5+1'), '2.5');
+      assert.equal(AI.arithmeticReply('1 plus 1'), '2');
+      assert.equal(AI.arithmeticReply('what is 1+1'), '2');
+      assert.equal(AI.arithmeticReply('crée une tâche'), '');
+      assert.equal(AI.arithmeticReply('50'), '');
+      assert.equal(AI.arithmeticReply('1/0'), 'Division par zéro.');
+      const a = await AI.run({}, { text: '1+1', rows: [], lists: [] });
+      const b = await AI.run({}, { text: 'do 1+1', rows: [], lists: [] });
+      assert.equal(n, 0);
+      assert.equal(a.message, '2');
+      assert.equal(b.message, '2');
+      assert.deepEqual(a.applied, []);
+    });
+  });
+
   describe('suggestions', () => {
     it('picks a helpful, runnable sentence from the card state', () => {
       const row = (o) => Object.assign({ id: 'x', name: 'T', statutKey: 'started', progress: 0, desc: 'd' }, o);

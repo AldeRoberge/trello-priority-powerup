@@ -244,6 +244,8 @@ html[data-color-mode] .tp-page--mindmap {
 .mm-sub { font-size: 11px; fill: var(--tp-text-muted); pointer-events: none; }
 .mm-avatar { fill: var(--mm-accent); stroke: color-mix(in srgb, var(--mm-accent) 70%, transparent); stroke-width: 2; pointer-events: none; }
 .mm-initials { font-size: 11px; font-weight: 600; fill: #fff; pointer-events: none; }
+.mm-node foreignObject { overflow: visible; }
+.mm-proj-ico { width: 18px; height: 18px; }
 .mm-pinicon { fill: var(--mm-accent); pointer-events: none; }
 .mm-pinhole { fill: var(--tp-surface-subtle); pointer-events: none; }
 .mm-progress-track { fill: color-mix(in srgb, var(--tp-text) 14%, transparent); pointer-events: none; }

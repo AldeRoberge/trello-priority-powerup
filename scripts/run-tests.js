@@ -115,6 +115,8 @@ const UNIT_FILES = [
   'add-row.test.js',
   'triage-doc-model.test.js',
   'triage-doc-trello.test.js',
+  'triage-image.test.js',
+  'quick-find.test.js',
 ];
 
 function listTests() {

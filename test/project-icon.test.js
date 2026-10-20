@@ -8,8 +8,11 @@ describe('project icons', () => {
   before(() => {
     loadComponent('docs/docs-model.js');
     loadComponent('mindmap/mindmap-model.js');
+    loadComponent('shared/work-os.js');
     loadComponent('shared/project-icon.js');
     loadComponent('gantt/gantt-model.js');
+    loadComponent('table/table-model.js');
+    loadComponent('journey/journey-model.js');
   });
 
   it('keeps a catalog icon on a project and drops an unknown one', () => {
@@ -49,5 +52,33 @@ describe('project icons', () => {
     );
     assert.equal(grouped[0].sectionKey, 'project');
     assert.deepEqual(grouped[0].icon, { i: 'rocket' });
+  });
+
+  it('a place, a table section, a mindmap node and Parcours keep the same icon', async () => {
+    const goals = {
+      nodes: [{ id: 'p', level: 'project', name: 'Site', icon: { i: 'rocket', c: '#0c66e4' } }],
+      links: [{ from: 'card', to: 'p' }],
+    };
+    const place = global.WorkOS.places(goals).card;
+    assert.equal(place.projectId, 'p');
+    assert.deepEqual(place.icon, { i: 'rocket', c: '#0c66e4' });
+
+    const sections = global.TableModel.groupByProject(
+      [{ id: 'card', project: 'Site', projectId: 'p', projectIcon: place.icon }],
+      {}
+    );
+    assert.equal(sections[0].id, 'p');
+    assert.deepEqual(sections[0].icon, { i: 'rocket', c: '#0c66e4' });
+
+    const graph = global.MindmapModel.buildGraph([], { goals: goals });
+    assert.deepEqual(graph.nodes.filter((n) => n.id === 'p')[0].icon, { i: 'rocket', c: '#0c66e4' });
+
+    const parcours = global.JourneyModel.prepare([], goals);
+    assert.deepEqual(parcours.byId.p.icon, { i: 'rocket', c: '#0c66e4' });
+
+    global.MindmapGoalsTrello = { save: async (_t, g) => g };
+    const saved = await global.ProjectIcon.save({}, { nodes: [{ id: 'p', level: 'project', name: 'Site' }], links: [] }, 'p', { i: 'plane', c: '#0c66e4' });
+    assert.deepEqual(saved.nodes[0].icon, { i: 'plane', c: '#0c66e4' });
+    assert.deepEqual(global.ProjectIcon.of('p'), { i: 'plane', c: '#0c66e4' });
   });
 });

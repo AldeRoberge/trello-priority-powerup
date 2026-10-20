@@ -124,6 +124,16 @@
     return 'needs';
   }
 
+  function cleanIcon(raw) {
+    if (global.DocsModel && typeof global.DocsModel.normalizeIcon === 'function') return global.DocsModel.normalizeIcon(raw);
+    if (!raw || typeof raw !== 'object') return null;
+    var name = typeof raw.i === 'string' ? raw.i : '';
+    if (!/^[a-z0-9-]{1,40}$/.test(name)) return null;
+    var out = { i: name };
+    if (typeof raw.c === 'string' && /^#[0-9a-fA-F]{6}$/.test(raw.c)) out.c = raw.c.toLowerCase();
+    return out;
+  }
+
   function normalizeGoals(raw) {
     var src = raw && typeof raw === 'object' ? raw : {};
     var nodes = [];
@@ -133,7 +143,10 @@
       var level = n && ALIAS[n.level] ? ALIAS[n.level] : n && n.level;
       if (!name || !n.id || ids[n.id] || !levelById(level)) return;
       ids[String(n.id)] = true;
-      nodes.push({ id: String(n.id), level: level, name: name });
+      var node = { id: String(n.id), level: level, name: name };
+      var icon = cleanIcon(n.icon);
+      if (icon) node.icon = icon;
+      nodes.push(node);
     });
     var links = [];
     var seen = Object.create(null);
@@ -171,7 +184,9 @@
 
     goalData.nodes.forEach(function (g) {
       goalLevel[g.id] = g.level;
-      addNode({ id: g.id, kind: 'goal', level: g.level, name: g.name, rec: null, checks: [] });
+      var goalNode = { id: g.id, kind: 'goal', level: g.level, name: g.name, rec: null, checks: [] };
+      if (g.icon) goalNode.icon = g.icon;
+      addNode(goalNode);
     });
 
     cards.forEach(function (rec) {
@@ -708,6 +723,7 @@
         kind: n.kind,
         level: n.level,
         name: n.name,
+        icon: n.icon || null,
         rec: n.rec,
         checks: n.checks || [],
         state: n.kind === 'task' ? (graph.state[id] || 'ready') : goalState(counts),

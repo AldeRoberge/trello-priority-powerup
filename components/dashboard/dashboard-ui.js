@@ -842,6 +842,9 @@
             row.fullDesc = full;
           }, function (err) { row.desc = prev; throw err; });
         };
+        extra.uploadImage = function (file) {
+          return attachNote(row.id, file).then(function () { render(); return null; });
+        };
       }
       global.CardFields.open(kind, Object.assign({
         t: t,
@@ -918,7 +921,7 @@
       var p = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
       if (!p) return null;
       var place = state.places && state.places[row.id];
-      return { text: p.name, title: place ? WO().placeLabel(place) : p.name };
+      return { text: p.name, title: place ? WO().placeLabel(place) : p.name, glyph: (p.icon && p.icon.i) || '' };
     }
 
     /** The card joins a project (null: leaves it). It is saved in the goal map of the Mindmap; a card may also stay free. */
@@ -932,7 +935,7 @@
       if (!projects.length) return setStatus('Aucun projet pour l’instant : créez-en un dans la Mindmap.', '', 4500);
       if (!global.LinearPick) return;
       var cur = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
-      var items = projects.map(function (p) { return { id: p.id, label: p.name + (p.outcome ? ' · ' + p.outcome : ''), icon: 'stack-2' }; });
+      var items = projects.map(function (p) { return { id: p.id, label: p.name + (p.outcome ? ' · ' + p.outcome : ''), icon: (p.icon && p.icon.i) || 'stack-2' }; });
       if (cur) items.unshift({ id: '', label: 'Aucun projet', icon: 'circle-x' });
       global.LinearPick.open({
         anchor: anchor,
@@ -1111,12 +1114,146 @@
     }
 
     /** Name or description of a project, saved in the goal map of the Mindmap (same path as setProject). */
-    function saveProject(id, patch) {
+    function saveProject(id, patch, okMsg) {
       if (!WO() || !WO().withNodeEdit) {
         setStatus('Projets indisponibles ici.', 'error');
         return Promise.reject(new Error('Projets indisponibles ici.'));
       }
-      return commitGoals(WO().withNodeEdit(state.goals, id, patch));
+      return commitGoals(WO().withNodeEdit(state.goals, id, patch), okMsg).then(function (saved) {
+        return saved;
+      }, function (err) {
+        if (err) err.reported = true;
+        throw err;
+      });
+    }
+
+    var projectDocs = Object.create(null);
+    var projectDocMiss = Object.create(null);
+    var noteCache = Object.create(null); // card id -> [{ src, alt }]
+
+    function imageExt(file) {
+      var kind = String((file && file.type) || '').toLowerCase();
+      if (kind === 'image/png') return 'png';
+      if (kind === 'image/webp') return 'webp';
+      if (kind === 'image/gif') return 'gif';
+      return 'jpg';
+    }
+
+    /**
+     * A description picture is an attachment named note-… on the card (the project document, or the
+     * task card). The goal map and pluginData stay untouched: Trello's attachment list is the index.
+     */
+    function attachNote(cardId, file) {
+      var docs = global.DocsTrello;
+      var ui = global.TriageUI;
+      if (!docs || typeof docs.uploadCover !== 'function') return Promise.reject(new Error('Image non ajoutée'));
+      return docs.uploadCover(t, cardId, file, imageExt(file), 'note').then(function (cover) {
+        if (!cover || !cover.c || !cover.a || !cover.n) throw new Error('upload-failed');
+        var alt = ui && ui.imageAlt ? ui.imageAlt(file) : '';
+        var list = noteCache[cardId] || (noteCache[cardId] = []);
+        list.push({ src: 'upload:' + cover.c + '/' + cover.a + '/' + cover.n, alt: alt });
+        return null;
+      });
+    }
+
+    function shotsOf(cardId) {
+      return noteCache[cardId] ? noteCache[cardId].slice() : [];
+    }
+
+    function loadNoteImages(cardId) {
+      if (!cardId) return Promise.resolve([]);
+      if (noteCache[cardId]) return Promise.resolve(shotsOf(cardId));
+      var docs = global.DocsTrello;
+      if (!docs || typeof docs.listNoteImages !== 'function') return Promise.resolve([]);
+      return docs.listNoteImages(t, cardId).then(function (rows) {
+        noteCache[cardId] = rows || [];
+        return shotsOf(cardId);
+      });
+    }
+
+    function resolveImage(src) {
+      if (!src || src.indexOf('upload:') !== 0) return Promise.resolve(src || '');
+      var parts = src.slice(7).split('/');
+      var docs = global.DocsTrello;
+      if (parts.length !== 3 || !docs || typeof docs.coverBlobUrl !== 'function') return Promise.resolve('');
+      return docs.coverBlobUrl(t, { k: 'upload', c: parts[0], a: parts[1], n: parts[2] });
+    }
+
+    function imageError(msg) { setStatus(msg, 'error'); }
+
+    /** The project's document, or '' when it has none yet. Does not create one. */
+    function findProjectDocId(p) {
+      if (projectDocs[p.id]) return Promise.resolve(projectDocs[p.id]);
+      if (projectDocMiss[p.id]) return Promise.resolve('');
+      var docs = global.DocsTrello;
+      if (!docs || typeof docs.listDocs !== 'function') return Promise.resolve('');
+      return docs.listDocs(t).then(function (list) {
+        var found = (list || []).filter(function (d) {
+          return d && d.subject && d.subject.k === 'project' && d.subject.id === p.id;
+        })[0];
+        if (found) { projectDocs[p.id] = found.id; return found.id; }
+        projectDocMiss[p.id] = true;
+        return '';
+      }, function () { return ''; });
+    }
+
+    /** The document of this project, created when pasting a picture onto a project that has none. */
+    function projectDocId(p) {
+      return findProjectDocId(p).then(function (id) {
+        if (id) return id;
+        var docs = global.DocsTrello;
+        if (!docs || typeof docs.createDoc !== 'function') return Promise.reject(new Error('Image non ajoutée'));
+        var glyph = p.icon && (p.icon.i || p.icon.c) ? p.icon : { i: 'stack-2' };
+        return docs.createDoc(t, p.name || 'Projet', '', { subject: { k: 'project', id: p.id }, icon: glyph }).then(function (doc) {
+          if (!doc || !doc.id) throw new Error('Image non ajoutée');
+          delete projectDocMiss[p.id];
+          projectDocs[p.id] = doc.id;
+          return doc.id;
+        });
+      });
+    }
+
+    function attachFiles(cardId, files) {
+      var seq = Promise.resolve();
+      (files || []).forEach(function (file) {
+        seq = seq.then(function () { return attachNote(cardId, file); });
+      });
+      return seq;
+    }
+
+    function pasteProjectImages(p, files) {
+      setStatus('Image…', 'busy');
+      return projectDocId(p).then(function (docId) {
+        return attachFiles(docId, files);
+      }).then(function () {
+        setStatus('Image ajoutée', 'ok');
+        render();
+      }, function (err) {
+        fail(err);
+        throw err;
+      });
+    }
+
+    function pasteCardImages(row, files) {
+      setStatus('Image…', 'busy');
+      return attachFiles(row.id, files).then(function () {
+        setStatus('Image ajoutée', 'ok');
+        render();
+      }, function (err) {
+        fail(err);
+        throw err;
+      });
+    }
+
+    function loadCardShots(row, cb) {
+      loadNoteImages(row && row.id).then(function (rows) { cb(rows); }, function () { cb([]); });
+    }
+
+    function loadProjectShots(p, cb) {
+      findProjectDocId(p).then(function (id) {
+        if (!id) { cb([]); return; }
+        return loadNoteImages(id).then(function (rows) { cb(rows); });
+      }, function () { cb([]); });
     }
 
     function foldName(s) {
@@ -1163,8 +1300,15 @@
       if (!global.CardFields || !anchor) return;
       global.CardFields.open('desc', {
         anchor: anchor,
+        t: t,
         cardName: p.name || '',
         value: p.desc || '',
+        uploadImage: function (file) {
+          return projectDocId(p).then(function (id) { return attachNote(id, file); }).then(function () {
+            render();
+            return null;
+          });
+        },
         save: function (text) { return saveProject(p.id, { desc: text }); },
         onError: function (m) { setStatus(m, 'error'); },
       });
@@ -1314,6 +1458,11 @@
         perform: perform,
         openCard: openCard,
         openEditor: openEditor,
+        pasteImages: pasteCardImages,
+        resolveImage: resolveImage,
+        imageError: imageError,
+        shots: function (row) { return shotsOf(row && row.id); },
+        loadImages: loadCardShots,
         openEntities: openEntities,
         pickProject: pickProject,
         estimateMenu: estimateMenu,
@@ -1436,6 +1585,11 @@
             saveProject: saveProject,
             pickIcon: function (project, icon) { saveProject(project.id, { icon: icon }); },
             openDesc: openProjectDesc,
+            pasteImages: pasteProjectImages,
+            resolveImage: resolveImage,
+            imageError: imageError,
+            shots: function (project) { return shotsOf(projectDocs[project.id]); },
+            loadImages: loadProjectShots,
             pickOutcome: pickOutcome,
             saveStep: saveProjectStep,
             saveMetric: saveProjectMetric,
@@ -1602,9 +1756,24 @@
     }
 
     function placeLine(row) {
-      var label = WO() && state.places ? WO().placeLabel(state.places[row.id]) : '';
+      var place = WO() && state.places ? state.places[row.id] : null;
+      var label = place ? WO().placeLabel(place) : '';
       if (!label) return null;
-      return h('span', { class: 'db-place', text: label });
+      var kids = [h('span', { text: label })];
+      if (place.projectId && global.ProjectIcon) {
+        var glyph = global.ProjectIcon.button({
+          t: t,
+          id: place.projectId,
+          icon: place.icon,
+          goals: function () { return state.goals; },
+          onSaved: function (saved) {
+            if (saved) applyGoals(saved);
+            render();
+          },
+        });
+        if (glyph) kids.unshift(glyph);
+      }
+      return h('span', { class: 'db-place' }, kids);
     }
 
     // owner: the row the card is drawn on ('me' by default, a person key under the people rows).

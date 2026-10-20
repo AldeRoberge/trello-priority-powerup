@@ -343,6 +343,7 @@ html[data-color-mode] body.tp-page.tp-page--journey {
   gap: 6px;
   min-width: 0;
 }
+button.jy-node-ico.ip-glyph { width: 16px; height: 16px; padding: 0; }
 .jy-node-ico {
   width: 16px;
   flex: none;

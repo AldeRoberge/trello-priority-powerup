@@ -9,6 +9,8 @@
  *  - "En retard" and "Bloquées" filter the board; arrow keys move between cards
  *  - "Par priorité" cuts the board into rows, one per priority tier (Critique on top, "Sans priorité" last):
  *    same tiles, same columns, a card can only be dragged along its own row (KanbanModel.buildLanes)
+ *  - "Projets" nests each project's tasks and subtasks in the column the project occupies. Dragging the
+ *    project moves the project; dragging a task still moves that task.
  * Icons: Tabler webfont.
  */
 (function (global) {
@@ -49,6 +51,8 @@
 
   var LANES_KEY = 'tp-kanban-lanes';
   var LANES_FOLDED_KEY = 'tp-kanban-lanes-folded';
+  var PROJECTS_KEY = 'tp-kanban-projects';
+  var PROJ_FOLDED_KEY = 'tp-kanban-projects-folded';
 
   function readStored(key, fallback) {
     try {
@@ -73,16 +77,21 @@
       lists: [],
       rows: [],
       places: {},
+      goals: { nodes: [], links: [] },
       filter: '',
       facets: { blocked: false, overdue: false },
       lanes: readStored(LANES_KEY, false) === true, // rows = priority tiers (Y axis), columns stay the board's lists
       lanesFolded: readStored(LANES_FOLDED_KEY, {}) || {}, // lane key -> true when its row is folded
+      projects: readStored(PROJECTS_KEY, false) === true, // project shells in the columns, tasks and subtasks inside
+      projFolded: readStored(PROJ_FOLDED_KEY, {}) || {},
+      goals: { nodes: [], links: [] },
       hideDone: HD.get(),
       authOk: true,
       detailId: null,
       quick: null,
       quickId: null,
       dragId: null,
+      dragProjectId: null, // project shell being dragged to another column
       dragListId: null, // list id of the column being dragged by its header
       composer: null, // list id with the open "add card" composer
       aiBusy: false,
@@ -359,6 +368,21 @@
           title: state.lanes ? 'Revenir au tableau simple' : 'Grouper les cartes par priorité, les plus urgentes en haut',
           onclick: function () {
             state.lanes = !state.lanes;
+            if (state.lanes) state.projects = false;
+            writeStored(LANES_KEY, state.lanes);
+            writeStored(PROJECTS_KEY, state.projects);
+            renderBar();
+            renderBoard();
+          },
+        }),
+        btn('stack-2', 'Projets', {
+          cls: 'kb-btn--lanes',
+          active: state.projects,
+          title: state.projects ? 'Revenir au tableau simple' : 'Voir les projets, leurs tâches et leurs sous-tâches',
+          onclick: function () {
+            state.projects = !state.projects;
+            if (state.projects) state.lanes = false;
+            writeStored(PROJECTS_KEY, state.projects);
             writeStored(LANES_KEY, state.lanes);
             renderBar();
             renderBoard();
@@ -478,6 +502,26 @@
       return h('button', { class: 'kb-chip ' + cls, title: title || null, onclick: onclick }, [icon(iconName), text ? h('span', { text: text }) : null]);
     }
 
+    /** Checklist lines under a task, only in the project view. Nested items follow their parent. */
+    function subList(row) {
+      var lines = [];
+      function walk(items) {
+        (items || []).forEach(function (it) {
+          if (!it || typeof it.text !== 'string' || !it.text.trim()) return;
+          var done = it.done === true || Number(it.progress) >= 100;
+          var blocked = it.blocked === true && !done;
+          lines.push(h('li', { class: 'kb-sub' + (done ? ' is-done' : '') + (blocked ? ' is-blocked' : '') }, [
+            icon(done ? 'circle-check' : blocked ? 'player-pause' : 'circle'),
+            h('span', { text: it.text }),
+          ]));
+          if (Array.isArray(it.items) && it.items.length) walk(it.items);
+        });
+      }
+      walk(row.items);
+      if (!lines.length) return null;
+      return h('ul', { class: 'kb-subs' }, lines);
+    }
+
     function tile(row, list) {
       var badges = [];
       if (row.urgency) {
@@ -522,7 +566,21 @@
       var stepText = global.WorkOS && global.WorkOS.stepText(row);
       if (stepText) kids.push(h('div', { class: 'kb-step', text: stepText }));
       var place = state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[row.id]) : '';
-      if (place) kids.push(h('div', { class: 'kb-place', text: place }));
+      if (place) {
+        var pl = state.places[row.id];
+        var placeKids = [h('span', { text: place })];
+        if (pl && pl.projectId && global.ProjectIcon) {
+          var placeGlyph = global.ProjectIcon.button({
+            t: t,
+            id: pl.projectId,
+            icon: pl.icon,
+            goals: function () { return state.goals; },
+            onSaved: function () { reload({ quiet: true }); },
+          });
+          if (placeGlyph) placeKids.unshift(placeGlyph);
+        }
+        kids.push(h('div', { class: 'kb-place' }, placeKids));
+      }
       if (badges.length) kids.push(h('div', { class: 'kb-badges' }, badges));
       var prog = null;
       if (typeof row.progress === 'number') {
@@ -559,6 +617,7 @@
         kids.push(prog);
       }
       if (AI()) kids.push(askBox(row));
+      if (state.projects) kids.push(subList(row));
       var accent = row.statutColor || (list && list.color) || '#626f86';
       // Blocked (flag or "Bloqué" status) yet complete: striped red/green accent instead of the plain status colour.
       var blockedDone = !!(row.blocked || row.statutKey === 'blocked') && typeof row.progress === 'number' && row.progress >= 100;
@@ -811,6 +870,7 @@
      */
     function bindDropZone(zone, body, list, lane) {
       function accepts() {
+        if (state.dragProjectId) return !lane;
         if (!state.dragId) return false;
         if (!lane) return true;
         var dragged = findRow(state.dragId);
@@ -822,6 +882,7 @@
         e.dataTransfer.dropEffect = 'move';
         clearDropMarks();
         zone.classList.add('is-over');
+        if (state.dragProjectId) return;
         var at = dropIndex(body, e.clientY);
         var marker = h('div', { class: 'kb-drop' });
         var ref = at.rects[at.index];
@@ -836,19 +897,98 @@
       zone.addEventListener('drop', function (e) {
         if (!accepts()) return;
         e.preventDefault();
+        clearDropMarks();
+        if (state.dragProjectId) {
+          var projectId = state.dragProjectId;
+          state.dragProjectId = null;
+          moveProject(projectId, list.id);
+          return;
+        }
         var at = dropIndex(body, e.clientY).index;
         var id = state.dragId;
-        clearDropMarks();
         dropCard(id, list.id, at, lane);
       });
+    }
+
+    function projectNodes() {
+      return ((state.goals && state.goals.nodes) || []).filter(function (n) { return n && n.level === 'project'; });
+    }
+
+    function projectGlyph(project) {
+      var name = project.icon && project.icon.i ? project.icon.i : 'stack-2';
+      var color = project.icon && project.icon.c ? project.icon.c : '';
+      return h('i', { class: 'ti ti-' + name + ' kb-proj-glyph', style: color ? 'color:' + color : '' });
+    }
+
+    /** One project shell: its tasks in this column, and their subtasks on each tile. A guest is the same name in another column, not a second project to drag. */
+    function projectBlock(block, list) {
+      var id = block.project.id;
+      var folded = !!state.projFolded[id];
+      var guest = !!block.guest;
+      var shell = h('div', {
+        class: 'kb-proj' + (guest ? ' is-guest' : '') + (folded ? ' is-folded' : ''),
+        'data-project': id,
+      });
+      var head = h('div', {
+        class: 'kb-proj-head',
+        draggable: guest ? 'false' : 'true',
+        title: guest ? (block.project.name || 'Projet') : 'Glisser le projet vers une autre colonne',
+        'aria-label': block.project.name || 'Projet',
+      }, [
+        h('button', {
+          class: 'kb-proj-fold',
+          type: 'button',
+          title: folded ? 'Déplier' : 'Replier',
+          onclick: function (e) {
+            e.stopPropagation();
+            if (folded) delete state.projFolded[id];
+            else state.projFolded[id] = true;
+            writeStored(PROJ_FOLDED_KEY, state.projFolded);
+            renderBoard();
+          },
+        }, [icon(folded ? 'chevron-right' : 'chevron-down')]),
+        projectGlyph(block.project),
+        h('span', { class: 'kb-proj-name', text: block.project.name || 'Projet' }),
+        h('span', {
+          class: 'kb-proj-n',
+          text: block.tasks.length === block.total ? String(block.total) : block.tasks.length + '/' + block.total,
+        }),
+      ]);
+      if (!guest) {
+        head.ondragstart = function (e) {
+          e.stopPropagation();
+          state.dragProjectId = id;
+          state.dragId = null;
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', 'project:' + id); } catch (err) { /* ignore */ }
+          setTimeout(function () { shell.classList.add('is-dragging'); }, 0);
+          els.board.classList.add('is-dragging');
+        };
+        head.ondragend = function () {
+          state.dragProjectId = null;
+          els.board.classList.remove('is-dragging');
+          shell.classList.remove('is-dragging');
+          clearDropMarks();
+        };
+      }
+      shell.appendChild(head);
+      if (!folded) block.tasks.forEach(function (row) { shell.appendChild(tile(row, list)); });
+      return shell;
     }
 
     function column(col) {
       var list = col.list;
       var body = h('div', { class: 'kb-cards' });
-      col.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
+      if (state.projects && col.blocks) {
+        col.blocks.forEach(function (block) { body.appendChild(projectBlock(block, list)); });
+        col.guests.forEach(function (block) { body.appendChild(projectBlock(block, list)); });
+        col.loose.forEach(function (row) { body.appendChild(tile(row, list)); });
+      } else {
+        col.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
+      }
+      var shown = state.projects && col.blocks ? col.blocks.length + col.guests.length + col.loose.length : col.cards.length;
       // An empty column shows no placeholder: the "+ Ajouter une carte" button below is also a drop target (the whole column accepts drops).
-      if (!col.cards.length && (col.hidden || filtering())) {
+      if (!shown && (col.hidden || filtering())) {
         body.appendChild(h('div', { class: 'kb-empty', text: col.hidden ? col.total + ' masquée' + (col.total > 1 ? 's' : '') : 'Aucune carte' }));
       }
       var colEl = h('section', {
@@ -1020,8 +1160,11 @@
       });
       els.board.textContent = '';
       els.board.classList.toggle('is-lanes', state.lanes);
+      els.board.classList.toggle('is-projects', !!state.projects && !state.lanes);
       var model = state.lanes ? KM().buildLanes(state.rows, state.lists, viewOpts()) : null;
-      var cols = model ? model.columns : columns();
+      var cols = state.projects && !state.lanes
+        ? KM().buildProjectColumns(state.rows, state.lists, projectNodes(), viewOpts())
+        : (model ? model.columns : columns());
       if (!cols.length) {
         els.board.appendChild(h('div', { class: 'kb-loading', text: 'Aucune liste dans ce tableau.' }));
         return;
@@ -1043,6 +1186,30 @@
     }
 
     /* ── Writes ────────────────────────────────────────────────────── */
+    /** Moves a project shell into a column. Tasks stay where they are. */
+    function moveProject(projectId, listId) {
+      state.dragProjectId = null;
+      var os = global.WorkOS;
+      var GG = global.MindmapGoalsTrello;
+      var cur = projectNodes().filter(function (n) { return n.id === projectId; })[0];
+      if (!cur || !listId || cur.listId === listId) return renderBoard();
+      if (!os || typeof os.withProjectList !== 'function' || !GG || typeof GG.save !== 'function') {
+        setStatus('Enregistrement impossible', 'error');
+        return renderBoard();
+      }
+      var next = os.withProjectList(state.goals, projectId, listId);
+      state.goals = next;
+      renderBoard();
+      setStatus('Déplacement…');
+      GG.save(t, next).then(function (saved) {
+        state.goals = saved || next;
+        setStatus('Projet déplacé', 'ok');
+      }, function () {
+        setStatus('Échec du déplacement', 'error');
+        reload({ quiet: true });
+      });
+    }
+
     /**
      * Moves a card into `listId` at `index` among that list's other cards (null = bottom).
      * `lane` (priority view): `index` counts the tiles of that row only.
@@ -1217,7 +1384,11 @@
       var goals = global.MindmapGoalsTrello;
       var os = global.WorkOS;
       if (!goals || typeof goals.load !== 'function' || !os || typeof os.places !== 'function') return Promise.resolve({});
-      return goals.load(t).then(function (g) { return os.places(g || {}); }).catch(function () { return {}; });
+      return goals.load(t).then(function (g) {
+        state.goals = g || { nodes: [], links: [] };
+        if (global.ProjectIcon && typeof global.ProjectIcon.remember === 'function') global.ProjectIcon.remember(state.goals);
+        return os.places(state.goals);
+      }).catch(function () { return {}; });
     }
 
     function reload(opts) {
@@ -1231,6 +1402,10 @@
         state.rows = res[0].rows;
         state.authOk = !!res[1];
         state.places = res[2] || {};
+        (state.rows || []).forEach(function (row) {
+          var place = state.places[row.id];
+          row.projectId = place && place.projectId ? place.projectId : '';
+        });
         renderBanner();
         renderBar();
         renderBoard();

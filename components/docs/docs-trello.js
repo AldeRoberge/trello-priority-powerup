@@ -345,12 +345,14 @@
   }
 
   /**
-   * Uploads an image (File / Blob) as an attachment of the document card and returns the cover pointing
-   * to it. The file name is ours (no characters that would break the download URL).
+   * Uploads an image (File / Blob) as an attachment of the card and returns a pointer to it.
+   * The file name is ours (no characters that would break the download URL). `prefix === 'note'`
+   * marks a description picture (`note-…`); anything else is a cover (`couverture-…`).
    */
-  async function uploadCover(t, docId, blob, ext) {
+  async function uploadCover(t, docId, blob, ext, prefix) {
     var c = await restCreds(t);
-    var name = 'couverture-' + Date.now() + '.' + (/^(jpg|png|webp|gif)$/.test(ext) ? ext : 'jpg');
+    var kind = prefix === 'note' ? 'note' : 'couverture';
+    var name = kind + '-' + Date.now() + '.' + (/^(jpg|png|webp|gif)$/.test(ext) ? ext : 'jpg');
     var form = new FormData();
     form.append('file', blob, name);
     form.append('name', name);
@@ -365,6 +367,19 @@
     if (!cover) throw fail('upload-failed');
     if (typeof URL !== 'undefined' && URL.createObjectURL) blobCache[cover.a] = URL.createObjectURL(blob);
     return cover;
+  }
+
+  /**
+   * Description pictures already attached to a card (`note-…` files). Nothing is written into
+   * pluginData or the goal map: the attachment list is the index.
+   * @returns {Promise<{src:string, alt:string}[]>}
+   */
+  async function listNoteImages(t, cardId) {
+    var res = await ST().trelloRest(t, '/cards/' + enc(cardId) + '/attachments?fields=id,name');
+    if (!res || res.ok === false) throw fail((res && res.reason) || 'trello-failed', res && res.detail);
+    var rows = Array.isArray(res.data) ? res.data : [];
+    var ui = global.TriageUI;
+    return ui && typeof ui.noteShots === 'function' ? ui.noteShots(cardId, rows) : [];
   }
 
   /* Uploaded covers are Trello attachments, which need the token to be read: fetched once as blob URLs. */
@@ -726,11 +741,22 @@
     ((opts && opts.keepTitles) || []).forEach(function (id) { if (id) keep[id] = true; });
     var names = await cardNames(t);
     var created = [];
+    if (global.ProjectIcon && typeof global.ProjectIcon.remember === 'function') global.ProjectIcon.remember(goals);
     var plan = DP.plan(goals, docs, names);
     var i;
     for (i = 0; i < plan.createProjects.length; i++) {
       var p = plan.createProjects[i];
-      var doc = await createDoc(t, p.name, '', { subject: { k: 'project', id: p.id }, icon: { i: 'briefcase' } });
+      var icon = null;
+      ((goals && goals.nodes) || []).forEach(function (n) { if (n && n.id === p.id && n.icon) icon = n.icon; });
+      if (!icon && global.ProjectIcon && typeof global.ProjectIcon.suggest === 'function') {
+        icon = await global.ProjectIcon.suggest(t, p.name, '');
+        if (icon && global.WorkOS && typeof global.WorkOS.withNodeEdit === 'function') {
+          goals = global.WorkOS.withNodeEdit(goals, p.id, { icon: icon });
+          try { goals = (await GG.save(t, goals)) || goals; } catch (e) { /* the document still gets the glyph */ }
+          if (global.ProjectIcon.remember) global.ProjectIcon.remember(goals);
+        }
+      }
+      var doc = await createDoc(t, p.name, '', { subject: { k: 'project', id: p.id }, icon: icon || { i: 'briefcase' } });
       docs.unshift(listed(doc));
       created.push(doc);
     }
@@ -807,6 +833,7 @@
     setCover: setCover,
     setIcon: setIcon,
     uploadCover: uploadCover,
+    listNoteImages: listNoteImages,
     coverBlobUrl: coverBlobUrl,
     searchUnsplash: searchUnsplash,
     renameDoc: renameDoc,

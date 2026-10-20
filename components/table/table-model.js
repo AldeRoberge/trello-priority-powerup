@@ -156,6 +156,8 @@
       r.parent = p ? p.name : '';
       var place = places && places[r.id];
       r.project = place && place.project ? place.project : '';
+      r.projectId = place && place.projectId ? place.projectId : '';
+      r.projectIcon = place && place.icon ? place.icon : null;
     });
     return rows;
   }
@@ -171,7 +173,7 @@
     (rows || []).forEach(function (r) {
       if (!r.project) { free.push(r); return; }
       var g = by[r.project];
-      if (!g) { g = by[r.project] = { key: 'p:' + r.project, name: r.project, rows: [], free: false }; list.push(g); }
+      if (!g) { g = by[r.project] = { key: 'p:' + r.project, id: r.projectId || '', icon: r.projectIcon || null, name: r.project, rows: [], free: false }; list.push(g); }
       g.rows.push(r);
     });
     if (!list.length) return null;

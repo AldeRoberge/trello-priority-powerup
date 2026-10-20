@@ -86,7 +86,20 @@
 .tri-desc:hover { background: var(--tp-surface-hover); }
 .tri-desc.is-empty { align-items: center; color: var(--tp-text-muted); opacity: 0.55; }
 .tri-desc.is-empty:hover { opacity: 0.9; }
+.tri-desc:not(.is-empty) { flex-direction: column; }
+.tri-desc.is-drop { background: var(--tp-surface-subtle); box-shadow: inset 0 0 0 2px var(--tp-primary); }
 .tri-desc .ti { font-size: 14px; flex: none; }
+.tri-desc-img { margin: 0; max-width: 100%; }
+.tri-desc-img img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--tp-surface-subtle);
+}
+.tri-desc-img.is-loading { min-height: 72px; border-radius: 6px; background: var(--tp-surface-subtle); }
+.tri-desc-img.is-broken { min-height: 48px; border: 1px dashed var(--tp-border-strong); border-radius: 6px; }
 .tri-desc-body { min-width: 0; max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
 .tri-desc-body > :first-child { margin-top: 0; }
 

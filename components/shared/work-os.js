@@ -168,19 +168,22 @@
   }
 
   function placeOf(nodes) {
-    var place = { project: '', objective: '', goal: '' };
+    var place = { project: '', projectId: '', icon: null, objective: '', goal: '' };
     var i;
     for (i = 0; i < (nodes || []).length; i++) {
       var n = nodes[i];
       if (!n) continue;
-      if (n.level === 'project' && !place.project) place.project = n.name || '';
-      else if (n.level === 'objective' && !place.objective) place.objective = n.name || '';
+      if (n.level === 'project' && !place.project) {
+        place.project = n.name || '';
+        place.projectId = n.id || '';
+        place.icon = n.icon || null;
+      } else if (n.level === 'objective' && !place.objective) place.objective = n.name || '';
       else if (n.level === 'goal' && !place.goal) place.goal = n.name || '';
     }
     return place;
   }
 
-  /** cardId → { project, objective, goal } for tasks linked into the goal map. */
+  /** cardId → { project, projectId, icon, objective, goal } for tasks linked into the goal map. */
   function places(goals) {
     var g = indexGoals(goals);
     var out = Object.create(null);
@@ -270,9 +273,23 @@
           if (patch.icon.c) next.icon.c = patch.icon.c;
         } else delete next.icon;
       }
+      if (patch && Object.prototype.hasOwnProperty.call(patch, 'listId')) {
+        var listId = String(patch.listId || '').trim().slice(0, 32);
+        if (listId) next.listId = listId;
+        else delete next.listId;
+      }
       return next;
     });
     return { nodes: nodes, links: ((goals && goals.links) || []).slice() };
+  }
+
+  /** The goal map with a project's Kanban column (`listId` empty clears it). Other nodes stay as they are. */
+  function withProjectList(goals, projectId, listId) {
+    var node = ((goals && goals.nodes) || []).filter(function (n) {
+      return n && n.id === projectId && n.level === 'project';
+    })[0];
+    if (!node) return { nodes: ((goals && goals.nodes) || []).slice(), links: ((goals && goals.links) || []).slice() };
+    return withNodeEdit(goals, projectId, { listId: listId || '' });
   }
 
   /** The project node a task sits under (nearest first), or null. */
@@ -479,6 +496,7 @@
     withProjectOutcome: withProjectOutcome,
     projectOf: projectOf,
     withNodeEdit: withNodeEdit,
+    withProjectList: withProjectList,
     placeLabel: placeLabel,
     wip: wip,
     review: review,

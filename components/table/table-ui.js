@@ -61,6 +61,7 @@
       lists: [],
       rows: [],
       places: {},
+      goals: { nodes: [], links: [] },
       columns: TM().DEFAULT_COLUMNS.slice(),
       widths: {},
       sheetTheme: 'light',
@@ -1078,6 +1079,28 @@
         return td;
       }
 
+      if (key === 'project') {
+        var bits = [];
+        if (row.projectId && global.ProjectIcon) {
+          var glyph = global.ProjectIcon.button({
+            t: t,
+            id: row.projectId,
+            icon: row.projectIcon,
+            goals: function () { return state.goals; },
+            onSaved: function () { reload({ quiet: true }); },
+          });
+          if (glyph) bits.push(glyph);
+        }
+        var projLabel = TM().cellText(row, key);
+        if (projLabel) bits.push(h('span', { text: projLabel }));
+        if (bits.length) td.appendChild(h('span', { class: 'tb-proj' }, bits));
+        td.addEventListener('click', function () {
+          state.selected = { rowId: row.id, key: key };
+          renderGrid();
+        });
+        return td;
+      }
+
       if (key === 'name') {
         td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
         td.title = row.name;
@@ -1086,7 +1109,21 @@
         var stepText = global.WorkOS && global.WorkOS.stepText(row);
         if (stepText) td.appendChild(h('span', { class: 'tb-step', text: stepText }));
         var place = state.places && global.WorkOS && state.columns.indexOf('project') === -1 ? global.WorkOS.placeLabel(state.places[row.id]) : '';
-        if (place) td.appendChild(h('span', { class: 'tb-place', text: place }));
+        if (place) {
+          var pl = state.places[row.id];
+          var placeKids = [h('span', { text: place })];
+          if (pl && pl.projectId && global.ProjectIcon) {
+            var placeGlyph = global.ProjectIcon.button({
+              t: t,
+              id: pl.projectId,
+              icon: pl.icon,
+              goals: function () { return state.goals; },
+              onSaved: function () { reload({ quiet: true }); },
+            });
+            if (placeGlyph) placeKids.unshift(placeGlyph);
+          }
+          td.appendChild(h('span', { class: 'tb-place' }, placeKids));
+        }
         td.addEventListener('click', function () {
           state.selected = { rowId: row.id, key: key };
           beginEdit(row.id, key);
@@ -1799,7 +1836,11 @@
       var goals = global.MindmapGoalsTrello;
       var os = global.WorkOS;
       if (!goals || typeof goals.load !== 'function' || !os || typeof os.places !== 'function') return Promise.resolve({});
-      return goals.load(t).then(function (g) { return os.places(g || {}); }).catch(function () { return {}; });
+      return goals.load(t).then(function (g) {
+        state.goals = g || { nodes: [], links: [] };
+        if (global.ProjectIcon && typeof global.ProjectIcon.remember === 'function') global.ProjectIcon.remember(state.goals);
+        return os.places(state.goals);
+      }).catch(function () { return {}; });
     }
 
     /* ── Project sections (same look as the Triage tree), folded state remembered in this browser ── */
@@ -1816,9 +1857,21 @@
       renderGrid();
     }
     function sectionRow(g) {
+      var sectionGlyph = icon(g.free ? 'inbox' : ((g.icon && g.icon.i) || 'stack-2'), 'tb-section-icon');
+      if (!g.free && g.id && global.ProjectIcon) {
+        var picked = global.ProjectIcon.button({
+          t: t,
+          id: g.id,
+          icon: g.icon,
+          className: 'ip-glyph tb-section-icon',
+          goals: function () { return state.goals; },
+          onSaved: function () { reload({ quiet: true }); },
+        });
+        if (picked) sectionGlyph = picked;
+      }
       var inner = h('div', { class: 'tb-section-in' }, [
         icon(g.open ? 'chevron-down' : 'chevron-right', 'tb-section-chev'),
-        icon(g.free ? 'inbox' : 'stack-2', 'tb-section-icon'),
+        sectionGlyph,
         h('span', { class: 'tb-section-name', text: g.name }),
         h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
       ]);

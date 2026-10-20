@@ -663,8 +663,17 @@
 
     var iconTimers = {};
 
-    function itemIcon(doc, fallback, whenMissing) {
+    function shownIcon(doc) {
       var mark = DM().normalizeIcon(doc && doc.icon);
+      if (doc && doc.subject && doc.subject.k === 'project' && global.ProjectIcon && typeof global.ProjectIcon.of === 'function') {
+        var fromGoal = DM().normalizeIcon(global.ProjectIcon.of(doc.subject.id));
+        if (fromGoal) return fromGoal;
+      }
+      return mark;
+    }
+
+    function itemIcon(doc, fallback, whenMissing) {
+      var mark = shownIcon(doc);
       var name = (mark && mark.i) || fallback;
       var btn = h('button', {
         class: 'dc-item-icon' + (mark && mark.c ? ' has-color' : ''),
@@ -700,6 +709,9 @@
     function applyIcon(doc, next) {
       var norm = DM().normalizeIcon(next);
       doc.icon = norm;
+      if (doc.subject && doc.subject.k === 'project' && global.ProjectIcon && typeof global.ProjectIcon.save === 'function') {
+        global.ProjectIcon.save(t, null, doc.subject.id, norm);
+      }
       if (state.current && state.current.id === doc.id) state.current.icon = norm;
       touchListItem(doc.id, { icon: norm });
       scheduleIconSave(doc.id);
@@ -750,7 +762,7 @@
 
     function openIconPicker(anchor, doc, fallback) {
       closePop();
-      var current = DM().normalizeIcon(doc.icon);
+      var current = shownIcon(doc);
       var q = '';
       var box = h('div', { class: 'dc-pop dc-iconpick', role: 'dialog', 'aria-label': 'Icône' });
       box._for = doc.id;

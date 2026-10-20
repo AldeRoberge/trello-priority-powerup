@@ -149,10 +149,135 @@
     return rest.slice(0, at).concat([moved], rest.slice(at));
   }
 
+  /** Open work beats a finished list. Lower rank is the column a project follows when it has no list of its own. */
+  var STAGE_RANK = { started: 0, unstarted: 1, backlog: 2, triage: 3, blocked: 4 };
+
+  function listMap(lists) {
+    var byId = Object.create(null);
+    (lists || []).forEach(function (l) { if (l && l.id) byId[l.id] = l; });
+    return byId;
+  }
+
+  /**
+   * Column a project occupies. An explicit `project.listId` wins when that list still exists.
+   * Otherwise the project follows its least-finished task (En cours before À faire before Backlog).
+   * A project with no task sits in Backlog, then À faire, then the first list.
+   */
+  function projectListId(project, tasks, lists) {
+    var byId = listMap(lists);
+    if (project && project.listId && byId[project.listId]) return project.listId;
+    var bestId = '';
+    var bestRank = 99;
+    var closedId = '';
+    (tasks || []).forEach(function (task) {
+      var list = task && byId[task.listId];
+      if (!list) return;
+      var rank = STAGE_RANK[list.category];
+      if (rank == null) {
+        if (!closedId && (list.category === 'completed' || list.category === 'canceled')) closedId = list.id;
+        return;
+      }
+      if (rank < bestRank) {
+        bestRank = rank;
+        bestId = list.id;
+      }
+    });
+    if (bestId) return bestId;
+    if (closedId) return closedId;
+    var fallback = (lists || []).filter(function (l) { return l.category === 'backlog'; })[0]
+      || (lists || []).filter(function (l) { return l.category === 'unstarted'; })[0]
+      || (lists || [])[0];
+    return fallback ? fallback.id : '';
+  }
+
+  /**
+   * The board grouped by project. Each column still is a list. A project shell lives in one column
+   * (its own list, or the one projectListId picks). Its tasks that share that column sit inside the
+   * shell; its tasks in other columns are `guests` there, under the same project name. Cards with no
+   * project stay `loose`. opts: same as buildColumns. projects: [{ id, name, icon, listId }].
+   * Rows need `projectId`. A filter or facet hides a shell that has no visible task, unless the
+   * project's name matches the text.
+   */
+  function buildProjectColumns(rows, lists, projects, opts) {
+    opts = opts || {};
+    var columns = buildColumns(rows, lists, opts);
+    var visible = Object.create(null);
+    columns.forEach(function (col) {
+      col.cards.forEach(function (row) { visible[row.id] = col.list.id; });
+    });
+    var byProject = Object.create(null);
+    (projects || []).forEach(function (p) {
+      if (!p || !p.id) return;
+      byProject[p.id] = { project: p, tasks: [] };
+    });
+    (rows || []).forEach(function (row) {
+      if (!row || !row.projectId || !byProject[row.projectId]) return;
+      byProject[row.projectId].tasks.push(row);
+    });
+    var home = Object.create(null);
+    Object.keys(byProject).forEach(function (id) {
+      home[id] = projectListId(byProject[id].project, byProject[id].tasks, lists);
+    });
+    var q = String(opts.filter || '').trim().toLowerCase();
+    var narrowing = !!(q || opts.blocked || opts.overdue);
+    function byName(a, b) {
+      return String(a.project.name || '').localeCompare(String(b.project.name || ''), 'fr');
+    }
+    return columns.map(function (col) {
+      var used = Object.create(null);
+      var blocks = [];
+      Object.keys(byProject).forEach(function (id) {
+        if (home[id] !== col.list.id) return;
+        var group = byProject[id];
+        var here = group.tasks.filter(function (task) { return visible[task.id] === col.list.id; });
+        here.sort(function (a, b) { return a.pos - b.pos; });
+        var nameHit = q && String(group.project.name || '').toLowerCase().indexOf(q) !== -1;
+        if (narrowing && !here.length && !nameHit) return;
+        if (col.hidden) return;
+        blocks.push({
+          project: group.project,
+          tasks: here,
+          total: group.tasks.length,
+          elsewhere: group.tasks.length - here.length,
+          guest: false,
+        });
+        here.forEach(function (task) { used[task.id] = true; });
+      });
+      blocks.sort(byName);
+      var guests = [];
+      var guestBy = Object.create(null);
+      if (!col.hidden) {
+        col.cards.forEach(function (row) {
+          if (used[row.id] || !row.projectId || !byProject[row.projectId] || home[row.projectId] === col.list.id) return;
+          var key = row.projectId;
+          if (!guestBy[key]) {
+            guestBy[key] = { project: byProject[key].project, tasks: [], total: byProject[key].tasks.length, elsewhere: 0, guest: true };
+            guests.push(guestBy[key]);
+          }
+          guestBy[key].tasks.push(row);
+          used[row.id] = true;
+        });
+      }
+      guests.sort(byName);
+      var loose = col.hidden ? [] : col.cards.filter(function (row) { return !used[row.id]; });
+      return {
+        list: col.list,
+        cards: col.cards,
+        total: col.total,
+        hidden: col.hidden,
+        blocks: blocks,
+        guests: guests,
+        loose: loose,
+      };
+    });
+  }
+
   global.KanbanModel = {
     columnInsertIndex: columnInsertIndex,
     reorderLists: reorderLists,
     buildColumns: buildColumns,
+    buildProjectColumns: buildProjectColumns,
+    projectListId: projectListId,
     buildLanes: buildLanes,
     laneKey: laneKey,
     TIER_LABELS: TIER_LABELS,

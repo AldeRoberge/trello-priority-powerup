@@ -4,6 +4,11 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Ctrl+F ouvre une recherche instantanée : un projet ou une tâche s’ouvre tout de suite, et « Demander à l’IA » pose la même question à l’assistant sans modifier le tableau.
+- Triage : coller une image dans la description d’un projet ou d’une carte la joint à la carte. Le texte de la carte des objectifs ne grossit pas.
+- Kanban : « Projets » montre chaque projet dans sa colonne, avec ses tâches et ses sous-tâches. Glisser le projet le déplace (Backlog, À faire, En cours, Terminé) sans déplacer ses tâches.
+- Assistant : « 1+1 » répond « 2 ». Une question qui ne change pas le tableau reçoit la réponse, sans demander quelle carte modifier.
+- Projet : l’icône choisie (et sa couleur) apparaît dans chaque vue, et un clic dessus ouvre le même sélecteur. À la création du document du projet, l’assistant en propose une.
 - Cliquer une tâche l’ouvre dans la vue, en isolation, pour la modifier sans changer de page.
 - Assistant : l’interview de carte ne démarre plus et ne bloque plus les actions (mémoire de carte, etc.).
 - Assistant : pendant l’attente, la conversation montre l’étape (préparation, envoi, lecture), une barre et le temps estimé.
