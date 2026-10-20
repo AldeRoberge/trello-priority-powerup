@@ -99,6 +99,11 @@ describe('GanttUI helpers', () => {
     assert.equal(stored.sortDir, 'asc');
     assert.deepEqual(stored.sortKeys, [{ by: 'progress', dir: 'asc' }]);
     assert.equal(stored.groupByStatus, true);
+    assert.equal(stored.groupByProject, false);
+
+    GanttUI.storeFilters({ groupByProject: true, groupByStatus: true });
+    assert.equal(GanttUI.readStoredFilters().groupByProject, true);
+    assert.equal(GanttUI.readStoredFilters().groupByStatus, false);
 
     GanttUI.storeFilters({ sortBy: 'subtasks' });
     assert.equal(GanttUI.readStoredFilters().sortBy, 'subtasks');

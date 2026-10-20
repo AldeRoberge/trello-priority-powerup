@@ -26,6 +26,7 @@
     sortDir: 'asc',
     sortKeys: [{ by: 'date', dir: 'asc' }],
     groupByStatus: true,
+    groupByProject: false,
     criteria: {
       query: '',
       statuses: [],
@@ -166,6 +167,7 @@
       sortDir: DEFAULT_FILTERS.sortDir,
       sortKeys: normalizeSortKeysUi(DEFAULT_FILTERS.sortKeys),
       groupByStatus: DEFAULT_FILTERS.groupByStatus,
+      groupByProject: DEFAULT_FILTERS.groupByProject,
       criteria: normalizeCriteriaUi(DEFAULT_FILTERS.criteria),
     };
   }
@@ -195,6 +197,10 @@
       if (typeof parsed.groupByStatus === 'boolean') {
         out.groupByStatus = parsed.groupByStatus;
       }
+      if (typeof parsed.groupByProject === 'boolean') {
+        out.groupByProject = parsed.groupByProject;
+      }
+      if (out.groupByProject) out.groupByStatus = false;
       if (Array.isArray(parsed.sortKeys) && parsed.sortKeys.length) {
         out.sortKeys = normalizeSortKeysUi(parsed.sortKeys);
       } else if (typeof parsed.sortBy === 'string') {
@@ -244,6 +250,10 @@
         typeof filters.groupByStatus === 'boolean'
           ? filters.groupByStatus
           : DEFAULT_FILTERS.groupByStatus,
+      groupByProject:
+        typeof filters.groupByProject === 'boolean'
+          ? filters.groupByProject
+          : DEFAULT_FILTERS.groupByProject,
       criteria: criteria,
     };
     try {
@@ -427,6 +437,8 @@
       hideBlocked: storedFilters.hideBlocked,
       sortKeys: storedFilters.sortKeys,
       groupByStatus: storedFilters.groupByStatus,
+      groupByProject: storedFilters.groupByProject,
+      goals: { nodes: [], links: [] },
       criteria: storedFilters.criteria,
       me: null,
       facets: null,
@@ -472,6 +484,7 @@
         hideBlocked: state.hideBlocked,
         sortKeys: state.sortKeys,
         groupByStatus: state.groupByStatus,
+        groupByProject: state.groupByProject,
         criteria: state.criteria,
       });
     }
@@ -535,6 +548,9 @@
           },
           getGroup: function () {
             return state.groupByStatus;
+          },
+          getGroupProject: function () {
+            return state.groupByProject;
           },
           getCriteria: function () {
             return state.criteria;
@@ -1779,6 +1795,15 @@
           },
           setGroup: function (on) {
             state.groupByStatus = !!on;
+            if (on) state.groupByProject = false;
+            onSortChanged();
+          },
+          getGroupProject: function () {
+            return state.groupByProject;
+          },
+          setGroupProject: function (on) {
+            state.groupByProject = !!on;
+            if (on) state.groupByStatus = false;
             onSortChanged();
           },
         });
@@ -2170,8 +2195,62 @@
       });
     }
 
-    /** Sort the roots by every level in state.sortKeys (grouped by status or flat). */
+    /** Writes the project's icon on the goal map and redraws the sections. */
+    function saveProjectIcon(id, icon) {
+      var GG = global.MindmapGoalsTrello;
+      var WO = global.WorkOS;
+      if (!id || !GG || typeof GG.save !== 'function' || !WO || typeof WO.withNodeEdit !== 'function') return;
+      var next = WO.withNodeEdit(state.goals, id, { icon: icon });
+      state.goals = next;
+      applySort();
+      renderChart();
+      GG.save(t, next).then(function (saved) {
+        if (saved) state.goals = saved;
+      }, function () { /* the glyph stays until the next reload */ });
+    }
+
+    /** The project a card belongs to, or null. Subtasks stay on the card. */
+    function projectOfNode(node) {
+      var W = global.WorkOS;
+      if (!W || typeof W.projectOf !== 'function' || !node || !node.cardId) return null;
+      var p = null;
+      try { p = W.projectOf(state.goals, node.cardId); } catch (e) { p = null; }
+      if (!p || !p.id) return null;
+      return { id: p.id, name: p.name || 'Projet', icon: p.icon || null };
+    }
+
+    /** CSS tone (`is-project`) and the drop key (`project:<id>`, empty id = Sans projet). */
+    function sectionTone(row) {
+      if (row && row.sectionKey === 'project') return 'project';
+      return (row && row.sectionKey) || 'pending';
+    }
+
+    function sectionDropKey(row) {
+      if (row && row.sectionKey === 'project') return 'project:' + (row.projectId || '');
+      return (row && row.sectionKey) || 'pending';
+    }
+
+    function setSectionsExpanded(open) {
+      (state.tree || []).forEach(function (n) {
+        if (n && n.kind === 'section') state.expanded[n.id] = !!open;
+      });
+      renderChart();
+    }
+
+    /** Sort the roots by every level in state.sortKeys (by project, by status, or flat). */
     function applySort() {
+      if (
+        state.groupByProject &&
+        typeof model.sortTreeRootsGroupedByProject === 'function'
+      ) {
+        state.tree = model.sortTreeRootsGroupedByProject(
+          state.tree,
+          state.sortKeys,
+          null,
+          { group: true, projectOf: projectOfNode }
+        );
+        return;
+      }
       var opts = { group: state.groupByStatus !== false };
       if (typeof model.sortTreeRootsGroupedByState === 'function') {
         state.tree = model.sortTreeRootsGroupedByState(
@@ -2323,15 +2402,51 @@
       return ids;
     }
 
-    function applySectionDrop(cardIds, sectionKey) {
+    function applyProjectDrop(cardIds, projectId) {
+      var W = global.WorkOS;
+      var GG = global.MindmapGoalsTrello;
       if (
-        !cardIds ||
-        !cardIds.length ||
-        !sectionKey ||
-        typeof ganttTrello.moveCardToStateSection !== 'function'
+        !W ||
+        typeof W.withTaskProject !== 'function' ||
+        !GG ||
+        typeof GG.save !== 'function'
       ) {
+        setStatus('Projet indisponible', true);
         return;
       }
+      if (state.saving) return;
+      state.saving = true;
+      var pid = projectId || null;
+      var next = state.goals || { nodes: [], links: [] };
+      cardIds.forEach(function (cid) {
+        next = W.withTaskProject(next, cid, pid);
+      });
+      state.goals = next;
+      applySort();
+      renderChart();
+      setStatus(pid ? 'Projet enregistré' : 'Projet retiré');
+      GG.save(t, next).then(
+        function (saved) {
+          state.saving = false;
+          if (saved && saved.nodes) state.goals = saved;
+          applySort();
+          renderChart();
+        },
+        function () {
+          state.saving = false;
+          setStatus('Échec de l’enregistrement du projet', true);
+          reload({ quiet: true });
+        }
+      );
+    }
+
+    function applySectionDrop(cardIds, sectionKey) {
+      if (!cardIds || !cardIds.length || !sectionKey) return;
+      if (String(sectionKey).indexOf('project:') === 0) {
+        applyProjectDrop(cardIds, String(sectionKey).slice('project:'.length));
+        return;
+      }
+      if (typeof ganttTrello.moveCardToStateSection !== 'function') return;
       if (state.saving) return;
       state.saving = true;
       var label =
@@ -2411,10 +2526,23 @@
 
     function bindLabelSectionDrag(labelRow, row) {
       if (!row || row.kind !== 'card' || !row.cardId) return;
-      if (typeof ganttTrello.moveCardToStateSection !== 'function') return;
+      var canProject =
+        state.groupByProject &&
+        global.WorkOS &&
+        typeof global.WorkOS.withTaskProject === 'function';
+      var canStatus = typeof ganttTrello.moveCardToStateSection === 'function';
+      if (state.groupByProject) {
+        if (!canProject) return;
+      } else if (!canStatus) {
+        return;
+      }
 
       labelRow.classList.add('is-section-draggable');
-      labelRow.title = labelRow.title || 'Glisser vers une section pour changer le statut';
+      labelRow.title =
+        labelRow.title ||
+        (state.groupByProject
+          ? 'Glisser vers un projet'
+          : 'Glisser vers une section pour changer le statut');
 
       labelRow.addEventListener('pointerdown', function (ev) {
         if (ev.button != null && ev.button !== 0) return;
@@ -4848,15 +4976,16 @@
               : state.expanded[row.id] !== false;
           var sectionLabelRow = el(
             'div',
-            'gantt-row gantt-row--section' +
-              (row.sectionKey ? ' is-' + row.sectionKey : '') +
+            'gantt-row gantt-row--section is-' +
+              sectionTone(row) +
               (sectionOpen ? '' : ' is-collapsed')
           );
           sectionLabelRow.style.height = ROW_H + 'px';
-          sectionLabelRow.setAttribute(
-            'data-section-key',
-            row.sectionKey || 'pending'
-          );
+          sectionLabelRow.setAttribute('data-section-key', sectionDropKey(row));
+          if (row.sectionKey === 'project' && row.projectId) {
+            sectionLabelRow.setAttribute('data-iso-project', row.projectId);
+            sectionLabelRow.setAttribute('data-iso-label', row.name || '');
+          }
           var sectionCell = el('div', 'gantt-label-cell gantt-label-cell--section');
           var sectionTwist = el('button', 'gantt-twist gantt-section-twist', {
             type: 'button',
@@ -4887,6 +5016,14 @@
             (sectionOpen ? ' \u2014 Replier' : ' \u2014 D\u00e9plier');
           sectionTitle.addEventListener('click', toggleSection);
           sectionCell.appendChild(sectionTwist);
+          if (row.sectionKey === 'project' && row.projectId && global.IconPick) {
+            sectionCell.appendChild(global.IconPick.button({
+              icon: row.icon,
+              fallback: 'stack-2',
+              className: 'ip-glyph',
+              onChoose: function (next) { saveProjectIcon(row.projectId, next); },
+            }));
+          }
           sectionCell.appendChild(sectionTitle);
           if (row.children && row.children.length) {
             var shownInSection = sectionShownCount(row);
@@ -4922,25 +5059,13 @@
                   toggleExpand(row.id);
                 },
                 onCollapseAll: function () {
-                  var order =
-                    model.STATE_SECTION_ORDER ||
-                    ['started', 'pending', 'blocked'];
-                  for (var si = 0; si < order.length; si++) {
-                    state.expanded['section:' + order[si]] = false;
-                  }
-                  renderChart();
+                  setSectionsExpanded(false);
                 },
                 onExpandAll: function () {
-                  var order2 =
-                    model.STATE_SECTION_ORDER ||
-                    ['started', 'pending', 'blocked'];
-                  for (var sj = 0; sj < order2.length; sj++) {
-                    state.expanded['section:' + order2[sj]] = true;
-                  }
-                  renderChart();
+                  setSectionsExpanded(true);
                 },
                 onMoveSelection: function () {
-                  applySectionDrop(selectedCardIds, row.sectionKey);
+                  applySectionDrop(selectedCardIds, sectionDropKey(row));
                 },
                 onSelectCards: function () {
                   var kids = row.children || [];
@@ -4979,16 +5104,14 @@
 
           var sectionTimeRow = el(
             'div',
-            'gantt-row gantt-row--section gantt-timeline-row' +
-              (row.sectionKey ? ' is-' + row.sectionKey : '') +
+            'gantt-row gantt-row--section gantt-timeline-row is-' +
+              sectionTone(row) +
               (sectionOpen ? '' : ' is-collapsed')
           );
           sectionTimeRow.style.height = ROW_H + 'px';
           sectionTimeRow.style.width = state.timelineWidth + 'px';
-          sectionTimeRow.setAttribute(
-            'data-section-key',
-            row.sectionKey || 'pending'
-          );
+          sectionTimeRow.setAttribute('data-section-key', sectionDropKey(row));
+          appendProjectSpan(sectionTimeRow, row);
           timelineCol.appendChild(sectionTimeRow);
           return;
         }
@@ -5000,7 +5123,13 @@
             (state.selected[row.id] ? ' is-selected' : '')
         );
         labelRow.style.height = ROW_H + 'px';
-        if (row.kind === 'card' && row.cardId) labelRow.setAttribute('data-card-id', row.cardId);
+        if (row.kind === 'card' && row.cardId) {
+          labelRow.setAttribute('data-card-id', row.cardId);
+          labelRow.setAttribute('data-iso-card', row.cardId);
+        } else if ((row.kind === 'local' || row.kind === 'checklist') && row.parentCardId && row.itemId) {
+          labelRow.setAttribute('data-iso-sub', 'sub:' + row.parentCardId + ':' + row.itemId);
+          labelRow.setAttribute('data-iso-label', row.name || '');
+        }
         var labelCell = el('div', 'gantt-label-cell');
         labelCell.style.setProperty('--gantt-depth', String(row.depth || 0));
 
@@ -5098,6 +5227,17 @@
             }, 280);
           });
         }
+        if (row.kind === 'card' && !(row.depth > 0) && !state.groupByProject) {
+          var proj = projectOfNode(row);
+          if (proj && global.IconPick) {
+            nameWrap.appendChild(global.IconPick.button({
+              icon: proj.icon,
+              fallback: 'stack-2',
+              className: 'ip-glyph',
+              onChoose: function (next) { saveProjectIcon(proj.id, next); },
+            }));
+          }
+        }
         nameWrap.appendChild(nameBtn);
         var subBadge = buildSubtaskTitleBadge(row);
         if (subBadge) nameWrap.appendChild(subBadge);
@@ -5128,7 +5268,7 @@
               var btn = detailRoot && detailRoot.querySelector(sel);
               if (btn) btn.click();
             }
-            return ContextMenu.buildGanttCardItems({
+            var built = ContextMenu.buildGanttCardItems({
               kind: row.kind,
               cardId: row.cardId,
               selected: !!state.selected[row.id],
@@ -5167,6 +5307,19 @@
                 deleteSubtaskRow(row);
               },
             });
+            if (global.Isolation) {
+              var subId = (row.kind === 'local' || row.kind === 'checklist') && row.parentCardId && row.itemId
+                ? 'sub:' + row.parentCardId + ':' + row.itemId
+                : '';
+              built = built.concat(global.Isolation.menuItems({
+                cardId: row.cardId || row.parentCardId || '',
+                cardName: row.name || '',
+                subId: subId,
+                subName: subId ? (row.name || '') : '',
+                people: global.Isolation.peopleOf(row),
+              }));
+            }
+            return built;
           });
         }
         labelsCol.appendChild(labelRow);
@@ -5177,6 +5330,8 @@
         );
         timeRow.style.height = ROW_H + 'px';
         timeRow.style.width = state.timelineWidth + 'px';
+        if (labelRow.getAttribute('data-iso-card')) timeRow.setAttribute('data-iso-card', labelRow.getAttribute('data-iso-card'));
+        if (labelRow.getAttribute('data-iso-sub')) timeRow.setAttribute('data-iso-sub', labelRow.getAttribute('data-iso-sub'));
 
         var interval = model.resolveBarInterval(row, intervalOptions());
         var hasVisibleBar = false;
@@ -5434,6 +5589,51 @@
       // Gantt is always opened as a fullscreen board modal — never call t.sizeTo.
     }
 
+    /** Quiet span covering the dates of the tasks in a project section. */
+    function appendProjectSpan(timeRow, row) {
+      if (!row || row.sectionKey !== 'project' || !timeRow) return;
+      var start = '';
+      var due = '';
+      (row.children || []).forEach(function (c) {
+        if (!c) return;
+        var s = c.startDate || c.dueDate || '';
+        var d = c.dueDate || c.startDate || '';
+        if (s && (!start || s < start)) start = s;
+        if (d && (!due || d > due)) due = d;
+      });
+      if (!start || !due) return;
+      var interval = model.resolveBarInterval(
+        { startDate: start, dueDate: due },
+        intervalOptions()
+      );
+      if (!interval) return;
+      var geo = model.barGeometry(
+        interval,
+        range(),
+        state.timelineWidth,
+        timelineMapOptions()
+      );
+      if (!geo || !geo.visible) return;
+      var span = el('div', 'gantt-project-span');
+      span.style.left = geo.left + 'px';
+      span.style.width = geo.width + 'px';
+      timeRow.appendChild(span);
+    }
+
+    function loadGoals() {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG || typeof GG.load !== 'function') return Promise.resolve(state.goals);
+      return GG.load(t).then(
+        function (g) {
+          if (g && Array.isArray(g.nodes)) state.goals = g;
+          return state.goals;
+        },
+        function () {
+          return state.goals;
+        }
+      );
+    }
+
     function reload(options) {
       options = options || {};
       // Soft reloads (e.g. after mini editors) skip the empty "Chargement…" flash.
@@ -5444,9 +5644,9 @@
         setStatus('Chargement du tableau\u2026');
         render();
       }
-      return ganttTrello
-        .loadBoard(t)
-        .then(function (data) {
+      return Promise.all([ganttTrello.loadBoard(t), loadGoals()])
+        .then(function (pair) {
+          var data = pair[0];
           state.loading = false;
           state.error = '';
           state.tree = (data && data.tree) || [];
@@ -5459,6 +5659,7 @@
           applySort();
           state.cardsById = Object.create(null);
           var cards = (data && data.cards) || [];
+          if (global.Isolation) global.Isolation.adopt(t, cards);
           for (var i = 0; i < cards.length; i++) {
             if (cards[i] && cards[i].id) {
               state.cardsById[cards[i].id] = cards[i];

@@ -4,7 +4,16 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
-- Priorité : « Empressement » ne passe plus sous le curseur (colonne des libellés élargie), et le Graphique 2D est ouvert par défaut.
+- Isolation : le clic droit « Isoler » retient une tâche, une sous-tâche, un projet ou une personne. Les autres tâches pâlissent (Tableau, Kanban, Gantt, Mindmap, Parcours, Triage) et Documents ouvre la page de ce sujet.
+- Triage et Gantt : un clic sur l’icône d’un projet en choisit une autre et une couleur, comme pour un document. À la création, l’assistant en propose une.
+- Gantt : « Regrouper par projet » découpe le graphique comme le triage (projets repliables, « Sans projet » à la fin). Déposer une carte sur un projet l’y rattache.
+- Assistant : les réponses dans la boîte en bas montrent le visage de l’assistant.
+- Documents : chaque projet est un document, et chacune de ses tâches est un document enfant de ce projet.
+- Assistant : « hello » reçoit un salut. La boîte ne demande plus quoi faire sur le tableau, et ne propose plus une suite de phrase sans rapport.
+- Triage : cliquer le nom d’un projet déplie ou replie ses tâches, comme la flèche.
+- Triage : le panneau d’un projet permet d’écrire sa description, de choisir ou créer son résultat, et de modifier sa prochaine action.
+- Logo : nouveau logo Cerveau, plus net : deux hémisphères bleus unis sur fond sombre, sans dégradé ni halo.
+- Menu clic droit d’une carte : « Archiver » est maintenant toujours en premier (Triage, Tableau, Kanban, Gantt, Mindmap, Parcours).
 
 - Parcours : la carte montre maintenant toutes les tâches ouvertes d'emblée, plus besoin de cliquer un projet pour les voir.
 - Parcours : cliquer une boîte ne recentre plus la carte si elle est déjà bien visible; sinon la caméra glisse doucement.

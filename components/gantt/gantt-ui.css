@@ -600,6 +600,28 @@
   box-shadow: inset 3px 0 0 var(--tp-danger-text, #e34935);
 }
 
+.gantt-row--section.is-project {
+  box-shadow: inset 3px 0 0 var(--tp-text-subtle, #44546f);
+}
+
+.gantt-row--section.is-project .gantt-label-cell--section,
+.gantt-row--section.is-project .gantt-section-title {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 600;
+  color: var(--tp-text, #172b4d);
+}
+
+.gantt-project-span {
+  position: absolute;
+  top: 16px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--tp-text-subtle, #44546f);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 .gantt-label-cell--section {
   display: flex;
   align-items: center;

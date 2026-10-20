@@ -803,6 +803,65 @@ describe('GanttModel', () => {
     );
   });
 
+  it('sortTreeRootsGroupedByProject orders projects by name, Sans projet last', () => {
+    const nodes = [
+      {
+        id: 'card:a',
+        kind: 'card',
+        cardId: 'a',
+        name: 'Bravo',
+        children: [{ id: 'sub', kind: 'checklist', name: 'étape' }],
+      },
+      { id: 'card:b', kind: 'card', cardId: 'b', name: 'Alpha', children: [] },
+      { id: 'card:c', kind: 'card', cardId: 'c', name: 'Zulu', children: [] },
+    ];
+    const map = {
+      a: { id: 'p2', name: 'Zèbre' },
+      b: { id: 'p1', name: 'Alpha' },
+    };
+    const grouped = GanttModel.sortTreeRootsGroupedByProject(nodes, 'name', 'asc', {
+      projectOf: (n) => map[n.cardId] || null,
+    });
+    assert.deepEqual(
+      grouped.map((n) => n.name),
+      ['Alpha', 'Zèbre', 'Sans projet']
+    );
+    assert.equal(grouped[0].sectionKey, 'project');
+    assert.equal(grouped[0].projectId, 'p1');
+    assert.equal(grouped[0].id, 'section:project:p1');
+    assert.deepEqual(
+      grouped[0].children.map((n) => n.cardId),
+      ['b']
+    );
+    assert.equal(grouped[1].children[0].children[0].id, 'sub');
+    assert.deepEqual(
+      grouped[2].children.map((n) => n.cardId),
+      ['c']
+    );
+
+    const again = GanttModel.sortTreeRootsGroupedByProject(grouped, 'name', 'asc', {
+      projectOf: (n) => map[n.cardId] || null,
+    });
+    assert.equal(again.filter((n) => n.kind === 'section').length, 3);
+
+    const flat = GanttModel.sortTreeRootsGroupedByProject(grouped, 'name', 'asc', {
+      group: false,
+    });
+    assert.deepEqual(
+      flat.map((n) => n.cardId),
+      ['b', 'a', 'c']
+    );
+
+    const none = GanttModel.sortTreeRootsGroupedByProject(nodes, 'name', 'asc', {
+      projectOf: () => null,
+    });
+    assert.deepEqual(
+      none.map((n) => n.cardId),
+      ['b', 'a', 'c']
+    );
+    assert.equal(none.some((n) => n.kind === 'section'), false);
+  });
+
   it('flattenVisible can collapse state sections', () => {
     const tree = GanttModel.buildNestTree([
       { id: 'go', name: 'Go', dueDate: '2026-07-20', category: 'started' },

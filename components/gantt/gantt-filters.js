@@ -437,7 +437,7 @@
   // ── Sort panel ───────────────────────────────────────────────────────
 
   /**
-   * opts: { getKeys, setKeys(keys), getGroup, setGroup(bool) }
+   * opts: { getKeys, setKeys(keys), getGroup, setGroup(bool), getGroupProject?, setGroupProject?(bool) }
    * @returns {{ wrap, refresh }}
    */
   function createSortPanel(opts) {
@@ -644,22 +644,26 @@
       presets.appendChild(prow);
       pop.appendChild(presets);
 
-      // Grouping
+      // Grouping. Status and project are alternatives: turning one on clears the other.
       var foot = el('div', 'gantt-pop-foot');
-      var lab = el('label', 'gantt-switch');
-      var cb = el('input', '', { type: 'checkbox' });
-      cb.checked = !!opts.getGroup();
-      cb.addEventListener('change', function () {
-        opts.setGroup(!!cb.checked);
-      });
-      lab.appendChild(cb);
-      lab.appendChild(el('span', 'gantt-switch-track'));
-      lab.appendChild(
-        el('span', 'gantt-switch-text', {
-          text: 'Regrouper par statut',
-        })
-      );
-      foot.appendChild(lab);
+      function switchRow(text, on, set) {
+        var lab = el('label', 'gantt-switch');
+        var cb = el('input', '', { type: 'checkbox' });
+        cb.checked = !!on;
+        cb.addEventListener('change', function () { set(!!cb.checked); });
+        lab.appendChild(cb);
+        lab.appendChild(el('span', 'gantt-switch-track'));
+        lab.appendChild(el('span', 'gantt-switch-text', { text: text }));
+        return lab;
+      }
+      foot.appendChild(switchRow('Regrouper par statut', opts.getGroup && opts.getGroup(), function (on) {
+        if (typeof opts.setGroup === 'function') opts.setGroup(on);
+      }));
+      if (typeof opts.setGroupProject === 'function') {
+        foot.appendChild(switchRow('Regrouper par projet', opts.getGroupProject && opts.getGroupProject(), function (on) {
+          opts.setGroupProject(on);
+        }));
+      }
       pop.appendChild(foot);
     }
 
@@ -1073,7 +1077,9 @@
         lvl.appendChild(el('span', 'gantt-summary-dir', { text: k.dir === 'desc' ? '▼' : '▲' }));
         sortBtn.appendChild(lvl);
       });
-      if (opts.getGroup()) {
+      if (opts.getGroupProject && opts.getGroupProject()) {
+        sortBtn.appendChild(el('span', 'gantt-summary-tag', { text: 'par projet' }));
+      } else if (opts.getGroup()) {
         sortBtn.appendChild(el('span', 'gantt-summary-tag', { text: 'par statut' }));
       }
       sortBtn.addEventListener('click', opts.onOpenSort);

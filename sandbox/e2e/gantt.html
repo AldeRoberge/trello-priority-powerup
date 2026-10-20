@@ -38,7 +38,9 @@
   <script src="/components/shared/add-row.js"></script>
   <script src="/components/completion/completion-ui.js"></script>
   <script src="/components/gantt/gantt-model.js"></script>
+  <script src="/components/shared/work-os.js"></script>
   <script src="/components/gantt/gantt-trello.js"></script>
+  <script src="/components/shared/"></script>
   <script src="/components/shared/view-tabs.js"></script>
   <script src="/components/shared/view-shell.js?v=narrow-2"></script>
   <script src="/components/shared/card-fields.js"></script>
@@ -80,6 +82,25 @@
       });
     };
     GanttTrello.ensureRestAuthorized = function () { return Promise.resolve({ ok: true }); };
+    window.__goals = {
+      nodes: [
+        { id: 'p1', level: 'project', name: 'Semaine des bibliothèques' },
+        { id: 'p2', level: 'project', name: 'Autre chantier' },
+      ],
+      links: [
+        { from: 'c1', to: 'p1' },
+        { from: 'c2', to: 'p1' },
+        { from: 'c3', to: 'p2' },
+      ],
+    };
+    window.MindmapGoalsTrello = {
+      load: function () { return Promise.resolve(JSON.parse(JSON.stringify(window.__goals))); },
+      save: function (_t, g) {
+        window.__goals = JSON.parse(JSON.stringify(g));
+        window.__goalSaves = (window.__goalSaves || 0) + 1;
+        return Promise.resolve(window.__goals);
+      },
+    };
     var t = {
       get: function () { return Promise.resolve(null); },
       set: function () { return Promise.resolve(); },

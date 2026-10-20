@@ -1888,6 +1888,101 @@
     return out;
   }
 
+  /** A project section (or "Sans projet" when `project` is null). */
+  function makeProjectSectionHeader(project) {
+    var id = project && project.id ? String(project.id) : '';
+    return {
+      id: 'section:project:' + id,
+      kind: 'section',
+      sectionKey: 'project',
+      projectId: id,
+      icon: project && project.icon ? project.icon : null,
+      name: project && project.name ? String(project.name) : 'Sans projet',
+      category: null,
+      categoryLabel: '',
+      depth: 0,
+      expandable: true,
+      children: [],
+      progress: 0,
+      done: false,
+      startDate: '',
+      dueDate: '',
+      cardId: null,
+      parentCardId: null,
+      itemId: null,
+      blocked: false,
+      subtaskCount: 0,
+    };
+  }
+
+  function unwrapSectionRoots(nodes) {
+    var all = [];
+    (nodes || []).forEach(function (n) {
+      if (!n) return;
+      if (n.kind === 'section') {
+        (n.children || []).forEach(function (c) {
+          if (c) all.push(c);
+        });
+      } else {
+        all.push(n);
+      }
+    });
+    return all;
+  }
+
+  /**
+   * Group roots under their project (name order), "Sans projet" last.
+   * opts.projectOf(node) -> { id, name } | null. Subtasks stay on their card.
+   * When nothing belongs to a project, the list stays flat. opts.group === false unwraps.
+   */
+  function sortTreeRootsGroupedByProject(nodes, sortBy, sortDir, opts) {
+    opts = opts || {};
+    var multi = Array.isArray(sortBy);
+    var roots = unwrapSectionRoots(nodes);
+    function sorted(list) {
+      return multi ? sortTreeRootsMulti(list, sortBy) : sortTreeRoots(list, sortBy, sortDir);
+    }
+    if (opts.group === false) return sorted(roots);
+    var projectOf = typeof opts.projectOf === 'function' ? opts.projectOf : function () { return null; };
+    var buckets = [];
+    var byId = Object.create(null);
+    var free = [];
+    roots.forEach(function (n) {
+      if (!n || n.kind === 'section') return;
+      var p = null;
+      try { p = projectOf(n); } catch (e) { p = null; }
+      if (!p || !p.id) { free.push(n); return; }
+      var id = String(p.id);
+      var g = byId[id];
+      if (!g) {
+        g = { id: id, name: String(p.name || 'Projet'), icon: p.icon || null, rows: [] };
+        byId[id] = g;
+        buckets.push(g);
+      }
+      g.rows.push(n);
+    });
+    if (!buckets.length) return sorted(roots);
+    buckets.sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name), 'fr', { sensitivity: 'base' });
+    });
+    var out = [];
+    buckets.forEach(function (g) {
+      var header = makeProjectSectionHeader(g);
+      header.children = sorted(g.rows);
+      header.expandable = header.children.length > 0;
+      header.subtaskCount = header.children.length;
+      out.push(header);
+    });
+    if (free.length) {
+      var loose = makeProjectSectionHeader(null);
+      loose.children = sorted(free);
+      loose.expandable = loose.children.length > 0;
+      loose.subtaskCount = loose.children.length;
+      out.push(loose);
+    }
+    return out;
+  }
+
   /**
    * Drop section headers that have no visible task rows after them.
    * Collapsed sections with children are kept so the header stays clickable.
@@ -2176,6 +2271,8 @@
     makeStateSectionHeader: makeStateSectionHeader,
     isNodeExpanded: isNodeExpanded,
     sortTreeRootsGroupedByState: sortTreeRootsGroupedByState,
+    sortTreeRootsGroupedByProject: sortTreeRootsGroupedByProject,
+    makeProjectSectionHeader: makeProjectSectionHeader,
     pruneEmptyStateSections: pruneEmptyStateSections,
   };
 })(typeof window !== 'undefined' ? window : this);
