@@ -10118,7 +10118,32 @@ html[data-color-mode="dark"] .calc-rsm-marker-core {
   font-size: 13px;
 }
 
+/* Rows open when filled and fold when empty on their own: no chevron. */
 .info-row-chevron {
+  display: none;
+}
+
+.info-row.is-collapsible:not(.is-collapsed) > .info-row-toggle {
+  cursor: default;
+}
+
+/* The title is the card heading, not a labelled field. */
+.info-row--title > .info-row-label {
+  display: none;
+}
+
+/* Description toolbar stays out of sight until the editor is focused. Its
+   slot is kept (opacity, not display) so focusing never shifts the text. */
+.info-desc-wrap:not(:focus-within) > .info-desc-toolbar {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.info-desc-toolbar {
+  transition: opacity 0.12s ease;
+}
+
+.info-row-chevron-legacy {
   flex-shrink: 0;
   margin-left: auto;
   font-size: 14px;

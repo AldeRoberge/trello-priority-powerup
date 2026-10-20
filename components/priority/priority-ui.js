@@ -11205,21 +11205,45 @@
         sortEmptyRowsDown(row.parentNode);
       }
 
-      function setCollapsed(next, persist) {
+      function setCollapsed(next) {
         row.classList.toggle('is-collapsed', next);
         label.setAttribute('aria-expanded', next ? 'false' : 'true');
         summary.hidden = !next;
-        if (persist) rowCollapsedStore(key, next);
         refresh();
         onLayoutChangeSafe();
       }
 
+      // Quiet when empty, rich when set: a row with a value is always open, an
+      // empty one folds to one dimmed line until the user opens it to add.
+      var userOpened = false;
+      function isEmptyNow() {
+        var text = '';
+        try {
+          text = rowSummaries[key] ? rowSummaries[key]() : genericRowSummary(value);
+        } catch (e) {
+          text = genericRowSummary(value);
+        }
+        var plain = text && text.nodeType ? (text.textContent || '').trim() : String(text || '').trim();
+        return !plain;
+      }
+      function rowHasFocus() {
+        var active = global.document && global.document.activeElement;
+        return !!(active && row.contains(active));
+      }
+      function autoFold() {
+        var collapsed = row.classList.contains('is-collapsed');
+        var empty = isEmptyNow();
+        if (collapsed && !empty) setCollapsed(false);
+        else if (!collapsed && empty && !userOpened && !rowHasFocus()) setCollapsed(true);
+      }
+
       function toggle(event) {
         event.preventDefault();
-        var wasCollapsed = row.classList.contains('is-collapsed');
+        if (!row.classList.contains('is-collapsed')) return;
+        userOpened = true;
         var wasEmpty = summary.classList.contains('is-empty');
-        setCollapsed(!wasCollapsed, true);
-        if (wasCollapsed && wasEmpty) {
+        setCollapsed(false);
+        if (wasEmpty) {
           setTimeout(function () {
             startRowEdit(value);
           }, 0);
@@ -11229,16 +11253,24 @@
       label.addEventListener('keydown', function (event) {
         if (event.key === 'Enter' || event.key === ' ') toggle(event);
       });
+      row.addEventListener('focusout', function () {
+        setTimeout(function () {
+          if (rowHasFocus()) return;
+          userOpened = false;
+          autoFold();
+        }, 150);
+      });
 
       if (typeof global.MutationObserver === 'function') {
         var timer = null;
         new global.MutationObserver(function () {
-          if (!row.classList.contains('is-collapsed')) return;
           clearTimeout(timer);
-          timer = setTimeout(refresh, 80);
+          timer = setTimeout(autoFold, 80);
         }).observe(value, { childList: true, subtree: true, characterData: true });
       }
-      setCollapsed(rowCollapsedStore(key), false);
+      setCollapsed(false);
+      setTimeout(autoFold, 0);
+      setTimeout(autoFold, 600);
     }
 
     function onLayoutChangeSafe() {
@@ -11248,7 +11280,7 @@
     }
 
     // ── Title ──────────────────────────────────────────────────────────
-    var titleRow = makeRow('title', 'Titre', { icon: 'ti-heading' });
+    var titleRow = makeRow('title', 'Titre', { icon: 'ti-heading', collapsible: false });
     var titleWrap = document.createElement('div');
     titleWrap.className = 'info-title-wrap';
 
