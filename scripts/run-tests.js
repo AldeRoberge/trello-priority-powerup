@@ -104,6 +104,7 @@ const UNIT_FILES = [
   'dashboard-model.test.js',
   'dashboard-menu.test.js',
   'dashboard-trello.test.js',
+  'triage-tree.test.js',
   'journey-model.test.js',
   'graph-canvas.test.js',
   'skeleton.test.js',

@@ -1,0 +1,92 @@
+/* Triage as a tree (see triage-tree.js): project lines, task rows (the usual Triage rows) and subtask lines. */
+.db-triage-list { --tt-indent: 18px; }
+
+.tt-chev {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-text); }
+.tt-chev.is-empty { cursor: default; }
+
+/* Every line starts its fold arrow one step further in than its parent. */
+.tt-project,
+.tt-task.db-row,
+.tt-sub {
+  padding-left: calc(12px + var(--tt-depth, 0) * var(--tt-indent));
+}
+
+.tt-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--tp-border);
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tt-project:hover { background: var(--tp-surface-hover); }
+.tt-project > .ti { flex: none; font-size: 15px; color: var(--tp-text-muted); }
+.tt-project .tt-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tt-project.is-free { font-weight: 500; color: var(--tp-text-muted); }
+.tt-project .tt-count {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--tp-surface-active);
+  color: var(--tp-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Task rows keep the Triage look; the "2/5" column is always there so the score never moves. */
+.tt-task .tt-chev { margin-right: -2px; }
+.tt-sub-count {
+  flex: none;
+  min-width: 30px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--tp-text-muted);
+}
+.tt-sub-count.is-done { color: var(--tp-success); }
+
+.tt-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--tp-border);
+  font-size: 13px;
+  cursor: default;
+}
+.tt-sub > .ti { flex: none; font-size: 14px; color: var(--tp-text-muted); }
+.tt-sub .tt-name { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--tp-text-subtle); }
+.tt-sub.is-done .tt-name { color: var(--tp-text-muted); text-decoration: line-through; }
+.tt-sub.is-done > .ti { color: var(--tp-success); }
+.tt-sub.is-blocked .tt-name,
+.tt-sub.is-blocked > .ti { color: var(--tp-danger-text); }
+
+/* The tree / list button in the Triage header: filled while the tree is on. */
+.db-icon-btn.is-on { background: var(--tp-surface-active); color: var(--tp-text); }
