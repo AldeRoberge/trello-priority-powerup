@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Tableau : « Colonnes… » dans le clic droit ouvre enfin le panneau des colonnes (il se refermait aussitôt).
 - Onglets : l’onglet actif (Assistant, Gantt…) garde toujours son soulignement bleu, même quand il a le focus clavier ; le cadre de focus reste à l’intérieur de l’onglet.
 - Parcours : les sous-tâches (éléments de liste d’une carte) se déplacent à la main comme les cartes et ont un fond plein ; les liens vers les sous-tâches sont tracés comme une arborescence (tronc et branches coudées, sans flèche).
 - Parcours : double-clic sur le nom d’une tâche, d’un projet ou d’une mission pour le renommer sur place, comme dans la Mindmap (« Ouvrir » reste dans le clic droit et sous la carte).

@@ -163,7 +163,9 @@
     function addRow(item, hint) {
       var row = makeRow(item, hint);
       var idx = rows.length;
-      row.addEventListener('click', function () {
+      row.addEventListener('click', function (e) {
+        // Keep the click from reaching "click outside" handlers that would close what the action just opened (Colonnes…).
+        if (e && e.stopPropagation) e.stopPropagation();
         if (item.children && item.children.length) openSub(row, item);
         else run(item);
       });
