@@ -175,9 +175,11 @@
 /* Impact: a scale. Everything up to the value is tinted, the value itself is solid. */
 .tri-scale { gap: 1px; }
 .tri-scale .tri-opt { min-width: 28px; padding: 0; font-variant-numeric: tabular-nums; }
-.tri-scale .tri-opt.is-fill { background: color-mix(in srgb, var(--tp-primary) 20%, transparent); color: var(--tp-text); }
-.tri-scale .tri-opt:hover { background: color-mix(in srgb, var(--tp-primary) 32%, transparent); color: var(--tp-text); }
-.tri-scale .tri-opt[aria-checked="true"] { background: var(--tp-primary); color: var(--tp-primary-text, #fff); box-shadow: none; }
+/* Gradient: each step carries its own tint (--tri-g 0-100, cool to warm) so the filled range shows the impact heat. */
+.tri-scale .tri-opt { --tri-c: color-mix(in srgb, #4f8df5, #e8573f calc(var(--tri-g, 0) * 1%)); }
+.tri-scale .tri-opt.is-fill { background: color-mix(in srgb, var(--tri-c) 38%, transparent); color: var(--tp-text); }
+.tri-scale .tri-opt:hover { background: color-mix(in srgb, var(--tri-c) 55%, transparent); color: var(--tp-text); }
+.tri-scale .tri-opt[aria-checked="true"] { background: var(--tri-c); color: var(--tp-primary-text, #fff); box-shadow: none; }
 .tri-scale.is-default .tri-opt.is-fill, .tri-scale.is-default .tri-opt[aria-checked="true"] { opacity: 0.55; }
 
 /* Priorité: the result of Impact and Urgence. */

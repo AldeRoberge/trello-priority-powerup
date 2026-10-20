@@ -95,6 +95,7 @@
         title: o.title || null,
         'data-fk': spec.key + ':' + o.id,
       }, [o.icon ? icon(o.icon) : null, h('span', { class: 'tri-opt-t', text: o.label })]);
+      if (spec.fill) b.style.setProperty('--tri-g', String(Math.round(100 * i / Math.max(1, spec.options.length - 1))));
       b.addEventListener('click', function () { spec.onPick(o); });
       b.addEventListener('focus', function () {
         buttons.forEach(function (x) { x.tabIndex = x === b ? 0 : -1; });
