@@ -1,46 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144" role="img" aria-label="Cerveau">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1B2330"/>
-      <stop offset="100%" stop-color="#0F141C"/>
-    </linearGradient>
-    <linearGradient id="brain" x1="18%" y1="12%" x2="86%" y2="92%">
-      <stop offset="0%" stop-color="#7DD3F0"/>
-      <stop offset="55%" stop-color="#3BA3D9"/>
-      <stop offset="100%" stop-color="#1D7EB8"/>
-    </linearGradient>
-    <linearGradient id="fold" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#E8F7FC" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#E8F7FC" stop-opacity="0.12"/>
-    </linearGradient>
-  </defs>
-  <rect width="144" height="144" rx="32" fill="url(#bg)"/>
-  <!-- Stylized brain (top view / silhouette) -->
-  <path fill="url(#brain)" d="
-    M72 28
-    C58 28, 48 34, 42 44
-    C34 42, 26 48, 26 58
-    C26 64, 28 69, 32 72
-    C28 78, 28 86, 32 94
-    C36 104, 48 112, 60 114
-    C64 118, 68 120, 72 120
-    C76 120, 80 118, 84 114
-    C96 112, 108 104, 112 94
-    C116 86, 116 78, 112 72
-    C116 69, 118 64, 118 58
-    C118 48, 110 42, 102 44
-    C96 34, 86 28, 72 28
-    Z"/>
-  <!-- Center fissure -->
-  <path d="M72 36 V112" stroke="url(#fold)" stroke-width="3.5" stroke-linecap="round" fill="none"/>
-  <!-- Left folds -->
-  <path d="M48 48 C56 52, 58 60, 52 68" stroke="url(#fold)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <path d="M40 62 C50 66, 52 76, 44 84" stroke="url(#fold)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <path d="M46 88 C56 92, 58 100, 50 106" stroke="url(#fold)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <!-- Right folds -->
-  <path d="M96 48 C88 52, 86 60, 92 68" stroke="url(#fold)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <path d="M104 62 C94 66, 92 76, 100 84" stroke="url(#fold)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <path d="M98 88 C88 92, 86 100, 94 106" stroke="url(#fold)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <!-- Soft highlight -->
-  <ellipse cx="56" cy="52" rx="14" ry="10" fill="#FFFFFF" opacity="0.14"/>
+  <rect width="144" height="144" rx="32" fill="#161B22"/>
+  <!-- Two mirrored hemispheres with a clear gap, flat color -->
+  <path fill="#4DA3FF" d="M67 32C46 32 30 48 30 68c0 9 3.5 16 9 21-1 15 10 25 28 25z"/>
+  <path fill="#4DA3FF" d="M77 32c21 0 37 16 37 36 0 9-3.5 16-9 21 1 15-10 25-28 25z"/>
+  <!-- One fold per side, cut out in the tile color -->
+  <g fill="none" stroke="#161B22" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M67 58H55c-5 0-9-4-9-9"/>
+    <path d="M67 84H52c-5 0-8-3-8-8"/>
+    <path d="M77 58h12c5 0 9-4 9-9"/>
+    <path d="M77 84h15c5 0 8-3 8-8"/>
+  </g>
 </svg>
