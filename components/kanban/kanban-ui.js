@@ -7,6 +7,8 @@
  *  - a sparkle on a tile (and one field for the board in the toolbar) asks KanbanAI; the tile
  *    field stays closed until asked, so a board does not prefetch one suggestion per card
  *  - "En retard" and "Bloquées" filter the board; arrow keys move between cards
+ *  - "Par priorité" cuts the board into rows, one per priority tier (Critique on top, "Sans priorité" last):
+ *    same tiles, same columns, a card can only be dragged along its own row (KanbanModel.buildLanes)
  * Icons: Tabler webfont.
  */
 (function (global) {
@@ -45,6 +47,26 @@
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
 
+  var LANES_KEY = 'tp-kanban-lanes';
+  var LANES_FOLDED_KEY = 'tp-kanban-lanes-folded';
+
+  function readStored(key, fallback) {
+    try {
+      var raw = global.localStorage.getItem(key);
+      return raw == null ? fallback : JSON.parse(raw);
+    } catch (e) { return fallback; }
+  }
+
+  function writeStored(key, value) {
+    try { global.localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode: the choice just is not remembered */ }
+  }
+
+  /** Name, index and colour of each priority tier, from the Priority module when it is loaded. */
+  function tierDefs() {
+    var tiers = (global.PriorityUI && global.PriorityUI.TIERS) || [];
+    return tiers.map(function (x) { return { i: x.i, label: x.label, color: x.seg }; });
+  }
+
   function mount(root, t) {
     var HD = global.HideDone;
     var state = {
@@ -53,6 +75,8 @@
       places: {},
       filter: '',
       facets: { blocked: false, overdue: false },
+      lanes: readStored(LANES_KEY, false) === true, // rows = priority tiers (Y axis), columns stay the board's lists
+      lanesFolded: readStored(LANES_FOLDED_KEY, {}) || {}, // lane key -> true when its row is folded
       hideDone: HD.get(),
       authOk: true,
       detailId: null,
@@ -183,14 +207,21 @@
     function listById(id) {
       return state.lists.filter(function (l) { return l.id === id; })[0] || null;
     }
-    function columns() {
-      return KM().buildColumns(state.rows, state.lists, {
+    function viewOpts() {
+      return {
         filter: state.filter,
         hideDone: state.hideDone,
         blocked: state.facets.blocked,
         overdue: state.facets.overdue,
         today: todayIso(),
-      });
+        tiers: tierDefs(),
+      };
+    }
+    function columns() {
+      return KM().buildColumns(state.rows, state.lists, viewOpts());
+    }
+    function filtering() {
+      return !!(state.filter || state.facets.blocked || state.facets.overdue);
     }
 
     function closeDetail() {
@@ -286,7 +317,7 @@
     function btn(iconName, label, opts) {
       opts = opts || {};
       return h('button', {
-        class: 'kb-btn' + (opts.active ? ' is-active' : '') + (label ? '' : ' kb-btn--icon'),
+        class: 'kb-btn' + (opts.active ? ' is-active' : '') + (label ? '' : ' kb-btn--icon') + (opts.cls ? ' ' + opts.cls : ''),
         title: opts.title || label || null,
         onclick: opts.onclick,
       }, [icon(iconName), label ? h('span', { text: label }) : null]);
@@ -334,6 +365,17 @@
         AI() ? boardAsk() : null,
         h('span', { class: 'kb-spacer' }),
         h('span', { class: 'kb-count', 'aria-live': 'polite' }),
+        btn('layout-rows', 'Par priorité', {
+          cls: 'kb-btn--lanes',
+          active: state.lanes,
+          title: state.lanes ? 'Revenir au tableau simple' : 'Grouper les cartes par priorité, les plus urgentes en haut',
+          onclick: function () {
+            state.lanes = !state.lanes;
+            writeStored(LANES_KEY, state.lanes);
+            renderBar();
+            renderBoard();
+          },
+        }),
         btn(HD.icon(state.hideDone), HD.label(state.hideDone, done), {
           active: state.hideDone,
           title: HD.title(state.hideDone),
@@ -556,10 +598,16 @@
           try { e.dataTransfer.setData('text/plain', row.id); } catch (err) { /* ignore */ }
           setTimeout(function () { el.classList.add('is-dragging'); }, 0);
           els.board.classList.add('is-dragging');
+          // Priority rows: a card only moves along its own row (its priority is computed, not dropped), so other rows go quiet.
+          var own = KM().laneKey(row);
+          els.board.querySelectorAll('.kb-cell').forEach(function (c) {
+            c.classList.toggle('is-foreign', c.getAttribute('data-lane') !== own);
+          });
         },
         ondragend: function () {
           state.dragId = null;
           els.board.classList.remove('is-dragging');
+          els.board.querySelectorAll('.kb-cell.is-foreign').forEach(function (c) { c.classList.remove('is-foreign'); });
           clearDropMarks();
           el.classList.remove('is-dragging');
         },
@@ -674,7 +722,7 @@
 
     /** Where a dragged column would land at `x`: its index among the other columns, plus the neighbour to mark. */
     function columnDropAt(x) {
-      var cols = [].slice.call(els.board.querySelectorAll('.kb-col:not(.is-dragging-col)'));
+      var cols = [].slice.call(els.board.querySelectorAll('.kb-col:not(.is-dragging-col), .kb-colhead:not(.is-dragging-col)'));
       var rects = cols.map(function (n) { return n.getBoundingClientRect(); });
       var index = KM().columnInsertIndex(rects, x);
       return { index: index, before: cols[index] || null, after: index > 0 ? cols[index - 1] : null };
@@ -708,93 +756,115 @@
       return { index: KM().insertIndex(rects, y), rects: rects };
     }
 
+    /**
+     * Column header (icon, name, count, "+"): also the handle that reorders the board's lists.
+     * `host` is the element that dims while the header is dragged and serves as the drag image.
+     */
+    function colHead(col, host) {
+      var list = col.list;
+      return h('header', {
+        class: 'kb-col-head',
+        draggable: 'true',
+        title: 'Glisser pour réorganiser les colonnes',
+        ondragstart: function (e) {
+          state.dragListId = list.id;
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', 'list:' + list.id); } catch (err) { /* ignore */ }
+          try { e.dataTransfer.setDragImage(host, 20, 20); } catch (err) { /* default drag image */ }
+          setTimeout(function () { host.classList.add('is-dragging-col'); }, 0);
+          els.board.classList.add('is-dragging-list');
+        },
+        ondragend: function () {
+          state.dragListId = null;
+          els.board.classList.remove('is-dragging-list');
+          host.classList.remove('is-dragging-col');
+          clearDropMarks();
+        },
+      }, [
+        h('span', { class: 'kb-col-icon' }, [icon(list.icon)]),
+        h('span', { class: 'kb-col-name', text: list.name, title: list.name }),
+        (function () {
+          var over = list.category === 'started' && global.WorkOS && global.WorkOS.wip(state.rows, global.WorkOS.DEFAULT_WIP);
+          if (over && over.over) {
+            return h('button', {
+              class: 'kb-col-count is-over',
+              type: 'button',
+              title: 'Ranger la moins prioritaire',
+              text: over.count + '/' + over.cap,
+              onclick: function (e) {
+                e.stopPropagation();
+                e.preventDefault();
+                var park = over.park;
+                var dest = state.lists.filter(function (l) { return l.category === 'unstarted'; })[0]
+                  || state.lists.filter(function (l) { return l.category === 'backlog'; })[0];
+                if (park && dest) dropCard(park.id, dest.id, null);
+              },
+            });
+          }
+          return h('span', { class: 'kb-col-count', text: String(filtering() ? col.cards.length : col.total) });
+        })(),
+        h('button', {
+          class: 'kb-iconbtn',
+          title: 'Nouvelle carte',
+          onclick: function () { openComposer(list.id); },
+        }, [icon('plus')]),
+      ]);
+    }
+
+    /**
+     * Makes `zone` accept dragged cards, marking the landing spot among `body`'s tiles. `lane` (priority view only)
+     * limits the zone to cards of that row: moving to another row would need a different priority, which is computed.
+     */
+    function bindDropZone(zone, body, list, lane) {
+      function accepts() {
+        if (!state.dragId) return false;
+        if (!lane) return true;
+        var dragged = findRow(state.dragId);
+        return !!dragged && KM().laneKey(dragged) === lane;
+      }
+      zone.addEventListener('dragover', function (e) {
+        if (!accepts()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropMarks();
+        zone.classList.add('is-over');
+        var at = dropIndex(body, e.clientY);
+        var marker = h('div', { class: 'kb-drop' });
+        var ref = at.rects[at.index];
+        var empty = body.querySelector('.kb-empty');
+        if (ref) body.insertBefore(marker, ref.node);
+        else if (empty) body.insertBefore(marker, empty);
+        else body.appendChild(marker);
+      });
+      zone.addEventListener('dragleave', function (e) {
+        if (!zone.contains(e.relatedTarget)) clearDropMarks();
+      });
+      zone.addEventListener('drop', function (e) {
+        if (!accepts()) return;
+        e.preventDefault();
+        var at = dropIndex(body, e.clientY).index;
+        var id = state.dragId;
+        clearDropMarks();
+        dropCard(id, list.id, at, lane);
+      });
+    }
+
     function column(col) {
       var list = col.list;
       var body = h('div', { class: 'kb-cards' });
       col.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
       // An empty column shows no placeholder: the "+ Ajouter une carte" button below is also a drop target (the whole column accepts drops).
-      if (!col.cards.length && (col.hidden || state.filter || state.facets.blocked || state.facets.overdue)) {
+      if (!col.cards.length && (col.hidden || filtering())) {
         body.appendChild(h('div', { class: 'kb-empty', text: col.hidden ? col.total + ' masquée' + (col.total > 1 ? 's' : '') : 'Aucune carte' }));
       }
       var colEl = h('section', {
         class: 'kb-col' + (KM().isClosedKey(list.category) ? ' is-closed' : ''),
         'data-list': list.id,
         style: '--kb-accent:' + list.color,
-        ondragover: function (e) {
-          if (!state.dragId) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          clearDropMarks();
-          colEl.classList.add('is-over');
-          var at = dropIndex(body, e.clientY);
-          var marker = h('div', { class: 'kb-drop' });
-          var ref = at.rects[at.index];
-          var empty = body.querySelector('.kb-empty');
-          if (ref) body.insertBefore(marker, ref.node);
-          else if (empty) body.insertBefore(marker, empty);
-          else body.appendChild(marker);
-        },
-        ondragleave: function (e) {
-          if (!colEl.contains(e.relatedTarget)) clearDropMarks();
-        },
-        ondrop: function (e) {
-          if (!state.dragId) return;
-          e.preventDefault();
-          var at = dropIndex(body, e.clientY).index;
-          var id = state.dragId;
-          clearDropMarks();
-          dropCard(id, list.id, at);
-        },
-      }, [
-        h('header', {
-          class: 'kb-col-head',
-          draggable: 'true',
-          title: 'Glisser pour réorganiser les colonnes',
-          ondragstart: function (e) {
-            state.dragListId = list.id;
-            e.dataTransfer.effectAllowed = 'move';
-            try { e.dataTransfer.setData('text/plain', 'list:' + list.id); } catch (err) { /* ignore */ }
-            try { e.dataTransfer.setDragImage(colEl, 20, 20); } catch (err) { /* default drag image */ }
-            setTimeout(function () { colEl.classList.add('is-dragging-col'); }, 0);
-            els.board.classList.add('is-dragging-list');
-          },
-          ondragend: function () {
-            state.dragListId = null;
-            els.board.classList.remove('is-dragging-list');
-            colEl.classList.remove('is-dragging-col');
-            clearDropMarks();
-          },
-        }, [
-          h('span', { class: 'kb-col-icon' }, [icon(list.icon)]),
-          h('span', { class: 'kb-col-name', text: list.name, title: list.name }),
-          (function () {
-            var over = list.category === 'started' && global.WorkOS && global.WorkOS.wip(state.rows, global.WorkOS.DEFAULT_WIP);
-            if (over && over.over) {
-              return h('button', {
-                class: 'kb-col-count is-over',
-                type: 'button',
-                title: 'Ranger la moins prioritaire',
-                text: over.count + '/' + over.cap,
-                onclick: function (e) {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  var park = over.park;
-                  var dest = state.lists.filter(function (l) { return l.category === 'unstarted'; })[0]
-                    || state.lists.filter(function (l) { return l.category === 'backlog'; })[0];
-                  if (park && dest) dropCard(park.id, dest.id, null);
-                },
-              });
-            }
-            return h('span', { class: 'kb-col-count', text: String((state.filter || state.facets.blocked || state.facets.overdue) ? col.cards.length : col.total) });
-          })(),
-          h('button', {
-            class: 'kb-iconbtn',
-            title: 'Nouvelle carte',
-            onclick: function () { openComposer(list.id); },
-          }, [icon('plus')]),
-        ]),
-        h('div', { class: 'kb-col-scroll' }, [body, composer(list)]),
-      ]);
+      });
+      colEl.appendChild(colHead(col, colEl));
+      colEl.appendChild(h('div', { class: 'kb-col-scroll' }, [body, composer(list)]));
+      bindDropZone(colEl, body, list, null);
       if (global.InsertGap) {
         global.InsertGap.watch(body, {
           item: '.kb-card',
@@ -863,8 +933,85 @@
       }
     }
 
+    /* ── Priority rows (Y axis) ────────────────────────────────────── */
+    /** Sticky column header of the priority view: the same header as a column, plus the composer when open. */
+    function laneColHead(col) {
+      var list = col.list;
+      var box = h('div', {
+        class: 'kb-colhead' + (KM().isClosedKey(list.category) ? ' is-closed' : ''),
+        'data-list': list.id,
+        style: '--kb-accent:' + list.color,
+      });
+      var inner = h('div', { class: 'kb-colhead-box' });
+      inner.appendChild(colHead(col, box));
+      if (col.hidden && !col.cards.length) {
+        inner.appendChild(h('div', { class: 'kb-empty', text: col.total + ' masquée' + (col.total > 1 ? 's' : '') }));
+      }
+      if (state.composer === list.id) inner.appendChild(composer(list));
+      box.appendChild(inner);
+      return box;
+    }
+
+    /** Row title ("Critique 3"): click folds the row. The chevron swaps in place, nothing around it moves. */
+    function laneHead(lane) {
+      var folded = !!state.lanesFolded[lane.key];
+      return h('div', {
+        class: 'kb-lane-head' + (lane.count ? '' : ' is-empty'),
+        'data-lane': lane.key,
+        style: lane.color ? '--kb-lane:' + lane.color : null,
+      }, [
+        h('button', {
+          class: 'kb-lane-toggle',
+          type: 'button',
+          'aria-expanded': folded ? 'false' : 'true',
+          title: folded ? 'Déplier' : 'Replier',
+          onclick: function () {
+            if (folded) delete state.lanesFolded[lane.key];
+            else state.lanesFolded[lane.key] = true;
+            writeStored(LANES_FOLDED_KEY, state.lanesFolded);
+            renderBoard();
+          },
+        }, [
+          icon(folded ? 'chevron-right' : 'chevron-down'),
+          h('span', { class: 'kb-lane-dot' }),
+          h('span', { class: 'kb-lane-name', text: lane.label }),
+          h('span', { class: 'kb-lane-count', text: String(lane.count) }),
+        ]),
+      ]);
+    }
+
+    /** One list's cards inside one priority row. */
+    function laneCell(lane, cell) {
+      var list = cell.list;
+      var body = h('div', { class: 'kb-cards' });
+      cell.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
+      var el = h('div', {
+        class: 'kb-cell' + (KM().isClosedKey(list.category) ? ' is-closed' : ''),
+        'data-list': list.id,
+        'data-lane': lane.key,
+        style: '--kb-accent:' + list.color,
+      }, [body]);
+      bindDropZone(el, body, list, lane.key);
+      return el;
+    }
+
+    function lanesBoard(model) {
+      var grid = h('div', { class: 'kb-lanes', style: '--kb-n:' + model.columns.length });
+      var heads = h('div', { class: 'kb-lanes-heads' });
+      model.columns.forEach(function (col) { heads.appendChild(laneColHead(col)); });
+      grid.appendChild(heads);
+      model.lanes.forEach(function (lane) {
+        grid.appendChild(laneHead(lane));
+        // An empty or folded row is just its title: there is nothing to drop into (a card only moves along its own row).
+        if (!lane.count || state.lanesFolded[lane.key]) return;
+        lane.cells.forEach(function (cell) { grid.appendChild(laneCell(lane, cell)); });
+      });
+      return grid;
+    }
+
     function renderBoard() {
       var scrollX = els.board.scrollLeft;
+      var scrollY = els.board.scrollTop;
       var scrolls = {};
       var focusId = '';
       var active = document.activeElement;
@@ -877,14 +1024,18 @@
         if (b) scrolls[c.getAttribute('data-list')] = b.scrollTop;
       });
       els.board.textContent = '';
-      var cols = columns();
+      els.board.classList.toggle('is-lanes', state.lanes);
+      var model = state.lanes ? KM().buildLanes(state.rows, state.lists, viewOpts()) : null;
+      var cols = model ? model.columns : columns();
       if (!cols.length) {
         els.board.appendChild(h('div', { class: 'kb-loading', text: 'Aucune liste dans ce tableau.' }));
         return;
       }
-      cols.forEach(function (c) { els.board.appendChild(column(c)); });
+      if (model) els.board.appendChild(lanesBoard(model));
+      else cols.forEach(function (c) { els.board.appendChild(column(c)); });
       global.Skeleton.remember('kanban', { cols: cols.map(function (c) { return c.cards.length; }) });
       els.board.scrollLeft = scrollX;
+      if (model) els.board.scrollTop = scrollY;
       els.board.querySelectorAll('.kb-col').forEach(function (c) {
         var b = c.querySelector('.kb-col-scroll');
         var s = scrolls[c.getAttribute('data-list')];
@@ -897,8 +1048,11 @@
     }
 
     /* ── Writes ────────────────────────────────────────────────────── */
-    /** Moves a card into `listId` at `index` among that list's other cards (null = bottom). */
-    function dropCard(id, listId, index) {
+    /**
+     * Moves a card into `listId` at `index` among that list's other cards (null = bottom).
+     * `lane` (priority view): `index` counts the tiles of that row only.
+     */
+    function dropCard(id, listId, index, lane) {
       state.dragId = null;
       var moved = findRow(id);
       var list = listById(listId);
@@ -906,7 +1060,10 @@
       var siblings = KM().siblingsFor(state.rows, listId, id);
       var at = index == null ? siblings.length : index;
       // `index` counts the *visible* tiles; map it onto the full list so hidden cards keep their place.
-      var visible = siblings.filter(function (r) { return columns().some(function (c) { return c.list.id === listId && c.cards.indexOf(r) !== -1; }); });
+      var visible = siblings.filter(function (r) {
+        if (lane && KM().laneKey(r) !== lane) return false;
+        return columns().some(function (c) { return c.list.id === listId && c.cards.indexOf(r) !== -1; });
+      });
       if (visible.length !== siblings.length && at < visible.length) at = siblings.indexOf(visible[at]);
       else if (visible.length !== siblings.length) at = siblings.length;
       var pos = TM().dropPos(siblings, at);
@@ -919,7 +1076,7 @@
       moved.statutKey = list.category;
       moved.statutColor = list.color;
       // Dropped into a hidden (completed) column: dissolve the tile instead of making it vanish.
-      var tile = state.hideDone && !state.filter && !state.facets.blocked && !state.facets.overdue ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;
+      var tile = state.hideDone && !filtering() ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;
       var target = columns().filter(function (c) { return c.list.id === listId; })[0];
       if (tile && target && target.hidden) {
         tile.classList.remove('is-dragging');
@@ -1163,12 +1320,38 @@
       var tag = node.tagName;
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
     }
+    /** Arrow keys in the priority view: up/down walk one list's cards from row to row, left/right hop to the neighbouring list in the same row. */
+    function moveLaneFocus(cur, dx, dy) {
+      var cell = cur.closest('.kb-cell');
+      if (!cell) return null;
+      var listId = cell.getAttribute('data-list');
+      if (dy) {
+        var inList = [].slice.call(els.board.querySelectorAll('.kb-cell[data-list="' + listId + '"] .kb-card'));
+        return inList[inList.indexOf(cur) + dy] || null;
+      }
+      var ids = [].slice.call(els.board.querySelectorAll('.kb-colhead')).map(function (n) { return n.getAttribute('data-list'); });
+      var lane = cell.getAttribute('data-lane');
+      var inCell = [].slice.call(cell.querySelectorAll('.kb-card'));
+      var i = inCell.indexOf(cur);
+      for (var k = ids.indexOf(listId) + dx; k >= 0 && k < ids.length; k += dx) {
+        var there = [].slice.call(els.board.querySelectorAll('.kb-cell[data-list="' + ids[k] + '"][data-lane="' + lane + '"] .kb-card'));
+        if (there.length) return there[Math.min(i, there.length - 1)];
+      }
+      return null;
+    }
     function moveCardFocus(dx, dy) {
       var cols = [].slice.call(els.board.querySelectorAll('.kb-col'));
       var cur = document.activeElement && document.activeElement.closest ? document.activeElement.closest('.kb-card') : null;
       if (!cur || !els.board.contains(cur)) {
         var first = els.board.querySelector('.kb-card');
         if (first) first.focus();
+        return;
+      }
+      if (state.lanes) {
+        var hop = moveLaneFocus(cur, dx, dy);
+        if (!hop) return;
+        hop.focus({ preventScroll: true });
+        hop.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         return;
       }
       var col = cur.closest('.kb-col');

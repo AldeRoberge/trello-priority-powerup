@@ -464,7 +464,7 @@ html[data-color-mode] .tp-page--kanban {
 }
 .kb-ai-input::placeholder { color: var(--tp-text-muted); opacity: 0.8; }
 .kb-ai-input:disabled { opacity: 0.6; cursor: progress; }
-.kb-ai--bar { margin: 0; min-width: 260px; max-width: 420px; flex: 1; padding: 0 9px; }
+.kb-ai--bar { margin: 0; min-width: 240px; max-width: 420px; flex: 1; padding: 0 9px; }
 .kb-ai--bar .kb-ai-input { font-size: 13px; padding: 5px 0; }
 
 .kb-ai-hint {
@@ -545,3 +545,127 @@ html[data-color-mode] .tp-page--kanban {
 .kb-ai-toggle:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
 .kb-ask.is-open { display: block; }
 .kb-ask.is-open .kb-ai { margin-top: 2px; }
+
+/* ── Priority rows ("Par priorité"): X = the board's lists, Y = one row per priority tier ───────── */
+.kb-btn--lanes { white-space: nowrap; }
+/* Not enough room for the toolbar: the toggle keeps its icon (the tooltip names it). */
+@media (max-width: 1180px) {
+  .kb-btn--lanes > span { display: none; }
+  .kb-btn--lanes { padding: 6px 8px; }
+}
+.kb-board.is-lanes {
+  display: block;
+  padding: 0 12px 12px;
+  overflow: auto;
+}
+.kb-lanes {
+  display: grid;
+  grid-template-columns: repeat(var(--kb-n, 1), 290px);
+  column-gap: 12px;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+}
+/* Column headers stay on screen while the rows scroll; opaque so tiles slide under them. */
+.kb-lanes-heads {
+  grid-column: 1 / -1;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(var(--kb-n, 1), 290px);
+  column-gap: 12px;
+  padding: 12px 0 6px;
+  background: var(--tp-surface);
+}
+.kb-colhead { --kb-accent: #626f86; min-width: 0; }
+.kb-colhead-box {
+  border-radius: 8px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--tp-border), inset 0 3px 0 var(--kb-accent);
+}
+.kb-colhead .kb-col-head { padding-top: 10px; padding-bottom: 8px; }
+.kb-colhead .kb-empty { margin: 0 8px 8px; padding: 4px 8px; border: 0; }
+.kb-colhead.is-closed { opacity: 0.5; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s; }
+.kb-colhead.is-closed:hover { opacity: 1; filter: none; }
+.kb-colhead.is-dragging-col { opacity: 0.4; }
+.kb-colhead.is-drop-before,
+.kb-colhead.is-drop-after { position: relative; }
+.kb-colhead.is-drop-before::before,
+.kb-colhead.is-drop-after::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--tp-primary);
+  pointer-events: none;
+}
+.kb-colhead.is-drop-before::before { left: -8px; }
+.kb-colhead.is-drop-after::after { right: -8px; }
+
+/* Row title: a hairline across the board, the label stays at the left edge when scrolling sideways. */
+.kb-lane-head {
+  --kb-lane: var(--tp-text-muted);
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+.kb-lane-head::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--tp-border);
+}
+.kb-lane-toggle {
+  font: inherit;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  cursor: pointer;
+}
+.kb-lane-toggle:hover { background: var(--tp-surface-hover); }
+.kb-lane-toggle:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 1px; }
+.kb-lane-toggle .ti { font-size: 14px; color: var(--tp-text-muted); }
+.kb-lane-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kb-lane); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tp-text) 22%, transparent); flex: none; }
+.kb-lane-name { font-weight: 600; }
+.kb-lane-count { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--tp-text-muted); }
+/* An empty row stays in place, quieter. */
+.kb-lane-head.is-empty { opacity: 0.55; }
+.kb-lane-head.is-empty:hover { opacity: 0.9; }
+
+.kb-cell {
+  --kb-accent: #626f86;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 0;
+  border-radius: 8px;
+  background: var(--tp-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--tp-border);
+  transition: box-shadow 0.12s, opacity 0.12s;
+}
+.kb-cell .kb-cards { padding: 0 8px; }
+.kb-cell.is-closed { opacity: 0.5; filter: grayscale(1); }
+.kb-cell.is-closed:hover,
+.kb-cell.is-closed.is-over { opacity: 1; filter: none; }
+.kb-cell.is-over { box-shadow: inset 0 0 0 2px var(--tp-primary); }
+/* While a tile is dragged, the other rows go quiet: it only moves along its own row. */
+.kb-cell.is-foreign { opacity: 0.3; }
+.is-lanes .kb-card { scroll-margin-top: 90px; }

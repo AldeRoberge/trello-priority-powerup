@@ -78,6 +78,41 @@
     });
   }
 
+  /** Priority tiers, most urgent first (same order and names as PriorityUI.TIER_DEFS; `tierI` is the index). */
+  var TIER_LABELS = ['Critique', 'Urgente', 'Prioritaire', 'Importante', 'Flexible', 'Secondaire', 'Optionnelle'];
+  var NO_PRIORITY_LANE = 'none';
+
+  /** Swimlane a card sits in: `tier:<tierI>` (0 = Critique), or `none` when it has no priority tier. */
+  function laneKey(row) {
+    var i = row && row.tierI;
+    return typeof i === 'number' && isFinite(i) && i >= 0 && i < TIER_LABELS.length ? 'tier:' + Math.round(i) : NO_PRIORITY_LANE;
+  }
+
+  /**
+   * Lanes for the priority view: the same columns as buildColumns (X axis), cut into one horizontal lane per
+   * priority tier, Critique at the top, "Sans priorité" last (Y axis). Every lane is returned, even an empty one.
+   * opts: same as buildColumns, plus `tiers` ([{ i, label, color }]) to override the built-in names / add colours.
+   * Returns { columns, lanes: [{ key, label, color, count, cells: [{ list, cards, hidden }] }] }; a lane's cells
+   * line up with `columns`, and a card is in exactly one lane, so dropping inside its own lane never changes its priority.
+   */
+  function buildLanes(rows, lists, opts) {
+    opts = opts || {};
+    var columns = buildColumns(rows, lists, opts);
+    var defs = TIER_LABELS.map(function (label, i) {
+      var custom = (opts.tiers || []).filter(function (t) { return t && t.i === i; })[0] || {};
+      return { key: 'tier:' + i, label: custom.label || label, color: custom.color || '' };
+    });
+    defs.push({ key: NO_PRIORITY_LANE, label: 'Sans priorité', color: '' });
+    var lanes = defs.map(function (def) {
+      var cells = columns.map(function (c) {
+        return { list: c.list, hidden: c.hidden, cards: c.cards.filter(function (r) { return laneKey(r) === def.key; }) };
+      });
+      var count = cells.reduce(function (n, cell) { return n + cell.cards.length; }, 0);
+      return { key: def.key, label: def.label, color: def.color, count: count, cells: cells };
+    });
+    return { columns: columns, lanes: lanes };
+  }
+
   /** Cards of the target list (minus the moved one) in pos order — what `dropPos` needs. */
   function siblingsFor(rows, listId, movedId) {
     return rows
@@ -118,6 +153,9 @@
     columnInsertIndex: columnInsertIndex,
     reorderLists: reorderLists,
     buildColumns: buildColumns,
+    buildLanes: buildLanes,
+    laneKey: laneKey,
+    TIER_LABELS: TIER_LABELS,
     rowsInView: rowsInView,
     facetCounts: facetCounts,
     isBlockedRow: isBlockedRow,

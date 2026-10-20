@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Kanban : le bouton « Par priorité » découpe le tableau en rangées, une par palier (Critique tout en haut, puis Urgente, Prioritaire… jusqu’à « Sans priorité »). Les colonnes restent celles du tableau ; une carte se glisse d’une colonne à l’autre dans sa propre rangée, et chaque rangée se replie.
 - Aujourd’hui : le bandeau « Bon matin » suit le mode sombre (ciel assombri, plus de fond éclatant) et plus rien n’y bouge (soleil, nuages, pluie, étoiles).
 - Assistant : un onglet « Assistant » apparaît en haut, juste après Dashboard (l’icône à droite est retirée).
 - Parcours : les éléments de la liste d’une carte s’affichent comme de petits nœuds sous la carte, au lieu d’une liste dans le panneau du bas.

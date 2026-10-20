@@ -484,6 +484,17 @@ html:has(body.tp-page--journey) body {
     scroll-snap-align: start;
     scroll-snap-stop: always;
   }
+  /* Kanban by priority: same one-list-per-swipe width for the sticky headers and the cells. */
+  .kb-lanes,
+  .kb-lanes-heads {
+    grid-template-columns: repeat(var(--kb-n, 1), calc(100vw - 28px));
+    column-gap: 8px;
+  }
+  .kb-colhead,
+  .kb-cell {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
   .kb-detail:not([hidden]) {
     position: absolute;
     inset: 0;
