@@ -497,7 +497,7 @@
             onClose: function (changed) { if (changed) reload({ quiet: true }); },
           });
         },
-      }, has ? [document.createTextNode(String(row.priority))] : [icon('flag'), document.createTextNode('Prioriser…')]);
+      }, has ? [document.createTextNode('P' + String(row.priority))] : [icon('flag'), document.createTextNode('Prioriser…')]);
       return badge;
     }
 

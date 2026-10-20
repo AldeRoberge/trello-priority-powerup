@@ -252,7 +252,7 @@
     function paintPrio() {
       prio.textContent = '';
       if (typeof row.priority === 'number') {
-        prio.appendChild(h('span', { class: 'db-prio db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)), text: String(row.priority) }));
+        prio.appendChild(h('span', { class: 'db-prio db-prio--' + (row.tierI == null ? 'n' : Math.min(row.tierI, 4)), text: 'P' + String(row.priority) }));
         if (row.tier) prio.appendChild(h('span', { class: 'tri-tier', text: row.tier }));
       } else {
         prio.appendChild(h('span', { class: 'tri-quiet', text: 'Pas encore calculée' }));
