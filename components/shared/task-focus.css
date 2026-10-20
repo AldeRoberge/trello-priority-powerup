@@ -1,0 +1,41 @@
+/* Task opened inside the current view (task-focus.js). Sits under the tabs, clear of the assistant dock. */
+.tf-panel {
+  position: fixed;
+  top: 46px;
+  right: 12px;
+  bottom: 72px;
+  z-index: 30;
+  width: min(380px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  padding: 8px 4px 12px 12px;
+  border: 1px solid var(--tp-border);
+  border-radius: 10px;
+  background: var(--tp-surface);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+}
+.tf-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+}
+.tf-x:hover { background: var(--tp-surface-hover, rgba(0, 0, 0, 0.06)); color: var(--tp-text); }
+.tf-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 28px;
+}

@@ -2670,60 +2670,16 @@
       });
     }
 
-    function openCard(cardId, cardName, options) {
-      if (!cardId || !t) return;
-      options = options || {};
-      var openSection =
-        typeof options.openSection === 'string' && options.openSection
-          ? options.openSection
-          : 'priority';
-      var appName =
-        (global.PriorityBrand &&
-        typeof PriorityBrand.getAppName === 'function'
-          ? PriorityBrand.getAppName()
-          : null) ||
-        (global.PriorityRestConfig && PriorityRestConfig.appName) ||
-        'Trello Cerveau';
-      var pageUrl =
-        global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
-          ? PriorityTrello.pageUrl('./popup.html')
-          : './popup.html';
-      var ganttUrl =
-        global.PriorityTrello && typeof PriorityTrello.pageUrl === 'function'
-          ? PriorityTrello.pageUrl('./gantt.html')
-          : './gantt.html';
-      var args = {
-        cardId: String(cardId),
-        cardName: cardName || '',
-        openSection: openSection,
-      };
-
+    function openCard(cardId, cardName) {
+      if (!cardId || !global.TaskFocus) return;
       closeMiniPopover();
       closeCardOverlay({ reload: false });
-
-      // Do not nest popup.html inside this fullscreen Gantt iframe: the Power-Up
-      // client talks to window.parent, so a nested iframe never receives `render`
-      // from Trello and stays on "Ouverture de Cerveau…". Open a real modal, then
-      // restore Gantt when the task editor closes.
-      if (typeof t.modal !== 'function') {
-        console.error('Gantt openCard: t.modal unavailable');
-        return;
-      }
-      return t.modal({
-        title: cardName || appName,
-        url: pageUrl,
-        args: args,
-        fullscreen: true,
-        accentColor: '#22272B',
-        callback: function () {
-          if (typeof t.modal !== 'function') return;
-          t.modal({
-            title: 'Gantt',
-            url: ganttUrl,
-            fullscreen: true,
-            accentColor: '#22272B',
-          });
-        },
+      global.TaskFocus.open({
+        t: t,
+        cardId: cardId,
+        name: cardName || '',
+        onChange: function () { refreshBoardQuiet(); },
+        onToast: function (m, kind) { setStatus(m || '', kind === 'error'); },
       });
     }
 

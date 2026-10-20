@@ -225,6 +225,7 @@
     }
 
     function closeDetail() {
+      var id = state.detailId;
       state.detailId = null;
       state.quickId = null;
       if (state.quick) {
@@ -237,11 +238,19 @@
         n.classList.remove('is-selected');
         n.setAttribute('aria-selected', 'false');
       });
+      var Iso = global.Isolation;
+      if (id && Iso && typeof Iso.read === 'function' && typeof Iso.clear === 'function') {
+        var cur = Iso.read();
+        if (cur && cur.kind === 'task' && cur.id === id && !(global.TaskFocus && global.TaskFocus.currentId && global.TaskFocus.currentId() === id)) Iso.clear();
+      }
     }
 
-    /** Card beside the board. The full editor stays on "Ouvrir la carte". */
+    /** Card beside the board. Other tasks fade; the editor stays on this page. */
     function openDetail(row) {
       if (!row) return;
+      if (global.Isolation && typeof global.Isolation.set === 'function') {
+        global.Isolation.set({ kind: 'task', id: row.id, label: row.name || '' });
+      }
       state.detailId = row.id;
       els.detail.hidden = false;
       els.board.querySelectorAll('.kb-card').forEach(function (n) {
@@ -256,18 +265,12 @@
       els.detailBody.textContent = '';
       if (!global.CardQuick) {
         els.detailBody.appendChild(h('div', { class: 'kb-title', text: row.name || 'Sans titre' }));
-        els.detailBody.appendChild(h('button', {
-          class: 'kb-btn kb-btn--primary',
-          type: 'button',
-          onclick: function () { openCard(findRow(row.id) || row); },
-        }, [icon('external-link'), h('span', { text: 'Ouvrir' })]));
         return;
       }
       state.quick = global.CardQuick.mount(els.detailBody, {
         t: t,
         cardId: row.id,
         name: row.name || '',
-        onOpen: function () { openCard(findRow(row.id) || row); },
         onChange: function () { reload({ quiet: true }); },
         onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
         onGone: function () {

@@ -453,21 +453,13 @@
     }
 
     function openCard(row) {
-      if (!row) return;
-      t.modal({
-        title: row.name || 'Carte',
-        url: global.PriorityTrello.pageUrl('./popup.html'),
-        args: { cardId: row.id, cardName: row.name || '', openSection: null },
-        fullscreen: true,
-        accentColor: '#22272B',
-        callback: function () {
-          return t.modal({
-            title: 'Table',
-            url: global.PriorityTrello.pageUrl('./table.html'),
-            fullscreen: true,
-            accentColor: '#22272B',
-          });
-        },
+      if (!row || !global.TaskFocus) return;
+      global.TaskFocus.open({
+        t: t,
+        cardId: row.id,
+        name: row.name || '',
+        onChange: function () { reload({ quiet: true }); },
+        onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
       });
     }
 

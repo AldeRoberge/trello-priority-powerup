@@ -374,6 +374,36 @@
 
   <script>
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'settings' });
+
+    function initCapacitySettings() {
+      var section = document.getElementById('capacitySettingsSection');
+      var select = document.getElementById('capacityPerDay');
+      var DT = window.DashboardTrello;
+      if (!section || !select || !DT || typeof DT.getCapacity !== 'function') {
+        if (section) section.hidden = true;
+        return;
+      }
+      try {
+        var hours = [3, 4, 5, 6, 7, 8];
+        var current = DT.getCapacity();
+        select.textContent = '';
+        hours.forEach(function (hrs) {
+          var opt = document.createElement('option');
+          opt.value = String(hrs * 60);
+          opt.textContent = hrs + ' h';
+          if (current === hrs * 60) opt.selected = true;
+          select.appendChild(opt);
+        });
+        select.addEventListener('change', function () {
+          DT.setCapacity(Number(select.value));
+        });
+      } catch (err) {
+        console.error('Capacity settings init failed', err);
+        section.hidden = true;
+      }
+    }
+    initCapacitySettings();
+
     PriorityTrello.initIframePage(function (t) {
     let buildStampTimer;
 
@@ -694,34 +724,6 @@
         resizeSettingsPopup();
       } catch (err) {
         console.error('Language settings init failed', err);
-        section.hidden = true;
-      }
-    }
-
-    function initCapacitySettings() {
-      var section = document.getElementById('capacitySettingsSection');
-      var select = document.getElementById('capacityPerDay');
-      var DT = window.DashboardTrello;
-      if (!section || !select || !DT || typeof DT.getCapacity !== 'function') {
-        if (section) section.hidden = true;
-        return;
-      }
-      try {
-        var hours = [3, 4, 5, 6, 7, 8];
-        var current = DT.getCapacity();
-        select.textContent = '';
-        hours.forEach(function (hrs) {
-          var opt = document.createElement('option');
-          opt.value = String(hrs * 60);
-          opt.textContent = hrs + ' h';
-          if (current === hrs * 60) opt.selected = true;
-          select.appendChild(opt);
-        });
-        select.addEventListener('change', function () {
-          DT.setCapacity(Number(select.value));
-        });
-      } catch (err) {
-        console.error('Capacity settings init failed', err);
         section.hidden = true;
       }
     }
@@ -1931,7 +1933,6 @@
       initCompletionSchemePicker(),
       refreshAutoSortUi(),
       initLanguageSettings(),
-      initCapacitySettings(),
       initGanttSettings(),
       initDisplaySettings(),
       initDebugSettings(),

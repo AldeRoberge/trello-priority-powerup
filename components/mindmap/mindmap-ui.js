@@ -2158,21 +2158,13 @@
     }
 
     function openCard(rec) {
-      if (!rec || typeof t.modal !== 'function') return;
-      t.modal({
-        title: rec.name || 'Carte',
-        url: global.PriorityTrello.pageUrl('./popup.html'),
-        args: { cardId: rec.id, cardName: rec.name || '', openSection: null },
-        fullscreen: true,
-        accentColor: '#22272B',
-        callback: function () {
-          return t.modal({
-            title: 'Mindmap',
-            url: global.PriorityTrello.pageUrl('./mindmap.html'),
-            fullscreen: true,
-            accentColor: '#22272B',
-          });
-        },
+      if (!rec || !global.TaskFocus) return;
+      global.TaskFocus.open({
+        t: t,
+        cardId: rec.id,
+        name: rec.name || '',
+        onChange: function () { reload({ quiet: true }); },
+        onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
       });
     }
 

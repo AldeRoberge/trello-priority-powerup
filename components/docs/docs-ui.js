@@ -2101,7 +2101,7 @@
             dim: missing,
             onClick: function () {
               if (missing) return;
-              if (sub.k === 'task' && t && typeof t.showCard === 'function') t.showCard(sub.id);
+              if (sub.k === 'task') openTask(sub.id, name);
               else if (sub.k === 'entity' && global.ViewTabs) global.location.assign(global.ViewTabs.hrefForSubject('./entities.html', global.location, 'entity', sub.id));
             },
             onRemove: function () { patchPage({ subject: null }).then(function () { loadFace(); }); },
@@ -3187,22 +3187,13 @@
     }
 
     function openTask(cardId, name) {
-      saveNow().then(function () {
-        t.modal({
-          title: name || 'Carte',
-          url: global.PriorityTrello.pageUrl('./popup.html'),
-          args: { cardId: cardId, cardName: name || '', openSection: null },
-          fullscreen: true,
-          accentColor: '#22272B',
-          callback: function () {
-            return t.modal({
-              title: 'Documents',
-              url: global.PriorityTrello.pageUrl('./docs.html'),
-              fullscreen: true,
-              accentColor: '#22272B',
-            });
-          },
-        });
+      if (!cardId || !global.TaskFocus) return;
+      global.TaskFocus.open({
+        t: t,
+        cardId: cardId,
+        name: name || '',
+        onChange: function () { loadFace(); },
+        onToast: function (m, kind, action) { toast(m, kind === 'error' ? 'error' : '', action); },
       });
     }
 

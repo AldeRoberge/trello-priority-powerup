@@ -514,22 +514,12 @@
 
     function openCard(id) {
       var rec = recOf(id);
-      var pt = PT();
-      if (!rec || !t || typeof t.modal !== 'function' || !pt) return;
-      t.modal({
-        title: rec.name || 'Carte',
-        url: pt.pageUrl('./popup.html'),
-        args: { cardId: rec.id, cardName: rec.name || '', openSection: null },
-        fullscreen: true,
-        accentColor: '#22272B',
-        callback: function () {
-          return t.modal({
-            title: 'Parcours',
-            url: pt.pageUrl('./journey.html'),
-            fullscreen: true,
-            accentColor: '#22272B',
-          });
-        },
+      if (!rec || !global.TaskFocus) return;
+      global.TaskFocus.open({
+        t: t,
+        cardId: rec.id,
+        name: rec.name || '',
+        onChange: function () { reload(); },
       });
     }
 

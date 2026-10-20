@@ -327,10 +327,12 @@
     function moreMenu(anchor, row) {
       var items = [
         { id: 'archive', label: 'Archiver', icon: 'archive', danger: true, action: function () { archive(row); } },
-        { sep: true },
-        { id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', action: function () { if (opts.onOpen) opts.onOpen(); } },
-        { id: 'open-document', label: 'Document', icon: 'file-text', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', opts.cardId); } },
       ];
+      if (opts.onOpen) {
+        items.push({ sep: true });
+        items.push({ id: 'open-card', label: 'Ouvrir la carte', icon: 'external-link', action: function () { opts.onOpen(); } });
+      }
+      items.push({ id: 'open-document', label: 'Document', icon: 'file-text', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', opts.cardId); } });
       if (row.link) {
         items.push({
           id: 'copy-link',
@@ -346,10 +348,19 @@
     }
 
     function header(row) {
-      var open = el('button', 'cq-iconbtn', { type: 'button', title: 'Ouvrir la carte', 'aria-label': 'Ouvrir la carte', onclick: function () { if (opts.onOpen) opts.onOpen(); } }, [ico('external-link')]);
+      var kids = [statusButton(row), el('span', 'cq-spacer')];
+      if (opts.onOpen) {
+        kids.push(el('button', 'cq-iconbtn', {
+          type: 'button',
+          title: 'Ouvrir la carte',
+          'aria-label': 'Ouvrir la carte',
+          onclick: function () { opts.onOpen(); },
+        }, [ico('external-link')]));
+      }
       var more = el('button', 'cq-iconbtn', { type: 'button', title: 'Plus d’actions', 'aria-label': 'Plus d’actions' }, [ico('dots')]);
       more.addEventListener('click', function () { moreMenu(more, row); });
-      return el('div', 'cq-head', null, [statusButton(row), el('span', 'cq-spacer'), open, more]);
+      kids.push(more);
+      return el('div', 'cq-head', null, kids);
     }
 
     /* Title: double-click to rename in place */

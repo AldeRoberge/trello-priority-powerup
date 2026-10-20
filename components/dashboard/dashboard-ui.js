@@ -607,19 +607,19 @@
     }
 
     function openCard(row) {
-      if (!row) return;
+      if (!row || !global.TaskFocus) return;
       var id = row.id;
       if (row.link) {
         var part = String(row.link).split('/c/')[1];
         if (part) id = part.split('/')[0];
       }
-      if (t && typeof t.showCard === 'function') {
-        t.showCard(id).catch(function () {
-          if (row.link) global.open(row.link, '_blank', 'noopener');
-        });
-        return;
-      }
-      if (row.link) global.open(row.link, '_blank', 'noopener');
+      global.TaskFocus.open({
+        t: t,
+        cardId: id,
+        name: row.name || '',
+        onChange: function () { render(); },
+        onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
+      });
     }
 
     var people = [];
