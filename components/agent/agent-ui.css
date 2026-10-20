@@ -1717,6 +1717,24 @@ body.tp-page--priority.tp-page--assistant {
   animation: agent-face-jump-in 0.65s ease-out both !important;
 }
 
+/*
+ * The face holds still: no idle bob, glow pulse, blink, mood loops or random idle effects.
+ * A mood still shows as a pose (eyes, brows, mouth). Only the click spin, the entrance motions
+ * (above) and the event bursts (sparkles, puke) play. Keep this after every loop rule it overrides.
+ */
+.tp-page--priority .agent-face:not(.agent-face--spin):not([class*='agent-face--enter-']),
+.tp-page--priority .agent-face:not(.agent-face--spin):not([class*='agent-face--enter-']) :is(
+  .agent-face-eyes,
+  .agent-face-eye,
+  .agent-face-brow,
+  .agent-face-cheek,
+  .agent-face-shine,
+  .agent-face-mouth,
+  .agent-face-features
+) {
+  animation: none !important;
+}
+
 .tp-page--priority .agent-face.is-frozen {
   flex-basis: 18px;
   width: 18px;
@@ -1770,10 +1788,10 @@ body.tp-page--priority.tp-page--assistant {
   display: none;
 }
 
-/* Quiet chat: blank orb + floating zzzz. */
+/* Quiet chat: blank orb + the z's, both still. */
 .tp-page--priority .agent-face.is-asleep {
   cursor: pointer;
-  animation: agent-face-sleep-breathe 3.2s ease-in-out infinite !important;
+  animation: none !important;
   filter: saturate(0.82) brightness(0.97);
   opacity: 0.96;
   box-shadow:
@@ -1809,46 +1827,9 @@ body.tp-page--priority.tp-page--assistant {
   letter-spacing: 0.02em;
   color: color-mix(in srgb, var(--agent-face-glow) 48%, #4a3b32);
   text-shadow: 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
-  opacity: 0;
-  animation: agent-face-zzz-rise 2.6s ease-in-out infinite;
-  animation-delay: calc(var(--i, 0) * 0.55s);
-  will-change: transform, opacity;
-}
-
-@keyframes agent-face-sleep-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.93);
-  }
-}
-
-@keyframes agent-face-zzz-rise {
-  0% {
-    opacity: 0;
-    transform: translate(0, 4px) scale(0.65);
-  }
-  18% {
-    opacity: 0.92;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(10px, -18px) scale(1.2);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tp-page--priority .agent-face.is-asleep {
-    animation: none !important;
-  }
-
-  .tp-page--priority .agent-face-zzz {
-    animation: none;
-    opacity: 0.7;
-    transform: translate(calc(var(--i, 0) * 4px), calc(var(--i, 0) * -5px));
-  }
+  /* Fanned out up and to the right. */
+  opacity: 0.7;
+  transform: translate(calc(var(--i, 0) * 4px), calc(var(--i, 0) * -5px));
 }
 
 /* Full-viewport puke spray from the face. */
@@ -3688,7 +3669,7 @@ html[data-color-mode='dark']
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
-  animation: agent-new-message-glow 1.6s ease-in-out infinite;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #2a6f9e 24%, transparent);
   -webkit-mask-image: none;
   mask-image: none;
 }
@@ -3700,16 +3681,6 @@ html[data-color-mode='dark']
 .tp-page--priority .field--chat.is-listening:not(.has-ai-suggestions):not(.has-new-message) .section-toggle-summary {
   color: color-mix(in srgb, var(--tp-text-muted) 70%, #1f7a68);
   font-weight: 500;
-}
-
-@keyframes agent-new-message-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, #2a6f9e 0%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, #2a6f9e 22%, transparent);
-  }
 }
 
 .tp-page--priority .agent-face-status {
@@ -3727,46 +3698,16 @@ html[data-color-mode='dark']
 
 .tp-page--priority .agent-face[data-listen='listening'] .agent-face-status {
   background: #1f7a68;
-  animation: agent-face-status-listen 1.8s ease-out infinite;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #1f7a68 35%, transparent);
 }
 
 .tp-page--priority .agent-face[data-listen='analyzing'] .agent-face-status {
   background: #d4a017;
-  animation: agent-face-status-analyze 0.85s ease-out infinite;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #d4a017 40%, transparent);
 }
 
 .tp-page--priority .agent-face.is-frozen .agent-face-status {
   display: none;
-}
-
-@keyframes agent-face-status-listen {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 color-mix(in srgb, #1f7a68 55%, transparent);
-  }
-  70% {
-    transform: scale(1.08);
-    box-shadow: 0 0 0 5px transparent;
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-
-@keyframes agent-face-status-analyze {
-  0% {
-    transform: scale(0.92);
-    box-shadow: 0 0 0 0 color-mix(in srgb, #d4a017 60%, transparent);
-  }
-  55% {
-    transform: scale(1.12);
-    box-shadow: 0 0 0 4px transparent;
-  }
-  100% {
-    transform: scale(0.92);
-    box-shadow: 0 0 0 0 transparent;
-  }
 }
 
 .tp-page--priority .agent-msg--offer {

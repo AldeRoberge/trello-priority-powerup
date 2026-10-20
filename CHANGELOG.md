@@ -4,6 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-20
+- Assistant : le visage reste immobile (plus de rebond, de clignement ni de lueur en boucle), et la pastille « nouveau message » et le point d’écoute ne pulsent plus.
+- Tableau : en mode sombre, le bandeau des cartes critiques est un rouge foncé au lieu d’une barre rouge vif.
 - Météo : la recherche de ville met d’abord la bonne (Val-d’Or au Québec avant « Val Dor » en Malaisie), préfère le Canada à nom égal, et retire les doublons, les aéroports et les lignes sans région ni pays.
 - Tableau : « Colonnes… » dans le clic droit ouvre enfin le panneau des colonnes (il se refermait aussitôt).
 - Onglets : l’onglet actif (Assistant, Gantt…) garde toujours son soulignement bleu, même quand il a le focus clavier ; le cadre de focus reste à l’intérieur de l’onglet.

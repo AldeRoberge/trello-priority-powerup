@@ -401,6 +401,13 @@ tr:hover .tb-edit, .tb-cell.is-selected .tb-edit { visibility: visible; }
   display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex: none;
   background: #c9372c; color: #fff; border-bottom: 1px solid rgba(0, 0, 0, 0.2);
 }
+/* Dark mode: a deep red band on the dark surface instead of a full-bright red bar. */
+html[data-color-mode="dark"] .tb-alert {
+  background: color-mix(in srgb, #c9372c 30%, var(--tp-elev-1));
+  color: var(--tp-text);
+  border-bottom-color: color-mix(in srgb, #c9372c 55%, transparent);
+}
+html[data-color-mode="dark"] .tb-alert-icon { color: var(--tp-danger-text); }
 .tb-alert[hidden] { display: none; }
 .tb-alert-icon { font-size: 26px; flex: none; }
 .tb-alert-text { flex: 1; min-width: 0; line-height: 1.35; }
