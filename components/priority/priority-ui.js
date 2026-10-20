@@ -25846,7 +25846,6 @@
     var focusSection = variantConfig.focusSection || null;
 
     function sectionExpandedDefault(key, enabledFallback) {
-      if (key === 'graph') return false;
       // Opening focused on one section should not auto-expand the others.
       if (focusSection && key !== focusSection) return false;
       if (focusSection && key === focusSection) return true;
@@ -26419,7 +26418,7 @@
       calcGraph = createCalcGraphPanel({
         el: fieldsSection,
         fields: fields,
-        expanded: sectionExpanded('graph', false),
+        expanded: sectionExpanded('graph', true),
         onExpandChange: persistSectionExpanded('graph'),
         onChange: function () {
           cancelSliderAnim();

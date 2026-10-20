@@ -265,13 +265,20 @@ body {
 /* Shared label column so slider tracks align across Urgence / Impact / Facilité */
 .variant-fields .field-head {
   display: grid;
-  grid-template-columns: 5.75rem minmax(0, 1fr);
+  grid-template-columns: 8.25rem minmax(0, 1fr);
   align-items: center;
   gap: 8px 12px;
 }
 
 .variant-fields .field-lbl-wrap {
   min-width: 0;
+}
+
+/* Long labels (Empressement) wrap or clip inside the label column instead of running under the slider */
+.variant-fields .field-lbl-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .variant-fields-section > .calc-graph-panel {
