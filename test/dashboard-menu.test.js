@@ -133,6 +133,23 @@ describe('Dashboard card menu', () => {
     });
   });
 
+  it('an open card can be handed to someone (me first, a tick on who has it)', () => {
+    const people = [{ key: 'me', name: 'Moi', on: true }, { key: 'm:m2', name: 'Marie Gagnon', on: false }];
+    const items = UI.menuEntries({ id: 'c1', name: 'x', statutKey: 'unstarted', listId: 'l1' }, { today: today, lists: lists, people: people });
+    const assign = items.filter((it) => it.id === 'assign')[0];
+    assert.ok(assign, 'missing the "Confier à" entry');
+    assert.equal(assign.label, 'Confier à');
+    assert.deepEqual(assign.children.map((c) => c.id), ['assign:me', 'assign:m:m2']);
+    assert.deepEqual(assign.children.map((c) => !!c.checked), [true, false]);
+  });
+
+  it('there is no "Confier à" when nobody else is on the board, or the card is done', () => {
+    const none = UI.menuEntries({ id: 'c1', name: 'x', statutKey: 'unstarted', listId: 'l1' }, { today: today, lists: lists, people: [] });
+    assert.equal(none.some((it) => it.id === 'assign'), false);
+    const done = UI.menuEntries({ id: 'c2', name: 'x', statutKey: 'completed', dueDone: true, listId: 'l1' }, { today: today, lists: lists, people: [{ key: 'me', name: 'Moi', on: true }] });
+    assert.equal(done.some((it) => it.id === 'assign'), false);
+  });
+
   it('empty space offers a new card, the sections and reload', () => {
     const items = UI.pageEntries({ section: 'triage', canCreate: true });
     const id = ids(items);

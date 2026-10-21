@@ -3,6 +3,10 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-10-21
+- Orchestrateur : sous ma rangée, une rangée par personne du tableau (membres Trello et contacts « Hors Trello »), sur les mêmes colonnes. Glisser une carte sur la rangée de quelqu’un la lui confie (sur la case d’un autre jour, elle change aussi de jour) ; la glisser vers ma rangée la reprend. La molette sur les personnes les fait défiler, ailleurs elle zoome toujours. « Défaire » ou Ctrl+Z remet comme avant.
+- Clic droit sur une carte : « Confier à » une personne, ou à moi.
+
 ## 2026-10-20
 - Carte : priorité et statuts plus calmes. Les noms des 7 niveaux sont masqués (le badge nomme déjà le niveau), « Nous permet de… » et « Ce que ça coûte… » restent discrets jusqu’au survol, les statuts sont alignés à gauche avec seul le statut actuel rempli, et les choix de lieu sont atténués.
 - Carte : les champs vides (description, assignés, lieux…) se replient sur une ligne discrète, ceux qui ont une valeur restent ouverts. Plus de chevrons, le titre devient l’en-tête et la barre de la description n’apparaît qu’au clic.

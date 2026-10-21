@@ -354,3 +354,54 @@ describe('DashboardTrello daily capacity', () => {
     assert.equal(DT.getCapacity(), 360);
   });
 });
+
+describe('DashboardTrello.setAssignees', () => {
+  let DT;
+  let rest;
+  let inputs;
+  const t = {};
+
+  before(() => {
+    loadComponent('dashboard/dashboard-model.js');
+    loadComponent('dashboard/dashboard-trello.js');
+    DT = global.DashboardTrello;
+  });
+
+  beforeEach(() => {
+    rest = [];
+    inputs = [];
+    global.SheetsTrello = {
+      trelloRest: async (tt, path, method, body) => {
+        rest.push([method, path, body]);
+        return { ok: true, data: {} };
+      },
+    };
+    global.PriorityTrello = {
+      saveCardInputsById: async (tt, id, patch) => {
+        inputs.push([id, patch]);
+        return patch;
+      },
+    };
+  });
+
+  it('writes the members through REST (idMembers) and the contacts into the stored inputs', async () => {
+    await DT.setAssignees(t, 'c1', { members: ['m2', 'm3'], contacts: [{ id: 'person-n', name: 'Nadia' }] });
+    assert.deepEqual(rest, [['PUT', '/cards/c1', { idMembers: 'm2,m3' }]]);
+    assert.deepEqual(inputs, [['c1', { customAssignees: [{ id: 'person-n', name: 'Nadia' }] }]]);
+  });
+
+  it('leaves alone what is null', async () => {
+    await DT.setAssignees(t, 'c1', { members: null, contacts: [] });
+    assert.equal(rest.length, 0);
+    assert.deepEqual(inputs, [['c1', { customAssignees: [] }]]);
+    await DT.setAssignees(t, 'c1', { members: [], contacts: null });
+    assert.deepEqual(rest, [['PUT', '/cards/c1', { idMembers: '' }]]);
+    assert.equal(inputs.length, 1);
+  });
+
+  it('a refused write rejects with its reason, so the view can say it and reload', async () => {
+    global.SheetsTrello.trelloRest = async () => ({ ok: false, reason: 'not-authorized' });
+    await assert.rejects(DT.setAssignees(t, 'c1', { members: ['m2'], contacts: null }), (err) => err.reason === 'not-authorized');
+    assert.equal(inputs.length, 0);
+  });
+});

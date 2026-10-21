@@ -106,6 +106,7 @@ const UNIT_FILES = [
   'insert-gap.test.js',
   'dashboard-model.test.js',
   'dashboard-menu.test.js',
+  'people-board-model.test.js',
   'dashboard-trello.test.js',
   'triage-tree.test.js',
   'project-icon.test.js',
