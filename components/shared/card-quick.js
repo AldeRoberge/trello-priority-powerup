@@ -55,6 +55,32 @@
     return (err && (err.message || err.reason)) || String(err || 'erreur');
   }
 
+  /**
+   * The row of a card, by its Trello id. The short link (the code in the card's URL, /c/AbCd1234/…) is accepted too,
+   * so a caller that only knows the link still finds its card.
+   */
+  function rowFor(rows, cardId) {
+    var id = cardId == null ? '' : String(cardId);
+    if (!id) return null;
+    var list = rows || [];
+    var i;
+    for (i = 0; i < list.length; i++) if (list[i] && String(list[i].id) === id) return list[i];
+    for (i = 0; i < list.length; i++) {
+      var url = list[i] && list[i].link;
+      if (url && (String(url) + '/').indexOf('/c/' + id + '/') >= 0) return list[i];
+    }
+    return null;
+  }
+
+  /** The panel found no card for this id: say so in the console (it used to fail without a trace). */
+  function reportMissing(cardId, rows) {
+    var d = global.TpDebug;
+    if (d && typeof d.log === 'function') d.log('cardQuick', 'card-not-found', { cardId: String(cardId), rows: (rows || []).length });
+    if (global.console && typeof global.console.warn === 'function') {
+      global.console.warn('CardQuick: no card ' + cardId + ' among the ' + (rows || []).length + ' cards of the board snapshot');
+    }
+  }
+
   /* ── Pure helpers ───────────────────────────────────────────────── */
 
   var URGENCY_TONE = { Aucun: 0, 'Bientôt': 1, 'Assez vite': 2, Vite: 3, 'Au plus vite': 4 };
@@ -227,7 +253,8 @@
       return loadBoard(t, true).then(function (data) {
         if (!state.alive) return;
         state.lists = data.lists || [];
-        state.row = (data.rows || []).filter(function (r) { return r.id === opts.cardId; })[0] || null;
+        state.row = rowFor(data.rows, opts.cardId);
+        if (!state.row) reportMissing(opts.cardId, data.rows);
         paint();
       }, function (err) {
         if (!state.alive) return;
@@ -623,12 +650,13 @@
       return loadBoard(t, attempt > 0).then(function (data) {
         if (!state.alive) return;
         state.lists = data.lists || [];
-        state.row = (data.rows || []).filter(function (r) { return r.id === opts.cardId; })[0] || null;
+        state.row = rowFor(data.rows, opts.cardId);
         if (!state.row && attempt < (opts.waitForCard ? WAIT_RETRIES : 0)) {
           return new Promise(function (resolve) { setTimeout(resolve, WAIT_MS); }).then(function () {
             return state.alive ? firstLoad(attempt + 1) : null;
           });
         }
+        if (!state.row) reportMissing(opts.cardId, data.rows);
         paint();
       }, function (err) {
         if (state.alive) paintMessage('Aperçu indisponible : ' + msg(err));
@@ -658,6 +686,7 @@
   global.CardQuick = {
     mount: mount,
     describe: describe,
+    rowFor: rowFor,
     pctFromX: pctFromX,
     resizeRect: resizeRect,
     zoomAt: zoomAt,

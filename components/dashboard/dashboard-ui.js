@@ -608,14 +608,9 @@
 
     function openCard(row) {
       if (!row || !global.TaskFocus) return;
-      var id = row.id;
-      if (row.link) {
-        var part = String(row.link).split('/c/')[1];
-        if (part) id = part.split('/')[0];
-      }
       global.TaskFocus.open({
         t: t,
-        cardId: id,
+        cardId: row.id,
         name: row.name || '',
         onChange: function () { reload({ quiet: true }); },
         onToast: function (m, kind) { setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },

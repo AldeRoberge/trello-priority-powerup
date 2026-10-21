@@ -90,3 +90,19 @@ test('zoomAt keeps the point under the cursor', () => {
   assert.equal(corner.left, 100);
   assert.equal(corner.top, 50, 'zooming on the top-left does not move that corner');
 });
+
+test('rowFor finds a card by its Trello id, and by the short link of its URL', () => {
+  var rows = [
+    { id: '65f0a1b2c3d4e5f607182930', name: 'Capsule', link: 'https://trello.com/c/AbCd1234/12-capsule' },
+    { id: '65f0a1b2c3d4e5f607182931', name: 'Semaine', link: 'https://trello.com/c/Zz9Yy8Xx/13-semaine?x=1' },
+    { id: '65f0a1b2c3d4e5f607182932', name: 'Sans lien', link: '' },
+  ];
+  assert.equal(CQ.rowFor(rows, '65f0a1b2c3d4e5f607182931').name, 'Semaine');
+  assert.equal(CQ.rowFor(rows, 'AbCd1234').name, 'Capsule', 'the short link used to be passed in by the Aujourd’hui view');
+  assert.equal(CQ.rowFor(rows, 'Zz9Yy8Xx').name, 'Semaine');
+  assert.equal(CQ.rowFor([{ id: 'a', link: 'https://trello.com/c/Short' }], 'Short').id, 'a', 'a link without a title still matches');
+  assert.equal(CQ.rowFor(rows, 'AbCd'), null, 'only a whole short link matches');
+  assert.equal(CQ.rowFor(rows, 'gone'), null);
+  assert.equal(CQ.rowFor(rows, ''), null);
+  assert.equal(CQ.rowFor(null, 'x'), null);
+});

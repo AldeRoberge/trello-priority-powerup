@@ -7,6 +7,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Carte : la barre de titre « Trello Cerveau » indique depuis quand l’application a été mise à jour (« mis à jour il y a 2 heures »), comme l’en-tête de la section dans la carte.
 - Orchestrateur : sous ma rangée, une rangée par personne du tableau (membres Trello et contacts « Hors Trello »), sur les mêmes colonnes. Glisser une carte sur la rangée de quelqu’un la lui confie (sur la case d’un autre jour, elle change aussi de jour) ; la glisser vers ma rangée la reprend. La molette sur les personnes les fait défiler, ailleurs elle zoome toujours. « Défaire » ou Ctrl+Z remet comme avant.
 - Clic droit sur une carte : « Confier à » une personne, ou à moi.
+- Dashboard : ouvrir une tâche (Aujourd’hui, Triage, Orchestrateur) affichait « Tâche introuvable » ; elle s’ouvre maintenant. Si une carte manque vraiment, la console le dit au lieu de se taire.
 
 ## 2026-10-21
 - Assistant : une tâche créée s’ouvre en vrai panneau au-dessus de la boîte, au lieu d’une simple ligne. On y règle tout sur place : liste, titre, progrès, priorité, échéance, estimation, personnes, lieux, étiquettes et description. La croix le ferme.
