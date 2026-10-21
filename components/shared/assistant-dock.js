@@ -19,6 +19,7 @@
   var SHOT_EDGE = 1600; // longest edge sent to the model, in px
   var LOG_KEEP = 4;
   var LOG_FADE_MS = 45000;
+  var MAX_CARDS = 4; // task panels kept open above the box; the oldest closes first
   var IMG_RE = /^image\/(png|jpe?g|gif|webp|bmp)$/;
 
   function el(tag, cls, text) {
@@ -88,13 +89,33 @@
     });
   }
 
+  /**
+   * What the box says about an AI result. A task that was just created is not repeated as a line: it opens as a
+   * task panel (`created`, one per new card) when the page can show one (`rich`); otherwise it stays a line.
+   * -> { text, kind: 'ai' | 'error', created: [{ id, title, list, text }] }
+   */
+  function outcome(res, rich) {
+    res = res || {};
+    var applied = res.applied || [];
+    var failed = res.failed || [];
+    var made = rich ? (res.created || []).filter(function (c) { return c && c.id; }) : [];
+    var madeText = made.map(function (c) { return c.text; });
+    var rest = applied.filter(function (s) { return madeText.indexOf(s) < 0; });
+    var parts = [];
+    if (rest.length) parts.push(rest.join(', '));
+    else if (!made.length) parts.push(res.message || 'Rien à faire.');
+    if (failed.length) parts.push('Échec : ' + failed.join(' ; '));
+    return { text: parts.join(' — '), kind: failed.length && !applied.length ? 'error' : 'ai', created: made };
+  }
+
   function mount(opts) {
     opts = opts || {};
     var t = opts.t;
     var files = []; // { id, file, thumb }
     var seq = 0;
     var busy = false;
-    var log = []; // { who: 'me' | 'ai' | 'error', text, at }
+    var log = []; // { who: 'me' | 'ai' | 'error', text, at, action? }
+    var cards = []; // task panels: { destroy }
 
     var root = el('div', 'ad-dock');
     if (opts.after && opts.after.parentNode) opts.after.parentNode.insertBefore(root, opts.after.nextSibling);
@@ -130,13 +151,16 @@
     composer.appendChild(picker);
     var loadHost = el('div', 'ad-dock-load');
     loadHost.hidden = true;
+    var cardsEl = el('div', 'ad-dock-cards'); // task panels float above the box, so the view behind does not move
+    cardsEl.hidden = true;
+    root.appendChild(cardsEl);
     root.appendChild(logEl);
     root.appendChild(loadHost);
     root.appendChild(attsEl);
     root.appendChild(composer);
 
-    function addLog(who, text) {
-      log.push({ who: who, text: text, at: Date.now() });
+    function addLog(who, text, action) {
+      log.push({ who: who, text: text, at: Date.now(), action: action || null });
       if (log.length > LOG_KEEP) log.shift();
       renderLog();
     }
@@ -150,11 +174,66 @@
         var row = el('div', 'ad-dock-msg is-' + m.who);
         if (m.who !== 'me') row.appendChild(avatar());
         row.appendChild(el('span', 'ad-dock-msg-text', m.text));
+        if (m.action) {
+          var act = el('button', 'ad-dock-msg-act', m.action.label);
+          act.type = 'button';
+          act.addEventListener('click', function () {
+            log = log.filter(function (x) { return x !== m; });
+            renderLog();
+            try { m.action.run(); } catch (e) { /* the host reports its own errors */ }
+          });
+          row.appendChild(act);
+        }
         logEl.appendChild(row);
       });
       logEl.scrollTop = logEl.scrollHeight;
     }
     setInterval(function () { if (root.isConnected && log.length) renderLog(); }, 5000);
+
+    function refreshView() {
+      if (typeof opts.onRefresh === 'function') try { opts.onRefresh(); } catch (e) { /* view gone */ }
+    }
+
+    /** A task the assistant just created, open as the shared task panel (status, progress, priority, date, people, description). */
+    function addCard(made) {
+      var CQ = global.CardQuick;
+      var entry = el('div', 'ad-dock-card');
+      var panel = el('div', 'ad-dock-card-panel');
+      entry.appendChild(avatar());
+      entry.appendChild(panel);
+      cardsEl.appendChild(entry);
+      var quick = null;
+      var item = {
+        destroy: function () {
+          if (quick) quick.destroy();
+          quick = null;
+          if (entry.parentNode) entry.parentNode.removeChild(entry);
+          cards = cards.filter(function (c) { return c !== item; });
+          cardsEl.hidden = !cards.length;
+          input.focus();
+        },
+      };
+      cards.push(item);
+      quick = CQ.mount(panel, {
+        t: t,
+        cardId: made.id,
+        name: made.title,
+        waitForCard: true,
+        onChange: refreshView,
+        onClose: item.destroy,
+        onToast: function (message, kind, action) {
+          if (kind === 'error') addLog('error', message);
+          else if (action) addLog('ai', message, action);
+        },
+        onGone: function () {
+          item.destroy();
+          refreshView();
+        },
+      });
+      while (cards.length > MAX_CARDS) cards[0].destroy();
+      cardsEl.hidden = false;
+      return entry;
+    }
 
     function renderAtts() {
       attsEl.innerHTML = '';
@@ -272,17 +351,19 @@
           });
         });
       }).then(function (res) {
-        var parts = [];
-        if (res.applied.length) parts.push(res.applied.join(', '));
-        else if (res.message) parts.push(res.message);
-        else parts.push('Rien à faire.');
-        if (res.failed.length) parts.push('Échec : ' + res.failed.join(' ; '));
-        addLog(res.failed.length && !res.applied.length ? 'error' : 'ai', parts.join(' — '));
+        var CQ = global.CardQuick;
+        var out = outcome(res, !!(CQ && typeof CQ.mount === 'function'));
+        if (out.text) addLog(out.kind, out.text);
+        if (out.created.length) {
+          CQ.invalidate(); // the snapshot taken before the creation does not hold these cards
+          var entries = out.created.map(addCard);
+          if (entries[0].scrollIntoView) entries[0].scrollIntoView({ block: 'start' }); // earlier panels scroll away
+        }
         if (res.applied.length) {
           sending.forEach(function (a) { if (a.thumb) try { URL.revokeObjectURL(a.thumb); } catch (e) { /* ignore */ } });
           files = [];
           renderAtts();
-          if (typeof opts.onRefresh === 'function') try { opts.onRefresh(); } catch (e) { /* view gone */ }
+          refreshView();
         } else if (!res.failed.length && AI.keepsDraft && AI.keepsDraft(text, res.message)) {
           input.value = text; // a real question came back: keep the draft so it can be edited
           grow();
@@ -357,5 +438,5 @@
   }
 
   // toDataUrl / named are shared with the Triage document (images pasted there are read the same way).
-  global.AssistantDock = { mount: mount, ask: ask, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE };
+  global.AssistantDock = { mount: mount, ask: ask, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE, outcome: outcome };
 })(typeof window !== 'undefined' ? window : this);

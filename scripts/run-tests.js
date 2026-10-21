@@ -118,6 +118,7 @@ const UNIT_FILES = [
   'triage-doc-trello.test.js',
   'triage-image.test.js',
   'quick-find.test.js',
+  'assistant-dock.test.js',
 ];
 
 function listTests() {

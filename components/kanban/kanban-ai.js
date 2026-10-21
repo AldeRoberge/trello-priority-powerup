@@ -589,7 +589,10 @@
       return steps.then(function () {
         if (cardId) res.touched[cardId] = true;
         if (cardId && typeof o.record === 'function') o.record({ type: 'create', targetId: cardId, title: a.title, after: list.name });
-        res.applied.push('tâche « ' + a.title + ' » créée dans « ' + list.name + ' »');
+        var text = 'tâche « ' + a.title + ' » créée dans « ' + list.name + ' »';
+        res.applied.push(text);
+        // The dock opens the new card as a full panel instead of repeating this line.
+        if (cardId) res.created.push({ id: cardId, title: a.title, list: list.name, text: text });
       });
     });
   }
@@ -715,7 +718,7 @@
       if (!actions.length && isHelpPivot(message) && foldUtterance(text).split(' ').length <= 3) {
         message = socialReply(text) || 'Dis-moi ce qu’il faut changer.';
       }
-      var res = { message: message, applied: [], failed: [], touched: {} };
+      var res = { message: message, applied: [], failed: [], touched: {}, created: [] };
       if (actions.length) tell('write');
       o.soleCreate = actions.filter(function (a) { return a.op === 'create'; }).length === 1;
       var chain = Promise.resolve();

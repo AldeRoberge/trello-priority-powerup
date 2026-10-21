@@ -189,3 +189,59 @@
 }
 .ad-dock-load[hidden] { display: none; }
 .ad-dock-load .ai-status { flex: 1 1 auto; max-width: 320px; }
+
+/* Undo link on a log line (e.g. after archiving a new task) */
+.ad-dock-msg-act {
+  flex: none;
+  margin-left: 8px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-link, var(--tp-primary));
+  font: inherit;
+  cursor: pointer;
+}
+.ad-dock-msg-act:hover { background: var(--tp-surface-hover); }
+
+/* Tasks the assistant just created: the full task panel floats above the box (the view behind does not move) */
+.ad-dock-cards {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(60vh, 560px);
+  padding: 0 12px 8px;
+  overflow-y: auto;
+  pointer-events: none; /* only the panels catch the pointer, the view stays usable around them */
+}
+.ad-dock-cards[hidden] { display: none; }
+.ad-dock-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: auto;
+  animation: ad-card-in 140ms ease-out;
+}
+.ad-dock-card-panel {
+  flex: 0 1 560px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--tp-border-strong, var(--tp-border));
+  border-radius: 12px;
+  background: var(--tp-surface);
+  box-shadow: 0 6px 24px rgba(9, 30, 66, 0.2);
+}
+.ad-dock-card .ad-dock-avatar { margin-top: 4px; }
+@keyframes ad-card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ad-dock-card { animation: none; }
+}

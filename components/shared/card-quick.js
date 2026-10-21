@@ -12,6 +12,8 @@
  *     onHold(on),                      // an editor / menu is open: the host must not close the panel
  *     onToast(message, kind, action),  // optional feedback; action = { label, run }
  *     onGone(),                        // the card was archived: the host closes the panel
+ *     onClose(),                       // optional: adds an "x" to the header (the host closes the panel)
+ *     waitForCard,                     // optional: the card was just created, wait for Trello to list it
  *   }) -> { refresh(), destroy() }
  *
  * Pure helpers (describe, pctFromX) are exported for unit tests.
@@ -20,6 +22,8 @@
   'use strict';
 
   var TTL = 15000;
+  var WAIT_RETRIES = 6; // opts.waitForCard: reads of the board before giving up on a card that was just created
+  var WAIT_MS = 600;
   var cache = null; // { t, at, promise }
 
   function TT() { return global.TableTrello; }
@@ -271,6 +275,8 @@
 
     function paintMessage(text) {
       root.textContent = '';
+      var head = bareHead();
+      if (head) root.appendChild(head);
       root.appendChild(el('div', 'cq-note', { text: text }));
     }
 
@@ -360,7 +366,22 @@
       var more = el('button', 'cq-iconbtn', { type: 'button', title: 'Plus d’actions', 'aria-label': 'Plus d’actions' }, [ico('dots')]);
       more.addEventListener('click', function () { moreMenu(more, row); });
       kids.push(more);
+      if (opts.onClose) kids.push(closeButton());
       return el('div', 'cq-head', null, kids);
+    }
+
+    function closeButton() {
+      return el('button', 'cq-iconbtn', {
+        type: 'button',
+        title: 'Fermer',
+        'aria-label': 'Fermer',
+        onclick: function () { opts.onClose(); },
+      }, [ico('x')]);
+    }
+
+    /** Header of the loading / unavailable states: only the "x" (there is no card to act on yet). */
+    function bareHead() {
+      return opts.onClose ? el('div', 'cq-head', null, [el('span', 'cq-spacer'), closeButton()]) : null;
     }
 
     /* Title: double-click to rename in place */
@@ -593,20 +614,36 @@
       root.appendChild(descBlock(row, info));
     }
 
+    /**
+     * First load. A card created a moment ago is not always in Trello's listing yet, so with
+     * `opts.waitForCard` the snapshot is read again (a few times) until the card shows up. The host calls
+     * CardQuick.invalidate() first when its cached snapshot predates the card.
+     */
+    function firstLoad(attempt) {
+      return loadBoard(t, attempt > 0).then(function (data) {
+        if (!state.alive) return;
+        state.lists = data.lists || [];
+        state.row = (data.rows || []).filter(function (r) { return r.id === opts.cardId; })[0] || null;
+        if (!state.row && attempt < (opts.waitForCard ? WAIT_RETRIES : 0)) {
+          return new Promise(function (resolve) { setTimeout(resolve, WAIT_MS); }).then(function () {
+            return state.alive ? firstLoad(attempt + 1) : null;
+          });
+        }
+        paint();
+      }, function (err) {
+        if (state.alive) paintMessage('Aperçu indisponible : ' + msg(err));
+      });
+    }
+
     // First paint: the title straight away, the rest once the board snapshot is in.
+    var firstHead = bareHead();
+    if (firstHead) root.appendChild(firstHead);
     root.appendChild(el('div', 'cq-title', { text: opts.name || 'Carte' }));
     root.appendChild(el('div', 'cq-note', { text: 'Chargement…' }));
     if (!TT() || typeof TT().load !== 'function') {
       paintMessage('Aperçu indisponible.');
     } else {
-      loadBoard(t, false).then(function (data) {
-        if (!state.alive) return;
-        state.lists = data.lists || [];
-        state.row = (data.rows || []).filter(function (r) { return r.id === opts.cardId; })[0] || null;
-        paint();
-      }, function (err) {
-        if (state.alive) paintMessage('Aperçu indisponible : ' + msg(err));
-      });
+      firstLoad(0);
     }
 
     return {

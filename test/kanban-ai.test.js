@@ -248,6 +248,31 @@ describe('KanbanAI', () => {
       assert.match(msgs[1].content, /mise en attente/);
     });
 
+    it('returns the created card (id, title, list) so the dock can open it', async () => {
+      global.PriorityAgent.chatCompletions = async () => ({
+        content: JSON.stringify({ message: '', actions: [{ op: 'create', title: 'Libérer de l’espace sur l’iPhone', list: 'l1' }] }),
+      });
+      global.TableTrello.createRow = async (_t, name, listId) => ({ cardId: 'new1', name, listId });
+      const res = await AI.run({}, { text: 'Make room on my iPhone', target: null, rows: mkRows(), lists });
+      assert.deepEqual(res.failed, []);
+      assert.equal(res.created.length, 1);
+      assert.deepEqual({ ...res.created[0], text: undefined }, { id: 'new1', title: 'Libérer de l’espace sur l’iPhone', list: 'À faire', text: undefined });
+      assert.ok(res.applied.includes(res.created[0].text), 'the line stays in applied (chat log, pages without a task panel)');
+    });
+
+    it('returns no created card when Trello gave no card id, or the action failed', async () => {
+      global.PriorityAgent.chatCompletions = async () => ({
+        content: JSON.stringify({ message: '', actions: [{ op: 'create', title: 'Sans id', list: 'l1' }] }),
+      });
+      global.TableTrello.createRow = async () => ({});
+      const noId = await AI.run({}, { text: 'x', target: null, rows: mkRows(), lists });
+      assert.deepEqual(noId.created, []);
+      global.TableTrello.createRow = async () => { throw new Error('refusé'); };
+      const failed = await AI.run({}, { text: 'x', target: null, rows: mkRows(), lists });
+      assert.deepEqual(failed.created, []);
+      assert.deepEqual(failed.failed, ['refusé']);
+    });
+
     it('rejects with no-provider when the provider is not configured', async () => {
       global.PriorityAgent.isConfigured = () => false;
       await assert.rejects(() => AI.run({}, { text: 'x', target: null, rows: mkRows(), lists }), (e) => e.reason === 'no-provider');
