@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-21
+- Carte : la barre de titre « Trello Cerveau » indique depuis quand l’application a été mise à jour (« mis à jour il y a 2 heures »), comme l’en-tête de la section dans la carte.
 - Orchestrateur : sous ma rangée, une rangée par personne du tableau (membres Trello et contacts « Hors Trello »), sur les mêmes colonnes. Glisser une carte sur la rangée de quelqu’un la lui confie (sur la case d’un autre jour, elle change aussi de jour) ; la glisser vers ma rangée la reprend. La molette sur les personnes les fait défiler, ailleurs elle zoome toujours. « Défaire » ou Ctrl+Z remet comme avant.
 - Clic droit sur une carte : « Confier à » une personne, ou à moi.
 

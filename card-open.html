@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-build-watch="off">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="./components/shared/trello-theme.css" />
   <link rel="stylesheet" href="./components/priority/priority-ui.css" />
   <script src="./components/shared/brand.js"></script>
+  <script src="./components/shared/version.js"></script>
   <script src="./components/shared/rest-config.js"></script>
   <script src="./components/shared/debug-log.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
@@ -419,6 +420,15 @@
           });
       }
 
+      // "Trello Cerveau · mis à jour il y a …"; the plain name when the build time is unknown.
+      function modalTitle(t) {
+        if (!window.BuildVersion || typeof BuildVersion.titleWithAge !== 'function') {
+          return Promise.resolve(appName);
+        }
+        var sign = function (url) { return typeof t.signUrl === 'function' ? t.signUrl(url) : url; };
+        return BuildVersion.titleWithAge(appName, sign('./build-info.json'), sign('./index.html'));
+      }
+
       function openCerveauModal(t, options) {
         options = options || {};
         return Promise.resolve()
@@ -451,27 +461,29 @@
             if (window.TpDebug) {
               TpDebug.log('cardOpen', 'modal.open', { force: !!options.force });
             }
-            return t.modal({
-              title: appName,
-              url: PriorityTrello.pageUrl('./popup.html'),
-              args: {
-                cardName: cardName,
-                openSection: options.openSection || 'overview'
-              },
-              height: 1100,
-              fullscreen: true,
-              accentColor: '#22272B',
-              callback: function () {
-                try {
-                  if (cardId) sessionStorage.removeItem(key);
-                } catch (e) {
-                  /* ignore */
-                }
-                if (window.TpDebug) TpDebug.log('cardOpen', 'modal.closed');
-                // Modal edits land in shared plugin data; refresh the strip
-                // immediately so users do not need to close/reopen the card.
-                refreshOverview(t, { force: true });
-              },
+            return modalTitle(t).then(function (title) {
+              return t.modal({
+                title: title,
+                url: PriorityTrello.pageUrl('./popup.html'),
+                args: {
+                  cardName: cardName,
+                  openSection: options.openSection || 'overview'
+                },
+                height: 1100,
+                fullscreen: true,
+                accentColor: '#22272B',
+                callback: function () {
+                  try {
+                    if (cardId) sessionStorage.removeItem(key);
+                  } catch (e) {
+                    /* ignore */
+                  }
+                  if (window.TpDebug) TpDebug.log('cardOpen', 'modal.closed');
+                  // Modal edits land in shared plugin data; refresh the strip
+                  // immediately so users do not need to close/reopen the card.
+                  refreshOverview(t, { force: true });
+                },
+              });
             });
           });
       }

@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before } = require('node:test');
+const { describe, it, before, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadComponent } = require('./helpers/load');
 
@@ -68,6 +68,48 @@ describe('BuildVersion', () => {
     assert.equal(BuildVersion.needsReload('samesha123', 'samesha123', false, ''), false);
     assert.equal(BuildVersion.needsReload('', 'newsha1234', false, ''), false);
     assert.equal(BuildVersion.needsReload('oldsha1234', 'newsha1234', false, 'newsha1234'), false);
+  });
+
+  describe('titleWithAge', () => {
+    const realFetch = global.fetch;
+
+    function stubFetch(handler) {
+      global.fetch = (url, opts) => handler(url, opts || {});
+    }
+
+    function buildInfoFor(iso) {
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ builtAt: iso }),
+      };
+    }
+
+    afterEach(() => {
+      global.fetch = realFetch;
+    });
+
+    it('adds how long ago the app was updated to the name', async () => {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      stubFetch((url, opts) => Promise.resolve(opts.method === 'HEAD' ? { ok: false } : buildInfoFor(twoHoursAgo)));
+      const title = await BuildVersion.titleWithAge('Trello Cerveau', 'build-info.json', 'index.html');
+      assert.equal(title, 'Trello Cerveau · mis à jour il y a 2 heures');
+    });
+
+    it('falls back to the plain name when the build info is missing', async () => {
+      stubFetch(() => Promise.resolve({ ok: false }));
+      assert.equal(await BuildVersion.titleWithAge('Trello Cerveau', 'build-info.json'), 'Trello Cerveau');
+      stubFetch(() => Promise.reject(new Error('offline')));
+      assert.equal(await BuildVersion.titleWithAge('Trello Cerveau', 'build-info.json'), 'Trello Cerveau');
+    });
+
+    it('does not make a modal wait for a slow fetch', async () => {
+      stubFetch(() => new Promise(() => {}));
+      const started = Date.now();
+      const title = await BuildVersion.titleWithAge('Trello Cerveau', 'build-info.json', '', 30);
+      assert.equal(title, 'Trello Cerveau');
+      assert.ok(Date.now() - started < 1000);
+    });
   });
 
   it('adds a cache-busting v to the page URL', () => {

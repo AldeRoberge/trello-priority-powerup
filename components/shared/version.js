@@ -115,6 +115,22 @@
     return resolved;
   }
 
+  /**
+   * `Nom · mis à jour il y a …` for a title bar. Never rejects and never waits longer than
+   * `timeoutMs` (a modal must not open late): it falls back to the plain name.
+   */
+  function titleWithAge(name, url, probeUrl, timeoutMs) {
+    let timer = null;
+    const late = new Promise((resolve) => {
+      timer = global.setTimeout(() => resolve(''), timeoutMs || 1200);
+    });
+    const built = fetchBuiltAt(url, probeUrl).then((iso) => iso, () => '');
+    return Promise.race([built, late]).then((iso) => {
+      global.clearTimeout(timer);
+      return iso ? `${name} · mis à jour ${relativeAgo(iso)}` : name;
+    });
+  }
+
   /** True when the page HTML is an older deploy than build-info.json. */
   function needsReload(running, remote, busy, alreadyTried) {
     if (!running || !remote || running === remote) return false;
@@ -148,6 +164,8 @@
     if (!doc || typeof doc.querySelector !== 'function' || !global.location || typeof global.fetch !== 'function') {
       return;
     }
+    // Pages that only borrow the age label (card-open.html) must not reload themselves on a new deploy.
+    if (doc.documentElement && doc.documentElement.getAttribute('data-build-watch') === 'off') return;
     const meta = doc.querySelector('meta[name="cerveau-build"]');
     const running = (meta && meta.getAttribute && meta.getAttribute('content')) || '';
     if (!running) return;
@@ -195,6 +213,7 @@
     parseTimestampMs,
     resolveBuiltAt,
     fetchBuiltAt,
+    titleWithAge,
     needsReload,
     urlWithBuild,
   };

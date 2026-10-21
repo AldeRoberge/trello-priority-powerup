@@ -340,7 +340,7 @@
         ? 'Définir le progrès'
         : focusObjectif
           ? 'Objectif'
-          : appName;
+          : await appTitleWithAge(t, appName);
       if (window.TpDebug) {
         TpDebug.log('index', 'modal.open', {
           section: openSection,
@@ -355,6 +355,15 @@
         fullscreen: true,
         accentColor: '#22272B',
       });
+    }
+
+    // "Trello Cerveau · mis à jour il y a …" for a title bar; the plain name when the build time is unknown.
+    function appTitleWithAge(t, appName) {
+      if (!window.BuildVersion || typeof BuildVersion.titleWithAge !== 'function') {
+        return Promise.resolve(appName);
+      }
+      var sign = function (url) { return typeof t.signUrl === 'function' ? t.signUrl(url) : url; };
+      return BuildVersion.titleWithAge(appName, sign('./build-info.json'), sign('./index.html'));
     }
 
     async function openCompletionPopup(t) {
@@ -479,20 +488,7 @@
           };
         }
         // Header shows how long ago the app was updated (falls back to the plain name).
-        if (!window.BuildVersion || typeof BuildVersion.fetchBuiltAt !== 'function') {
-          return sectionFor(appName);
-        }
-        return BuildVersion.fetchBuiltAt(
-          typeof t.signUrl === 'function' ? t.signUrl('./build-info.json') : './build-info.json',
-          typeof t.signUrl === 'function' ? t.signUrl('./index.html') : './index.html'
-        )
-          .then(function (builtAt) {
-            var ago = BuildVersion.relativeAgo(builtAt);
-            return sectionFor(appName + ' · mis à jour ' + ago);
-          })
-          .catch(function () {
-            return sectionFor(appName);
-          });
+        return appTitleWithAge(t, appName).then(sectionFor);
       }),
 
       'on-enable': trackCapability('on-enable', function(t) {
