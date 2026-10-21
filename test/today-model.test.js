@@ -60,6 +60,14 @@ describe('TodayModel', () => {
       assert.equal(TM.inWords(120), 'dans 2 h');
     });
 
+    it('writes the distance from now with a sign', () => {
+      assert.equal(TM.fmtOffset(-180), '-3 h');
+      assert.equal(TM.fmtOffset(-50), '-50 min');
+      assert.equal(TM.fmtOffset(75), '+1 h 15');
+      assert.equal(TM.fmtOffset(15), '+15 min');
+      assert.equal(TM.fmtOffset(0), 'Maintenant');
+    });
+
     it('lists the times of a time menu, every half hour, on one level', () => {
       const slots = TM.timeSlots(6, 8);
       assert.deepEqual(slots.map((s) => s.time), ['06:00', '06:30', '07:00', '07:30', '08:00', '08:30']);

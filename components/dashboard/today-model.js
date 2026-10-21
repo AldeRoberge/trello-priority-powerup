@@ -91,6 +91,13 @@
     return DM().formatMinutes(min);
   }
 
+  /** Distance from now, signed: -180 → "-3 h", -50 → "-50 min", 75 → "+1 h 15", 0 → "Maintenant". */
+  function fmtOffset(deltaMin) {
+    var d = Math.round(deltaMin);
+    if (!d) return 'Maintenant';
+    return (d < 0 ? '-' : '+') + fmtDuration(Math.abs(d));
+  }
+
   /* ── Minutes on a grid ─────────────────────────────────────────── */
 
   function snap(min, step) {
@@ -561,6 +568,7 @@
     fmtRange: fmtRange,
     inWords: inWords,
     fmtDuration: fmtDuration,
+    fmtOffset: fmtOffset,
     snap: snap,
     ceilTo: ceilTo,
     toClock: toClock,

@@ -920,6 +920,32 @@
       grid.appendChild(hint);
       if (ui.compose) grid.appendChild(composer(grid, scale));
 
+      /* The hint and the compose label sit in the gutter on top of the hour and weather text: hide what they would overlap, even by a few pixels. */
+      var coverKey = null;
+      var covered = [];
+      function coverGutter(y) {
+        if (y === coverKey) return;
+        coverKey = y;
+        covered.forEach(function (el) { el.classList.remove('is-covered'); });
+        covered = [];
+        if (y == null) return;
+        var top = grid.getBoundingClientRect().top;
+        Array.prototype.forEach.call(grid.querySelectorAll('.td-hr-t, .td-wx-h, .td-sun > .ti, .td-sun > span'), function (el) {
+          var r = el.getBoundingClientRect();
+          if (!r.height || Math.abs(r.top + r.height / 2 - top - y) >= 16) return;
+          el.classList.add('is-covered');
+          covered.push(el);
+        });
+      }
+      function composeY() {
+        return ui.compose ? scale.yOf(ui.compose.at) + 17 : null;
+      }
+      function hideHint() {
+        hint.hidden = true;
+        coverGutter(composeY());
+      }
+      if (ui.compose) window.requestAnimationFrame(function () { if (grid.isConnected) coverGutter(composeY()); });
+
       function minuteAt(clientY, step) {
         var rect = grid.getBoundingClientRect();
         var m = TM().snap(scale.minOf(clientY - rect.top), step);
@@ -936,7 +962,7 @@
         drop.style.top = top + 'px';
         drop.style.height = Math.max(MIN_BLOCK_PX - 3, scale.yOf(Math.min(scale.to, m + ui.drag.duration)) - top - 3) + 'px';
         drop.firstChild.textContent = TM().fmtRange(m, m + ui.drag.duration);
-        hint.hidden = true;
+        hideHint();
       });
       grid.addEventListener('dragleave', function (e) {
         if (!grid.contains(e.relatedTarget)) hideDrop();
@@ -958,13 +984,14 @@
         return !ui.drag && !ui.resizing && !ui.compose && e.target.closest && !e.target.closest('.td-block, .td-compose');
       }
       grid.addEventListener('pointermove', function (e) {
-        if (!overEmpty(e) || e.pointerType === 'touch') { hint.hidden = true; return; }
+        if (!overEmpty(e) || e.pointerType === 'touch') { hideHint(); return; }
         var m = minuteAt(e.clientY, CLICK_STEP);
         hint.hidden = false;
         hint.style.top = scale.yOf(m) + 'px';
-        hint.firstChild.textContent = TM().fmtClock(m);
+        hint.firstChild.textContent = TM().fmtOffset(m - ui.nowMin);
+        coverGutter(scale.yOf(m));
       });
-      grid.addEventListener('pointerleave', function () { hint.hidden = true; });
+      grid.addEventListener('pointerleave', hideHint);
       grid.addEventListener('click', function (e) {
         if (!overEmpty(e)) return;
         ui.compose = { at: minuteAt(e.clientY, CLICK_STEP), text: '' };
