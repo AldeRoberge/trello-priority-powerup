@@ -299,8 +299,19 @@
     window.__doc = { asked: [], created: [] };
     PriorityAgent.getProvider = function () { return Promise.resolve({ ok: true }); };
     PriorityAgent.isConfigured = function () { return !new URLSearchParams(location.search).has('noai'); };
+    function cannedEdit(messages) {
+      var text = messages[messages.length - 1].content;
+      var data = JSON.parse(text.slice(text.indexOf('{'), text.indexOf('\n\nDocument')));
+      var ask = text.slice(text.lastIndexOf('Demande : ') + 10);
+      var ids = data.plan.map(function (t) { return { id: t.id }; });
+      if (/supprim|enl[eè]ve/i.test(ask)) return { message: 'J’ai retiré la dernière tâche.', tasks: ids.slice(0, -1) };
+      if (/projet/i.test(ask)) return { message: 'J’ai regroupé les tâches libres dans le projet « Jardin ».', tasks: data.plan.map(function (t) { return t.project ? { id: t.id } : { id: t.id, project: 'Jardin' }; }) };
+      if (/\?$/.test(ask)) return { message: 'Il y a ' + data.plan.length + ' tâches dans le plan.', tasks: ids };
+      return { message: 'Rien à changer.', tasks: ids };
+    }
     PriorityAgent.chatCompletions = function (provider, messages) {
       window.__doc.asked.push(messages);
+      if (/^Tu aides à corriger un plan/.test(messages[0].content)) return later({ content: JSON.stringify(cannedEdit(messages)) });
       var user = messages[messages.length - 1].content;
       var seen = Array.isArray(user) && user.some(function (c) { return c.type === 'image_url'; });
       var plan = {
@@ -333,8 +344,13 @@
       return Promise.resolve({ ok: true });
     };
     var baseSaveInputs = PriorityTrello.saveCardInputsById;
+    var staleTries = {};
     PriorityTrello.saveCardInputsById = function (t, id, patch) {
       var r = find(id);
+      var q = new URLSearchParams(location.search);
+      var notYet = function () { return Object.assign(new Error('Card not found or not on current board (Command: data)'), { name: 'TrelloError', status: 404, reason: 'http-404' }); };
+      if (r && q.has('fail') && /potager/i.test(r.name)) return Promise.reject(notYet());
+      if (r && q.has('stale') && (staleTries[id] = (staleTries[id] || 0) + 1) <= 2) return Promise.reject(notYet());
       if (r && patch.customAssignees) {
         r.inputs = Object.assign({}, r.inputs, { customAssignees: patch.customAssignees });
         r.assignees = (r.assignees || []).filter(function (a) { return !a.custom; }).concat(patch.customAssignees.map(function (c) { return { id: c.id, name: c.name, custom: true, trelloId: '' }; }));

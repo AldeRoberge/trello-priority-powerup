@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before, beforeEach } = require('node:test');
+const { describe, it, before, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadComponent } = require('./helpers/load');
 
@@ -12,6 +12,7 @@ describe('TriageDocTrello', () => {
   let goalsStore;
   let goalsSaves;
   let failOn;
+  let savedConsoleError;
   const t = {};
   const lists = [
     { id: 'l0', name: 'Inbox', category: 'triage' },
@@ -38,6 +39,8 @@ describe('TriageDocTrello', () => {
   });
 
   beforeEach(() => {
+    savedConsoleError = console.error;
+    console.error = () => {};
     calls = [];
     cards = 0;
     failOn = {};
@@ -91,6 +94,8 @@ describe('TriageDocTrello', () => {
       },
     };
   });
+
+  afterEach(() => { console.error = savedConsoleError; });
 
   const planOf = (raw, imageIds) => M.normalizePlan(raw, { resolve: M.contextOf(rawCtx).resolve, imageIds: imageIds || [], existingTitles: [] });
 
@@ -157,19 +162,20 @@ describe('TriageDocTrello', () => {
       assert.equal(res.failed.length, 0);
       assert.deepEqual(res.created.map((c) => [c.taskId, c.cardId, c.title]), [['t1', 'card1', 'Préparer'], ['t2', 'card2', 'Appeler'], ['t3', 'card3', 'Libre']]);
       assert.deepEqual(progress, [[1, 3], [2, 3], [3, 3]]);
-      const first = calls.filter((c) => c[1] === 'card1' || c[0] === 'create').slice(0, 7);
-      assert.deepEqual(first[0], ['create', 'Préparer', 'l0']);
-      assert.deepEqual(first[1], ['put', 'card1', { desc: 'Notes', idMembers: 'm2', idLabels: 'lb3' }]);
-      assert.equal(first[2][0], 'inputs');
-      assert.equal(first[2][2].empressement, 'vite');
-      assert.deepEqual(first[2][2].places, { at: { id: 'place-maison', name: 'Maison' } });
-      assert.deepEqual(first[2][2].customAssignees, [{ id: 'new-nouvel-ami', name: 'Nouvel Ami' }]);
-      assert.deepEqual(first[3], ['day', 'card1', '2026-10-23']);
-      assert.deepEqual(first[4][2], [
+      const mine = calls.filter((c) => c[1] === 'card1' || (c[0] === 'create' && c[1] === 'Préparer'));
+      // Trello's REST API knows a new card at once; its stored data (priority, people, subtasks) comes last
+      assert.deepEqual(mine.map((c) => c[0]), ['create', 'put', 'attach', 'day', 'inputs', 'items']);
+      assert.deepEqual(mine[0], ['create', 'Préparer', 'l0']);
+      assert.deepEqual(mine[1], ['put', 'card1', { desc: 'Notes', idMembers: 'm2', idLabels: 'lb3' }]);
+      assert.deepEqual(mine[2], ['attach', 'card1', 'Capture.png']);
+      assert.deepEqual(mine[3], ['day', 'card1', '2026-10-23']);
+      assert.equal(mine[4][2].empressement, 'vite');
+      assert.deepEqual(mine[4][2].places, { at: { id: 'place-maison', name: 'Maison' } });
+      assert.deepEqual(mine[4][2].customAssignees, [{ id: 'new-nouvel-ami', name: 'Nouvel Ami' }]);
+      assert.deepEqual(mine[5][2], [
         { text: 'Terreau', progress: 0 },
         { text: 'Semis', progress: 0, items: [{ text: 'Tomates', progress: 0 }] },
       ]);
-      assert.deepEqual(first[5], ['attach', 'card1', 'Capture.png']);
       // a task without subtasks keeps its own duration
       assert.ok(calls.some((c) => c[0] === 'estimate' && c[1] === 'card2' && c[2] === 15));
       // the new person and the new place are added to the board catalogs once
@@ -226,6 +232,73 @@ describe('TriageDocTrello', () => {
       assert.deepEqual(again.created.map((c) => c.title).sort(), ['A', 'B', 'C']);
     });
 
+    const STALE = 'Card not found or not on current board (Command: data)';
+
+    it('a card Trello does not know yet is tried again, then once more after the batch, and ends written', async () => {
+      const slept = [];
+      let tries = 0;
+      const base = global.PriorityTrello.saveCardInputsById;
+      global.PriorityTrello.saveCardInputsById = async (tt, id, patch) => {
+        if (id === 'card2' && ++tries <= 3) throw new Error(STALE);
+        return base(tt, id, patch);
+      };
+      const plan = planOf({ tasks: [{ title: 'A', urgency: 'vite' }, { title: 'B', urgency: 'vite', subtasks: ['x'] }] });
+      const res = await TD.create(t, plan, { lists, goals: goalsStore, sleep: async (ms) => { slept.push(ms); } });
+      assert.equal(res.failures.length, 0);
+      assert.equal(res.retried, 1);
+      assert.equal(res.created.length, 2);
+      assert.equal(calls.filter((c) => c[0] === 'inputs' && c[1] === 'card2').length, 1);
+      // one short wait right after the card, then the pause once the batch is made, then the longer ones
+      assert.deepEqual(slept, [600, 1000, 800]);
+      // the rest of that card was not held up
+      assert.ok(calls.some((c) => c[0] === 'items' && c[1] === 'card2'));
+    });
+
+    it('a step that never works is reported with the whole error, what was sent and how many tries', async () => {
+      const err = Object.assign(new Error(STALE), { name: 'TrelloError', reason: 'http-400', status: 400, detail: '{"x":1}' });
+      global.PriorityTrello.saveCardInputsById = async () => { throw err; };
+      const plan = planOf({ tasks: [{ title: 'Régler la redondance', urgency: 'vite', people: ['Nouvel Ami'], subtasks: ['x'] }, { title: 'Libre' }] });
+      const res = await TD.create(t, plan, { lists, goals: goalsStore, sleep: async () => {} });
+      assert.equal(res.created.length, 2);
+      assert.equal(res.failures.length, 1);
+      const f = res.failures[0];
+      assert.equal(f.step, 'priorité et personnes');
+      assert.equal(f.title, 'Régler la redondance');
+      assert.equal(f.taskId, 't1');
+      assert.equal(f.cardId, 'card1');
+      assert.equal(f.message, STALE);
+      assert.equal(f.name, 'TrelloError');
+      assert.equal(f.reason, 'http-400');
+      assert.equal(f.status, '400');
+      assert.equal(f.detail, '{"x":1}');
+      assert.equal(f.attempts, 7);
+      assert.match(f.stack, /TrelloError|Error/);
+      assert.match(f.payload, /"empressement": "vite"/);
+      assert.match(f.payload, /Nouvel Ami/);
+      assert.match(f.at, /^\d{4}-\d{2}-\d{2}T/);
+      assert.match(res.failed[0], /priorité et personnes de « Régler la redondance » \(Card not found/);
+      // the subtasks of that card were still written
+      assert.ok(calls.some((c) => c[0] === 'items' && c[1] === 'card1'));
+    });
+
+    it('any other error is reported at once, with no retry', async () => {
+      let n = 0;
+      global.PriorityTrello.saveCardInputsById = async () => { n++; throw new Error('http 500'); };
+      const res = await TD.create(t, planOf({ tasks: [{ title: 'A', urgency: 'vite' }] }), { lists, goals: goalsStore, sleep: async () => { throw new Error('should not wait'); } });
+      assert.equal(n, 1);
+      assert.equal(res.failures[0].attempts, 1);
+      assert.equal(res.failures[0].message, 'http 500');
+    });
+
+    it('a card that cannot be created is a failure of its own, with what was asked', async () => {
+      failOn.create = 'B';
+      const res = await TD.create(t, planOf({ tasks: [{ title: 'B' }] }), { lists, goals: goalsStore });
+      assert.equal(res.failures[0].step, 'création de la carte');
+      assert.equal(res.failures[0].title, 'B');
+      assert.match(res.failures[0].payload, /"idList": "l0"/);
+      assert.equal(res.failures[0].message, 'refusé');
+    });
+
     it('refuses when the board has no triage list', async () => {
       await assert.rejects(TD.create(t, planOf({ tasks: [{ title: 'A' }] }), { lists: [lists[1]], goals: goalsStore }), (e) => e.reason === 'no-triage-list');
       assert.equal(cards, 0);
@@ -248,11 +321,51 @@ describe('TriageDocTrello', () => {
     });
 
     it('a goal map that cannot be saved is reported, the cards stay', async () => {
-      global.MindmapGoalsTrello.save = async () => { const e = new Error('x'); e.reason = 'too-long'; throw e; };
+      global.MindmapGoalsTrello.save = async () => { const e = new Error('too-long'); e.reason = 'too-long'; throw e; };
       const res = await TD.create(t, planOf({ tasks: [{ title: 'A', project: 'Potager' }] }), { lists, goals: goalsStore });
       assert.equal(res.created.length, 1);
       assert.equal(res.goalsSaved, false);
       assert.match(res.failed[0], /projets \(too-long\)/);
+      assert.equal(res.failures[0].step, 'projets');
+      assert.equal(res.failures[0].reason, 'too-long');
+    });
+  });
+
+  describe('error report', () => {
+    it('describeError keeps name, reason, status, detail and the first lines of the trace', () => {
+      const d = TD.describeError(Object.assign(new Error('boom'), { name: 'X', reason: 'r', status: 404, detail: { a: 1 }, command: 'data' }));
+      assert.equal(d.message, 'boom');
+      assert.equal(d.name, 'X');
+      assert.equal(d.reason, 'r');
+      assert.equal(d.status, '404');
+      assert.equal(d.command, 'data');
+      assert.match(d.detail, /"a": 1/);
+      assert.ok(d.stack.split('\n').length <= 10);
+      assert.deepEqual(TD.describeError('texte'), { message: 'texte' });
+      assert.equal(TD.describeError(null).message, 'erreur inconnue');
+    });
+
+    it('recognises a card Trello has not heard of yet, and nothing else', () => {
+      assert.equal(TD.isNotYetThere(new Error('Card not found or not on current board (Command: data)')), true);
+      assert.equal(TD.isNotYetThere(Object.assign(new Error('x'), { detail: 'No such card' })), true);
+      assert.equal(TD.isNotYetThere(new Error('http 500')), false);
+      assert.equal(TD.isNotYetThere(null), false);
+    });
+
+    it('reportOf writes everything on one page to paste: step, card, error, tries, what was sent, trace', () => {
+      const text = TD.reportOf([{
+        step: 'priorité et personnes', title: 'Régler la redondance', cardId: 'abc123', message: 'Card not found', name: 'Error', reason: 'x', status: '400',
+        attempts: 7, at: '2026-10-21T10:00:00.000Z', detail: 'ligne 1\nligne 2', payload: '{\n  "empressement": "vite"\n}', stack: 'Error: Card not found\n    at a (b.js:1:1)',
+      }], { at: '2026-10-21T10:00:05.000Z', build: 'abc1234567', summary: '25 cartes, 1 étape en échec' });
+      assert.match(text, /Date : 2026-10-21T10:00:05.000Z/);
+      assert.match(text, /Version : abc1234567/);
+      assert.match(text, /25 cartes, 1 étape en échec/);
+      assert.match(text, /1\. priorité et personnes : « Régler la redondance »/);
+      assert.match(text, /Message : Card not found/);
+      assert.match(text, /type Error · raison x · statut 400 · 7 tentatives · carte abc123/);
+      assert.match(text, /Détail : ligne 1\n {5}ligne 2/);
+      assert.match(text, /Envoyé : \{\n {5} {2}"empressement": "vite"\n {5}\}/);
+      assert.match(text, /Trace :\n {5}Error: Card not found\n {5} {4}at a/);
     });
   });
 
@@ -267,12 +380,26 @@ describe('TriageDocTrello', () => {
       assert.deepEqual(goalsStore.links, []);
     });
 
+    it('says which card could not be archived and archives the others', async () => {
+      const res = await TD.create(t, planOf({ tasks: [{ title: 'A' }, { title: 'B' }] }), { lists, goals: goalsStore });
+      global.TableTrello.archiveCard = async (tt, id) => { if (id === 'card1') throw new Error('http 429'); calls.push(['archive', id]); };
+      calls.length = 0;
+      const out = await TD.undo(t, res);
+      assert.deepEqual(calls.filter((c) => c[0] === 'archive').map((c) => c[1]), ['card2']);
+      assert.equal(out.failures.length, 1);
+      assert.equal(out.failures[0].step, 'archivage');
+      assert.equal(out.failures[0].cardId, 'card1');
+      assert.equal(out.failures[0].message, 'http 429');
+    });
+
     it('still archives when the goal map cannot be reached', async () => {
       const res = await TD.create(t, planOf({ tasks: [{ title: 'A', project: 'Potager' }] }), { lists, goals: goalsStore });
       global.MindmapGoalsTrello.load = async () => { throw new Error('offline'); };
       calls.length = 0;
-      await TD.undo(t, res);
+      const out = await TD.undo(t, res);
       assert.deepEqual(calls.filter((c) => c[0] === 'archive').map((c) => c[1]), ['card1']);
+      assert.equal(out.failures[0].step, 'retrait des projets');
+      assert.equal(out.failures[0].message, 'offline');
     });
   });
 });

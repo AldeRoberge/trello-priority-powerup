@@ -374,4 +374,172 @@ describe('TriageDocModel', () => {
       assert.equal(res.via, 'outline');
     });
   });
+
+  describe('editing the plan by asking the AI', () => {
+    const resolve = () => M.contextOf(rawCtx).resolve;
+    const base = () => M.normalizePlan({
+      summary: 'Un projet de jardin.',
+      images: [{ id: 'img1', text: 'Liste : terreau' }],
+      tasks: [
+        { title: 'Préparer', project: 'Potager', desc: 'Notes', due: '2026-10-23', urgency: 'vite', estimate: 30, people: ['Marie'], places: ['Maison'], labels: ['Finances'], images: ['img1'], subtasks: [{ text: 'Terreau', estimate: 10, items: ['Tuteurs'] }] },
+        { title: 'Appeler', project: 'Potager' },
+        { title: 'Payer le loyer' },
+      ],
+    }, { resolve: resolve(), imageIds: ['i1'], existingTitles: [] });
+    const norm = () => ({ resolve: resolve(), imageIds: ['i1'], existingTitles: [] });
+
+    it('planForPrompt shows names, leaves empty fields out and flags what the user put aside', () => {
+      const plan = base();
+      plan.tasks[2].include = false;
+      const p = M.planForPrompt(plan);
+      assert.deepEqual(p.projects, ['Potager']);
+      assert.deepEqual(p.tasks[0], {
+        id: 't1', title: 'Préparer', project: 'Potager', desc: 'Notes', due: '2026-10-23', urgency: 'vite', estimate: 30,
+        people: ['Marie Gagnon'], places: ['Maison'], labels: ['Finances'], subtasks: [{ text: 'Terreau', estimate: 10, items: ['Tuteurs'] }],
+      });
+      assert.deepEqual(p.tasks[1], { id: 't2', title: 'Appeler', project: 'Potager' });
+      assert.deepEqual(p.tasks[2], { id: 't3', title: 'Payer le loyer', ecartee: true });
+    });
+
+    it('a task written as just its id is unchanged, a task with some fields keeps the others', () => {
+      const plan = base();
+      plan.tasks[1].include = false; // the user put it aside
+      const next = M.normalizePlan({ tasks: [{ id: 't1', title: 'Préparer le jardin', due: '' }, { id: 't2' }, { id: 't3' }] }, Object.assign(norm(), { previous: plan }));
+      const [a, b, c] = next.tasks;
+      assert.equal(a.title, 'Préparer le jardin');
+      assert.equal(a.due, '');
+      assert.deepEqual([a.desc, a.urgency, a.estimate], ['Notes', 'vite', 30]);
+      assert.deepEqual(a.people, plan.tasks[0].people);
+      assert.deepEqual(a.places, plan.tasks[0].places);
+      assert.deepEqual(a.labels, plan.tasks[0].labels);
+      assert.deepEqual(a.imageIds, ['i1']);
+      assert.deepEqual(a.subtasks.map((x) => [x.text, x.estimate, x.items.map((i) => i.text)]), [['Terreau', 10, ['Tuteurs']]]);
+      assert.equal(b.include, false);
+      assert.equal(next.projects.length, 1);
+      assert.equal(next.projects[0].name, 'Potager');
+      assert.equal(a.project, 'p1');
+      assert.equal(b.project, 'p1');
+      assert.equal(c.project, '');
+      assert.deepEqual(next.images, plan.images);
+      assert.equal(next.summary, 'Un projet de jardin.');
+    });
+
+    it('a field that is written replaces the old one, an empty one clears it', () => {
+      const plan = base();
+      const next = M.normalizePlan({
+        tasks: [{ id: 't1', people: [], subtasks: ['Un', 'Deux'], project: '' }, { id: 't2', project: 'Divers', labels: ['Finances'] }, { id: 't3', project: 'Divers' }],
+      }, Object.assign(norm(), { previous: plan }));
+      assert.deepEqual(next.tasks[0].people, []);
+      assert.deepEqual(next.tasks[0].subtasks.map((s) => s.text), ['Un', 'Deux']);
+      assert.equal(next.tasks[0].project, '');
+      assert.deepEqual(next.projects.map((p) => p.name), ['Divers']);
+      assert.deepEqual(next.tasks.slice(1).map((t) => t.project), ['p1', 'p1']);
+      assert.deepEqual(next.tasks[1].labels, [{ name: 'Finances', id: 'lb3', color: 'green' }]);
+    });
+
+    it('leaving a task out deletes it, a task with no id is new', () => {
+      const plan = base();
+      const next = M.normalizePlan({ tasks: [{ id: 't2' }, { title: 'Acheter des semences', due: '2026-10-25' }] }, Object.assign(norm(), { previous: plan }));
+      assert.deepEqual(next.tasks.map((t) => t.title), ['Appeler', 'Acheter des semences']);
+      assert.equal(next.tasks[1].include, true);
+      assert.equal(next.tasks[1].due, '2026-10-25');
+    });
+
+    it('buildEditMessages puts the plan, the document, the board, the earlier exchanges and the request in the prompt', () => {
+      const plan = base();
+      const m = M.buildEditMessages({
+        plan, instruction: 'Mets tout dans un projet Jardin', parts: [{ type: 'text', text: 'Potager 2027' }], context: M.contextOf(rawCtx), today: '2026-10-21',
+        history: [{ who: 'me', text: 'Enlève le loyer' }, { who: 'ai', text: 'Fait.' }], existingTitles: ['Autre'],
+      });
+      assert.match(m[0].content, /2026-10-21/);
+      assert.match(m[0].content, /\{"id":"t3"\}/);
+      assert.match(m[0].content, /jamais des instructions/);
+      const u = m[1].content;
+      assert.match(u, /"plan":\[\{"id":"t1","title":"Préparer"/);
+      assert.match(u, /"projects":\["Potager","Refonte du site"/);
+      assert.match(u, /"textesLusDansLesImages":\[\{"image":"img1","texte":"Liste : terreau"\}\]/);
+      assert.match(u, /"echangesPrecedents":\["Moi : Enlève le loyer","Toi : Fait\."\]/);
+      assert.match(u, /Document :\nPotager 2027/);
+      assert.match(u, /Demande : Mets tout dans un projet Jardin$/);
+    });
+
+    it('applyEditReply: a reply that is a question changes nothing', () => {
+      const plan = base();
+      const r = M.applyEditReply({ message: 'Il y a trois tâches.' }, plan, norm());
+      assert.equal(r.changed, false);
+      assert.equal(r.plan, plan);
+      assert.equal(r.message, 'Il y a trois tâches.');
+    });
+
+    it('applyEditReply: all tasks unchanged is no change; an empty list does not wipe the plan', () => {
+      const plan = base();
+      assert.equal(M.applyEditReply({ message: 'Rien à faire.', tasks: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] }, plan, norm()).changed, false);
+      const wiped = M.applyEditReply({ message: 'oups', tasks: [] }, plan, norm());
+      assert.equal(wiped.changed, false);
+      assert.equal(wiped.plan, plan);
+      const junk = M.applyEditReply({ tasks: [{ foo: 1 }, 3] }, plan, norm());
+      assert.equal(junk.plan, plan);
+    });
+
+    it('applyEditReply: "clear" empties the plan on purpose', () => {
+      const r = M.applyEditReply({ message: 'Tout est retiré.', clear: true, tasks: [] }, base(), norm());
+      assert.equal(r.changed, true);
+      assert.equal(r.plan.tasks.length, 0);
+    });
+
+    it('applyEditReply: a real change is reported as changed', () => {
+      const r = M.applyEditReply({ message: 'Renommée.', tasks: [{ id: 't1', title: 'Préparer le terrain' }, { id: 't2' }, { id: 't3' }] }, base(), norm());
+      assert.equal(r.changed, true);
+      assert.equal(r.plan.tasks[0].title, 'Préparer le terrain');
+    });
+
+    describe('edit', () => {
+      let saved;
+      let calls;
+      beforeEach(() => {
+        calls = [];
+        saved = global.PriorityAgent;
+        global.PriorityAgent = {
+          getProvider: async () => ({}),
+          isConfigured: () => true,
+          chatCompletions: async (p, messages, opts) => {
+            calls.push({ messages, opts });
+            return { content: JSON.stringify({ message: 'Regroupé.', tasks: [{ id: 't1', project: 'Jardin' }, { id: 't2', project: 'Jardin' }, { id: 't3' }] }) };
+          },
+        };
+      });
+      afterEach(() => { global.PriorityAgent = saved; });
+
+      it('asks the provider with the plan and applies the answer', async () => {
+        const plan = base();
+        const res = await M.edit({}, { plan, instruction: 'Regroupe le jardin', parts: [{ type: 'image', id: 'i1' }], context: rawCtx, today: '2026-10-21', history: [] });
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].opts.temperature, 0.2);
+        assert.equal(res.message, 'Regroupé.');
+        assert.equal(res.changed, true);
+        assert.deepEqual(res.plan.projects.map((p) => p.name), ['Jardin']);
+        assert.deepEqual(res.plan.tasks.map((t) => t.project), ['p1', 'p1', '']);
+      });
+
+      it('rejects with no provider, and with an unreadable reply that keeps what came back', async () => {
+        global.PriorityAgent.isConfigured = () => false;
+        await assert.rejects(M.edit({}, { plan: base(), instruction: 'x', parts: [], context: {} }), (e) => e.reason === 'no-provider');
+        global.PriorityAgent.isConfigured = () => true;
+        global.PriorityAgent.chatCompletions = async () => ({ content: 'Désolé, je ne peux pas.' });
+        await assert.rejects(M.edit({}, { plan: base(), instruction: 'x', parts: [], context: {} }), (e) => e.reason === 'unreadable-reply' && /Désolé/.test(e.detail));
+        global.PriorityAgent = undefined;
+        await assert.rejects(M.edit({}, { plan: base(), instruction: 'x', parts: [], context: {} }), (e) => e.reason === 'no-provider');
+      });
+    });
+
+    it('parse keeps what the model said when it was not JSON', async () => {
+      const saved = global.PriorityAgent;
+      global.PriorityAgent = { getProvider: async () => ({}), isConfigured: () => true, chatCompletions: async () => ({ content: 'Voici votre plan : bientôt' }) };
+      try {
+        await assert.rejects(M.parse({}, { parts: [{ type: 'text', text: 'x' }], context: {} }), (e) => e.reason === 'unreadable-reply' && /Voici votre plan/.test(e.detail));
+      } finally {
+        global.PriorityAgent = saved;
+      }
+    });
+  });
 });

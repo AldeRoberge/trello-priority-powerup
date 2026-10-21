@@ -4,6 +4,10 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-21
+- Triage, Document : le plan se lit comme un tableau. Une bande par projet (qu’on replie), ses tâches en retrait dessous, leurs sous-tâches encore plus en retrait. Les colonnes Jour, Urgence, Durée, Projet, Personnes, Lieux et Étiquettes tombent au même endroit sur chaque ligne ; sur un volet étroit, elles passent sous le titre.
+- Triage, Document : une boîte « Demander une modification… » sous le plan. On écrit « mets les achats dans un projet », « fusionne ces deux tâches » ou « retire la dernière », l’IA change le plan sur place (avec le document, les images lues et les échanges précédents) et « Défaire » annule.
+- Triage, Document : une étape qui échoue n’est plus résumée en une ligne. Chaque erreur affiche l’étape, la carte, le message complet, le type, le statut, le nombre de tentatives, ce qui a été envoyé et la trace, avec un bouton « Copier le détail ». Le panneau reste ouvert après la création pour qu’on puisse le lire.
+- Triage, Document : « Card not found or not on current board » sur une carte tout juste créée (priorité, personnes, sous-tâches) est réglé : Trello ne connaît la carte qu’après un instant, l’étape attend et réessaie, puis une dernière fois une fois toutes les cartes créées.
 - Carte : la barre de titre « Trello Cerveau » indique depuis quand l’application a été mise à jour (« mis à jour il y a 2 heures »), comme l’en-tête de la section dans la carte.
 - Orchestrateur : sous ma rangée, une rangée par personne du tableau (membres Trello et contacts « Hors Trello »), sur les mêmes colonnes. Glisser une carte sur la rangée de quelqu’un la lui confie (sur la case d’un autre jour, elle change aussi de jour) ; la glisser vers ma rangée la reprend. La molette sur les personnes les fait défiler, ailleurs elle zoome toujours. « Défaire » ou Ctrl+Z remet comme avant.
 - Clic droit sur une carte : « Confier à » une personne, ou à moi.

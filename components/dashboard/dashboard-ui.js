@@ -1504,7 +1504,8 @@
       var made = result.created.filter(function (c) { return plan.tasks.some(function (x) { return x.id === c.taskId && x.createdId === c.cardId; }); });
       var n = made.length;
       var msg = n === 1 ? '« ' + made[0].title + ' » créée dans le triage' : n + ' cartes créées dans le triage';
-      if (result.failed.length) msg += ' · à revoir : ' + result.failed.slice(0, 2).join(' ; ');
+      var points = (result.failures || []).length;
+      if (points) msg += ' · ' + points + (points === 1 ? ' point à revoir' : ' points à revoir') + ' (le détail est dans le document)';
       if (finished) {
         state.docOpen = false;
         if (made[0]) state.selected = made[0].cardId;
@@ -1513,10 +1514,19 @@
         if (state.undo !== undo) return;
         state.undo = null;
         setStatus('Annulation…', 'busy');
-        global.TriageDocTrello.undo(t, result).then(function () {
-          setStatus('Création annulée', 'ok');
+        global.TriageDocTrello.undo(t, result).then(function (out) {
+          var failures = (out && out.failures) || [];
+          if (failures.length && docUI) {
+            // what could not be taken back is shown in the document, with all its details
+            docUI.addProblems(failures);
+            state.docOpen = true;
+            render();
+            setStatus('Annulation incomplète : ' + failures.length + (failures.length === 1 ? ' étape a échoué' : ' étapes ont échoué') + ' (le détail est dans le document)', 'error', 12000);
+          } else {
+            setStatus('Création annulée', 'ok');
+          }
           reload({ quiet: true });
-        });
+        }, fail);
       };
       state.undo = undo;
       setStatus(msg, result.failed.length ? 'error' : 'ok', 9000, { label: 'Annuler', run: undo });

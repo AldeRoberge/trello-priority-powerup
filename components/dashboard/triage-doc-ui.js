@@ -1,15 +1,17 @@
 /*
  * Role: the Document pane of the Triage (right side of the split view). A page to write, paste or drop text and
  * images into, like a document. "Analyser" has the AI read all of it (images included) and propose a plan of
- * projects, tasks and subtasks, with day, urgency, duration, people, places and labels. The plan is reviewed in
- * place (keep or drop a task, fix a title, change a value, move a task to another project), then "Créer" writes it
- * to the triage list. Logic is in triage-doc-model.js, Trello writes in triage-doc-trello.js.
+ * projects, tasks and subtasks, with day, urgency, duration, project, people, places and labels. The plan is a table
+ * (a band per project, its tasks under it, their subtasks under those) reviewed in place: keep or drop a task, fix a
+ * title, change a value, or ask the AI in the box under the table ("regroupe les achats dans un projet"). Then "Créer"
+ * writes it to the triage list. Every error is shown with all its details and can be copied. Logic is in
+ * triage-doc-model.js, Trello writes in triage-doc-trello.js.
  *
- *   TriageDocUI.create(host) -> { el, focus(), hasFocus(), park(), unpark(), isDirty() }
+ *   TriageDocUI.create(host) -> { el, focus(), hasFocus(), park(), unpark(), isDirty(), addProblems(list) }
  *   host: {
  *     t, today(),
  *     rows(), projects() -> [{ id, name }], goals(), lists(),
- *     onCreated(result, plan),      // after cards were written (also when some steps failed)
+ *     onCreated(result, plan, clean),  // after cards were written (also when some steps failed); clean: nothing left to read
  *     onClose(),
  *     status(message, kind, keepMs),
  *   }
@@ -73,7 +75,22 @@
   }
 
   function create(host) {
-    var s = { phase: 'write', plan: null, notes: [], parts: [], error: '', progress: '' };
+    var s = {
+      phase: 'write', // write | busy | review | creating
+      plan: null,
+      notes: [],
+      parts: [],
+      error: '',
+      progress: '',
+      problems: [], // errors with all their details (see problemOf)
+      ctx: null, // the board context the plan was read with (raw, see TriageDocTrello.loadContext)
+      chat: [], // { who: 'me' | 'ai' | 'error', text, undo? }
+      snaps: [], // the plan before each AI change, for "Défaire"
+      asking: false,
+      collapsed: {}, // project name (folded) -> true
+      done: false, // everything is made; the points to review stay until the pane is closed
+      created: 0,
+    };
     var images = {}; // editor image id -> { id, file, url }
     var seq = 0;
     var parked = null;
@@ -290,6 +307,99 @@
     var saved = store(function (ls) { return ls.getItem(DRAFT_KEY); });
     if (saved) setText(saved);
 
+    /* ── Problems: every error with all its details, to read and to copy ── */
+    function messageOf(err) {
+      return (err && (err.message || err.reason)) ? String(err.message || err.reason) : String(err || 'erreur inconnue');
+    }
+
+    function short(text, max) {
+      var t = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+      return t.length > max ? t.slice(0, max - 1) + '…' : t;
+    }
+
+    function problemOf(step, err, extra) {
+      var d = TD() && TD().describeError ? TD().describeError(err) : { message: messageOf(err) };
+      return Object.assign({ step: step, title: '', attempts: 1, at: new Date().toISOString() }, d, extra || {});
+    }
+
+    function buildId() {
+      var m = document.querySelector ? document.querySelector('meta[name="cerveau-build"]') : null;
+      return m ? m.getAttribute('content') || '' : '';
+    }
+
+    function reportText() {
+      var made = s.created ? s.created + (s.created === 1 ? ' carte créée' : ' cartes créées') : '';
+      return TD().reportOf(s.problems, { build: buildId(), summary: made });
+    }
+
+    function copyText(text) {
+      var nav = global.navigator;
+      if (nav && nav.clipboard && nav.clipboard.writeText) return nav.clipboard.writeText(text);
+      return new Promise(function (resolve, reject) {
+        var ta = h('textarea', { 'aria-hidden': 'true', style: 'position:fixed;opacity:0;left:-9999px' });
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+        if (ok) resolve(); else reject(new Error('copie refusée'));
+      });
+    }
+
+    function problemEl(p) {
+      var facts = [];
+      if (p.name) facts.push('type ' + p.name);
+      if (p.reason) facts.push('raison ' + p.reason);
+      if (p.status) facts.push('statut ' + p.status);
+      if (p.code) facts.push('code ' + p.code);
+      if (p.command) facts.push('commande ' + p.command);
+      if (p.attempts) facts.push(p.attempts + (p.attempts === 1 ? ' tentative' : ' tentatives'));
+      if (p.cardId) facts.push('carte ' + p.cardId);
+      if (p.at) facts.push(String(p.at).replace('T', ' ').replace(/\.\d+Z$/, ' UTC'));
+      var el = h('div', { class: 'tdoc-problem' }, [
+        h('div', { class: 'tdoc-problem-h' }, [h('strong', { text: p.step }), p.title ? h('span', { text: ' · « ' + p.title + ' »' }) : null]),
+        h('pre', { class: 'tdoc-pre tdoc-problem-m', text: p.message }),
+      ]);
+      if (facts.length) el.appendChild(h('div', { class: 'tdoc-problem-facts', text: facts.join(' · ') }));
+      [['cause', 'Cause'], ['detail', 'Détail'], ['body', 'Réponse'], ['request', 'Requête'], ['payload', 'Envoyé'], ['stack', 'Trace']].forEach(function (pair) {
+        if (!p[pair[0]]) return;
+        el.appendChild(h('details', { class: 'tdoc-tech', open: pair[0] !== 'stack' }, [
+          h('summary', { text: pair[1] }),
+          h('pre', { class: 'tdoc-pre', text: String(p[pair[0]]) }),
+        ]));
+      });
+      return el;
+    }
+
+    function problemsBlock() {
+      if (!s.problems.length) return null;
+      var n = s.problems.length;
+      var copy = h('button', { class: 'tdoc-copy', type: 'button', title: 'Copier tout le détail pour le coller dans un message' }, [icon('copy'), h('span', { text: 'Copier le détail' })]);
+      copy.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        copyText(reportText()).then(function () {
+          copy.classList.add('is-ok');
+          copy.querySelector('.ti').className = 'ti ti-check';
+          copy.querySelector('span').textContent = 'Copié';
+          setTimeout(function () {
+            if (!copy.isConnected) return;
+            copy.classList.remove('is-ok');
+            copy.querySelector('.ti').className = 'ti ti-copy';
+            copy.querySelector('span').textContent = 'Copier le détail';
+          }, 2000);
+        }, function (err) { host.status('Copie impossible : ' + messageOf(err), 'error'); });
+      });
+      var det = h('details', { class: 'tdoc-problems', open: true }, [
+        h('summary', {}, [icon('alert-triangle'), h('span', { class: 'tdoc-problems-t', text: n + (n === 1 ? ' problème' : ' problèmes') }), h('span', { class: 'tdoc-spacer' }), copy]),
+      ]);
+      var list = h('div', { class: 'tdoc-problems-list' });
+      s.problems.forEach(function (p) { list.appendChild(problemEl(p)); });
+      det.appendChild(list);
+      return det;
+    }
+
     /* ── Reading the document ────────────────────────────────────── */
     function titlesInTriage() {
       return (host.rows() || []).filter(function (r) { return r.statutKey === 'triage'; }).map(function (r) { return r.name; });
@@ -301,6 +411,12 @@
       if (!DM().hasContent(parts)) return;
       s.parts = parts;
       s.error = '';
+      s.problems = [];
+      s.chat = [];
+      s.snaps = [];
+      s.done = false;
+      s.created = 0;
+      s.collapsed = {};
       s.phase = 'busy';
       paint();
       var ids = DM().imageIdsOf(parts);
@@ -312,6 +428,7 @@
         var map = {};
         used.forEach(function (im, i) { map[im.id] = urls[i]; });
         return TD().loadContext(host.t, { projects: host.projects() }).then(function (ctx) {
+          s.ctx = ctx;
           return DM().parse(host.t, { parts: parts, images: map, context: ctx, today: host.today(), existingTitles: titlesInTriage() });
         });
       }).then(function (res) {
@@ -327,13 +444,14 @@
         }
         paint();
       }, function (err) {
-        s.error = (err && (err.message || err.reason)) || 'Lecture impossible.';
+        s.problems = [problemOf('lecture du document', err)];
+        s.error = 'Lecture impossible : ' + short(messageOf(err), 140);
         s.phase = 'write';
         paint();
       });
     }
 
-    /* ── Review: the plan ────────────────────────────────────────── */
+    /* ── Review: the plan as a table ─────────────────────────────── */
     function box(state, label, onclick) {
       return h('button', {
         class: 'tdoc-box is-' + state,
@@ -382,18 +500,17 @@
     }
 
     function prop(cls, iconName, text, color, onclick, disabled) {
-      var b = h('button', { class: 'tdoc-prop ' + cls + (text ? '' : ' is-empty') + (disabled ? ' is-inert' : ''), type: 'button', onclick: onclick }, [
+      return h('button', { class: 'tdoc-prop ' + cls + (text ? '' : ' is-empty') + (disabled ? ' is-inert' : ''), type: 'button', onclick: onclick }, [
         h('i', { class: 'ti ti-' + iconName, 'aria-hidden': 'true', style: color ? 'color:' + color : null }),
         text ? h('span', { class: 'tdoc-prop-t', text: text }) : null,
       ]);
-      return b;
     }
 
-    function dayProp(task) {
+    function dayProp(task, locked) {
       var b = prop('tdoc-prop--day', 'calendar-event', dayText(task.due), '', function () {
         var inp = b.querySelector('input');
         if (inp && inp.showPicker) { try { inp.showPicker(); } catch (e) { inp.focus(); } } else if (inp) inp.focus();
-      });
+      }, locked);
       b.title = 'Jour';
       var date = h('input', { type: 'date', 'aria-label': 'Jour', tabindex: '-1' });
       date.value = task.due || '';
@@ -402,7 +519,7 @@
       return b;
     }
 
-    function urgencyProp(task) {
+    function urgencyProp(task, locked) {
       var D = global.DashboardModel;
       var cur = task.urgency || 'aucun';
       var u = D.URGENCIES.filter(function (x) { return x[0] === cur; })[0];
@@ -410,12 +527,12 @@
         pick(b, 'Définir l’urgence…', cur, D.URGENCIES.map(function (x) {
           return { id: x[0], label: x[1], icon: x[0] === 'aucun' ? 'flame-off' : 'flame', color: URGENCY_COLORS[x[0]] };
         }), function (it) { task.urgency = it.id === 'aucun' ? '' : it.id; paintReview(); });
-      });
+      }, locked);
       b.title = 'Urgence';
       return b;
     }
 
-    function estimateProp(task) {
+    function estimateProp(task, locked) {
       var sum = task.subtasks.reduce(function (n, x) { return n + (x.estimate || 0); }, 0);
       var withSubs = task.subtasks.length > 0; // the duration then lives on the subtasks
       var minutes = withSubs ? sum : task.estimate;
@@ -425,7 +542,7 @@
         pick(b, 'Durée…', String(task.estimate || 0), [{ id: '0', label: 'Aucune durée', icon: 'circle-x' }].concat(list.map(function (m) {
           return { id: String(m), label: minutesText(m), icon: 'clock' };
         })), function (it) { task.estimate = Number(it.id) || 0; paintReview(); });
-      }, withSubs);
+      }, withSubs || locked);
       b.title = withSubs ? 'Durée des sous-tâches' : 'Durée';
       return b;
     }
@@ -447,10 +564,11 @@
       task.project = hit.id;
     }
 
-    function projectProp(task) {
+    function projectCell(task, locked) {
       var plan = s.plan;
       var cur = plan.projects.filter(function (p) { return p.id === task.project; })[0];
-      var b = h('button', { class: 'tdoc-chip tdoc-chip--project' + (cur ? '' : ' is-empty'), type: 'button', title: 'Projet', onclick: function () {
+      var cell = h('div', { class: 'tdoc-cell tdoc-cell--project' });
+      var b = h('button', { class: 'tdoc-chip tdoc-chip--project' + (cur ? '' : ' is-empty') + (locked ? ' is-inert' : ''), type: 'button', title: 'Projet', onclick: function () {
         var items = [];
         if (cur) items.push({ id: '', label: 'Aucun projet', icon: 'circle-x' });
         var seen = Object.create(null);
@@ -471,42 +589,71 @@
           } else if (it.id.indexOf('new:') === 0) moveToProject(task, it.id.slice(4), '');
           paintReview();
         }, function (q) { return q ? { id: 'new:' + q, label: 'Nouveau projet « ' + q + ' »', icon: 'plus' } : null; });
-      } }, [icon('stack-2'), h('span', { text: cur ? cur.name : 'Projet' })]);
-      return b;
+      } }, [icon('stack-2'), h('span', { class: 'tdoc-chip-t', text: cur ? cur.name : 'Projet' })]);
+      cell.appendChild(b);
+      return cell;
     }
 
-    function entityChip(kind, iconName, label, title, onRemove, extra) {
-      var c = h('span', { class: 'tdoc-chip tdoc-chip--' + kind + (extra ? ' ' + extra : ''), title: title || label }, [icon(iconName), h('span', { class: 'tdoc-chip-t', text: label })]);
-      c.appendChild(h('button', { class: 'tdoc-chip-x', type: 'button', 'aria-label': 'Retirer ' + label, onclick: onRemove }, [icon('x')]));
-      return c;
-    }
+    var ENTITY = {
+      people: { icon: 'user', label: 'Personnes', hint: 'Ajouter une personne' },
+      places: { icon: 'map-pin', label: 'Lieux', hint: 'Choisir un lieu' },
+      labels: { icon: 'tag', label: 'Étiquettes', hint: 'Ajouter une étiquette' },
+    };
 
-    function metaRow(task) {
-      var kids = [projectProp(task)];
-      task.people.forEach(function (p, i) {
-        kids.push(entityChip('people', 'user', p.name, p.kind === 'new' ? p.name + ' (nouvelle personne, hors Trello)' : p.name, function () { task.people.splice(i, 1); paintReview(); }, p.kind === 'new' ? 'is-new' : ''));
-      });
-      task.places.forEach(function (p, i) {
-        kids.push(entityChip('place', 'map-pin', p.name, p.id ? p.name : p.name + ' (nouveau lieu)', function () { task.places.splice(i, 1); paintReview(); }, p.id ? '' : 'is-new'));
-      });
-      task.labels.forEach(function (l, i) {
-        var chip = entityChip('label', 'tag', l.name, l.name, function () { task.labels.splice(i, 1); paintReview(); });
-        var color = global.CardEntities && global.CardEntities.COLORS && global.CardEntities.COLORS[l.color];
+    function entityChip(kind, it, onRemove, locked) {
+      var isNew = kind !== 'labels' && !it.id;
+      var title = isNew ? it.name + (kind === 'people' ? ' (nouvelle personne, hors Trello)' : ' (nouveau lieu)') : it.name;
+      var chip = h('span', { class: 'tdoc-chip tdoc-chip--' + kind + (isNew ? ' is-new' : ''), title: title }, [icon(ENTITY[kind].icon), h('span', { class: 'tdoc-chip-t', text: it.name })]);
+      if (kind === 'labels') {
+        var color = global.CardEntities && global.CardEntities.COLORS && global.CardEntities.COLORS[it.color];
         if (color) chip.querySelector('.ti').style.color = color;
-        kids.push(chip);
-      });
-      return h('div', { class: 'tdoc-meta' }, kids);
+      }
+      if (!locked) chip.appendChild(h('button', { class: 'tdoc-chip-x', type: 'button', 'aria-label': 'Retirer ' + it.name, onclick: onRemove }, [icon('x')]));
+      return chip;
     }
 
-    function subtasksOf(task) {
+    /** Adds a person, sets the place, adds a label: from what the board has, or a new name for people and places. */
+    function pickEntity(kind, task, anchor) {
+      var res = DM().contextOf(s.ctx || {}).resolve;
+      var list = kind === 'people' ? res.people : kind === 'places' ? res.places : res.labels;
+      var have = task[kind].map(function (x) { return DM().fold(x.name); });
+      var rows = list.filter(function (x) { return have.indexOf(DM().fold(x.name)) < 0; });
+      var items = rows.map(function (x, i) { return { id: 'k:' + i, label: x.name, icon: ENTITY[kind].icon }; });
+      var create = kind === 'labels' ? undefined : function (q) { return q ? { id: 'new:' + q, label: 'Ajouter « ' + q + ' »', icon: 'plus' } : null; };
+      pick(anchor, kind === 'people' ? 'Chercher ou ajouter une personne…' : kind === 'places' ? 'Chercher ou ajouter un lieu…' : 'Chercher une étiquette…', '', items, function (it) {
+        var known = it.id.indexOf('k:') === 0 ? rows[Number(it.id.slice(2))] : null;
+        var name = known ? known.name : it.id.slice(4);
+        if (kind === 'people') task.people.push({ name: name, id: known ? known.id : '', kind: known ? known.kind : 'new' });
+        else if (kind === 'places') task.places = [{ name: name, id: known ? known.id : '' }]; // only the first place is written
+        else task.labels.push({ name: name, id: known.id, color: known.color || '' });
+        paintReview();
+      }, create);
+    }
+
+    function entityCell(kind, task, locked) {
+      var shown = kind === 'places' ? task.places.slice(0, 1) : task[kind];
+      var cell = h('div', { class: 'tdoc-cell tdoc-cell--' + kind + (shown.length ? '' : ' is-empty') });
+      shown.forEach(function (it) {
+        cell.appendChild(entityChip(kind, it, function () { task[kind].splice(task[kind].indexOf(it), 1); paintReview(); }, locked));
+      });
+      if (!locked) {
+        var edit = h('button', { class: 'tdoc-cell-edit', type: 'button', title: ENTITY[kind].hint, 'aria-label': ENTITY[kind].hint, onclick: function () { pickEntity(kind, task, edit); } }, [icon(shown.length ? 'pencil' : ENTITY[kind].icon)]);
+        cell.appendChild(edit);
+      } else if (!shown.length) {
+        cell.appendChild(h('span', { class: 'tdoc-cell-edit is-inert' }, [icon(ENTITY[kind].icon)]));
+      }
+      return cell;
+    }
+
+    function subtasksOf(task, locked) {
       if (!task.subtasks.length) return null;
       var list = h('div', { class: 'tdoc-subs' });
       task.subtasks.forEach(function (sub, si) {
         function row(cls, text, onCommit, onRemove, iconName) {
           return h('div', { class: 'tdoc-sub ' + cls }, [
             icon(iconName),
-            editable('tdoc-sub-t', text, onCommit),
-            h('button', { class: 'tdoc-sub-x', type: 'button', 'aria-label': 'Retirer', title: 'Retirer', onclick: onRemove }, [icon('x')]),
+            locked ? h('span', { class: 'tdoc-sub-t', text: text }) : editable('tdoc-sub-t', text, onCommit),
+            locked ? null : h('button', { class: 'tdoc-sub-x', type: 'button', 'aria-label': 'Retirer', title: 'Retirer', onclick: onRemove }, [icon('x')]),
           ]);
         }
         list.appendChild(row('', sub.text, function (v) { sub.text = v; }, function () { task.subtasks.splice(si, 1); paintReview(); }, 'circle'));
@@ -524,26 +671,45 @@
       if (task.duplicate) kids.push(h('span', { class: 'tdoc-tag', title: 'Déjà dans le triage : « ' + task.duplicate + ' »', text: 'Déjà là' }));
       if (locked) kids.push(h('span', { class: 'tdoc-tag tdoc-tag--ok', text: 'Créée' }));
       var main = h('div', { class: 'tdoc-main' }, [h('div', { class: 'tdoc-title-row' }, kids)]);
-      if (!locked) main.appendChild(metaRow(task));
-      var subs = subtasksOf(task);
+      var subs = subtasksOf(task, locked);
       if (subs) main.appendChild(subs);
-      return h('div', { class: 'tdoc-task' + (task.include ? '' : ' is-off') + (locked ? ' is-locked' : ''), 'data-task': task.id }, [
+      return h('div', { class: 'tdoc-task' + (task.include ? '' : ' is-off') + (locked ? ' is-locked' : ''), role: 'row', 'data-task': task.id }, [
         locked ? h('span', { class: 'tdoc-box is-all' }, [icon('square-check')]) : box(task.include ? 'all' : 'none', 'Garder « ' + task.title + ' »', function () { task.include = !task.include; paintReview(); }),
         main,
-        h('div', { class: 'tdoc-props' }, [dayProp(task), urgencyProp(task), estimateProp(task)]),
+        h('div', { class: 'tdoc-props' }, [dayProp(task, locked), urgencyProp(task, locked), estimateProp(task, locked)]),
+        h('div', { class: 'tdoc-ents' }, [projectCell(task, locked), entityCell('people', task, locked), entityCell('places', task, locked), entityCell('labels', task, locked)]),
       ]);
     }
 
-    function projectRow(g) {
+    function projectRow(g, key, folded) {
       var p = g.project;
-      var state = DM().projectState(s.plan, p.id);
+      var state = DM().projectState(s.plan, p ? p.id : '');
+      var kept = g.tasks.filter(function (t) { return t.include || t.createdId; }).length;
+      var fold = h('button', {
+        class: 'tdoc-fold',
+        type: 'button',
+        'aria-expanded': folded ? 'false' : 'true',
+        title: folded ? 'Déplier' : 'Replier',
+        onclick: function () { s.collapsed[key] = !s.collapsed[key]; paintReview(); },
+      }, [icon(folded ? 'chevron-right' : 'chevron-down')]);
+      var label = p ? 'Garder les tâches de « ' + p.name + ' »' : 'Garder les tâches sans projet';
+      var name = p
+        ? [icon('stack-2'), editable('tdoc-proj-name', p.name, function (v) { p.name = v; p.existingId = ''; }), h('span', { class: 'tdoc-tag' + (p.existingId ? '' : ' tdoc-tag--new'), text: p.existingId ? 'Projet existant' : 'Nouveau projet' })]
+        : [icon('inbox'), h('span', { class: 'tdoc-proj-name tdoc-loose', text: 'Sans projet' })];
       return h('div', { class: 'tdoc-proj' }, [
-        box(state, 'Garder les tâches de « ' + p.name + ' »', function () { DM().setProject(s.plan, p.id, state !== 'all'); paintReview(); }),
-        h('div', { class: 'tdoc-proj-main' }, [
-          icon('stack-2'),
-          editable('tdoc-proj-name', p.name, function (v) { p.name = v; p.existingId = ''; }),
-          h('span', { class: 'tdoc-tag' + (p.existingId ? '' : ' tdoc-tag--new'), text: p.existingId ? 'Projet existant' : 'Nouveau projet' }),
-        ]),
+        fold,
+        box(state, label, function () { DM().setProject(s.plan, p ? p.id : '', state !== 'all'); paintReview(); }),
+        h('div', { class: 'tdoc-proj-main' }, name),
+        h('span', { class: 'tdoc-spacer' }),
+        h('span', { class: 'tdoc-proj-count', text: kept + ' / ' + g.tasks.length }),
+      ]);
+    }
+
+    function headRow() {
+      function cell(text, cls) { return h('span', { class: 'tdoc-hc ' + (cls || ''), role: 'columnheader', text: text }); }
+      return h('div', { class: 'tdoc-head', role: 'row' }, [
+        h('span'), cell('Tâche', 'tdoc-hc--main'), cell('Jour'), cell('Urgence'), cell('Durée'),
+        cell('Projet', 'tdoc-hc--ent'), cell('Personnes', 'tdoc-hc--ent'), cell('Lieux', 'tdoc-hc--ent'), cell('Étiquettes', 'tdoc-hc--ent'),
       ]);
     }
 
@@ -561,19 +727,37 @@
       return det;
     }
 
+    function doneText() {
+      var n = s.created;
+      var f = s.problems.length;
+      return n + (n === 1 ? ' carte créée' : ' cartes créées') + (f ? ', ' + f + (f === 1 ? ' point à revoir' : ' points à revoir') : '');
+    }
+
     function paintReview() {
       var scroller = root.parentNode;
       var keep = scroller ? scroller.scrollTop : 0;
       var plan = s.plan;
       stage.textContent = '';
       var wrap = h('div', { class: 'tdoc-plan' });
+      var pb = problemsBlock();
+      if (pb) wrap.appendChild(pb);
+      if (s.done) wrap.appendChild(h('div', { class: 'tdoc-note tdoc-note--ok' }, [icon('circle-check'), h('span', { text: doneText() })]));
       s.notes.forEach(function (n) { wrap.appendChild(h('div', { class: 'tdoc-note' }, [icon('info-circle'), h('span', { text: n })])); });
+      var table = h('div', { class: 'tdoc-table', role: 'table', 'aria-label': 'Plan' });
+      table.appendChild(headRow());
       DM().groups(plan).forEach(function (g) {
-        var block = h('section', { class: 'tdoc-group' + (g.project ? '' : ' tdoc-group--loose') });
-        block.appendChild(g.project ? projectRow(g) : h('div', { class: 'tdoc-proj tdoc-proj--loose' }, [h('span'), h('div', { class: 'tdoc-proj-main' }, [h('span', { class: 'tdoc-loose', text: 'Sans projet' })])]));
-        g.tasks.forEach(function (task) { block.appendChild(taskRow(task)); });
-        wrap.appendChild(block);
+        var key = g.project ? DM().fold(g.project.name) : '';
+        var folded = !!s.collapsed[key];
+        var block = h('section', { class: 'tdoc-group' + (g.project ? '' : ' tdoc-group--loose') + (folded ? ' is-folded' : '') });
+        block.appendChild(projectRow(g, key, folded));
+        if (!folded) {
+          var body = h('div', { class: 'tdoc-body' });
+          g.tasks.forEach(function (task) { body.appendChild(taskRow(task)); });
+          block.appendChild(body);
+        }
+        table.appendChild(block);
       });
+      wrap.appendChild(table);
       var reads = readsBlock();
       if (reads) wrap.appendChild(reads);
       stage.appendChild(wrap);
@@ -582,9 +766,96 @@
       if (scroller) scroller.scrollTop = keep;
     }
 
+    /* ── Asking the AI to change the plan ────────────────────────── */
+    var chatLog = h('div', { class: 'tdoc-chat-log', role: 'log', 'aria-live': 'polite' });
+    var chatInput = h('textarea', { class: 'tdoc-chat-input', rows: '1', placeholder: 'Demander une modification…', 'aria-label': 'Demander une modification du plan à l’IA', maxlength: '1500' });
+    var chatSend = h('button', { class: 'tdoc-chat-send', type: 'button', title: 'Envoyer (Entrée)', 'aria-label': 'Envoyer' }, [icon('arrow-up')]);
+    var chatBox = h('div', { class: 'tdoc-chat' }, [
+      chatLog,
+      h('div', { class: 'tdoc-chat-row' }, [icon('sparkles'), chatInput, chatSend]),
+    ]);
+
+    function canChat() {
+      return s.phase === 'review' && !s.done && !!s.plan && !s.plan.tasks.some(function (t) { return t.createdId; });
+    }
+
+    function growChat() {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 110) + 'px';
+    }
+
+    function paintChat() {
+      chatLog.textContent = '';
+      chatLog.hidden = !s.chat.length;
+      var lastUndo = -1;
+      s.chat.forEach(function (m, i) { if (m.undo) lastUndo = i; });
+      s.chat.slice(-8).forEach(function (m) {
+        var i = s.chat.indexOf(m);
+        var line = h('div', { class: 'tdoc-msg is-' + m.who }, [h('span', { class: 'tdoc-msg-t', text: m.text })]);
+        if (i === lastUndo && s.snaps.length && !s.asking) {
+          line.appendChild(h('button', { class: 'tdoc-msg-undo', type: 'button', title: 'Défaire cette modification', onclick: undoEdit }, [icon('arrow-back-up'), document.createTextNode('Défaire')]));
+        }
+        chatLog.appendChild(line);
+      });
+      if (s.asking) chatLog.appendChild(h('div', { class: 'tdoc-msg is-wait' }, [icon('refresh'), h('span', { text: 'Modification en cours…' })]));
+      chatLog.hidden = !chatLog.childNodes.length;
+      chatLog.scrollTop = chatLog.scrollHeight;
+      chatInput.disabled = s.asking;
+      chatSend.disabled = s.asking;
+      root.classList.toggle('is-asking', s.asking);
+    }
+
+    function chatHistory() {
+      return s.chat.filter(function (m) { return m.who === 'me' || m.who === 'ai'; });
+    }
+
+    function ask() {
+      var text = chatInput.value.trim();
+      if (!text || s.asking || !canChat()) return;
+      var before = JSON.parse(JSON.stringify(s.plan));
+      var history = chatHistory();
+      s.asking = true;
+      s.chat.push({ who: 'me', text: text });
+      chatInput.value = '';
+      growChat();
+      paintChat();
+      DM().edit(host.t, { plan: s.plan, instruction: text, parts: s.parts, context: s.ctx || {}, today: host.today(), history: history, existingTitles: titlesInTriage() }).then(function (res) {
+        s.asking = false;
+        if (res.changed) { s.snaps.push(before); s.plan = res.plan; }
+        s.chat.push({ who: 'ai', text: res.message || (res.changed ? 'Plan modifié.' : 'Rien à changer.'), undo: !!res.changed });
+        if (s.chat.length > 24) s.chat = s.chat.slice(-24);
+        paintReview();
+        chatInput.focus();
+      }, function (err) {
+        s.asking = false;
+        s.problems.push(problemOf('modification par l’IA', err, { payload: text }));
+        s.chat.push({ who: 'error', text: 'Échec : ' + short(messageOf(err), 160) });
+        paintReview();
+        chatInput.focus();
+      });
+    }
+
+    function undoEdit() {
+      if (!s.snaps.length || s.asking) return;
+      s.plan = s.snaps.pop();
+      for (var i = s.chat.length - 1; i >= 0; i--) {
+        if (s.chat[i].undo) { s.chat[i].undo = false; break; }
+      }
+      s.chat.push({ who: 'ai', text: 'Modification annulée.' });
+      paintReview();
+    }
+
+    chatInput.addEventListener('input', growChat);
+    chatInput.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(); }
+      else if (e.key === 'Escape') chatInput.blur();
+    });
+    chatSend.addEventListener('click', ask);
+
     /* ── Create ──────────────────────────────────────────────────── */
     function createAll() {
-      if (s.phase !== 'review') return;
+      if (s.phase !== 'review' || s.done) return;
       var plan = s.plan;
       var count = DM().stats(plan);
       if (!count.tasks) return;
@@ -602,28 +873,34 @@
         onProgress: function (done, total) { s.progress = done + '/' + total; paintFoot(); },
       }).then(function (result) {
         root.classList.remove('is-busy');
+        s.problems = s.problems.concat(result.failures || []);
+        s.created = result.created.length;
         var left = DM().stats(plan).tasks;
         if (!result.created.length) {
           s.phase = 'review';
-          s.error = (result.failed[0] || 'Aucune carte créée.');
+          s.error = short(result.failed[0] || 'Aucune carte créée.', 160);
           paint();
           return;
         }
-        if (left) {
-          s.phase = 'review';
-          s.error = left + (left === 1 ? ' tâche n’a pas été créée.' : ' tâches n’ont pas été créées.');
-          paint();
-        } else {
+        var all = !left && !s.problems.length;
+        if (all) {
           s.phase = 'write';
           s.plan = null;
           clearPage();
-          paint();
+        } else if (left) {
+          s.phase = 'review';
+          s.error = left + (left === 1 ? ' tâche n’a pas été créée.' : ' tâches n’ont pas été créées.');
+        } else {
+          s.phase = 'review'; // everything is made; the points to review stay on screen until the user closes
+          s.done = true;
         }
-        host.onCreated(result, plan, left === 0);
+        paint();
+        host.onCreated(result, plan, all);
       }, function (err) {
         root.classList.remove('is-busy');
         s.phase = 'review';
-        s.error = (err && (err.message || err.reason)) || 'Création impossible.';
+        s.problems.push(problemOf('création des cartes', err));
+        s.error = 'Création impossible : ' + short(messageOf(err), 140);
         paint();
       });
     }
@@ -635,48 +912,72 @@
       ed.focus();
     }
 
+    /** Everything is made and the user has read the points to review: the page is emptied and the pane closes. */
+    function closeDone() {
+      s.phase = 'write';
+      s.plan = null;
+      s.done = false;
+      s.problems = [];
+      s.chat = [];
+      s.snaps = [];
+      s.error = '';
+      clearPage();
+      paint();
+      host.onClose();
+    }
+
     /* ── Frame: top bar and foot ─────────────────────────────────── */
     function paintTop() {
       top.textContent = '';
       top.appendChild(h('span', { class: 'tdoc-crumb' }, [icon('notes'), h('span', { text: 'Document' })]));
       top.appendChild(h('span', { class: 'tdoc-spacer' }));
       if ((s.phase === 'review' || s.phase === 'creating') && s.plan) {
-        var line = DM().summaryLine(DM().stats(s.plan));
+        var line = s.done ? doneText() : DM().summaryLine(DM().stats(s.plan));
         if (line) top.appendChild(h('span', { class: 'tdoc-count', text: line }));
       }
-      top.appendChild(h('button', { class: 'tdoc-icon', type: 'button', title: 'Fermer', 'aria-label': 'Fermer', onclick: function () { host.onClose(); } }, [icon('x')]));
+      top.appendChild(h('button', { class: 'tdoc-icon', type: 'button', title: 'Fermer', 'aria-label': 'Fermer', onclick: function () { if (s.done) closeDone(); else host.onClose(); } }, [icon('x')]));
     }
 
     function paintFoot() {
       foot.textContent = '';
-      var err = s.error ? h('span', { class: 'tdoc-err', role: 'alert' }, [icon('alert-triangle'), h('span', { text: s.error })]) : null;
+      var actions = h('div', { class: 'tdoc-actions' });
+      var err = s.error ? h('span', { class: 'tdoc-err', role: 'alert', title: s.error }, [icon('alert-triangle'), h('span', { text: s.error })]) : null;
       if (s.phase === 'write') {
         var has = DM().hasContent(DM().partsFromNode(ed));
-        foot.appendChild(h('button', { class: 'tdoc-icon', type: 'button', title: 'Ajouter une image', 'aria-label': 'Ajouter une image', onclick: function () { picker.click(); } }, [icon('photo-plus')]));
-        foot.appendChild(picker);
-        foot.appendChild(h('span', { class: 'tdoc-spacer' }));
-        if (err) foot.appendChild(err);
-        foot.appendChild(h('button', {
+        actions.appendChild(h('button', { class: 'tdoc-icon', type: 'button', title: 'Ajouter une image', 'aria-label': 'Ajouter une image', onclick: function () { picker.click(); } }, [icon('photo-plus')]));
+        actions.appendChild(picker);
+        actions.appendChild(h('span', { class: 'tdoc-spacer' }));
+        if (err) actions.appendChild(err);
+        actions.appendChild(h('button', {
           class: 'db-btn db-btn--primary tdoc-go' + (has ? '' : ' is-inert'),
           type: 'button',
           disabled: has ? null : true,
           onclick: analyse,
         }, [icon('sparkles'), document.createTextNode('Analyser'), h('kbd', { text: 'Ctrl ↵' })]));
       } else if (s.phase === 'busy') {
-        foot.appendChild(h('span', { class: 'tdoc-wait' }, [icon('refresh'), h('span', { text: 'Lecture du document…' })]));
+        actions.appendChild(h('span', { class: 'tdoc-wait' }, [icon('refresh'), h('span', { text: 'Lecture du document…' })]));
+      } else if (s.done) {
+        actions.appendChild(h('span', { class: 'tdoc-spacer' }));
+        actions.appendChild(h('button', { class: 'db-btn db-btn--primary tdoc-go', type: 'button', onclick: closeDone }, [icon('check'), document.createTextNode('Fermer')]));
       } else {
         var count = DM().stats(s.plan);
         var creating = s.phase === 'creating';
-        foot.appendChild(h('button', { class: 'db-btn', type: 'button', disabled: creating ? true : null, onclick: backToPage }, [icon('arrow-left'), document.createTextNode('Modifier')]));
-        foot.appendChild(h('span', { class: 'tdoc-spacer' }));
-        if (err) foot.appendChild(err);
-        foot.appendChild(h('button', {
+        actions.appendChild(h('button', { class: 'db-btn', type: 'button', disabled: creating ? true : null, onclick: backToPage }, [icon('arrow-left'), document.createTextNode('Modifier')]));
+        actions.appendChild(h('span', { class: 'tdoc-spacer' }));
+        if (err) actions.appendChild(err);
+        actions.appendChild(h('button', {
           class: 'db-btn db-btn--primary tdoc-go' + (count.tasks && !creating ? '' : ' is-inert'),
           type: 'button',
           disabled: count.tasks && !creating ? null : true,
           onclick: createAll,
         }, [icon(creating ? 'refresh' : 'check'), document.createTextNode(creating ? 'Création ' + s.progress + '…' : DM().createLabel(count))]));
       }
+      if (canChat() || (s.phase === 'creating' && !s.done)) {
+        paintChat();
+        chatBox.classList.toggle('is-off', s.phase === 'creating');
+        foot.appendChild(chatBox);
+      }
+      foot.appendChild(actions);
     }
 
     function paint() {
@@ -688,6 +989,8 @@
       }
       stage.textContent = '';
       stage.appendChild(ed);
+      var pb = problemsBlock();
+      if (pb) stage.appendChild(pb);
       paintTop();
       paintFoot();
     }
@@ -741,6 +1044,11 @@
       focus: function () { if (s.phase === 'write') { try { ed.focus(); } catch (e) { /* not shown */ } } },
       hasFocus: function () { return document.activeElement === ed; },
       isDirty: function () { return DM().hasContent(DM().partsFromNode(ed)) || !!s.plan; },
+      /** Problems met outside the pane (the undo of a creation): shown here with all their details. */
+      addProblems: function (list) {
+        s.problems = s.problems.concat(list || []);
+        paint();
+      },
     };
   }
 

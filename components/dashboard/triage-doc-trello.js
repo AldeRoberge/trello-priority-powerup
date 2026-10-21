@@ -147,39 +147,166 @@
 
   /* ── Write ─────────────────────────────────────────────────────── */
 
-  function writeTask(t, task, list, catalog, files, failed) {
+  // A card made seconds ago is unknown to Trello's Power-Up client: reading or storing its data answers
+  // "Card not found or not on current board (Command: data)". Those steps wait a little and try again, then
+  // once more after the whole batch is made; any other failure is reported at once.
+  var INLINE_DELAYS = [600];
+  var LATE_DELAYS = [800, 1600, 3000, 5000];
+  var SETTLE_MS = 1000;
+
+  function sleepMs(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function messageOf(err) {
+    if (err == null) return 'erreur inconnue';
+    if (typeof err === 'string') return err;
+    return String(err.message || err.reason || err);
+  }
+
+  function isNotYetThere(err) {
+    var text = messageOf(err) + ' ' + (err && err.detail ? err.detail : '');
+    return /not found|not on current board|no such card/i.test(text);
+  }
+
+  function safeJson(value, max) {
+    var out;
+    try { out = JSON.stringify(value, null, 2); } catch (e) { out = String(value); }
+    out = out == null ? '' : String(out);
+    return max && out.length > max ? out.slice(0, max) + '…' : out;
+  }
+
+  /** Everything an error carries, as plain data: message, name, reason, detail, status, code, command, first lines of the trace. */
+  function describeError(err) {
+    var out = { message: messageOf(err) };
+    if (err && typeof err === 'object') {
+      ['name', 'reason', 'detail', 'status', 'code', 'command', 'body', 'url'].forEach(function (k) {
+        if (err[k] != null && err[k] !== '') out[k] = typeof err[k] === 'object' ? safeJson(err[k], 1500) : String(err[k]);
+      });
+      if (err.debugMeta) out.request = safeJson(err.debugMeta, 1500); // what the provider call sent and got back
+      if (err.cause) out.cause = messageOf(err.cause);
+      if (err.stack) out.stack = String(err.stack).split('\n').slice(0, 10).join('\n');
+    }
+    return out;
+  }
+
+  /** Runs fn; a "card not known yet" answer is retried after each delay. -> { ok, attempts } | { ok: false, error, attempts } */
+  function attempt(fn, delays, sleep, already) {
+    var tries = already || 0;
+    function go(i) {
+      tries++;
+      return Promise.resolve().then(fn).then(function (r) {
+        if (r && r.ok === false) {
+          var e = new Error(r.reason || 'refusé');
+          e.reason = r.reason;
+          e.detail = r.detail;
+          throw e;
+        }
+        return { ok: true, attempts: tries };
+      }).catch(function (err) {
+        if (isNotYetThere(err) && i < delays.length) return sleep(delays[i]).then(function () { return go(i + 1); });
+        return { ok: false, error: err, attempts: tries };
+      });
+    }
+    return go(0);
+  }
+
+  /** A failed step as the user reads it: which step, which card, what was sent, and the error in full. */
+  function failureOf(meta, outcome) {
+    var f = Object.assign({
+      step: meta.step,
+      title: meta.title || '',
+      taskId: meta.taskId || '',
+      cardId: meta.cardId || '',
+      attempts: outcome.attempts || 1,
+      at: new Date().toISOString(),
+    }, describeError(outcome.error));
+    if (meta.payload !== undefined) f.payload = safeJson(meta.payload, 2000);
+    return f;
+  }
+
+  function labelOf(f) {
+    return f.step + (f.title ? ' de « ' + f.title + ' »' : '') + (f.message ? ' (' + f.message + ')' : '');
+  }
+
+  function logFailure(f) {
+    try { console.error('[Cerveau] document du triage : étape en échec', f); } catch (e) { /* no console */ }
+    var d = global.TpDebug;
+    if (d && typeof d.error === 'function') {
+      var err = new Error(f.message);
+      err.name = f.name || 'Error';
+      if (f.status && isFinite(Number(f.status))) err.status = Number(f.status);
+      d.error('triage-doc', 'step-failed', err, { step: f.step, cardId: f.cardId, attempts: f.attempts });
+    }
+  }
+
+  /**
+   * The failures as one text to paste in a message: what failed, on which card, what was sent, the whole error.
+   * meta: { at, build, summary }
+   */
+  function reportOf(items, meta) {
+    meta = meta || {};
+    var lines = ['Document du triage : rapport d’erreurs', 'Date : ' + (meta.at || new Date().toISOString())];
+    if (meta.build) lines.push('Version : ' + meta.build);
+    if (meta.summary) lines.push(meta.summary);
+    (items || []).forEach(function (f, i) {
+      lines.push('', (i + 1) + '. ' + f.step + (f.title ? ' : « ' + f.title + ' »' : ''));
+      lines.push('   Message : ' + f.message);
+      var facts = [];
+      if (f.name) facts.push('type ' + f.name);
+      if (f.reason) facts.push('raison ' + f.reason);
+      if (f.status) facts.push('statut ' + f.status);
+      if (f.code) facts.push('code ' + f.code);
+      if (f.command) facts.push('commande ' + f.command);
+      if (f.attempts) facts.push(f.attempts + (f.attempts === 1 ? ' tentative' : ' tentatives'));
+      if (f.cardId) facts.push('carte ' + f.cardId);
+      if (f.at) facts.push(f.at);
+      if (facts.length) lines.push('   ' + facts.join(' · '));
+      if (f.cause) lines.push('   Cause : ' + f.cause);
+      if (f.detail) lines.push('   Détail : ' + String(f.detail).replace(/\n/g, '\n     '));
+      if (f.body) lines.push('   Réponse : ' + String(f.body).replace(/\n/g, '\n     '));
+      if (f.request) lines.push('   Requête : ' + String(f.request).replace(/\n/g, '\n     '));
+      if (f.payload) lines.push('   Envoyé : ' + String(f.payload).replace(/\n/g, '\n     '));
+      if (f.stack) lines.push('   Trace :', String(f.stack).replace(/^/gm, '     '));
+    });
+    return lines.join('\n');
+  }
+
+  function writeTask(t, task, list, catalog, files, run) {
     var tt = TT();
     var pt = PT();
     var ct = CT();
     var dt = DT();
-    var label = '« ' + task.title + ' »';
     return tt.createRow(t, task.title, list.id).then(function (res) {
       var cardId = res && res.cardId;
-      if (!cardId) throw new Error('carte ' + label + ' non créée');
+      if (!cardId) throw Object.assign(new Error('Trello n’a pas renvoyé l’identifiant de la carte'), { detail: safeJson(res, 500) });
       task.createdId = cardId;
       var patches = patchesOf(task, catalog);
       var steps = Promise.resolve();
-      function step(what, fn) {
-        steps = steps.then(fn).then(function (r) {
-          if (r && r.ok === false) throw new Error(r.reason || 'refusé');
-        }).catch(function (err) {
-          failed.push(what + ' de ' + label + (err && err.message ? ' (' + err.message + ')' : ''));
+      function step(what, payload, fn) {
+        var meta = { step: what, title: task.title, taskId: task.id, cardId: cardId, payload: payload };
+        steps = steps.then(function () {
+          return attempt(fn, run.inline, run.sleep).then(function (out) {
+            if (out.ok) { if (out.attempts > 1) run.retried++; return; }
+            if (isNotYetThere(out.error)) run.late.push({ meta: meta, fn: fn, attempts: out.attempts });
+            else run.fail(meta, out);
+          });
         });
       }
-      if (Object.keys(patches.card).length) step('détails', function () { return pt.restPutCard(t, cardId, patches.card); });
-      if (Object.keys(patches.inputs).length) step('priorité et personnes', function () { return pt.saveCardInputsById(t, cardId, patches.inputs); });
-      if (task.due) step('jour', function () { return dt.planDay(t, cardId, task.due); });
-      if (task.subtasks.length && ct) {
-        step('sous-tâches', function () {
-          return ct.saveCardCompletionById(t, cardId, ct.normalizeCompletionData({ items: itemsOf(task) }));
-        });
-      } else if (task.estimate) {
-        step('durée', function () { return dt.saveEstimate(t, cardId, task.estimate); });
-      }
+      // Trello's REST API knows the card at once; the stored data (priority, people, subtasks, duration) waits for the Power-Up client.
+      if (Object.keys(patches.card).length) step('détails', patches.card, function () { return pt.restPutCard(t, cardId, patches.card); });
       task.imageIds.forEach(function (id) {
         var file = files && files[id];
-        if (file) step('image', function () { return dt.attachFile(t, cardId, file); });
+        if (file) step('image', { name: file.name, type: file.type, size: file.size }, function () { return dt.attachFile(t, cardId, file); });
       });
+      if (task.due) step('jour', { due: task.due }, function () { return dt.planDay(t, cardId, task.due); });
+      if (Object.keys(patches.inputs).length) step('priorité et personnes', patches.inputs, function () { return pt.saveCardInputsById(t, cardId, patches.inputs); });
+      if (task.subtasks.length && ct) {
+        var items = itemsOf(task);
+        step('sous-tâches', { items: items }, function () { return ct.saveCardCompletionById(t, cardId, ct.normalizeCompletionData({ items: items })); });
+      } else if (task.estimate) {
+        step('durée', { minutes: task.estimate }, function () { return dt.saveEstimate(t, cardId, task.estimate); });
+      }
       return steps.then(function () { return cardId; });
     });
   }
@@ -237,7 +364,21 @@
       noList.reason = 'no-triage-list';
       return Promise.reject(noList);
     }
-    var result = { created: [], failed: [], madeProjects: [], goalsBefore: o.goals || { nodes: [], links: [] }, goalsSaved: false };
+    var result = { created: [], failed: [], failures: [], retried: 0, madeProjects: [], goalsBefore: o.goals || { nodes: [], links: [] }, goalsSaved: false };
+    var delays = Object.assign({ inline: INLINE_DELAYS, late: LATE_DELAYS, settle: SETTLE_MS }, o.delays || {});
+    var log = typeof o.log === 'function' ? o.log : logFailure;
+    var run = {
+      inline: delays.inline,
+      sleep: typeof o.sleep === 'function' ? o.sleep : sleepMs,
+      late: [],
+      retried: 0,
+      fail: function (meta, outcome) {
+        var f = failureOf(meta, outcome);
+        result.failures.push(f);
+        result.failed.push(labelOf(f));
+        log(f);
+      },
+    };
     // Cards made by an earlier try of the same plan count too.
     (plan.tasks || []).forEach(function (x) { if (x.createdId) result.created.push({ taskId: x.id, cardId: x.createdId, title: x.title }); });
     var done = 0;
@@ -260,11 +401,11 @@
       var chain = Promise.resolve();
       tasks.forEach(function (task) {
         chain = chain.then(function () {
-          return writeTask(t, task, list, catalog, o.files || {}, result.failed).then(function (cardId) {
+          return writeTask(t, task, list, catalog, o.files || {}, run).then(function (cardId) {
             result.created.push({ taskId: task.id, cardId: cardId, title: task.title });
             if (task.project && nodeOf[task.project]) links.push({ taskId: cardId, projectId: nodeOf[task.project] });
           }, function (err) {
-            result.failed.push((err && err.message) || ('« ' + task.title + ' »'));
+            run.fail({ step: 'création de la carte', title: task.title, taskId: task.id, payload: { name: task.title, idList: list.id } }, { error: err, attempts: 1 });
           }).then(function () {
             done++;
             if (typeof o.onProgress === 'function') o.onProgress(done, tasks.length, task.title);
@@ -272,6 +413,21 @@
         });
       });
       return chain;
+    }).then(function () {
+      // The steps Trello was not ready for are tried again now that the whole batch is made.
+      if (!run.late.length) return null;
+      return run.sleep(delays.settle).then(function () {
+        var chain = Promise.resolve();
+        run.late.forEach(function (d) {
+          chain = chain.then(function () {
+            return attempt(d.fn, delays.late, run.sleep, d.attempts).then(function (out) {
+              if (out.ok) run.retried++;
+              else run.fail(d.meta, out);
+            });
+          });
+        });
+        return chain;
+      });
     }).then(function () {
       if (!links.length) return null;
       // Only the projects some created card sits under are written.
@@ -288,22 +444,37 @@
         result.madeProjects = r.made;
         result.goalsAfter = r.saved;
       }, function (err) {
-        result.failed.push('projets (' + ((err && (err.reason || err.message)) || 'erreur') + ')');
+        run.fail({ step: 'projets', payload: { projets: madeNodes.map(function (m) { return m.name; }), liens: links.length } }, { error: err, attempts: 1 });
       });
-    }).then(function () { return result; });
+    }).then(function () {
+      result.retried = run.retried;
+      return result;
+    });
   }
 
-  /** Takes a creation back: the cards are archived (Trello keeps them) and the projects it made leave the goal map. */
+  /** Takes a creation back: the cards are archived (Trello keeps them) and the projects it made leave the goal map. -> { failures } */
   function undo(t, result) {
     var tt = TT();
     var gg = GG();
+    var failures = [];
     var chain = Promise.resolve();
+    function miss(step, meta, err) {
+      var f = failureOf(Object.assign({ step: step }, meta), { error: err, attempts: 1 });
+      failures.push(f);
+      logFailure(f);
+    }
     (result.created || []).forEach(function (c) {
-      chain = chain.then(function () { return soft(tt.archiveCard(t, c.cardId)); });
+      chain = chain.then(function () {
+        return Promise.resolve().then(function () { return tt.archiveCard(t, c.cardId); }).then(null, function (err) {
+          miss('archivage', { title: c.title, taskId: c.taskId, cardId: c.cardId }, err);
+        });
+      });
     });
     var made = (result.madeProjects || []).map(function (m) { return m.nodeId; });
     var cards = (result.created || []).map(function (c) { return c.cardId; });
-    if (!result.goalsSaved || !gg || typeof gg.load !== 'function' || typeof gg.save !== 'function') return chain;
+    if (!result.goalsSaved || !gg || typeof gg.load !== 'function' || typeof gg.save !== 'function') {
+      return chain.then(function () { return { failures: failures }; });
+    }
     return chain.then(function () {
       return gg.load(t).then(function (cur) {
         var gone = Object.create(null);
@@ -315,7 +486,9 @@
         };
         return gg.save(t, next);
       });
-    }).then(function () {}, function () { /* the cards are archived; a link left behind points at an archived card */ });
+    }).then(null, function (err) {
+      miss('retrait des projets', { payload: { projets: made, cartes: cards.length } }, err);
+    }).then(function () { return { failures: failures }; });
   }
 
   global.TriageDocTrello = {
@@ -324,5 +497,8 @@
     undo: undo,
     itemsOf: itemsOf,
     patchesOf: patchesOf,
+    describeError: describeError,
+    reportOf: reportOf,
+    isNotYetThere: isNotYetThere,
   };
 })(typeof window !== 'undefined' ? window : this);
