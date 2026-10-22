@@ -319,8 +319,6 @@ textarea.tb-input {
 .tb-sub td { font-size: 12.5px; }
 .tb-sub .tb-cell { cursor: default; }
 .tb-sub-indent { display: inline-block; }
-/* One step under the project name. The fold slot stays the same width, so titles still line up. */
-.tb-grid td.tb-cell--name.is-nested { padding-left: 28px; }
 .tb-sub-icon { margin-right: 6px; font-size: 13px; color: var(--tp-text-subtle); vertical-align: -2px; }
 .tb-sub .tb-name { color: var(--tp-text-muted); }
 .tb-sub .tb-name.is-done { color: var(--tp-text-subtle); }
@@ -726,32 +724,22 @@ body.tb-resizing {
 .tb-section-icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .tb-cell.is-hard { font-weight: 600; }
 
-/* Project sections: one cell per column, so the name sits in Objet with the tasks. */
-.tb-grid tbody tr.tb-section td {
-  height: auto;
-  min-height: 32px;
-  white-space: normal;
-  vertical-align: middle;
-}
-.tb-grid tbody tr.tb-section td:not(.tb-num) {
-  padding: 0 8px;
-  background: var(--tp-surface-subtle);
-  border-right-color: transparent;
-  cursor: pointer;
-}
-.tb-grid tbody tr.tb-section td:last-child { border-right-color: var(--tp-border); }
-.tb-grid tbody tr.tb-section:hover td:not(.tb-num),
-.tb-grid tbody tr.tb-section:hover td.tb-cell--name { background: var(--tp-surface-hover); }
+/* Project line spans the row and starts at the left. Priority, progress and the count stay on the right. */
 .tb-section td { border-bottom: 1px solid var(--tp-border); }
+.tb-section td:not(.tb-num) { padding: 0; background: var(--tp-surface-subtle); cursor: pointer; }
+.tb-section:hover td:not(.tb-num) { background: var(--tp-surface-hover); }
 .tb-section-in {
-  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; min-width: 0; font-weight: 600;
+  display: flex; align-items: center; gap: 12px; min-height: 32px; padding: 4px 12px 4px 8px; font-weight: 600;
 }
-.tb-section-chev { width: 16px; text-align: center; }
+.tb-section-id {
+  position: sticky; left: 0; display: flex; align-items: center; gap: 6px;
+  flex: 1; min-width: 0;
+}
+.tb-section-chev { width: 16px; flex: none; text-align: center; }
 .tb-section-in .ti { flex: none; font-size: 15px; color: var(--tp-text-muted); }
 .tb-section.is-free .tb-section-in { font-weight: 500; color: var(--tp-text-muted); }
-.tb-section-name { flex: 1; min-width: 0; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
-.tb-section-in > .is-trail { margin-left: auto; }
-.tb-section-slot { display: flex; align-items: center; justify-content: flex-end; min-height: 32px; min-width: 0; }
+.tb-section-name { min-width: 0; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+.tb-section-meta { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: auto; }
 .tb-section-pri,
 .tb-section-prog { flex: none; display: inline-flex; align-items: center; justify-content: flex-end; box-sizing: border-box; font-variant-numeric: tabular-nums; }
 .tb-section-pri {

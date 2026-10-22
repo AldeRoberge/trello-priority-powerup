@@ -13,7 +13,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Aujourd’hui : « Modifier » est fermé au départ. Une fois ouvert, on change la taille des widgets. La météo, le bonjour, la prochaine action et le planning suivent la taille de leur carte.
 - Triage : le + est sous la tâche. Il ajoute une tâche au même niveau ou une sous-tâche, et les colonnes d’avancement et de priorité restent alignées.
 - Triage, Tableau, Gantt et Kanban : cliquer l'avancement d'un projet termine toutes ses tâches et leurs sous-tâches, et le projet avec elles. Un second clic les remet à 0 %.
-- Tableau : le nom du projet s’aligne sur la colonne Objet, et les tâches en dessous sont en retrait.
+- Tableau : le nom du projet commence à gauche de la ligne. Les tâches restent dans leurs colonnes.
 - Une tâche bloquée marque aussi son projet : le cercle du projet passe en pause dans Triage et le Tableau, et le pourcentage du projet passe au rouge dans le Gantt et le Kanban.
 - Assistant : un choix qui reprend une phrase surlignée prend la même couleur (vert, jaune, rouge).
 - Aujourd’hui : « Bilan de la semaine » liste le travail terminé, jour par jour, de lundi à dimanche.

@@ -686,7 +686,6 @@
         if (state.expanded[row.id]) renderSubRows(row, body);
       }
       var sections = TM().groupByProject(rows, foldedSections(), state.filter ? null : projectCatalog());
-      state.grouped = !!sections;
       if (!sections) rows.forEach(renderRowTr);
       else sections.forEach(function (g) {
         body.appendChild(sectionRow(g));
@@ -1125,7 +1124,6 @@
 
       if (key === 'name') {
         td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
-        if (state.grouped) td.classList.add('is-nested');
         td.title = row.name;
         td.appendChild(subToggle(row));
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
@@ -1199,12 +1197,6 @@
     }
 
     /* ── Subtasks: checklist items shown as child rows under their card ── */
-    /** One step under a project section, so a task sits in from the project name. None when the grid is flat. */
-    var TREE_STEP = 20;
-    function treePad() {
-      return state.grouped ? TREE_STEP : 0;
-    }
-
     /** Chevron before the Objet: toggles the child rows; a placeholder of the same width when there are none. */
     function subToggle(row) {
       var count = TM().subtaskRows(row).length;
@@ -1243,8 +1235,8 @@
       if (key === 'name') {
         td.classList.add('tb-cell--name');
         td.title = sub.name;
-        // 36px matches the card's fold slot, then one step per nesting level, plus the project step.
-        td.style.paddingLeft = (8 + treePad() + 36 + 16 * sub.depth) + 'px';
+        // 36px matches the card's fold slot, then one step per nesting level.
+        td.style.paddingLeft = (8 + 36 + 16 * sub.depth) + 'px';
         td.appendChild(icon(sub.done ? 'circle-check' : 'circle', 'tb-sub-icon'));
         td.appendChild(h('span', { class: 'tb-name' + (sub.done ? ' is-done' : ''), text: sub.name }));
       } else if (key === 'progress') {
@@ -1597,36 +1589,34 @@
         { icon: 'brand-trello', label: 'Ouvrir dans Trello', disabled: !row.link, action: function () { window.open(row.link, '_blank', 'noopener'); } },
         { icon: 'link', label: 'Copier le lien de la carte', disabled: !row.link, action: function () { copyText(row.link); } },
       ];
-      items.push({ sep: true });
-      items.push({ title: 'Modifier' });
-      [
+      var modify = [
         ['progress', 'chart-donut', 'Progrès…'],
         ['priority', 'flag', 'Priorité…'],
         ['due', 'calendar-event', 'Échéance…'],
         ['desc', 'align-left', 'Description…'],
-      ].forEach(function (f) {
-        items.push({ icon: f[1], label: f[2], action: function () { openFieldFor(row, f[0]); } });
+      ].map(function (f) {
+        return { icon: f[1], label: f[2], action: function () { openFieldFor(row, f[0]); } };
       });
-      if (key && spec.kind !== 'link') {
-        items.push({ sep: true });
-        if (editable && key !== 'statut') {
-          items.push({ icon: 'pencil', label: 'Modifier « ' + spec.header + ' »', hint: 'F2', action: function () { beginEdit(row.id, key); } });
-        }
+      if (key && spec && spec.kind !== 'link' && editable && key !== 'statut') {
+        modify.push({ icon: 'pencil', label: spec.header, hint: 'F2', action: function () { beginEdit(row.id, key); } });
+      }
+      if (key && spec && spec.kind !== 'link' && editable && key !== 'statut' && key !== 'name') {
+        modify.push({
+          icon: 'clipboard',
+          label: 'Coller',
+          action: function () {
+            if (!navigator.clipboard || !navigator.clipboard.readText) return setStatus('Collage non autorisé par le navigateur', 'error');
+            navigator.clipboard.readText().then(function (txt) { commitEdit(row, key, txt); }, function () { setStatus('Collage refusé', 'error'); });
+          },
+        });
+        modify.push({ icon: 'eraser', label: 'Effacer', hint: 'Suppr', disabled: !row[key], action: function () { commitEdit(row, key, ''); } });
+      }
+      items.push({ sep: true });
+      items.push({ icon: 'pencil', label: 'Modifier', children: modify });
+      if (key && spec && spec.kind !== 'link') {
         items.push({ icon: 'copy', label: 'Copier la valeur', action: function () { copyText(TM().cellText(row, key)); } });
-        if (editable && key !== 'statut' && key !== 'name') {
-          items.push({
-            icon: 'clipboard',
-            label: 'Coller',
-            action: function () {
-              if (!navigator.clipboard || !navigator.clipboard.readText) return setStatus('Collage non autorisé par le navigateur', 'error');
-              navigator.clipboard.readText().then(function (txt) { commitEdit(row, key, txt); }, function () { setStatus('Collage refusé', 'error'); });
-            },
-          });
-          items.push({ icon: 'eraser', label: 'Effacer la cellule', hint: 'Suppr', disabled: !row[key], action: function () { commitEdit(row, key, ''); } });
-        }
       }
       if (!key || key === 'statut') {
-        items.push({ sep: true });
         items.push({
           icon: (list && list.icon) || 'progress-check',
           color: list && list.color,
@@ -1635,12 +1625,20 @@
           children: statutItems(row),
         });
       }
-      if (key) {
+      if (key && spec) {
+        var sortText = TM().sortLabels(key);
         var sorted = sortOf(key) && state.sorts.length === 1 ? sortOf(key).dir : null;
-        items.push({ sep: true });
-        items.push({ icon: 'sort-ascending', label: 'Trier « ' + spec.header + ' » ' + TM().sortLabels(key).asc, checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } });
-        items.push({ icon: 'sort-descending', label: 'Trier « ' + spec.header + ' » ' + TM().sortLabels(key).desc, checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } });
-        items.push({ icon: 'sort-ascending', label: 'Ajouter « ' + spec.header + ' » au tri', disabled: !state.sorts.length, action: function () { setSort(key, sortOf(key) ? sortOf(key).dir : 'asc', true); } });
+        function lead(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+        items.push({
+          icon: 'arrows-sort',
+          label: 'Trier',
+          hint: spec.header,
+          children: [
+            { icon: 'sort-ascending', label: lead(sortText.asc), checked: sorted === 'asc', action: function () { setSort(key, 'asc'); } },
+            { icon: 'sort-descending', label: lead(sortText.desc), checked: sorted === 'desc', action: function () { setSort(key, 'desc'); } },
+            { icon: 'sort-ascending', label: 'Ajouter au tri', disabled: !state.sorts.length, action: function () { setSort(key, sortOf(key) ? sortOf(key).dir : 'asc', true); } },
+          ],
+        });
         items.push({ icon: 'eye-off', label: 'Masquer la colonne', disabled: state.columns.length <= 1, action: function () { hideColumn(key); } });
       }
       items.push({ sep: true });
@@ -2087,12 +2085,6 @@
         if (picked) sectionGlyph = picked;
       }
       var cols = shownColumns();
-      var nameKey = cols.indexOf('name') === -1 ? cols[0] : 'name';
-      var trail = [];
-      if (cols.indexOf('priority') === -1) trail.push(sectionPriority(g));
-      if (cols.indexOf('progress') === -1) trail.push(sectionProgress(g));
-      trail.push(h('span', { class: 'tb-section-count', text: String(g.rows.length) }));
-      if (trail.length) trail[0].classList.add('is-trail');
       var pid = g.free ? '' : (g.id || ((g.rows[0] && g.rows[0].projectId) || ''));
       var tr = h('tr', {
         class: 'tb-section' + (g.free ? ' is-free' : ''),
@@ -2106,24 +2098,20 @@
         },
       });
       tr.appendChild(h('td', { class: 'tb-num' }));
-      cols.forEach(function (key) {
-        var spec = TM().COLUMNS[key];
-        var td = h('td', {
-          class: 'tb-cell tb-section-cell tb-cell--' + spec.kind + (key === 'name' ? ' tb-cell--name' : ''),
-        });
-        if (key === nameKey) {
-          td.appendChild(h('div', { class: 'tb-section-in' }, [
+      tr.appendChild(h('td', { colspan: String(cols.length) }, [
+        h('div', { class: 'tb-section-in' }, [
+          h('div', { class: 'tb-section-id' }, [
             icon(g.open ? 'chevron-down' : 'chevron-right', 'tb-section-chev'),
             sectionGlyph,
             h('span', { class: 'tb-section-name', text: g.name }),
-          ].concat(trail)));
-        } else if (key === 'priority') {
-          td.appendChild(h('div', { class: 'tb-section-slot' }, [sectionPriority(g)]));
-        } else if (key === 'progress') {
-          td.appendChild(h('div', { class: 'tb-section-slot' }, [sectionProgress(g)]));
-        }
-        tr.appendChild(td);
-      });
+          ]),
+          h('span', { class: 'tb-section-meta' }, [
+            sectionPriority(g),
+            sectionProgress(g),
+            h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
+          ]),
+        ]),
+      ]));
       tr.addEventListener('dragover', function (e) {
         if (!state.dragId) return;
         var moved = findRow(state.dragId);
