@@ -408,7 +408,7 @@
         title: o.title || null,
         'data-fk': spec.key + ':' + o.id,
       }, [o.icon ? icon(o.icon) : null, h('span', { class: 'tri-opt-t', text: o.label })]);
-      if (spec.fill) b.setAttribute('data-tier', String(impactTier(Number(o.id))));
+      if (spec.fill === true) b.setAttribute('data-tier', String(impactTier(Number(o.id))));
       b.addEventListener('click', function () { spec.onPick(o); });
       b.addEventListener('focus', function () {
         buttons.forEach(function (x) { x.tabIndex = x === b ? 0 : -1; });
@@ -434,7 +434,7 @@
         var o = spec.options[i];
         var checked = has && String(o.id) === String(value);
         b.setAttribute('aria-checked', checked ? 'true' : 'false');
-        if (spec.fill) b.classList.toggle('is-fill', has && Number(o.id) <= Number(value));
+        if (spec.fill === true) b.classList.toggle('is-fill', has && Number(o.id) <= Number(value));
         if (checked) on = b;
         b.tabIndex = -1;
       });
@@ -666,6 +666,76 @@
     props.appendChild(prop('Priorité', [prio, h('span', { class: 'tri-spacer' }), refine], 'tri-prop--result'));
     props.appendChild(prop('Estimation', [est.el]));
     props.appendChild(prop('Jour prévu', [day.el]));
+
+    // Avancement: the usual steps in one click (the chosen step again clears it); a value in between shows as is.
+    var STEPS = [0, 25, 50, 75, 100];
+    function progValue() {
+      return typeof row.progress === 'number' && STEPS.indexOf(Math.round(row.progress)) >= 0 ? Math.round(row.progress) : '';
+    }
+    var progNum = h('span', { class: 'tri-quiet' });
+    var prog = segmented({
+      label: 'Avancement',
+      key: 'prog',
+      fill: 'plain',
+      cls: 'tri-scale tri-scale--plain',
+      options: STEPS.map(function (n) { return { id: n, label: n + ' %', title: n + ' %' }; }),
+      value: progValue(),
+      onPick: function (o) {
+        var cur = typeof row.progress === 'number' ? Math.round(row.progress) : 0;
+        host.setProgress(row, o.id === cur && o.id > 0 ? 0 : o.id);
+        paintProg();
+      },
+    });
+    function paintProg() {
+      var p = typeof row.progress === 'number' ? Math.round(row.progress) : 0;
+      prog.set(progValue());
+      prog.buttons.forEach(function (b, i) { b.classList.toggle('is-fill', p >= STEPS[i] && p > 0); });
+      prog.el.classList.toggle('is-done', p >= 100);
+      progNum.textContent = progValue() === '' && p > 0 ? p + ' %' : '';
+    }
+    paintProg();
+    props.appendChild(prop('Avancement', [prog.el, progNum]));
+
+    // Sous-tâches: each one ticks in place, a field adds the next.
+    var subs = h('div', { class: 'tri-subs' });
+    function paintSubs() {
+      subs.textContent = '';
+      (row.items || []).forEach(function (it) {
+        if (!it || typeof it.text !== 'string') return;
+        var done = it.done === true || Number(it.progress) >= 100;
+        var b = h('button', {
+          class: 'tri-sub' + (done ? ' is-done' : '') + (it.blocked && !done ? ' is-blocked' : ''),
+          type: 'button',
+          role: 'checkbox',
+          'aria-checked': done ? 'true' : 'false',
+          title: done ? 'Rouvrir' : 'Terminer',
+          disabled: it.linkedCardId ? 'disabled' : null,
+          onclick: function () {
+            host.toggleSub(row, it.id, !done);
+            paintSubs();
+            paintProg();
+          },
+        }, [icon(done ? 'circle-check' : 'circle'), h('span', { class: 'tri-sub-t', text: it.text })]);
+        subs.appendChild(b);
+      });
+      var add = h('input', { class: 'tri-sub-add', type: 'text', placeholder: 'Nouvelle sous-tâche', 'aria-label': 'Nouvelle sous-tâche', maxlength: '200' });
+      add.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var v = add.value.replace(/\s+/g, ' ').trim();
+        if (!v) return;
+        add.value = '';
+        host.addSub(row.id, '', v);
+        paintSubs();
+        paintProg();
+        var next = subs.querySelector('.tri-sub-add');
+        if (next) next.focus();
+      });
+      subs.appendChild(add);
+    }
+    paintSubs();
+    props.appendChild(prop('Sous-tâches', [subs], 'tri-prop--subs'));
     body.appendChild(props);
 
     /* ── Where it belongs ────────────────────────────────────────── */

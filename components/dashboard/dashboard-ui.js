@@ -159,7 +159,7 @@
       items.push(exitEntry('someday'));
     }
     if (triage) items.push(exitEntry('cancel'));
-    if (open && !triage) items.push({ id: 'complete', label: 'Terminer', icon: 'circle-check', group: 'Trier' });
+    if (open && !triage) items.push({ id: 'complete', label: 'Terminer', icon: 'circle-check', group: 'Trier', success: true });
     if (done) items.push({ id: 'reopen', label: 'Rouvrir', icon: 'rotate', group: 'Trier' });
 
     var days = [];
@@ -812,6 +812,42 @@
       render();
     }
 
+    /** Sets a card's progress from the list (master progress over subtasks, else its own); 100 % also completes it. */
+    function setProgress(row, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.getCardCompletionById !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
+      row.progress = pct;
+      if (Array.isArray(row.items) && row.items.length && CT.applyMasterProgress) row.items = CT.applyMasterProgress(row.items, pct);
+      if (state.selected === row.id) render(); // the pane on the right shows it too
+      else refreshRow(row);
+      save(row, function () {
+        return CT.getCardCompletionById(t, row.id).then(function (data) {
+          data = CT.normalizeCompletionData(data || { items: [] });
+          var next = data.items && data.items.length
+            ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
+            : Object.assign({}, data, { progress: pct });
+          return CT.saveCardCompletionById(t, row.id, CT.normalizeCompletionData(next));
+        }).then(function () {
+          return pct >= 100 && !row.dueDone ? DT().complete(t, row, state.lists, true) : null;
+        });
+      }, { ok: pct >= 100 ? '« ' + row.name + ' » terminée' : 'Enregistré', then: function () { if (pct >= 100) row.dueDone = true; } });
+    }
+
+    /** Ticks or unticks one subtask of a card; the card's progress follows (the list line and the pane are redrawn). */
+    function toggleSubtask(row, itemId, done) {
+      var CT = global.CompletionTrello;
+      if (!CT || !CT.applyItemProgress) return setStatus('Éditeur de progrès indisponible', 'error');
+      var local = CT.applyItemProgress({ items: row.items || [] }, itemId, done ? 100 : 0);
+      row.items = local.items;
+      if (CT.computeCardProgress) row.progress = Math.round(CT.computeCardProgress(local).percent);
+      refreshRow(row);
+      save(row, function () {
+        return CT.getCardCompletionById(t, row.id).then(function (data) {
+          return CT.saveCardCompletionById(t, row.id, CT.applyItemProgress(data || { items: [] }, itemId, done ? 100 : 0));
+        });
+      }, { ok: 'Enregistré' });
+    }
+
     function exitBlocked(row) {
       var on = !row.blocked;
       row.blocked = on;
@@ -1417,7 +1453,11 @@
           h('span', { class: 'db-row-name', text: r.name }),
           sub ? h('span', { class: 'db-step', text: sub }) : null,
         ]),
-        global.TriageTree ? global.TriageTree.progressEl(r.progress) : null,
+        global.TriageTree ? global.TriageTree.progressEl(r.progress, {
+          blocked: !!r.blocked,
+          onSet: function (pct) { setProgress(r, pct); },
+          onUnblock: function () { exitBlocked(r); },
+        }) : null,
         h('span', { class: 'tt-prio-col' }, [prioBadge(r)]),
       ]);
     }
@@ -1478,6 +1518,9 @@
         plan: function (row, iso) { plan(row, iso); },
         projectOf: projectOfRow,
         refreshRow: refreshRow,
+        setProgress: setProgress,
+        toggleSub: toggleSubtask,
+        addSub: addSubtask,
         hintOf: exitHint,
         dayLabel: function (iso) { return dayLabel(iso, today); },
         dayText: function (row) {

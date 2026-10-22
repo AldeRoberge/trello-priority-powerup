@@ -5,6 +5,10 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Triage : on peut glisser la barre d’avancement et cliquer le cercle pour terminer une tâche, dans la liste.
+- Triage : le panneau de droite a une ligne « Avancement » (0 à 100 %) et une ligne « Sous-tâches » (cocher, ajouter).
+
+- Menus clic droit : « Terminer » est en vert, comme « Archiver » est en rouge.
 - Assistant : la page s’ouvre tout de suite (le scan du tableau et la mise à jour de la mémoire se font ensuite en arrière-plan), et l’onglet actif retrouve son soulignement bleu.
 
 - Triage : l’avancement (barre et %) et la priorité sont plus visibles à droite de chaque ligne, et les projets affichent aussi leur priorité (la meilleure de leurs tâches) et leur avancement.

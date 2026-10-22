@@ -179,16 +179,65 @@
   }
 
   /** Progress column: a small bar and the percentage. The slot stays (empty) when there is no value, so the priority never moves. */
-  function progressEl(pct) {
+  function progressEl(pct, opts) {
+    opts = opts || {};
+    var live = !!opts.onSet && !!global.ProgressRing;
+    if (live && typeof pct !== 'number') pct = 0; // a task without progress yet starts at 0 so it can be set
     var has = typeof pct === 'number';
-    var c = el('span', 'tt-prog' + (has ? '' : ' is-empty') + (has && pct >= 100 ? ' is-done' : ''), has ? { title: 'Avancement ' + pct + ' %' } : {});
+    var c = el('span', 'tt-prog' + (has ? '' : ' is-empty') + (has && pct >= 100 ? ' is-done' : '') + (live ? ' is-live' : ''), has ? { title: 'Avancement ' + pct + ' %' } : {});
     if (!has) return c;
+    var ring = null;
+    if (global.ProgressRing) {
+      ring = global.ProgressRing.create(pct, !!opts.blocked);
+      ring.classList.add('tt-prog-ring');
+      if (live) {
+        ring.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+        ring.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (opts.blocked) { if (opts.onUnblock) opts.onUnblock(); return; }
+          opts.onSet(pct >= 100 ? 0 : 100);
+        });
+      }
+      c.appendChild(ring);
+    }
     var bar = el('span', 'tt-prog-bar');
     var fill = el('i');
     fill.style.width = pct + '%';
     bar.appendChild(fill);
     c.appendChild(bar);
-    c.appendChild(el('span', 'tt-prog-t', { text: pct + '%' }));
+    var num = el('span', 'tt-prog-t', { text: pct + '%' });
+    c.appendChild(num);
+    if (live) {
+      // Click or drag on the bar sets the % in place; it saves on release (same gesture as the Tableau).
+      bar.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var cur = pct;
+        function at(x) {
+          var r = bar.getBoundingClientRect();
+          return r.width ? Math.max(0, Math.min(100, Math.round(((x - r.left) / r.width) * 100))) : cur;
+        }
+        function paint() {
+          fill.style.width = cur + '%';
+          num.textContent = cur + '%';
+          global.ProgressRing.set(ring, cur);
+          c.classList.toggle('is-done', cur >= 100);
+        }
+        function move(ev) { cur = at(ev.clientX); paint(); }
+        function up() {
+          document.removeEventListener('pointermove', move);
+          document.removeEventListener('pointerup', up);
+          document.removeEventListener('pointercancel', up);
+          if (cur !== pct) opts.onSet(cur);
+        }
+        move(e);
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+        document.addEventListener('pointercancel', up);
+      });
+      bar.addEventListener('click', function (e) { e.stopPropagation(); });
+    }
     return c;
   }
 
