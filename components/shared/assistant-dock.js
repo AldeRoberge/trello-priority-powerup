@@ -169,6 +169,22 @@
     send.appendChild(icon('arrow-up'));
     composer.appendChild(clip);
     composer.appendChild(input);
+    var schedTasks = [];
+    var schedTimer = null;
+    var schedBtn = el('button', 'ad-dock-btn ad-dock-sched');
+    schedBtn.type = 'button';
+    schedBtn.hidden = true;
+    schedBtn.title = 'Rappels';
+    schedBtn.setAttribute('aria-label', 'Rappels');
+    schedBtn.setAttribute('aria-expanded', 'false');
+    schedBtn.appendChild(icon('alarm'));
+    var schedCount = el('span', 'ad-dock-sched-count');
+    schedCount.setAttribute('aria-hidden', 'true');
+    schedBtn.appendChild(schedCount);
+    var schedPop = el('div', 'agent-sched-pop');
+    schedPop.hidden = true;
+    composer.appendChild(schedBtn);
+    composer.appendChild(schedPop);
     composer.appendChild(send);
     composer.appendChild(picker);
     var loadHost = el('div', 'ad-dock-load');
@@ -274,10 +290,13 @@
       open = true;
       applyOpen();
     });
+    var guideHost = el('div', 'ag-guide-host ad-dock-guide');
+    guideHost.hidden = true;
     root.appendChild(grip);
     root.appendChild(cardsEl);
     root.appendChild(logEl);
     root.appendChild(loadHost);
+    root.appendChild(guideHost);
     root.appendChild(attsEl);
     root.appendChild(composer);
     applyOpen();
@@ -440,9 +459,100 @@
       input.style.height = Math.min(input.scrollHeight, 140) + 'px';
     }
 
+    function openDockGuide(spec) {
+      if (!global.AgentGuides || typeof AgentGuides.mount !== 'function') return;
+      AgentGuides.mount(guideHost, spec);
+    }
+
+    function paintSched() {
+      var n = schedTasks.length;
+      schedBtn.hidden = n === 0;
+      schedCount.textContent = n ? String(n) : '';
+      if (!n) {
+        schedPop.hidden = true;
+        schedBtn.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      if (schedPop.hidden) return;
+      schedPop.replaceChildren();
+      var now = Date.now();
+      schedTasks.forEach(function (task) {
+        var row = el('div', 'agent-sched-row');
+        var label = el('span', 'agent-sched-text', task.message);
+        var time = el('span', 'agent-sched-time', AgentGuides ? AgentGuides.formatRemain(task.at - now) : '');
+        var cancel = el('button', 'agent-sched-x', '\u00d7');
+        cancel.type = 'button';
+        cancel.setAttribute('aria-label', 'Annuler');
+        cancel.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          schedTasks = schedTasks.filter(function (item) { return item.id !== task.id; });
+          paintSched();
+        });
+        row.appendChild(label);
+        row.appendChild(time);
+        row.appendChild(cancel);
+        schedPop.appendChild(row);
+      });
+      var rect = schedBtn.getBoundingClientRect();
+      schedPop.style.left = Math.max(8, rect.right - 240) + 'px';
+      schedPop.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    }
+
+    function ensureSched() {
+      if (schedTimer) return;
+      schedTimer = setInterval(function () {
+        if (!global.AgentGuides) return;
+        var split = AgentGuides.dueTasks(schedTasks, Date.now());
+        split.due.forEach(function (task) { addLog('ai', task.message); });
+        schedTasks = split.pending;
+        paintSched();
+        if (!schedTasks.length) {
+          clearInterval(schedTimer);
+          schedTimer = null;
+        }
+      }, 1000);
+    }
+
+    function addDockSchedule(check) {
+      if (!check || !check.message) return;
+      var now = Date.now();
+      schedTasks.push({
+        id: 'c' + now + '-' + schedTasks.length,
+        message: check.message,
+        at: now + check.seconds * 1000
+      });
+      ensureSched();
+      paintSched();
+    }
+
+    schedBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!schedTasks.length) return;
+      var openPop = schedPop.hidden;
+      schedPop.hidden = !openPop;
+      schedBtn.setAttribute('aria-expanded', openPop ? 'true' : 'false');
+      paintSched();
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (schedPop.hidden) return;
+      if (schedBtn.contains(e.target) || schedPop.contains(e.target)) return;
+      schedPop.hidden = true;
+      schedBtn.setAttribute('aria-expanded', 'false');
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !global.AgentGuides || guideHost.hidden) return;
+      AgentGuides.close(guideHost);
+    });
+
     function submit() {
       var text = input.value.trim();
       if (busy || (!text && !files.length)) return;
+      if (text && global.AgentGuides && typeof AgentGuides.matchIntent === 'function') {
+        var guideIntent = AgentGuides.matchIntent(text);
+        if (guideIntent) openDockGuide(guideIntent);
+      }
       var AI = global.KanbanAI;
       var TT = global.TableTrello;
       if (!AI || !TT) return addLog('error', 'Assistant indisponible sur cette page.');
@@ -477,6 +587,8 @@
         var CQ = global.CardQuick;
         var out = outcome(res, !!(CQ && typeof CQ.mount === 'function'));
         if (out.text) addLog(out.kind, out.text);
+        (res.guides || []).forEach(openDockGuide);
+        (res.checks || []).forEach(addDockSchedule);
         if (out.created.length) {
           CQ.invalidate(); // the snapshot taken before the creation does not hold these cards
           var entries = out.created.map(addCard);

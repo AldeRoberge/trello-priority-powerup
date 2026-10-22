@@ -184,6 +184,30 @@
     return { done: false, phase: 'out', label: PHASE.out, scale: 1 - 0.38 * q, total: total };
   }
 
+  /**
+   * Guides and later checks the model put in a reply.
+   * Reads actions with op or tool show_guide / schedule_check.
+   */
+  function collect(obj) {
+    var guides = [];
+    var checks = [];
+    var list = obj && Array.isArray(obj.actions) ? obj.actions : [];
+    for (var i = 0; i < list.length; i++) {
+      var action = list[i];
+      if (!action || typeof action !== 'object') continue;
+      var tool = String(action.tool || action.op || '');
+      var args = action.args && typeof action.args === 'object' ? action.args : action;
+      if (tool === 'show_guide') {
+        var guide = normalizeGuide(args);
+        if (guide) guides.push(guide);
+      } else if (tool === 'schedule_check') {
+        var check = normalizeCheck(args);
+        if (check) checks.push(check);
+      }
+    }
+    return { guides: guides, checks: checks };
+  }
+
   function dueTasks(tasks, now) {
     var due = [];
     var pending = [];
@@ -437,6 +461,7 @@
     normalizeGuide: normalizeGuide,
     normalizeCheck: normalizeCheck,
     matchIntent: matchIntent,
+    collect: collect,
     breatheAt: breatheAt,
     dueTasks: dueTasks,
     formatRemain: formatRemain,

@@ -17,6 +17,10 @@ describe('AgentGuides', () => {
   });
 
   it('opens breathe or stretch from a short request', () => {
+    assert.deepEqual(Guides.matchIntent('I want to meditate now'), {
+      kind: 'breathe',
+      preset: null
+    });
     assert.deepEqual(Guides.matchIntent('Respirer 30 secondes'), {
       kind: 'breathe',
       preset: '30s'
@@ -57,6 +61,19 @@ describe('AgentGuides', () => {
     );
     assert.equal(Guides.normalizeCheck({ seconds: 2, message: 'Trop tôt' }), null);
     assert.equal(Guides.normalizeCheck({ seconds: 45, message: '   ' }), null);
+  });
+
+  it('reads a guide and a later check out of a reply', () => {
+    const found = Guides.collect({
+      message: 'Okay.',
+      actions: [
+        { op: 'show_guide', kind: 'breathe' },
+        { op: 'schedule_check', seconds: 45, message: 'Comment tu te sens?' },
+        { op: 'create', title: 'Autre' }
+      ]
+    });
+    assert.deepEqual(found.guides, [{ kind: 'breathe', preset: null }]);
+    assert.deepEqual(found.checks, [{ seconds: 45, message: 'Comment tu te sens?' }]);
   });
 
   it('walks inspire, hold, expire', () => {

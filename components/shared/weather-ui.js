@@ -2,7 +2,7 @@
  * Role: how the weather looks on the Aujourd'hui page.
  *  - icon(kind, isDay)   a hand-drawn SVG glyph (sun, moon, clouds, rain, snow, storm, fog)
  *  - sky(scene)          the animated background of the hero card (clouds, rain, snow, stars, lightning)
- *  - panel(live, opts)   current weather, a tip, the next hours and, on demand, the next days
+ *  - panel(live, opts)   current weather, a tip, the next hours, and the next days when the card is open
  *  - placePicker(anchor) search a city and pick it
  * Data and wording come from Weather (weather.js). Styles: weather-ui.css (prefix wx-).
  * Exposes window.WeatherUI.
@@ -254,7 +254,7 @@
     var Wx = W();
     var model = live && live.model;
     var place = (live && live.place) || (Wx && Wx.loadPlace()) || { name: '' };
-    var root = h('section', { class: 'wx', 'aria-label': 'Météo' });
+    var root = h('section', { class: 'wx' + (opts.expanded ? ' is-open' : ''), 'aria-label': 'Météo' });
 
     var placeBtn = h('button', {
       class: 'wx-place',
@@ -315,8 +315,8 @@
       ]));
     }
 
-    if (opts.expanded) {
-      var days = (model.days || []).slice(0, 5);
+    var days = (model.days || []).slice(0, 5);
+    if (days.length) {
       var sun = today && today.sunrise && today.sunset
         ? h('div', { class: 'wx-sun' }, [
             h('span', {}, [icon('sunrise'), document.createTextNode(' ' + clock(today.sunrise))]),

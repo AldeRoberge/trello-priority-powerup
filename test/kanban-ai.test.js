@@ -53,6 +53,11 @@ describe('KanbanAI', () => {
       assert.match(m[1].content, /"cards":\[/);
       assert.doesNotMatch(m[1].content, /"card":/);
     });
+    it('tells the dock assistant to open a guide instead of a card', () => {
+      const m = AI.buildMessages({ text: 'I want to meditate now', rows: [], lists, today: 'd' });
+      assert.match(m[0].content, /show_guide/);
+      assert.match(m[0].content, /schedule_check/);
+    });
   });
 
   describe('normalizeActions', () => {

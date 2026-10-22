@@ -210,6 +210,26 @@ html.ad-resizing * { cursor: ns-resize !important; user-select: none !important;
 .ad-dock-input:focus::placeholder {
   opacity: 0.8;
 }
+.ad-dock-guide[hidden] { display: none !important; }
+.ad-dock .ag-guide { margin: 0; }
+.ad-dock-sched { position: relative; }
+.ad-dock-sched[hidden] { display: none !important; }
+.ad-dock-sched-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: #4bce97;
+  color: #1d2125;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  pointer-events: none;
+}
 .ad-dock-btn {
   flex: 0 0 auto;
   display: inline-flex;

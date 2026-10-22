@@ -5,7 +5,9 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Assistant en bas : « je veux méditer » ouvre la respiration tout de suite, au-dessus du message.
 - Assistant : respiration et étirements (petit personnage, au choix), un rappel plus tard, et une icône des rappels à côté du débogage.
+- Aujourd’hui : chaque widget occupe l’espace de sa carte. La météo grandit, les heures se partagent la largeur, et les jours suivants apparaissent quand la carte est assez haute.
 - Aujourd’hui : la carte du jour nomme les tâches à faire. Un clic ouvre la tâche.
 - Clic droit : A archive tant que le menu est ouvert.
 - Aujourd’hui : « Modifier » est fermé au départ. Une fois ouvert, on change la taille des widgets. La météo, le bonjour, la prochaine action et le planning suivent la taille de leur carte.
