@@ -456,13 +456,14 @@
     var ago = born ? D.ageLabel(born, Date.now()) : '';
     body.appendChild(h('div', { class: 'tri-top' }, [
       h('span', { class: 'tri-origin' }, [icon('inbox'), text((row.statut || 'Inbox') + (ago ? ' · ' + ago : ''))]),
-      row.blocked ? h('button', {
-        class: 'tri-blocked',
+      h('button', {
+        class: 'tri-blocked' + (row.blocked ? ' is-on' : ''),
         type: 'button',
-        title: 'Bloquée · cliquer pour débloquer',
+        title: row.blocked ? 'Bloquée · cliquer pour débloquer' : 'Marquer comme bloquée',
+        'aria-pressed': row.blocked ? 'true' : 'false',
         'data-fk': 'blocked',
         onclick: function () { host.perform(row, 'blocked'); },
-      }, [icon('player-pause'), text('Bloquée')]) : null,
+      }, [icon('player-pause'), text(row.blocked ? 'Bloquée' : 'Bloquer')]),
       h('span', { class: 'tri-spacer' }),
       iconButton('external-link', 'Ouvrir la carte', function () { host.openCard(row); }),
       iconButton('dots', 'Plus d’actions', function (e) { host.cardMenu(row, e.currentTarget); }),

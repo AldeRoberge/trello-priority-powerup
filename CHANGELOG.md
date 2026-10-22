@@ -5,6 +5,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Assistant : la page s’ouvre tout de suite (le scan du tableau et la mise à jour de la mémoire se font ensuite en arrière-plan), et l’onglet actif retrouve son soulignement bleu.
+
 - Triage : l’avancement (barre et %) et la priorité sont plus visibles à droite de chaque ligne, et les projets affichent aussi leur priorité (la meilleure de leurs tâches) et leur avancement.
 
 - Triage : un « + » au survol d’une tâche ou d’une sous-tâche ajoute une sous-tâche, directement dans la liste.
