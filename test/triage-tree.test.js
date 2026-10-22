@@ -188,3 +188,17 @@ test('clicking a project name folds it, the same as the arrow', () => {
   eq(toggled, ['p:P1', 'p:P1', 'p:']);
   eq(selected, ['P1'], 'Sans projet has no pane');
 });
+
+test('adding: the new-subtask line comes after the task and its subtasks; only top-level subtasks can take a child', () => {
+  const rows = [card('x', [{ id: 'i1', text: 'un', items: [{ id: 'i2', text: 'deux' }] }, { id: 'i3', text: 'trois' }])];
+  const onTask = TT.build(rows, { projectOf: () => null, adding: 't:x' });
+  eq(kinds(onTask), ['task:t:x', 'sub:s:x:0', 'sub:s:x:0.0', 'sub:s:x:1', 'add:a:t:x']);
+  assert.equal(onTask.nodes[4].parentId, '');
+  assert.equal(onTask.nodes[4].depth, 1);
+  eq(onTask.nodes.filter((n) => n.kind === 'sub').map((n) => n.canAdd), [true, false, true]);
+
+  const onSub = TT.build(rows, { projectOf: () => null, adding: 's:x:0' });
+  eq(kinds(onSub), ['task:t:x', 'sub:s:x:0', 'sub:s:x:0.0', 'add:a:s:x:0', 'sub:s:x:1']);
+  assert.equal(onSub.nodes[3].parentId, 'i1');
+  assert.equal(onSub.nodes[3].depth, 2);
+});

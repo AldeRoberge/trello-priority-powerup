@@ -89,5 +89,41 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-sub.is-blocked .tt-name,
 .tt-sub.is-blocked > .ti { color: var(--tp-danger-text); }
 
+/* "+" of a line: its slot is always there, the glyph shows on hover (or focus) only. */
+.tt-add {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+}
+.tt-add.is-empty { cursor: default; }
+.tt-task:hover > .tt-add,
+.tt-sub:hover > .tt-add,
+.tt-add:focus-visible { opacity: 1; }
+button.tt-add:hover { background: var(--tp-surface-active); color: var(--tp-text); }
+.tt-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--tp-border);
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  outline: none;
+}
+.tt-input:focus { border-bottom-color: var(--tp-accent, currentColor); }
+.tt-input::placeholder { opacity: 0.55; }
+
 /* The tree / list button in the Triage header: filled while the tree is on. */
 .db-icon-btn.is-on { background: var(--tp-surface-active); color: var(--tp-text); }

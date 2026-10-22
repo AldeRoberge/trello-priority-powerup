@@ -28,7 +28,7 @@
   }
 
   /** Subtask lines of one task (and the nested ones of an open subtask). */
-  function subNodes(taskId, items, depth, path, collapsed, out) {
+  function subNodes(taskId, items, depth, path, collapsed, out, adding) {
     (items || []).forEach(function (it, i) {
       if (!it || typeof it.text !== 'string') return;
       var p = path + (path ? '.' : '') + i;
@@ -39,6 +39,9 @@
         kind: 'sub',
         key: key,
         taskId: taskId,
+        id: it.id || '',
+        canAdd: !path && !it.linkedCardId && !!it.id, // one level of nesting under a subtask
+
         text: it.text,
         done: isDone(it),
         blocked: it.blocked === true && !isDone(it),
@@ -47,11 +50,12 @@
         open: open,
         kids: !!kids,
       });
-      if (kids && open) subNodes(taskId, it.items, depth + 1, p, collapsed, out);
+      if (kids && open) subNodes(taskId, it.items, depth + 1, p, collapsed, out, adding);
+      if (adding === key) out.push({ kind: 'add', key: 'a:' + key, taskId: taskId, parentId: it.id || '', depth: depth + 1 });
     });
   }
 
-  function taskNodes(row, depth, collapsed, out, tasks) {
+  function taskNodes(row, depth, collapsed, out, tasks, adding) {
     var items = Array.isArray(row.items) ? row.items.filter(function (i) { return i && typeof i.text === 'string'; }) : [];
     var key = 't:' + row.id;
     var open = !collapsed[key];
@@ -66,12 +70,14 @@
       total: items.length,
     });
     tasks.push(row);
-    if (items.length && open) subNodes(row.id, items, depth + 1, '', collapsed, out);
+    if (items.length && open) subNodes(row.id, items, depth + 1, '', collapsed, out, adding);
+    if (adding === key) out.push({ kind: 'add', key: 'a:' + key, taskId: row.id, parentId: '', depth: depth + 1 });
   }
 
   function build(rows, opts) {
     opts = opts || {};
     var collapsed = opts.collapsed || {};
+    var adding = opts.adding || '';
     var projectOf = typeof opts.projectOf === 'function' ? opts.projectOf : function () { return null; };
     var groups = [];
     var byId = Object.create(null);
@@ -90,7 +96,7 @@
     var tasks = [];
     if (!groups.length) {
       // No project in sight: the tree is the plain list, subtasks still hang under their task.
-      free.forEach(function (row) { taskNodes(row, 0, collapsed, nodes, tasks); });
+      free.forEach(function (row) { taskNodes(row, 0, collapsed, nodes, tasks, adding); });
       return { nodes: nodes, tasks: tasks };
     }
     groups.sort(function (a, b) { return a.first - b.first; });
@@ -100,7 +106,7 @@
       var open = !collapsed[key];
       nodes.push({ kind: 'project', key: key, id: g.id, name: g.name, icon: g.icon || null, count: g.rows.length, open: open, free: !!g.free });
       if (!open) return;
-      g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks); });
+      g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks, adding); });
     });
     return { nodes: nodes, tasks: tasks };
   }
@@ -204,7 +210,53 @@
     });
     if (main && main.nextSibling) rowEl.insertBefore(count, main.nextSibling);
     else rowEl.appendChild(count);
+    rowEl.appendChild(addButton(info.key, ctx));
     return rowEl;
+  }
+
+  /** The hover "+" that creates a subtask under this line. Its slot is always there, so nothing shifts when it appears. */
+  function addButton(key, ctx) {
+    var b = el('button', 'tt-add', { type: 'button', 'aria-label': 'Nouvelle sous-tâche', title: 'Nouvelle sous-tâche' });
+    b.appendChild(icon('plus'));
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (typeof ctx.startAdd === 'function') ctx.startAdd(key);
+    });
+    return b;
+  }
+
+  /** The inline field of a new subtask: Enter adds it and stays open for the next one, Escape or leaving closes it. */
+  function addEl(n, ctx) {
+    var row = el('div', 'tt-sub tt-adding', { role: 'treeitem', 'aria-level': String(n.depth + 1), 'data-key': n.key });
+    indent(row, n.depth);
+    row.appendChild(el('span', 'tt-chev is-empty', { 'aria-hidden': 'true' }));
+    row.appendChild(icon('circle'));
+    var input = el('input', 'tt-input', { type: 'text', placeholder: 'Nouvelle sous-tâche', 'aria-label': 'Nouvelle sous-tâche', maxlength: '200' });
+    var closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      if (typeof ctx.stopAdd === 'function') ctx.stopAdd();
+    }
+    input.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        var text = input.value.replace(/\s+/g, ' ').trim();
+        if (!text) { close(); return; }
+        input.value = '';
+        if (typeof ctx.addSub === 'function') ctx.addSub(n.taskId, n.parentId, text);
+      }
+    });
+    input.addEventListener('click', function (e) { e.stopPropagation(); });
+    input.addEventListener('blur', function () {
+      // Let a click on a button finish before the field disappears.
+      setTimeout(function () { if (input.isConnected && !input.value.trim()) close(); }, 150);
+    });
+    row.appendChild(input);
+    setTimeout(function () { if (input.isConnected) input.focus(); }, 0);
+    return row;
   }
 
   function carryOver(oldEl, newEl, ctx) {
@@ -230,6 +282,7 @@
     row.appendChild(chevron(n.open, n.kids, function () { ctx.toggle(n.key); }));
     row.appendChild(icon(n.blocked ? 'player-pause' : n.done ? 'circle-check' : n.linked ? 'link' : 'circle'));
     row.appendChild(el('span', 'tt-name', { text: n.text, title: n.text }));
+    row.appendChild(n.canAdd ? addButton(n.key, ctx) : el('span', 'tt-add is-empty', { 'aria-hidden': 'true' }));
     row.addEventListener('click', function () { ctx.select(n.taskId); });
     return row;
   }
@@ -239,6 +292,7 @@
     built.nodes.forEach(function (n) {
       if (n.kind === 'project') frag.appendChild(projectEl(n, ctx));
       else if (n.kind === 'task') frag.appendChild(decorateTask(ctx.taskEl(n.row), n, ctx));
+      else if (n.kind === 'add') frag.appendChild(addEl(n, ctx));
       else frag.appendChild(subEl(n, ctx));
     });
     return frag;

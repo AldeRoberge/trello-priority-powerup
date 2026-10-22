@@ -1096,7 +1096,20 @@
           return p ? { id: p.id, name: p.name, icon: p.icon || null } : null;
         },
         collapsed: state.triageFold,
+        adding: state.subAdding || '',
       });
+    }
+
+    /** Adds a subtask: the line shows at once, the card is saved in the background (queued with the card's other writes). */
+    function addSubtask(taskId, parentId, text) {
+      var row = (state.rows || []).filter(function (r) { return r.id === taskId; })[0];
+      var CTm = global.CompletionTrello;
+      if (!row || !CTm || !DT().addSubtask) return;
+      var local = parentId ? CTm.addChecklistItem({ items: row.items || [] }, parentId, text) : CTm.addLocalItem({ items: row.items || [] }, text);
+      if (!local || !local.item) return setStatus('Sous-tâche non ajoutée', 'error');
+      row.items = local.data.items;
+      render();
+      save(row, function () { return DT().addSubtask(t, row.id, parentId, text); }, { ok: 'Sous-tâche ajoutée' });
     }
 
     /** The cards in the order the list shows them (what J / K walk through; folded ones are skipped). */
@@ -1331,6 +1344,17 @@
           render();
         },
         pickIcon: function (node, icon) { saveProject(node.id, { icon: icon }); },
+        startAdd: function (key) {
+          delete state.triageFold[key];
+          state.subAdding = key;
+          render();
+        },
+        stopAdd: function () {
+          if (!state.subAdding) return;
+          state.subAdding = '';
+          renderUnlessTyping();
+        },
+        addSub: addSubtask,
         taskEl: function (row) { return triageRow(row, !picked && row.id === selId); },
         toggle: function (key) {
           if (state.triageFold[key]) delete state.triageFold[key];

@@ -343,6 +343,18 @@
     await ct.saveCardCompletionById(t, cardId, Object.assign({}, data, { items: items }));
   }
 
+  /** Adds a subtask (checklist item) to a card, under `parentId` when given (a subtask of a subtask). Resolves the saved items. */
+  async function addSubtask(t, cardId, parentId, text) {
+    var ct = CT();
+    var clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean || !ct) return null;
+    var data = ct.normalizeCompletionData((await ct.getCardCompletionById(t, cardId)) || { items: [] });
+    var res = parentId ? ct.addChecklistItem(data, parentId, clean) : ct.addLocalItem(data, clean);
+    if (!res || !res.item) throw new Error('subtask-failed');
+    await ct.saveCardCompletionById(t, cardId, res.data);
+    return res.data.items;
+  }
+
   /**
    * Keeps the card's title (and note) as a line of the "Références" document.
    * Resolves { docId, added }: what to take out again to undo it (unfileReference).
@@ -479,6 +491,7 @@
     complete: complete,
     cancel: cancel,
     saveNextStep: saveNextStep,
+    addSubtask: addSubtask,
     fileReference: fileReference,
     unfileReference: unfileReference,
     restoreTriage: restoreTriage,
