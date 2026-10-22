@@ -21,7 +21,8 @@
 html[data-color-mode="dark"] .wx-sky::after {
   background: linear-gradient(180deg, color-mix(in srgb, var(--tp-elev-0) 62%, transparent) 0%, color-mix(in srgb, var(--tp-elev-0) 78%, transparent) 100%);
 }
-html[data-color-mode="dark"] .td-hero { box-shadow: none; }
+html[data-color-mode="dark"] .td-hero,
+html[data-color-mode="dark"] .td-widget--sky { box-shadow: none; }
 
 .wx-sky--clear-night { background: linear-gradient(160deg, #0a1128 0%, #172554 52%, #2b3a7a 100%); }
 .wx-sky--partly-day { background: linear-gradient(160deg, #3f78c8 0%, #6a9fd8 55%, #a3c5e6 100%); }

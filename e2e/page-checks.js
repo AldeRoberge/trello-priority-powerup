@@ -22,6 +22,12 @@ function inPageChecks(opts) {
   };
   const doc = document;
   const win = window;
+  if (doc.readyState !== 'complete') return out; // still loading: nothing to judge yet
+  if (win.frameElement) {
+    // the connector runs in a hidden iframe on the fake board; its markup is not on screen
+    const fr = win.frameElement.getBoundingClientRect();
+    if (!fr.width || !fr.height || win.parent.getComputedStyle(win.frameElement).display === 'none') return out;
+  }
   const isVisible = (el) => {
     if (!el || !el.getBoundingClientRect) return false;
     const r = el.getBoundingClientRect();
@@ -89,7 +95,8 @@ function inPageChecks(opts) {
     if (cs.display === 'inline') continue;
     const clips = cs.overflowX === 'hidden' || cs.overflowX === 'clip';
     if (!clips || cs.textOverflow === 'ellipsis') continue;
-    if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0 && isVisible(el)) {
+    // clientWidth <= 4: visually hidden labels (screen-reader only), not text a user can see
+    if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 4 && isVisible(el)) {
       clipped++;
       add('clipped-text', describe(el) + ' is cut off (' + el.scrollWidth + 'px of text in ' + el.clientWidth + 'px)');
     }
@@ -152,6 +159,18 @@ function inPageChecks(opts) {
 
 /** Runs the checks in the top page and in every iframe that has content. */
 async function runChecks(page, opts) {
+  let issues = await runChecksOnce(page, opts);
+  if (issues.some((i) => i.kind === 'stuck-skeleton')) {
+    // a view may be mid-load (the user just changed tab): only report placeholders that stay
+    await page.waitForTimeout(2500);
+    const again = await runChecksOnce(page, opts);
+    const stuck = again.filter((i) => i.kind === 'stuck-skeleton');
+    issues = issues.filter((i) => i.kind !== 'stuck-skeleton').concat(stuck);
+  }
+  return issues;
+}
+
+async function runChecksOnce(page, opts) {
   const issues = [];
   for (const frame of page.frames()) {
     let found;

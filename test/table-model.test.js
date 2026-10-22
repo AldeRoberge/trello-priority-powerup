@@ -259,4 +259,37 @@ describe('TableModel.subtaskRows', () => {
     assert.deepEqual(g.map((x) => [x.name, x.rows.length, x.open]), [['B', 2, true], ['A', 1, false], ['Sans projet', 1, true]]);
     assert.equal(TM.groupByProject([r('a', '')]), null);
   });
+
+  it('sectionStats averages each task once, subtasks first', () => {
+    const stats = TM.sectionStats([
+      { progress: 10, items: [{ progress: 0 }, { progress: 100 }, { linkedCardId: 'other', progress: 0 }] },
+      { progress: 40, items: [] },
+      { progress: null },
+    ]);
+    assert.equal(stats.progress, 45);
+    assert.equal(stats.subs, 2);
+    assert.equal(stats.tasks, 3);
+    assert.equal(TM.sectionStats([{ items: [{ done: true }] }]).progress, 100);
+    assert.equal(TM.sectionStats([{ progress: null }]).progress, null);
+  });
+
+  it('groupByProject keeps an empty project and the priority set on it', () => {
+    const rows = [{ id: 'a', project: 'B', projectId: 'b' }, { id: 'z', project: '' }];
+    const g = TM.groupByProject(rows, {}, [
+      { id: 'b', name: 'B', priority: 6.6 },
+      { id: 'c', name: 'C', priority: 2 },
+    ]);
+    assert.deepEqual(g.map((x) => [x.name, x.rows.length, x.priority, x.id]), [
+      ['B', 1, 6.6, 'b'],
+      ['C', 0, 2, 'c'],
+      ['Sans projet', 1, null, ''],
+    ]);
+    assert.equal(TM.clampPriority(11), 10);
+    assert.equal(TM.clampPriority(6.55), 6.6);
+    assert.equal(TM.clampPriority('haute'), null);
+    const items = TM.projectPriorityItems(5, function () {});
+    assert.equal(items[0].label, 'Critique');
+    assert.equal(items.find((it) => it.checked).label, 'Importante');
+    assert.equal(items[items.length - 1].label, 'Retirer');
+  });
 });

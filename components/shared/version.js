@@ -170,6 +170,65 @@
     const running = (meta && meta.getAttribute && meta.getAttribute('content')) || '';
     if (!running) return;
 
+    function reloadTo(remote) {
+      const next = urlWithBuild(global.location.href, remote);
+      if (!next) return;
+      try {
+        if (global.sessionStorage) global.sessionStorage.setItem(RELOAD_KEY, remote);
+      } catch (e2) {
+        /* private mode */
+      }
+      global.location.replace(next);
+    }
+
+    let notified = '';
+    function showNotice(remote) {
+      if (notified === remote || doc.getElementById('cerveau-update')) return;
+      if (!doc.body) {
+        doc.addEventListener('DOMContentLoaded', () => showNotice(remote), { once: true });
+        return;
+      }
+      notified = remote;
+      if (!doc.getElementById('cerveau-update-css')) {
+        const style = doc.createElement('style');
+        style.id = 'cerveau-update-css';
+        style.textContent = '#cerveau-update{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;'
+          + 'align-items:center;gap:10px;max-width:min(380px,calc(100vw - 32px));padding:10px 12px;border-radius:12px;'
+          + 'background:#1f2430;color:#f2f4f8;border:1px solid rgba(255,255,255,.14);box-shadow:0 8px 28px rgba(0,0,0,.35);'
+          + 'font:13px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;animation:cerveau-up .25s ease-out}'
+          + '#cerveau-update .cu-ic{flex:none;font-size:18px}'
+          + '#cerveau-update .cu-tx{flex:1;min-width:0}'
+          + '#cerveau-update button{flex:none;font:inherit;border:0;border-radius:8px;padding:5px 10px;cursor:pointer}'
+          + '#cerveau-update .cu-go{background:#6366f1;color:#fff}#cerveau-update .cu-go:hover{background:#7477f4}'
+          + '#cerveau-update .cu-x{background:transparent;color:#aab0bd;padding:5px 6px}#cerveau-update .cu-x:hover{color:#fff}'
+          + '@keyframes cerveau-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}';
+        doc.head.appendChild(style);
+      }
+      const box = doc.createElement('div');
+      box.id = 'cerveau-update';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      const ic = doc.createElement('span');
+      ic.className = 'cu-ic';
+      ic.textContent = '✨';
+      const tx = doc.createElement('span');
+      tx.className = 'cu-tx';
+      tx.textContent = 'Une nouvelle version est disponible, veuillez actualiser.';
+      const go = doc.createElement('button');
+      go.type = 'button';
+      go.className = 'cu-go';
+      go.textContent = 'Actualiser';
+      go.addEventListener('click', () => reloadTo(remote));
+      const x = doc.createElement('button');
+      x.type = 'button';
+      x.className = 'cu-x';
+      x.setAttribute('aria-label', 'Plus tard');
+      x.textContent = '✕';
+      x.addEventListener('click', () => box.remove());
+      box.append(ic, tx, go, x);
+      doc.body.appendChild(box);
+    }
+
     function tick() {
       const infoUrl = new URL('build-info.json', global.location.href);
       infoUrl.searchParams.set('t', String(Date.now()));
@@ -177,6 +236,11 @@
         .then((res) => (res.ok ? res.json() : null))
         .then((info) => {
           const remote = (info && info.commit) || '';
+          // A visible page asks; a hidden Trello iframe has nobody to ask and reloads itself.
+          if (global.top === global.self) {
+            if (needsReload(running, remote, false, notified)) showNotice(remote);
+            return;
+          }
           let tried = '';
           try {
             tried = global.sessionStorage ? global.sessionStorage.getItem(RELOAD_KEY) || '' : '';
@@ -184,14 +248,7 @@
             tried = '';
           }
           if (!needsReload(running, remote, pageBusy(), tried)) return;
-          const next = urlWithBuild(global.location.href, remote);
-          if (!next) return;
-          try {
-            if (global.sessionStorage) global.sessionStorage.setItem(RELOAD_KEY, remote);
-          } catch (e2) {
-            /* private mode */
-          }
-          global.location.replace(next);
+          reloadTo(remote);
         })
         .catch(() => {});
     }

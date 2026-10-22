@@ -64,8 +64,10 @@ function seedData() {
       cardPriority: { impact: 6, ease: 4, empressement: 'assez-vite' },
       cardCompletion: { items: [{ id: 's1', text: 'Maquette', progress: 100 }, { id: 's2', text: 'Revue avec l’équipe', progress: 0 }, { id: 's3', text: 'Intégration', progress: 20 }] },
     },
-    c3: { cardPriority: { impact: 9, ease: 6, empressement: 'au-plus-vite' }, cardCompletion: { items: [], progress: 100 } },
+    c3: { cardPriority: { impact: 9, ease: 6, empressement: 'au-plus-vite' }, cardCompletion: { items: [], progress: 80 } },
     c4: { cardPriority: { impact: 2, ease: 9, empressement: 'aucun' }, cardCompletion: { items: [], progress: 10 } },
+    c9: { cardCompletion: { items: [], progress: 100 } },
+    c12: { cardCompletion: { items: [], progress: 100 } },
     c10: { cardPriority: { impact: 7, ease: 3, empressement: 'vite' }, cardCompletion: { items: [], progress: 30, blocked: true, blockedReason: 'Attend un accès' } },
   };
   // The Assistant is configured against a host the Playwright suite answers (see e2e/mocks.js).
@@ -141,8 +143,9 @@ class FakeTrello {
 
   /* ── cards ───────────────────────────────────────────────────────────── */
 
+  // Trello's REST accepts a card id or its short link ("slc2" here) wherever it takes a card id.
   cardById(id) {
-    return this.cards.find((c) => c.id === id) || null;
+    return this.cards.find((c) => c.id === id || 'sl' + c.id === id) || null;
   }
 
   listById(id) {
@@ -420,6 +423,7 @@ class FakeTrello {
         this.attachments.push(att);
         return reply(200, clone(att));
       }
+      if (seg[2] === 'actions' && method === 'GET') return reply(200, []);
       if (seg[2] === 'attachments' && method === 'GET') {
         return reply(200, this.attachments.filter((a) => a.cardId === card.id).map(clone));
       }

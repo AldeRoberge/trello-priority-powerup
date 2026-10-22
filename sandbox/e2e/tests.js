@@ -257,6 +257,144 @@
     assert(!window.__errors.length, 'errors: ' + window.__errors.join(' | '));
   });
 
+  // ── ?chats: the Assistant page with its list of conversations (own page in scripts/run-e2e.js) ──
+  var withChats = /[?&]chats\b/.test(location.search);
+  var chatTests = [];
+  function chatTest(name, fn) { chatTests.push({ name: name, fn: fn }); }
+  function memoryStorage() {
+    var d = {};
+    return {
+      getItem: function (k) { return d[k] === undefined ? null : d[k]; },
+      setItem: function (k, v) { d[k] = String(v); },
+      removeItem: function (k) { delete d[k]; }
+    };
+  }
+  function rowTitles() { return $$('.agent-chats-list:not(.agent-chats-list--archived) .agent-chats-item').map(function (b) { return b.textContent; }); }
+  function rowByTitle(title, archived) {
+    var sel = archived ? '.agent-chats-list--archived .agent-chats-row' : '.agent-chats-list:not(.agent-chats-list--archived) .agent-chats-row';
+    return $$(sel).filter(function (r) { return r.querySelector('.agent-chats-item').textContent === title; })[0];
+  }
+  function assistantTexts() { return $$('.agent-msg--assistant .agent-msg-bubble').map(function (b) { return b.textContent; }); }
+
+  chatTest('chats: opens on a new, empty conversation with the list on the left', async function () {
+    await waitFor(function () { return $('.agent-chats'); }, 'the list');
+    var aside = $('.agent-chats');
+    assert(innerWidth >= 760, 'wide viewport (' + innerWidth + 'px)');
+    assert(aside.getBoundingClientRect().width > 150, 'the list is visible (layout "' + $('.agent-chats-layout').className + '")');
+    assert(aside.getBoundingClientRect().right <= $('.agent-composer').getBoundingClientRect().left + 1, 'the list is left of the chat');
+    assert($$('.agent-msg').length === 0, 'no message on screen');
+    assert(rowTitles().length === 0, 'nothing listed yet');
+    assert($('.agent-chats-new').classList.contains('is-current'), 'the new conversation is the current one');
+    assert(getComputedStyle($('.agent-chats-head-new')).display === 'none', 'header + is hidden while the list is shown');
+  });
+
+  chatTest('chats: the first message creates a conversation titled by it, under Aujourd’hui', async function () {
+    typeAndSend('Première question');
+    await settle();
+    var row = await waitFor(function () { return rowByTitle('Première question'); }, 'listed conversation');
+    assert(row.classList.contains('is-current'), 'it is the current one');
+    assert($('.agent-chats-group-title').textContent === 'Aujourd’hui', 'grouped under today');
+    assert(!$('.agent-chats-new').classList.contains('is-current'), 'new is no longer the current one');
+  });
+
+  chatTest('chats: Nouvelle conversation empties the chat and keeps the old one in the list', async function () {
+    $('.agent-chats-new').click();
+    await waitFor(function () { return $$('.agent-msg').length === 0; }, 'chat emptied');
+    assert(rowByTitle('Première question'), 'old conversation still listed');
+    assert(!rowByTitle('Première question').classList.contains('is-current'), 'and no longer current');
+    assert($('.agent-chats-new').classList.contains('is-current'), 'new is current');
+    $('.agent-chats-new').click();
+    await sleep(100);
+    assert(rowTitles().length === 1, 'asking again does not create an empty entry');
+  });
+
+  chatTest('chats: opening an earlier conversation brings its messages back, and only it feeds the model', async function () {
+    typeAndSend('Deuxième question');
+    await settle();
+    await waitFor(function () { return rowByTitle('Deuxième question'); }, 'second conversation');
+    assert(rowTitles().join('|') === 'Deuxième question|Première question', 'newest first: ' + rowTitles().join('|'));
+    rowByTitle('Première question').querySelector('.agent-chats-item').click();
+    await waitFor(function () { return userTexts().join('|') === 'Première question'; }, 'first conversation shown');
+    assert(assistantTexts().some(function (t) { return /Reçu : Première question/.test(t); }), 'its answer is back');
+    assert(rowByTitle('Première question').classList.contains('is-current'), 'now the current one');
+    typeAndSend('suite');
+    await settle();
+    var req = window.__llm.requests.filter(function (r) { return r.text.indexOf('suite') !== -1; }).pop();
+    assert(req, 'a request carried the new message');
+    var sent = req.messages.map(function (m) { return String(m.content); }).join('\n');
+    assert(/Première question/.test(sent), 'the open conversation is sent');
+    assert(!/Deuxième question/.test(sent), 'the other conversation is not');
+    assert(userTexts().join('|') === 'Première question|suite', 'it continues in place');
+  });
+
+  chatTest('chats: archive icon removes the open conversation from the list and opens a fresh one', async function () {
+    var row = rowByTitle('Première question');
+    var act = row.querySelector('.agent-chats-act');
+    assert(act.getBoundingClientRect().width === 26, 'the archive icon always has its own place');
+    act.click();
+    await waitFor(function () { return !rowByTitle('Première question'); }, 'removed from the list');
+    assert($$('.agent-msg').length === 0, 'a fresh conversation is on screen');
+    assert(rowTitles().join('|') === 'Deuxième question', 'the other one stays');
+    var toggle = $('.agent-chats-archived-toggle');
+    assert(!toggle.disabled && $('.agent-chats-archived-count').textContent === '1', 'archived count is 1');
+    assert($('.agent-chats-list--archived').hidden, 'archived list is folded');
+  });
+
+  chatTest('chats: an archived conversation is restored by clicking it, and opens', async function () {
+    $('.agent-chats-archived-toggle').click();
+    var row = await waitFor(function () { return rowByTitle('Première question', true); }, 'archived row');
+    row.querySelector('.agent-chats-item').click();
+    await waitFor(function () { return userTexts().join('|') === 'Première question|suite'; }, 'restored and opened');
+    assert(rowByTitle('Première question'), 'back in the main list');
+    assert($$('.agent-chats-list--archived .agent-chats-row').length === 0, 'out of the archived list');
+  });
+
+  chatTest('chats: right-click menu archives and restores', async function () {
+    var row = rowByTitle('Deuxième question');
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
+    var item = await waitFor(function () {
+      return $$('.cm-item, [role="menuitem"]').filter(function (i) { return /Archiver/.test(i.textContent); })[0];
+    }, 'Archiver in the context menu');
+    item.click();
+    await waitFor(function () { return !rowByTitle('Deuxième question'); }, 'archived through the menu');
+    assert(rowByTitle('Deuxième question', true), 'listed as archived');
+    rowByTitle('Deuxième question', true).querySelector('.agent-chats-act').click();
+    await waitFor(function () { return rowByTitle('Deuxième question'); }, 'restored with its icon');
+    assert(userTexts().join('|') === 'Première question|suite', 'restoring does not change what is open');
+  });
+
+  chatTest('chats: opening and new stay quiet while the assistant answers', async function () {
+    $('.agent-chats-new').click();
+    await waitFor(function () { return $$('.agent-msg').length === 0; }, 'fresh');
+    typeAndSend('[slow] question lente');
+    await waitFor(function () { return $('.agent-msg.is-pending'); }, 'answer pending');
+    assert($('.agent-chats').classList.contains('is-locked'), 'the list is marked quiet');
+    $('.agent-chats-new').click();
+    rowByTitle('Deuxième question').querySelector('.agent-chats-item').click();
+    await sleep(150);
+    assert(userTexts().join('|') === '[slow] question lente', 'the conversation did not change');
+    await settle();
+    await waitFor(function () { return !$('.agent-chats').classList.contains('is-locked'); }, 'unlocked');
+    assert(assistantTexts().some(function (t) { return /Reçu : question lente/.test(t); }), 'the answer landed in its own conversation');
+    rowByTitle('Deuxième question').querySelector('.agent-chats-item').click();
+    await waitFor(function () { return userTexts().join('|') === 'Deuxième question'; }, 'opens once it is done');
+  });
+
+  chatTest('chats: the list can be hidden, then + in the header starts a conversation', async function () {
+    $('.agent-chats-head-toggle').click();
+    await waitFor(function () { return getComputedStyle($('.agent-chats')).display === 'none'; }, 'list hidden');
+    var plus = $('.agent-chats-head-new');
+    assert(getComputedStyle(plus).display !== 'none', 'header + is shown');
+    plus.click();
+    await waitFor(function () { return $$('.agent-msg').length === 0; }, 'fresh conversation');
+    $('.agent-chats-head-toggle').click();
+    await waitFor(function () { return getComputedStyle($('.agent-chats')).display !== 'none'; }, 'list back');
+  });
+
+  chatTest('no console errors were raised', async function () {
+    assert(!window.__errors.length, 'errors: ' + window.__errors.join(' | '));
+  });
+
   window.__errors = [];
   window.addEventListener('error', function (e) { window.__errors.push(String(e.message)); });
   window.addEventListener('unhandledrejection', function (e) {
@@ -264,12 +402,15 @@
   });
 
   async function main() {
+    var run = withChats ? chatTests : tests;
+    if (withChats) document.body.style.width = '1000px';
     try {
       AgentUI.mount(document.getElementById('assistantMount'), {
         t: window.__fakeT,
         scope: 'project',
         standalone: true,
-        initiallyOpen: true
+        initiallyOpen: true,
+        chatList: withChats ? { key: 'e2e', storage: memoryStorage() } : null
       });
     } catch (err) {
       log('FAIL mount: ' + err.message);
@@ -281,14 +422,14 @@
       report.textContent = 'manual mode';
       return;
     }
-    for (var i = 0; i < tests.length; i++) {
+    for (var i = 0; i < run.length; i++) {
       try {
-        await tests[i].fn();
+        await run[i].fn();
         pass++;
-        log('PASS ' + tests[i].name);
+        log('PASS ' + run[i].name);
       } catch (err) {
         fail++;
-        log('FAIL ' + tests[i].name + ': ' + err.message);
+        log('FAIL ' + run[i].name + ': ' + err.message);
       }
     }
     log('E2E DONE pass=' + pass + ' fail=' + fail);

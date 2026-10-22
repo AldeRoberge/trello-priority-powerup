@@ -67,7 +67,7 @@
     var box = document.createElement('label');
     box.className = 'sp-search';
     input.classList.add('sp-search-input');
-    if (!input.placeholder) input.placeholder = 'Filtrer…';
+    if (!input.placeholder) input.placeholder = 'Rechercher…';
     box.appendChild(icon('search'));
     box.appendChild(input);
     var clear = opts.clear;

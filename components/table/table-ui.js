@@ -189,7 +189,7 @@
       return rows;
     }
     function canReorder() {
-      return !state.sorts.length && !state.filter && !state.hideDone;
+      return !state.sorts.length && !state.filter;
     }
     function findRow(id) {
       return state.rows.filter(function (r) { return r.id === id; })[0] || null;
@@ -274,8 +274,8 @@
       var filter = h('input', {
         class: 'tb-filter tp-search-input',
         type: 'search',
-        placeholder: 'Filtrer…',
-        'aria-label': 'Filtrer',
+        placeholder: 'Rechercher…',
+        'aria-label': 'Rechercher',
         value: state.filter,
         oninput: function (e) {
           state.filter = e.target.value;
@@ -627,16 +627,27 @@
         var i = rowNo++;
         var tr = h('tr', { 'data-id': row.id, 'data-iso-card': row.id });
         tr.addEventListener('dragover', function (e) {
-          if (!state.dragId || !canReorder()) return;
+          if (!state.dragId) return;
+          var moved = findRow(state.dragId);
+          if (!moved || moved.id === row.id) return;
+          var otherProject = (moved.projectId || '') !== (row.projectId || '');
+          if (!canReorder() && !otherProject) return;
           e.preventDefault();
-          tr.classList.toggle('is-drop-before', e.offsetY < tr.offsetHeight / 2);
-          tr.classList.toggle('is-drop-after', e.offsetY >= tr.offsetHeight / 2);
+          if (canReorder()) {
+            tr.classList.remove('is-drop-on');
+            tr.classList.toggle('is-drop-before', e.offsetY < tr.offsetHeight / 2);
+            tr.classList.toggle('is-drop-after', e.offsetY >= tr.offsetHeight / 2);
+          } else {
+            tr.classList.add('is-drop-on');
+            tr.classList.remove('is-drop-before', 'is-drop-after');
+          }
         });
-        tr.addEventListener('dragleave', function () {
-          tr.classList.remove('is-drop-before', 'is-drop-after');
+        tr.addEventListener('dragleave', function (e) {
+          if (e.relatedTarget && tr.contains(e.relatedTarget)) return;
+          tr.classList.remove('is-drop-before', 'is-drop-after', 'is-drop-on');
         });
         tr.addEventListener('drop', function (e) {
-          if (!state.dragId || !canReorder()) return;
+          if (!state.dragId) return;
           e.preventDefault();
           dropRow(state.dragId, row, e.offsetY >= tr.offsetHeight / 2);
         });
@@ -645,8 +656,8 @@
           h('td', { class: 'tb-num', 'data-row': row.id }, [
             h('span', {
               class: 'tb-handle' + (canReorder() ? '' : ' is-off'),
-              draggable: canReorder() ? 'true' : null,
-              title: canReorder() ? 'Glisser pour réordonner' : 'Retirez le tri/filtre (et réaffichez les terminées) pour réordonner',
+              draggable: 'true',
+              title: canReorder() ? 'Glisser pour réordonner ou changer de projet' : 'Glisser vers un projet',
               ondragstart: function (e) {
                 state.dragId = row.id;
                 e.dataTransfer.effectAllowed = 'move';
@@ -674,7 +685,7 @@
         body.appendChild(tr);
         if (state.expanded[row.id]) renderSubRows(row, body);
       }
-      var sections = TM().groupByProject(rows, foldedSections());
+      var sections = TM().groupByProject(rows, foldedSections(), state.filter ? null : projectCatalog());
       if (!sections) rows.forEach(renderRowTr);
       else sections.forEach(function (g) {
         body.appendChild(sectionRow(g));
@@ -1364,37 +1375,148 @@
       }, fail);
     }
 
+    function stageGoals(next) {
+      state.goals = next;
+      var os = global.WorkOS;
+      if (os && typeof os.places === 'function') {
+        state.places = os.places(next);
+        TM().withHierarchy(state.rows, state.places);
+      }
+      if (global.ProjectIcon && typeof global.ProjectIcon.remember === 'function') global.ProjectIcon.remember(next);
+    }
+
+    function saveGoals(next) {
+      var GG = global.MindmapGoalsTrello;
+      if (!GG || typeof GG.save !== 'function') return Promise.reject(new Error('no-goals'));
+      return GG.save(t, next).then(function (saved) {
+        if (saved && saved.nodes) stageGoals(saved);
+        return saved || next;
+      });
+    }
+
+    /** The goal-map projects, so a project with no card yet still has a section to drop onto. */
+    function projectCatalog() {
+      return ((state.goals && state.goals.nodes) || []).filter(function (n) {
+        return n && n.level === 'project' && n.id && n.name;
+      }).map(function (n) {
+        return {
+          id: n.id,
+          name: n.name,
+          icon: n.icon || null,
+          priority: typeof n.priority === 'number' ? n.priority : null,
+        };
+      });
+    }
+
+    function goalsReady() {
+      var os = global.WorkOS;
+      var GG = global.MindmapGoalsTrello;
+      return !!(os && GG && typeof os.withTaskProject === 'function' && typeof os.withNodeEdit === 'function' && typeof GG.save === 'function');
+    }
+
+    function unfoldSection(key) {
+      var f = foldedSections();
+      if (!f[key]) return;
+      delete f[key];
+      try { localStorage.setItem('tp-table-folded', JSON.stringify(f)); } catch (e) { /* lasts until reload */ }
+    }
+
+    /**
+     * Drop a card on another row. A different project moves the card there. With no sort and no filter,
+     * it also takes that row's place in the list. Dropping on the section header only changes the project.
+     */
     function dropRow(dragId, targetRow, after) {
       state.dragId = null;
       var moved = findRow(dragId);
-      if (!moved || moved.id === targetRow.id) return renderGrid();
-      var siblings = state.rows
-        .filter(function (r) { return r.listId === targetRow.listId && r.id !== moved.id; })
-        .sort(function (a, b) { return a.pos - b.pos; });
-      var idx = siblings.findIndex(function (r) { return r.id === targetRow.id; }) + (after ? 1 : 0);
-      var pos = TM().dropPos(siblings, idx);
-      var listChanged = moved.listId !== targetRow.listId;
-      var list = listById(targetRow.listId);
+      if (!moved || !targetRow || moved.id === targetRow.id) return renderGrid();
+      var nextProject = targetRow.projectId || '';
+      var projectChanged = (moved.projectId || '') !== nextProject;
       var from = { listId: moved.listId, pos: moved.pos, statut: moved.statut };
-      moved.pos = pos;
-      moved.listId = targetRow.listId;
-      if (list) {
-        moved.statut = list.name;
-        moved.statutKey = list.category;
-        moved.statutColor = list.color;
+      var pos = moved.pos;
+      var listChanged = false;
+      if (canReorder()) {
+        var siblings = state.rows
+          .filter(function (r) { return r.listId === targetRow.listId && r.id !== moved.id; })
+          .sort(function (a, b) { return a.pos - b.pos; });
+        var idx = siblings.findIndex(function (r) { return r.id === targetRow.id; }) + (after ? 1 : 0);
+        pos = TM().dropPos(siblings, idx);
+        listChanged = moved.listId !== targetRow.listId;
+        var list = listById(targetRow.listId);
+        moved.pos = pos;
+        moved.listId = targetRow.listId;
+        if (list) {
+          moved.statut = list.name;
+          moved.statutKey = list.category;
+          moved.statutColor = list.color;
+        }
+        state.rows = TM().orderByLists(state.rows, state.lists);
       }
-      state.rows = TM().orderByLists(state.rows, state.lists);
+      var orderChanged = canReorder() && (listChanged || from.pos !== pos);
+      if (projectChanged && !goalsReady()) {
+        setStatus('Projets indisponibles', 'error');
+        projectChanged = false;
+      }
+      if (!projectChanged && !orderChanged) return renderGrid();
+      var nextGoals = null;
+      if (projectChanged) {
+        nextGoals = global.WorkOS.withTaskProject(state.goals, moved.id, nextProject || null);
+        stageGoals(nextGoals);
+      }
       renderGrid();
       setStatus('Enregistrement…', 'busy');
-      var op = listChanged ? TT().moveCard(t, moved.id, targetRow.listId, pos) : TT().reorderCard(t, moved.id, pos);
-      op.then(function () {
-        setStatus('Ordre enregistré', 'ok');
-        schedulePush();
-        if (listChanged) {
-          record({ type: 'move', targetId: moved.id, title: moved.name, key: 'statut', before: from.statut, after: moved.statut, beforeVal: from.listId, afterVal: moved.listId, beforePos: from.pos, afterPos: pos });
-        } else if (from.pos !== pos) {
-          record({ type: 'reorder', targetId: moved.id, title: moved.name, after: moved.statut, beforeVal: from.pos, afterVal: pos });
-        }
+      var jobs = [];
+      if (nextGoals) jobs.push(saveGoals(nextGoals));
+      if (orderChanged) {
+        var op = listChanged ? TT().moveCard(t, moved.id, targetRow.listId, pos) : TT().reorderCard(t, moved.id, pos);
+        jobs.push(op.then(function () {
+          if (listChanged) {
+            record({ type: 'move', targetId: moved.id, title: moved.name, key: 'statut', before: from.statut, after: moved.statut, beforeVal: from.listId, afterVal: moved.listId, beforePos: from.pos, afterPos: pos });
+          } else if (from.pos !== pos) {
+            record({ type: 'reorder', targetId: moved.id, title: moved.name, after: moved.statut, beforeVal: from.pos, afterVal: pos });
+          }
+        }));
+      }
+      Promise.all(jobs).then(function () {
+        renderGrid();
+        setStatus(projectChanged ? (nextProject ? 'Projet enregistré' : 'Projet retiré') : 'Ordre enregistré', 'ok');
+        if (orderChanged) schedulePush();
+      }, function (err) {
+        fail(err);
+        reload({ quiet: true });
+      });
+    }
+
+    function dropOnSection(dragId, g) {
+      state.dragId = null;
+      var moved = findRow(dragId);
+      if (!moved || !g) return renderGrid();
+      var nextProject = g.free ? '' : (g.id || '');
+      if (!g.free && !nextProject) return renderGrid();
+      if ((moved.projectId || '') === nextProject) return renderGrid();
+      if (!goalsReady()) return setStatus('Projets indisponibles', 'error');
+      unfoldSection(g.key);
+      var nextGoals = global.WorkOS.withTaskProject(state.goals, moved.id, nextProject || null);
+      stageGoals(nextGoals);
+      renderGrid();
+      setStatus('Enregistrement…', 'busy');
+      saveGoals(nextGoals).then(function () {
+        renderGrid();
+        setStatus(nextProject ? 'Projet enregistré' : 'Projet retiré', 'ok');
+      }, function (err) {
+        fail(err);
+        reload({ quiet: true });
+      });
+    }
+
+    function saveProjectPriority(id, score) {
+      if (!id || !goalsReady()) return setStatus('Projets indisponibles', 'error');
+      var next = global.WorkOS.withNodeEdit(state.goals, id, { priority: score });
+      stageGoals(next);
+      renderGrid();
+      setStatus('Enregistrement…', 'busy');
+      saveGoals(next).then(function () {
+        renderGrid();
+        setStatus(score == null ? 'Priorité retirée' : 'Priorité enregistrée', 'ok');
       }, function (err) {
         fail(err);
         reload({ quiet: true });
@@ -1856,6 +1978,41 @@
       try { localStorage.setItem('tp-table-folded', JSON.stringify(f)); } catch (e) { /* lasts until reload */ }
       renderGrid();
     }
+    function sectionPriority(g) {
+      if (g.free || !g.id) return h('span', { class: 'tb-section-pri is-empty', text: '-', 'aria-hidden': 'true' });
+      var has = typeof g.priority === 'number';
+      return h('button', {
+        class: 'tb-section-pri' + (has ? '' : ' is-empty'),
+        type: 'button',
+        title: 'Priorité',
+        text: has ? TM().formatPriority(g.priority) : '-',
+        onclick: function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var rect = e.currentTarget.getBoundingClientRect();
+          MENU().show({ x: rect.left, y: rect.bottom + 4 }, [{ title: 'Priorité' }].concat(
+            TM().projectPriorityItems(g.priority, function (score) { saveProjectPriority(g.id, score); })
+          ));
+        },
+      });
+    }
+
+    function sectionProgress(g) {
+      var stats = TM().sectionStats(g.rows);
+      var done = stats.progress >= 100;
+      var box = h('span', {
+        class: 'tb-prog tb-section-prog' + (stats.progress == null ? ' is-empty' : '') + (done ? ' is-done' : ''),
+        title: stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches',
+      });
+      if (stats.progress == null) {
+        box.textContent = '-';
+        return box;
+      }
+      box.appendChild(progressRing(stats.progress));
+      box.appendChild(h('span', { class: 'tb-section-pct', text: stats.progress + '%' }));
+      return box;
+    }
+
     function sectionRow(g) {
       var sectionGlyph = icon(g.free ? 'inbox' : ((g.icon && g.icon.i) || 'stack-2'), 'tb-section-icon');
       if (!g.free && g.id && global.ProjectIcon) {
@@ -1873,16 +2030,41 @@
         icon(g.open ? 'chevron-down' : 'chevron-right', 'tb-section-chev'),
         sectionGlyph,
         h('span', { class: 'tb-section-name', text: g.name }),
+        sectionPriority(g),
+        sectionProgress(g),
         h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
       ]);
-      var pid = g.free ? '' : ((g.rows[0] && g.rows[0].projectId) || '');
-      return h('tr', {
+      var pid = g.free ? '' : (g.id || ((g.rows[0] && g.rows[0].projectId) || ''));
+      var tr = h('tr', {
         class: 'tb-section' + (g.free ? ' is-free' : ''),
         'aria-expanded': String(g.open),
+        'data-project': pid,
         'data-iso-project': pid || null,
         'data-iso-label': g.free ? null : g.name,
-        onclick: function () { toggleSection(g.key); },
+        onclick: function (e) {
+          if (e.target.closest('button, .ip-glyph, .tb-section-pri')) return;
+          toggleSection(g.key);
+        },
       }, [h('td', { class: 'tb-num' }), h('td', { colspan: String(state.columns.length) }, [inner])]);
+      tr.addEventListener('dragover', function (e) {
+        if (!state.dragId) return;
+        var moved = findRow(state.dragId);
+        if (!moved) return;
+        var nextId = g.free ? '' : (g.id || '');
+        if ((moved.projectId || '') === nextId) return;
+        e.preventDefault();
+        tr.classList.add('is-drop-on');
+      });
+      tr.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && tr.contains(e.relatedTarget)) return;
+        tr.classList.remove('is-drop-on');
+      });
+      tr.addEventListener('drop', function (e) {
+        if (!state.dragId) return;
+        e.preventDefault();
+        dropOnSection(state.dragId, g);
+      });
+      return tr;
     }
 
     /** One-time: boards with saved columns get Projet and Tâche parente after Objet (hideable afterwards). */

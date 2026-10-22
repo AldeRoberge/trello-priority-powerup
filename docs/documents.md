@@ -29,7 +29,7 @@ Un éditeur façon Google Docs / ClickUp Docs, dans la même fenêtre que **Gant
 | Prénom seulement | Retour arrière juste après le nom ne garde que le prénom ; la mention reste |
 
 Les mentions affichent toujours le **nom actuel** de la carte, du document ou du membre ; une tâche terminée est barrée, une cible archivée ou supprimée est grisée et soulignée.
-Les personnes proposées sont les **membres du tableau** et vos **contacts** (Mon profil → Personnes ; privés, donc invisibles pour les autres membres).
+Les personnes proposées sont les **membres du tableau** et vos **contacts** (Mon profil → Personnes ; privés, donc invisibles pour les autres membres). Un nom qui n’existe pas encore propose **Ajouter « nom »** (ou **Créer la personne** après `@`) : la personne rejoint vos contacts et, sur une tâche, la carte.
 
 L'enregistrement est automatique (environ 1 s après la dernière frappe, au changement de document et à la fermeture). Le plan des titres s'affiche à droite.
 Menu **…** : dupliquer, télécharger en `.md`, copier en Markdown, supprimer (définitif, avec confirmation).

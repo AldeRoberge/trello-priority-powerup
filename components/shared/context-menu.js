@@ -250,6 +250,7 @@
         checked: !!it.checked,
         disabled: !!it.disabled,
         danger: !!it.danger,
+        success: !!it.success,
         children: children,
         action: typeof it.action === 'function' ? it.action : null,
       });
@@ -547,7 +548,8 @@
       var btn = d.createElement('button');
       btn.type = 'button';
       btn.className =
-        ITEM_CLASS + (item.danger ? ' is-danger' : '') + (item.checked ? ' is-checked' : '');
+        ITEM_CLASS + (item.danger ? ' is-danger' : '') + (item.success ? ' is-success' : '') +
+        (item.checked ? ' is-checked' : '');
       btn.setAttribute('role', 'menuitem');
       btn.dataset.contextAction = item.id;
       if (item.disabled) {
@@ -1481,6 +1483,45 @@
     return items;
   }
 
+  /** A conversation in the Assistant's list: open it, archive it (or bring an archived one back). */
+  function buildAgentChatItems(opts) {
+    opts = opts || {};
+    var items = [
+      {
+        id: 'open-chat',
+        label: 'Ouvrir',
+        icon: 'message-circle',
+        group: 'Ouvrir',
+        action: function () {
+          if (typeof opts.onOpen === 'function') opts.onOpen();
+        },
+      },
+    ];
+    items.push({ sep: true });
+    items.push(
+      opts.archived
+        ? {
+            id: 'restore-chat',
+            label: 'Restaurer',
+            icon: 'archive-off',
+            group: 'Modifier',
+            action: function () {
+              if (typeof opts.onRestore === 'function') opts.onRestore();
+            },
+          }
+        : {
+            id: 'archive-chat',
+            label: 'Archiver',
+            icon: 'archive',
+            group: 'Modifier',
+            action: function () {
+              if (typeof opts.onArchive === 'function') opts.onArchive();
+            },
+          }
+    );
+    return items;
+  }
+
   /** Gantt card / subtask label row. */
   function buildGanttCardItems(opts) {
     opts = opts || {};
@@ -1709,6 +1750,7 @@
     items.push({
       id: 'bulk-done',
       label: 'Terminer',
+      success: true,
       disabled: count < 1,
       action: function () {
         if (typeof opts.onDone === 'function') opts.onDone();
@@ -2222,6 +2264,7 @@
     buildStatutChipItems: buildStatutChipItems,
     buildHeatSegmentItems: buildHeatSegmentItems,
     buildAgentMessageItems: buildAgentMessageItems,
+    buildAgentChatItems: buildAgentChatItems,
     buildGanttCardItems: buildGanttCardItems,
     buildGanttBarItems: buildGanttBarItems,
     buildHistoryEntryItems: buildHistoryEntryItems,

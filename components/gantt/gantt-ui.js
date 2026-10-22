@@ -2209,6 +2209,65 @@
       }, function () { /* the glyph stays until the next reload */ });
     }
 
+    function saveProjectPriority(projectId, score) {
+      var GG = global.MindmapGoalsTrello;
+      var WO = global.WorkOS;
+      if (!projectId || !GG || typeof GG.save !== 'function' || !WO || typeof WO.withNodeEdit !== 'function') {
+        setStatus('Projet indisponible', true);
+        return;
+      }
+      var next = WO.withNodeEdit(state.goals, projectId, { priority: score });
+      state.goals = next;
+      applySort();
+      renderChart();
+      setStatus(score == null ? 'Priorité retirée' : 'Priorité enregistrée');
+      GG.save(t, next).then(function (saved) {
+        if (saved) state.goals = saved;
+        applySort();
+        renderChart();
+      }, function () {
+        setStatus('Échec de l’enregistrement du projet', true);
+        reload({ quiet: true });
+      });
+    }
+
+    function projectSectionMeta(row) {
+      if (!row || row.sectionKey !== 'project') return [];
+      var nodes = [];
+      var hasPri = typeof row.priority === 'number';
+      if (!row.projectId) {
+        nodes.push(el('span', 'gantt-section-pri is-empty', { text: '-', 'aria-hidden': 'true' }));
+      } else {
+        var pri = el('button', 'gantt-section-pri' + (hasPri ? '' : ' is-empty'), {
+          type: 'button',
+          title: 'Priorité',
+          text: hasPri && global.TableModel ? global.TableModel.formatPriority(row.priority) : (hasPri ? String(row.priority) : '-'),
+        });
+        pri.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+        pri.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!global.TableModel || !global.ContextMenu || typeof global.ContextMenu.show !== 'function') return;
+          var rect = pri.getBoundingClientRect();
+          global.ContextMenu.show(
+            { clientX: rect.left, clientY: rect.bottom + 4 },
+            global.TableModel.projectPriorityItems(row.priority, function (score) {
+              saveProjectPriority(row.projectId, score);
+            })
+          );
+        });
+        nodes.push(pri);
+      }
+      var stats = global.TableModel && typeof global.TableModel.sectionStats === 'function'
+        ? global.TableModel.sectionStats(row.children || [])
+        : { progress: null, subs: 0 };
+      nodes.push(el('span', 'gantt-section-prog' + (stats.progress == null ? ' is-empty' : ''), {
+        text: stats.progress == null ? '-' : stats.progress + '%',
+        title: stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches',
+      }));
+      return nodes;
+    }
+
     /** The project a card belongs to, or null. Subtasks stay on the card. */
     function projectOfNode(node) {
       var W = global.WorkOS;
@@ -2216,7 +2275,12 @@
       var p = null;
       try { p = W.projectOf(state.goals, node.cardId); } catch (e) { p = null; }
       if (!p || !p.id) return null;
-      return { id: p.id, name: p.name || 'Projet', icon: p.icon || null };
+      return {
+        id: p.id,
+        name: p.name || 'Projet',
+        icon: p.icon || null,
+        priority: typeof p.priority === 'number' ? p.priority : null,
+      };
     }
 
     /** CSS tone (`is-project`) and the drop key (`project:<id>`, empty id = Sans projet). */
@@ -4981,6 +5045,7 @@
             }));
           }
           sectionCell.appendChild(sectionTitle);
+          projectSectionMeta(row).forEach(function (node) { sectionCell.appendChild(node); });
           if (row.children && row.children.length) {
             var shownInSection = sectionShownCount(row);
             var sectionCount = el('span', 'gantt-section-count', {

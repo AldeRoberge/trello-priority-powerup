@@ -719,7 +719,7 @@
         var closed = !!(JM().isClosed && JM().isClosed(rec));
         items.push(closed
           ? { id: 'done', label: 'Rouvrir', icon: 'circle', action: function () { reopen(id); } }
-          : { id: 'done', label: 'Terminer', icon: 'check', action: function () { complete(id); } });
+          : { id: 'done', label: 'Terminer', icon: 'check', success: true, action: function () { complete(id); } });
         if (!closed) {
           items.push({ id: 'sub', label: 'Nouvelle sous-tâche', icon: 'plus', action: function () { startAdding(id); } });
         }
@@ -852,9 +852,9 @@
       var row = el('div', 'jy-bar');
       var search = el('input', 'jy-search tp-search-input');
       search.type = 'search';
-      search.placeholder = 'Filtrer…';
+      search.placeholder = 'Rechercher…';
       search.value = state.query;
-      search.setAttribute('aria-label', 'Filtrer');
+      search.setAttribute('aria-label', 'Rechercher');
       search.addEventListener('input', function () {
         state.query = search.value;
         state.fitNext = true;

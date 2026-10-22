@@ -2,6 +2,7 @@
  * Role: boots the project-scope Assistant (AgentUI, scope 'project') into any container.
  * Shared by assistant.html (full page) and the Table/Gantt views (docked panel) so the same
  * memory / profile / people / places / board-digest wiring backs every assistant surface.
+ * It opens on a new conversation and lists the earlier ones (agent-chats.js, agent-chats-ui.js).
  *
  *   AssistantMount.mount(containerEl, t, { onLayoutChange, focusComposer, resizeBody })
  *     → Promise<void> (resolves once AgentUI is mounted)
@@ -64,6 +65,15 @@
         })
       : Promise.resolve(null);
 
+    // The conversation list is kept per board: its storage key is the board id.
+    var boardId =
+      t && typeof t.board === 'function'
+        ? Promise.resolve(t.board('id')).then(
+            function (b) { return (b && (b.id || b)) || ''; },
+            function () { return ''; }
+          )
+        : Promise.resolve('');
+
     // Independent loads run in parallel; the memory refresh needs the provider.
     return Promise.all([
       AM ? AM.load(t).catch(function () { return null; }) : null,
@@ -71,26 +81,14 @@
       loadDir(global.People),
       loadDir(global.Places),
       provider,
-      scanDigest(),
+      boardId,
     ]).then(function (res) {
       cachedMemory = res[0];
       cachedProfile = res[1];
       cachedPeople = res[2];
       cachedPlaces = res[3];
       var prov = res[4];
-      var memoryP = Promise.resolve(cachedMemory);
-      if (AM && typeof AM.scanAndRefresh === 'function' && PA && PA.isConfigured && PA.isConfigured(prov)) {
-        memoryP = AM.scanAndRefresh(t, prov, { force: false }).then(
-          function (m) {
-            if (m) cachedMemory = m;
-            return m;
-          },
-          function () {
-            return cachedMemory;
-          }
-        );
-      }
-      return memoryP.then(function () {
+      return Promise.resolve().then(function () {
         var needsAlign = AM && AM.needsOnboarding && AM.needsOnboarding(cachedMemory);
         function refresh(name, mod) {
           return async function () {
@@ -128,6 +126,7 @@
           scope: 'project',
           standalone: true,
           initiallyOpen: true,
+          chatList: { key: res[5] },
           focusComposer: options.focusComposer !== false,
           preferComposer: !!options.preferComposer,
           openMemoryOnSettings: !!needsAlign,
@@ -173,6 +172,16 @@
           },
         });
         resize();
+        // Slow work (board scan, LLM memory refresh) runs once the chat is on screen; the getters read the caches.
+        scanDigest();
+        if (AM && typeof AM.scanAndRefresh === 'function' && PA && PA.isConfigured && PA.isConfigured(prov)) {
+          AM.scanAndRefresh(t, prov, { force: false }).then(
+            function (m) {
+              if (m) cachedMemory = m;
+            },
+            function () {}
+          );
+        }
       });
     });
   }

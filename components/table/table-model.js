@@ -162,22 +162,164 @@
     return rows;
   }
 
+  /** A project priority is a score from 0 to 10, one decimal. Anything else is none. */
+  function clampPriority(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return null;
+    return Math.round(Math.max(0, Math.min(10, n)) * 10) / 10;
+  }
+
+  function formatPriority(n) {
+    var c = clampPriority(n);
+    return c == null ? '' : String(c);
+  }
+
+  var PROJECT_TIERS = [
+    { label: 'Critique', score: 9.3 },
+    { label: 'Urgente', score: 7.9 },
+    { label: 'Prioritaire', score: 6.5 },
+    { label: 'Importante', score: 5 },
+    { label: 'Flexible', score: 3.6 },
+    { label: 'Secondaire', score: 2.1 },
+    { label: 'Optionnelle', score: 0.7 },
+  ];
+
+  /** The seven priority levels, highest first. The board's heat scale when PriorityUI is loaded. */
+  function projectTiers() {
+    var ui = global.PriorityUI;
+    var segs = ui && ui.HEAT_SEGMENTS;
+    var list = [];
+    if (segs && segs.length) {
+      segs.forEach(function (s) {
+        var score = clampPriority(s && Number(s.target));
+        if (s && s.label && score != null) list.push({ label: s.label, score: score });
+      });
+    }
+    if (!list.length) list = PROJECT_TIERS.slice();
+    if (list.length > 1 && list[0].score < list[list.length - 1].score) list.reverse();
+    return list;
+  }
+
+  /** Menu rows for a project's priority. `onSet(score|null)` writes the choice. */
+  function projectPriorityItems(current, onSet) {
+    var cur = clampPriority(current);
+    var items = projectTiers().map(function (tier) {
+      return {
+        icon: 'flag',
+        label: tier.label,
+        hint: formatPriority(tier.score),
+        checked: cur === tier.score,
+        action: function () { onSet(tier.score); },
+      };
+    });
+    if (cur != null) {
+      items.push({ sep: true });
+      items.push({ icon: 'flag-off', label: 'Retirer', action: function () { onSet(null); } });
+    }
+    return items;
+  }
+
+  /** Checklist leaves (not cards linked elsewhere). Returns whether any leaf was found. */
+  function leafProgress(items, out) {
+    var any = false;
+    (items || []).forEach(function (it) {
+      if (!it || it.linkedCardId) return;
+      if (it.items && it.items.length) {
+        if (leafProgress(it.items, out)) any = true;
+        return;
+      }
+      any = true;
+      if (typeof it.progress === 'number' && isFinite(it.progress)) out.push(Math.max(0, Math.min(100, it.progress)));
+      else out.push(it.done ? 100 : 0);
+    });
+    return any;
+  }
+
   /**
-   * Sections by project, in order of first appearance, "Sans projet" last. Rows keep their order inside a
-   * section. Null when no row has a project (the grid stays one flat list). folded: { key: true }.
+   * Progress of a project's tasks. A task with subtasks counts as their average; otherwise its own
+   * progress. The section average weighs each task once. { progress, tasks, subs }.
    */
-  function groupByProject(rows, folded) {
+  function sectionStats(rows) {
+    var parts = [];
+    var subs = 0;
+    (rows || []).forEach(function (r) {
+      if (!r) return;
+      var leaves = [];
+      if (leafProgress(r.items, leaves)) {
+        subs += leaves.length;
+        var sum = 0;
+        leaves.forEach(function (n) { sum += n; });
+        parts.push(sum / leaves.length);
+      } else if (typeof r.progress === 'number' && isFinite(r.progress)) {
+        parts.push(Math.max(0, Math.min(100, r.progress)));
+      }
+    });
+    var progress = null;
+    if (parts.length) progress = Math.round(parts.reduce(function (a, b) { return a + b; }, 0) / parts.length);
+    return { progress: progress, tasks: (rows || []).filter(Boolean).length, subs: subs };
+  }
+
+  /**
+   * Sections by project, in order of first appearance, then projects with no card yet, "Sans projet" last.
+   * Rows keep their order inside a section. Null when nothing is a project (the grid stays one flat list).
+   * folded: { key: true }. projects: [{ id, name, icon, priority }] from the goal map, so an empty
+   * project stays a drop target and keeps the priority set on its header.
+   */
+  function groupByProject(rows, folded, projects) {
     var by = {};
     var list = [];
     var free = [];
     (rows || []).forEach(function (r) {
-      if (!r.project) { free.push(r); return; }
+      if (!r || !r.project) { if (r) free.push(r); return; }
       var g = by[r.project];
-      if (!g) { g = by[r.project] = { key: 'p:' + r.project, id: r.projectId || '', icon: r.projectIcon || null, name: r.project, rows: [], free: false }; list.push(g); }
+      if (!g) {
+        g = by[r.project] = {
+          key: 'p:' + r.project,
+          id: r.projectId || '',
+          icon: r.projectIcon || null,
+          name: r.project,
+          rows: [],
+          free: false,
+          priority: null,
+        };
+        list.push(g);
+      }
+      if (!g.id && r.projectId) g.id = r.projectId;
+      if (!g.icon && r.projectIcon) g.icon = r.projectIcon;
       g.rows.push(r);
     });
+    var catalog = [];
+    (projects || []).forEach(function (p) {
+      if (p && p.id && p.name) catalog.push(p);
+    });
+    if (!list.length && !catalog.length) return null;
+    function findGroup(p) {
+      var i;
+      for (i = 0; i < list.length; i++) {
+        if (list[i].free) continue;
+        if ((p.id && list[i].id === p.id) || list[i].name === p.name) return list[i];
+      }
+      return null;
+    }
+    catalog.forEach(function (p) {
+      var g = findGroup(p);
+      if (g) {
+        if (!g.id) g.id = p.id;
+        if (p.icon) g.icon = p.icon;
+        g.priority = clampPriority(p.priority);
+        return;
+      }
+      list.push({
+        key: 'p:' + p.name,
+        id: p.id,
+        icon: p.icon || null,
+        name: p.name,
+        rows: [],
+        free: false,
+        priority: clampPriority(p.priority),
+      });
+    });
+    if (free.length) list.push({ key: 'p:', id: '', name: 'Sans projet', rows: free, free: true, priority: null });
     if (!list.length) return null;
-    if (free.length) list.push({ key: 'p:', name: 'Sans projet', rows: free, free: true });
     list.forEach(function (g) { g.open = !(folded && folded[g.key]); });
     return list;
   }
@@ -405,6 +547,11 @@
     subtaskRows: subtaskRows,
     withHierarchy: withHierarchy,
     groupByProject: groupByProject,
+    clampPriority: clampPriority,
+    formatPriority: formatPriority,
+    projectTiers: projectTiers,
+    projectPriorityItems: projectPriorityItems,
+    sectionStats: sectionStats,
     urgencyLabel: function (id) { return URGENCY_LABELS[id] || ''; },
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,

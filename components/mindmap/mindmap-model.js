@@ -226,6 +226,9 @@
       if (icon) node.icon = icon;
       var listId = level === 'project' && typeof n.listId === 'string' ? n.listId.trim().slice(0, 32) : '';
       if (listId && /^[A-Za-z0-9]+$/.test(listId)) node.listId = listId;
+      if (level === 'project' && typeof n.priority === 'number' && isFinite(n.priority)) {
+        node.priority = Math.round(Math.max(0, Math.min(10, n.priority)) * 10) / 10;
+      }
       nodes.push(node);
     });
     var links = [];

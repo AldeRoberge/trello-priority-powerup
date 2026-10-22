@@ -59,6 +59,14 @@
   color: var(--tp-danger-text, #c9372c);
 }
 
+.tp-context-menu-item.is-success {
+  color: var(--tp-success, #216e4e);
+}
+
+.tp-context-menu-item.is-success .tp-context-menu-icon {
+  opacity: 1;
+}
+
 .tp-context-menu-item-label {
   flex: 1 1 auto;
   min-width: 0;
@@ -212,6 +220,10 @@ html[data-color-mode='dark'] .tp-context-menu-sep {
 
 html[data-color-mode='dark'] .tp-context-menu-item.is-danger {
   color: var(--tp-danger-text, #fd9891);
+}
+
+html[data-color-mode='dark'] .tp-context-menu-item.is-success {
+  color: var(--tp-success, #4bce97);
 }
 
 html[data-color-mode='dark'] .tp-context-menu-item:disabled:hover,

@@ -663,6 +663,37 @@
   outline: none;
 }
 
+.gantt-section-pri,
+.gantt-section-prog {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: right;
+}
+.gantt-section-pri {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: inherit;
+  cursor: pointer;
+}
+.gantt-section-prog { width: 40px; color: var(--tp-text-muted, #44546f); font-weight: 500; }
+.gantt-section-pri.is-empty,
+.gantt-section-prog.is-empty { opacity: 0.55; color: var(--tp-text-muted, #44546f); font-weight: 500; }
+button.gantt-section-pri.is-empty { cursor: pointer; }
+.gantt-section-pri:hover { background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06)); opacity: 1; }
 .gantt-section-count {
   flex: 0 0 auto;
   margin-left: 2px;

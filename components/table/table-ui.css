@@ -731,4 +731,19 @@ body.tb-resizing {
 .tb-section-in { position: sticky; left: 96px; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px; font-weight: 600; }
 .tb-section-in .ti { flex: none; font-size: 15px; color: var(--tp-text-muted); }
 .tb-section.is-free .tb-section-in { font-weight: 500; color: var(--tp-text-muted); }
-.tb-section-count { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--tp-surface-active); color: var(--tp-text-muted); font-size: 11px; font-weight: 600; text-align: center; }
+.tb-section-name { flex: none; width: 280px; line-height: 1.25; overflow-wrap: anywhere; }
+.tb-section-pri,
+.tb-section-prog { flex: none; display: inline-flex; align-items: center; justify-content: flex-end; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.tb-section-pri {
+  width: 36px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--tp-text); cursor: pointer;
+}
+.tb-section-pri.is-empty { color: var(--tp-text-muted); opacity: 0.55; font-weight: 500; cursor: default; }
+button.tb-section-pri.is-empty { cursor: pointer; }
+.tb-section-pri:hover { background: var(--tp-surface-active); opacity: 1; }
+.tb-section-prog { width: 72px; gap: 4px; font-size: 12px; font-weight: 600; color: var(--tp-text-muted); }
+.tb-section-prog.is-empty { opacity: 0.55; font-weight: 500; }
+.tb-section-prog .tb-prog-ring { width: 16px; height: 16px; flex: none; }
+.tb-section-count { flex: none; width: 28px; box-sizing: border-box; min-width: 28px; padding: 0 6px; border-radius: 999px; background: var(--tp-surface-active); color: var(--tp-text-muted); font-size: 11px; font-weight: 600; text-align: center; }
+.tb-section.is-drop-on td:not(.tb-num),
+tr.is-drop-on td:not(.tb-num) { box-shadow: inset 0 0 0 2px var(--tp-primary); }

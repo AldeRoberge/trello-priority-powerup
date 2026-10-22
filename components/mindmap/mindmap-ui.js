@@ -300,8 +300,8 @@
 
     function renderBar() {
       var filter = h('input', {
-        class: 'mm-filter tp-search-input', type: 'search', placeholder: 'Filtrer…', value: state.filter,
-        'aria-label': 'Filtrer',
+        class: 'mm-filter tp-search-input', type: 'search', placeholder: 'Rechercher…', value: state.filter,
+        'aria-label': 'Rechercher',
       });
       filter.addEventListener('input', function () {
         state.filter = filter.value;

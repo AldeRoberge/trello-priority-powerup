@@ -1,0 +1,206 @@
+/* Conversation list on the left of the Assistant page (agent-chats-ui.js). Colors from trello-theme.css (--tp-*). */
+.agent-chats-layout {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.agent-chats-layout > .variant-chat-section {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.agent-chats {
+  flex: 0 0 248px;
+  width: 248px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 6px 8px 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: 1px solid var(--tp-border);
+  background: var(--tp-surface);
+  font-size: 13px;
+}
+.agent-chats-layout:not(.is-chats-open) > .agent-chats {
+  display: none;
+}
+
+/* New conversation */
+.agent-chats-new {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--tp-border-strong, var(--tp-border));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.agent-chats-new .ti {
+  font-size: 16px;
+  color: var(--tp-text-subtle);
+}
+.agent-chats-new:hover,
+.agent-chats-new.is-current {
+  background: var(--tp-surface-hover);
+}
+
+/* Day groups and rows */
+.agent-chats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.agent-chats-list[hidden] {
+  display: none;
+}
+.agent-chats-group-title {
+  padding: 10px 8px 3px;
+  color: var(--tp-text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  opacity: 0.8;
+}
+.agent-chats-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  border-radius: 8px;
+}
+.agent-chats-row:hover {
+  background: var(--tp-surface-hover);
+}
+.agent-chats-row.is-current {
+  background: color-mix(in srgb, var(--tp-primary) 14%, transparent);
+}
+.agent-chats-item {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 4px 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.agent-chats-row.is-archived .agent-chats-item {
+  color: var(--tp-text-subtle);
+}
+
+/* Archive / restore: its place is reserved on every row, only its opacity changes */
+.agent-chats-act {
+  flex: 0 0 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 3px 3px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-subtle);
+  font-size: 15px;
+  opacity: 0;
+  cursor: pointer;
+}
+.agent-chats-row:hover .agent-chats-act,
+.agent-chats-row.is-current .agent-chats-act,
+.agent-chats-act:focus-visible {
+  opacity: 0.7;
+}
+.agent-chats-act:hover {
+  background: var(--tp-border);
+  color: var(--tp-text);
+  opacity: 1;
+}
+@media (hover: none) {
+  .agent-chats-act {
+    opacity: 0.55;
+  }
+}
+
+/* Archived list */
+.agent-chats-archived-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.agent-chats-archived-toggle:hover:not(:disabled) {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+.agent-chats-archived-toggle.is-empty {
+  opacity: 0.4;
+  cursor: default;
+}
+.agent-chats-archived-count {
+  margin-left: auto;
+}
+.agent-chats-note {
+  flex: none;
+  padding: 2px 8px;
+  color: var(--tp-text-muted);
+  font-size: 11px;
+  opacity: 0.8;
+}
+.agent-chats-note[hidden] {
+  display: none;
+}
+
+/* The assistant is answering: opening and new are quieter, in the same place */
+.agent-chats.is-locked .agent-chats-new,
+.agent-chats.is-locked .agent-chats-row:not(.is-archived) .agent-chats-item {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Header buttons: show / hide the list, new conversation when the list is hidden */
+.agent-chats-layout.is-chats-open .agent-chats-head-new {
+  display: none;
+}
+.agent-chats-head-toggle {
+  margin-left: 0;
+  margin-right: 2px;
+}
+
+/* Narrow window (board bar): the list floats over the chat instead of squeezing it */
+@media (max-width: 759px) {
+  .agent-chats-layout > .agent-chats {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(280px, 86%);
+    box-shadow: 4px 0 24px rgba(9, 30, 66, 0.25);
+  }
+}

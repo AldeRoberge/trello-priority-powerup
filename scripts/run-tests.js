@@ -119,6 +119,7 @@ const UNIT_FILES = [
   'triage-image.test.js',
   'quick-find.test.js',
   'assistant-dock.test.js',
+  'agent-chats.test.js',
 ];
 
 function listTests() {

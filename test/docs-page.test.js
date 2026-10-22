@@ -32,6 +32,7 @@ describe('document page (subject + fields)', () => {
     assert.deepEqual(back.subject, { k: 'task', id: 'card123' });
     assert.deepEqual(back.props.tags, ['Urgent', 'Plan']);
     assert.deepEqual(back.props.people, ['m1']);
+    assert.deepEqual(DM.normalizeProps({ people: ['person-m1abc-xy12', 'person-m1abc-xy12'] }).people, ['person-m1abc-xy12']);
   });
 
   it('drops a forged or unknown subject and keeps a cover line', () => {

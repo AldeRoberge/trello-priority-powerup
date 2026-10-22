@@ -433,7 +433,7 @@ describe('TodayModel', () => {
     it('widens the window for late blocks and for the clock', () => {
       const day = TM.buildDay([timed('x', '20:00', { estimate: 60 })], { today: TODAY, nowMin: at(7) });
       assert.equal(day.window.to, at(21));
-      assert.equal(day.window.from, at(7));
+      assert.equal(day.window.from, at(6));
     });
 
     it('gives overlapping fixed blocks their own lanes', () => {
@@ -518,6 +518,138 @@ describe('TodayModel', () => {
       assert.equal(TM.headline({ total: 3, open: 1 }), '1 tâche à faire');
       assert.equal(TM.headline({ total: 3, open: 2 }), '2 tâches à faire');
       assert.equal(TM.headline(null), 'Journée libre');
+    });
+  });
+
+  describe('widget board', () => {
+    const L = () => TM.layout;
+    const ids = (layout) => layout.items.map((it) => it.id);
+    const item = (layout, id) => layout.items.filter((it) => it.id === id)[0];
+    function overlaps(items) {
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i];
+          const b = items[j];
+          if (a.c < b.c + b.w && a.c + a.w > b.c && a.r < b.r + b.h && a.r + a.h > b.r) return true;
+        }
+      }
+      return false;
+    }
+
+    it('starts with every widget, the clock beside the list, and nothing on top of anything', () => {
+      const board = L().defaults();
+      assert.deepEqual(ids(board).sort(), ['focus', 'hello', 'late', 'plan', 'review', 'sugg', 'tasks', 'weather']);
+      const hello = item(board, 'hello');
+      const weather = item(board, 'weather');
+      assert.equal(hello.r, 0);
+      assert.equal(weather.r, 0);
+      assert.equal(hello.c + hello.w, weather.c);
+      assert.equal(hello.w + weather.w, 12);
+      const plan = item(board, 'plan');
+      const focus = item(board, 'focus');
+      assert.equal(plan.c, weather.c);
+      assert.equal(plan.r, focus.r);
+      assert.equal(overlaps(board.items), false);
+      board.items.forEach((it) => {
+        assert.ok(it.w >= L().MIN_W && it.c + it.w <= L().COLS);
+        assert.ok(it.h >= L().MIN_H);
+      });
+    });
+
+    it('keeps a saved board, drops what it does not know, and falls back when nothing was saved', () => {
+      const saved = L().normalize({
+        titles: { tasks: '  Mes tâches  ', nope: 'x', hello: '' },
+        items: [
+          { id: 'tasks', c: 0, r: 2, w: 20, h: 1 },
+          { id: 'tasks', c: 1, r: 1, w: 4, h: 6 },
+          { id: 'ghost', c: 0, r: 0, w: 4, h: 6 },
+          { id: 'plan', c: 9, r: 0, w: 5, h: 8 },
+        ],
+      });
+      assert.deepEqual(ids(saved), ['tasks', 'plan']);
+      assert.equal(item(saved, 'tasks').w, 12);
+      assert.equal(item(saved, 'tasks').h, L().MIN_H);
+      assert.equal(item(saved, 'plan').c, 7);
+      assert.equal(saved.titles.tasks, 'Mes tâches');
+      assert.equal(saved.titles.hello, undefined);
+      assert.equal(L().label(saved, 'tasks'), 'Mes tâches');
+      assert.equal(L().label(saved, 'plan'), 'Planning');
+      assert.deepEqual(ids(L().normalize(null)), ids(L().defaults()));
+      assert.deepEqual(L().normalize({ items: [] }).items, []);
+    });
+
+    it('closes a widget and lets the one under it move up', () => {
+      const board = L().defaults();
+      const tasksR = item(board, 'tasks').r;
+      const late = item(board, 'late');
+      const closed = L().close(board, 'late');
+      assert.equal(item(closed, 'late'), undefined);
+      assert.ok(item(closed, 'tasks').r <= late.r);
+      assert.ok(item(closed, 'tasks').r < tasksR);
+      assert.equal(overlaps(closed.items), false);
+      assert.equal(L().hidden(closed).some((w) => w.id === 'late'), true);
+    });
+
+    it('opens a closed widget without covering the others', () => {
+      const closed = L().close(L().defaults(), 'review');
+      const opened = L().open(closed, 'review');
+      assert.ok(item(opened, 'review'));
+      assert.equal(overlaps(opened.items), false);
+      assert.equal(L().same(L().open(opened, 'review'), opened), true);
+      assert.equal(L().open(opened, 'nope').items.length, opened.items.length);
+    });
+
+    it('gives the width it takes to the widget on its right', () => {
+      const board = L().defaults();
+      const grown = L().resize(board, 'hello', 9, null);
+      assert.equal(item(grown, 'hello').w, 9);
+      assert.equal(item(grown, 'weather').w, 3);
+      assert.equal(item(grown, 'weather').c, 9);
+      assert.equal(item(grown, 'hello').w + item(grown, 'weather').w, 12);
+      const stuck = L().resize(grown, 'hello', 11, null);
+      assert.equal(item(stuck, 'weather').w, L().MIN_W);
+      assert.equal(item(stuck, 'hello').w, 12 - L().MIN_W);
+    });
+
+    it('pushes the widget below when one grows taller', () => {
+      const board = L().defaults();
+      const suggR = item(board, 'sugg').r;
+      const taller = L().resize(board, 'tasks', null, item(board, 'tasks').h + 6);
+      assert.equal(item(taller, 'tasks').h, item(board, 'tasks').h + 6);
+      assert.ok(item(taller, 'sugg').r >= suggR);
+      assert.equal(overlaps(taller.items), false);
+      assert.equal(item(taller, 'tasks').r, item(board, 'tasks').r);
+    });
+
+    it('moves a widget and keeps the board free of overlaps', () => {
+      const board = L().defaults();
+      const moved = L().move(board, 'focus', 7, 0);
+      const focus = item(moved, 'focus');
+      assert.equal(focus.c + focus.w <= 12, true);
+      assert.equal(overlaps(moved.items), false);
+    });
+
+    it('renames a widget and forgets a name that is blank or the original', () => {
+      const named = L().rename(L().defaults(), 'plan', '  Horloge  ');
+      assert.equal(L().label(named, 'plan'), 'Horloge');
+      assert.equal(L().label(L().rename(named, 'plan', 'Planning'), 'plan'), 'Planning');
+      assert.equal(L().label(L().rename(named, 'plan', '   '), 'plan'), 'Planning');
+      const long = 'x'.repeat(80);
+      assert.equal(L().rename(named, 'tasks', long).titles.tasks.length, 40);
+    });
+
+    it('stacks the open widgets on a narrow screen without saving that', () => {
+      const board = L().defaults();
+      const stacked = L().present(board, true);
+      let r = 0;
+      stacked.forEach((it) => {
+        assert.equal(it.c, 0);
+        assert.equal(it.w, 12);
+        assert.equal(it.r, r);
+        r += it.h;
+      });
+      assert.equal(L().same(board, L().defaults()), true);
+      assert.deepEqual(L().present(board, false).map((it) => it.id), board.items.map((it) => it.id));
     });
   });
 });

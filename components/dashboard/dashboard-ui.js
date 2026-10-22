@@ -1618,14 +1618,68 @@
       return docUI.el;
     }
 
+    /** Drag handle between the list and the detail pane; the list width is remembered. */
+    function splitGrip(page) {
+      var KEY = 'tp-split-width:triage';
+      var MIN = 260;
+      function room() { var w = page.getBoundingClientRect().width; return w ? Math.max(MIN, w - 360) : 4000; }
+      function apply(w) { page.style.setProperty('--db-split-w', Math.max(MIN, Math.min(room(), w)) + 'px'); }
+      function save(w) { try { global.localStorage.setItem(KEY, String(w)); } catch (e) {} }
+      var left = function () { return page.querySelector('.db-split-l'); };
+      try {
+        var saved = parseInt(global.localStorage.getItem(KEY), 10);
+        if (saved) apply(saved);
+      } catch (e) {}
+      var grip = h('div', { class: 'sp-grip', role: 'separator', 'aria-orientation': 'vertical', 'aria-label': 'Redimensionner la liste', tabindex: '0' });
+      function current() { return Math.round(left().getBoundingClientRect().width); }
+      function set(w, persist) { apply(w); if (persist) save(current()); }
+      grip.addEventListener('pointerdown', function (e) {
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        var startX = e.clientX;
+        var startW = current();
+        grip.classList.add('is-drag');
+        document.documentElement.classList.add('sp-resizing');
+        try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+        function move(ev) { set(startW + (ev.clientX - startX), false); }
+        function done() {
+          grip.removeEventListener('pointermove', move);
+          grip.removeEventListener('pointerup', done);
+          grip.removeEventListener('pointercancel', done);
+          grip.classList.remove('is-drag');
+          document.documentElement.classList.remove('sp-resizing');
+          save(current());
+        }
+        grip.addEventListener('pointermove', move);
+        grip.addEventListener('pointerup', done);
+        grip.addEventListener('pointercancel', done);
+      });
+      grip.addEventListener('dblclick', function () {
+        page.style.removeProperty('--db-split-w');
+        try { global.localStorage.removeItem(KEY); } catch (e) {}
+      });
+      grip.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        set(current() + (e.key === 'ArrowRight' ? 16 : -16), true);
+      });
+      return h('div', { class: 'db-split-gripbox' }, [grip]);
+    }
+
+    function splitPage(l, r) {
+      var page = h('div', { class: 'db-page db-page--split' }, [l, r]);
+      page.insertBefore(splitGrip(page), r);
+      return page;
+    }
+
     function renderTriage() {
       var q = DM().triageQueue(viewRows());
       if (state.docOpen && global.TriageDocUI) {
         var open = triageListEl(q, null);
-        els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
+        els.main.appendChild(splitPage(
           h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
-          h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [docPane()]),
-        ]));
+          h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [docPane()])
+        ));
         return;
       }
       if (!q.length) {
@@ -1640,7 +1694,7 @@
       var sel = q.filter(function (r) { return r.id === state.selected; })[0] || triageOrder(q)[0] || q[0];
       state.selected = sel.id;
       var list = triageListEl(q, sel.id);
-      els.main.appendChild(h('div', { class: 'db-page db-page--split' }, [
+      els.main.appendChild(splitPage(
         h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
         h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pickedProject() && global.TriageUI.projectDetail
           ? global.TriageUI.projectDetail(pickedProject(), {
@@ -1655,8 +1709,8 @@
             saveStep: saveProjectStep,
             saveMetric: saveProjectMetric,
           })
-          : global.TriageUI.detail(sel, triageHost())]),
-      ]));
+          : global.TriageUI.detail(sel, triageHost())])
+      ));
     }
 
     /** List a task created in the orchestrator lands in, so it shows on the board (not in triage). */

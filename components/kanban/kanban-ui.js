@@ -325,8 +325,8 @@
       var filter = h('input', {
         class: 'kb-filter tp-search-input',
         type: 'search',
-        placeholder: 'Filtrer…',
-        'aria-label': 'Filtrer',
+        placeholder: 'Rechercher…',
+        'aria-label': 'Rechercher',
         value: state.filter,
         oninput: function (e) {
           state.filter = e.target.value;
@@ -768,8 +768,8 @@
       els.board.querySelectorAll('.is-over').forEach(function (n) { n.classList.remove('is-over'); });
       var m = els.board.querySelector('.kb-drop');
       if (m && m.parentNode) m.parentNode.removeChild(m);
-      els.board.querySelectorAll('.is-drop-before, .is-drop-after').forEach(function (n) {
-        n.classList.remove('is-drop-before', 'is-drop-after');
+      els.board.querySelectorAll('.is-drop-before, .is-drop-after, .is-drop-on').forEach(function (n) {
+        n.classList.remove('is-drop-before', 'is-drop-after', 'is-drop-on');
       });
     }
 
@@ -906,7 +906,7 @@
         }
         var at = dropIndex(body, e.clientY).index;
         var id = state.dragId;
-        dropCard(id, list.id, at, lane);
+        dropCard(id, list.id, at, lane, state.projects && !lane ? '' : null);
       });
     }
 
@@ -920,8 +920,66 @@
       return h('i', { class: 'ti ti-' + name + ' kb-proj-glyph', style: color ? 'color:' + color : '' });
     }
 
+    function projectTaskRows(projectId) {
+      return (state.rows || []).filter(function (r) { return r && r.projectId === projectId; });
+    }
+
+    function saveProjectPriority(id, score) {
+      var os = global.WorkOS;
+      var GG = global.MindmapGoalsTrello;
+      if (!id || !os || typeof os.withNodeEdit !== 'function' || !GG || typeof GG.save !== 'function') {
+        return setStatus('Projets indisponibles', 'error');
+      }
+      var next = os.withNodeEdit(state.goals, id, { priority: score });
+      state.goals = next;
+      renderBoard();
+      setStatus('Enregistrement…', 'busy');
+      GG.save(t, next).then(function (saved) {
+        state.goals = saved || next;
+        renderBoard();
+        setStatus(score == null ? 'Priorité retirée' : 'Priorité enregistrée', 'ok');
+      }, function () {
+        setStatus('Échec de l’enregistrement du projet', 'error');
+        reload({ quiet: true });
+      });
+    }
+
+    function projectPriorityButton(project) {
+      if (!project || !project.id) return h('span', { class: 'kb-proj-pri is-empty', text: '-', 'aria-hidden': 'true' });
+      var has = typeof project.priority === 'number';
+      var btn = h('button', {
+        class: 'kb-proj-pri' + (has ? '' : ' is-empty'),
+        type: 'button',
+        title: 'Priorité',
+        text: has && global.TableModel ? global.TableModel.formatPriority(project.priority) : (has ? String(project.priority) : '-'),
+      });
+      btn.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!global.TableModel || !MENU()) return;
+        var rect = btn.getBoundingClientRect();
+        MENU().show({ x: rect.left, y: rect.bottom + 4 }, [{ title: 'Priorité' }].concat(
+          global.TableModel.projectPriorityItems(project.priority, function (score) { saveProjectPriority(project.id, score); })
+        ));
+      });
+      btn.addEventListener('dragstart', function (e) { e.preventDefault(); e.stopPropagation(); });
+      return btn;
+    }
+
+    function projectProgress(projectId) {
+      var stats = global.TableModel && global.TableModel.sectionStats
+        ? global.TableModel.sectionStats(projectTaskRows(projectId))
+        : { progress: null, subs: 0 };
+      return h('span', {
+        class: 'kb-proj-prog' + (stats.progress == null ? ' is-empty' : ''),
+        title: stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches',
+        text: stats.progress == null ? '-' : stats.progress + '%',
+      });
+    }
+
     /** One project shell: its tasks in this column, and their subtasks on each tile. A guest is the same name in another column, not a second project to drag. */
-    function projectBlock(block, list) {
+    function projectBlock(block, list, body) {
       var id = block.project.id;
       var folded = !!state.projFolded[id];
       var guest = !!block.guest;
@@ -949,6 +1007,8 @@
         }, [icon(folded ? 'chevron-right' : 'chevron-down')]),
         projectGlyph(block.project),
         h('span', { class: 'kb-proj-name', text: block.project.name || 'Projet' }),
+        projectPriorityButton(block.project),
+        projectProgress(block.project.id),
         h('span', {
           class: 'kb-proj-n',
           text: block.tasks.length === block.total ? String(block.total) : block.tasks.length + '/' + block.total,
@@ -956,6 +1016,10 @@
       ]);
       if (!guest) {
         head.ondragstart = function (e) {
+          if (e.target && e.target.closest && e.target.closest('.kb-proj-pri')) {
+            e.preventDefault();
+            return;
+          }
           e.stopPropagation();
           state.dragProjectId = id;
           state.dragId = null;
@@ -971,7 +1035,30 @@
           clearDropMarks();
         };
       }
+      head.addEventListener('dragstart', function (e) {
+        if (e.target && e.target.closest && e.target.closest('.kb-proj-pri')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
       shell.appendChild(head);
+      shell.addEventListener('dragover', function (e) {
+        if (state.dragProjectId || !state.dragId) return;
+        e.preventDefault();
+        shell.classList.add('is-drop-on');
+      });
+      shell.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && shell.contains(e.relatedTarget)) return;
+        shell.classList.remove('is-drop-on');
+      });
+      shell.addEventListener('drop', function (e) {
+        if (state.dragProjectId || !state.dragId || !body) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearDropMarks();
+        var at = dropIndex(body, e.clientY).index;
+        dropCard(state.dragId, list.id, at, null, block.project.id);
+      });
       if (!folded) block.tasks.forEach(function (row) { shell.appendChild(tile(row, list)); });
       return shell;
     }
@@ -980,8 +1067,8 @@
       var list = col.list;
       var body = h('div', { class: 'kb-cards' });
       if (state.projects && col.blocks) {
-        col.blocks.forEach(function (block) { body.appendChild(projectBlock(block, list)); });
-        col.guests.forEach(function (block) { body.appendChild(projectBlock(block, list)); });
+        col.blocks.forEach(function (block) { body.appendChild(projectBlock(block, list, body)); });
+        col.guests.forEach(function (block) { body.appendChild(projectBlock(block, list, body)); });
         col.loose.forEach(function (row) { body.appendChild(tile(row, list)); });
       } else {
         col.cards.forEach(function (row) { body.appendChild(tile(row, list)); });
@@ -1214,11 +1301,12 @@
      * Moves a card into `listId` at `index` among that list's other cards (null = bottom).
      * `lane` (priority view): `index` counts the tiles of that row only.
      */
-    function dropCard(id, listId, index, lane) {
+    function dropCard(id, listId, index, lane, projectId) {
       state.dragId = null;
       var moved = findRow(id);
       var list = listById(listId);
       if (!moved || !list) return renderBoard();
+      var wantProject = projectId == null ? null : String(projectId);
       var siblings = KM().siblingsFor(state.rows, listId, id);
       var at = index == null ? siblings.length : index;
       // `index` counts the *visible* tiles; map it onto the full list so hidden cards keep their place.
@@ -1231,29 +1319,61 @@
       var pos = TM().dropPos(siblings, at);
       var listChanged = moved.listId !== listId;
       var from = { listId: moved.listId, statut: moved.statut, pos: moved.pos };
-      if (!listChanged && moved.pos === pos) return renderBoard();
-      moved.pos = pos;
-      moved.listId = listId;
-      moved.statut = list.name;
-      moved.statutKey = list.category;
-      moved.statutColor = list.color;
+      var projectChanged = wantProject != null && (moved.projectId || '') !== wantProject;
+      var nextGoals = null;
+      if (projectChanged) {
+        var os = global.WorkOS;
+        var GG = global.MindmapGoalsTrello;
+        if (!os || typeof os.withTaskProject !== 'function' || !GG || typeof GG.save !== 'function') {
+          setStatus('Projets indisponibles', 'error');
+          projectChanged = false;
+        } else {
+          nextGoals = os.withTaskProject(state.goals, id, wantProject || null);
+          state.goals = nextGoals;
+          if (typeof os.places === 'function') state.places = os.places(nextGoals);
+          moved.projectId = wantProject;
+        }
+      }
+      var orderChanged = listChanged || from.pos !== pos;
+      if (!orderChanged && !projectChanged) return renderBoard();
+      if (orderChanged) {
+        moved.pos = pos;
+        moved.listId = listId;
+        moved.statut = list.name;
+        moved.statutKey = list.category;
+        moved.statutColor = list.color;
+      }
       // Dropped into a hidden (completed) column: dissolve the tile instead of making it vanish.
       var tile = state.hideDone && !filtering() ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;
       var target = columns().filter(function (c) { return c.list.id === listId; })[0];
-      if (tile && target && target.hidden) {
+      if (tile && target && target.hidden && orderChanged) {
         tile.classList.remove('is-dragging');
         tile.classList.add('is-dissolving');
         setTimeout(renderBoard, 450);
       } else renderBoard();
       paintCount();
       setStatus('Enregistrement…', 'busy');
-      var op = listChanged ? TT().moveCard(t, id, listId, pos) : TT().reorderCard(t, id, pos);
-      op.then(function () {
-        if (listChanged) record({ type: 'move', targetId: id, title: moved.name, key: 'statut', before: from.statut, after: list.name, beforeVal: from.listId, afterVal: listId, beforePos: from.pos, afterPos: pos });
-        else record({ type: 'reorder', targetId: id, title: moved.name, after: list.name, beforeVal: from.pos, afterVal: pos });
+      var jobs = [];
+      if (orderChanged) {
+        var op = listChanged ? TT().moveCard(t, id, listId, pos) : TT().reorderCard(t, id, pos);
+        jobs.push(op.then(function () {
+          if (listChanged) record({ type: 'move', targetId: id, title: moved.name, key: 'statut', before: from.statut, after: list.name, beforeVal: from.listId, afterVal: listId, beforePos: from.pos, afterPos: pos });
+          else record({ type: 'reorder', targetId: id, title: moved.name, after: list.name, beforeVal: from.pos, afterVal: pos });
+        }));
+      }
+      if (nextGoals) {
+        jobs.push(global.MindmapGoalsTrello.save(t, nextGoals).then(function (saved) {
+          state.goals = saved || nextGoals;
+        }));
+      }
+      Promise.all(jobs).then(function () {
         var load = list.category === 'started' && global.WorkOS ? global.WorkOS.wip(state.rows, global.WorkOS.DEFAULT_WIP) : null;
         var note = load && load.over ? ' · En cours ' + load.count + '/' + load.cap : '';
-        setStatus((listChanged ? 'Carte déplacée dans « ' + list.name + ' »' : 'Ordre enregistré') + note, 'ok');
+        var msg = projectChanged
+          ? (wantProject ? 'Projet enregistré' : 'Projet retiré')
+          : (listChanged ? 'Carte déplacée dans « ' + list.name + ' »' : 'Ordre enregistré');
+        setStatus(msg + note, 'ok');
+        renderBoard();
       }, function (err) {
         fail(err);
         reload({ quiet: true });

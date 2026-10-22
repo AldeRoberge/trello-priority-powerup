@@ -566,6 +566,9 @@ body.tp-page--priority.tp-page--assistant {
   width: 100%;
   max-width: none;
   box-sizing: border-box;
+  /* Own stacking context: nothing inside the chat can paint over the tab strip's active underline. */
+  position: relative;
+  z-index: 0;
 }
 
 .tp-page--assistant .variant-chat-section--standalone .field--chat {

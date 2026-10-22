@@ -7,6 +7,7 @@
  *             resize, click an empty hour to add a task there.
  * Logic is in TodayModel (pure); the weather in Weather / WeatherUI. Every write goes through the helpers
  * dashboard-ui.js hands over (`api`), so the right-click menu, undo and Trello writes stay in one place.
+ * The page is a board of widgets (TodayModel.layout): move, resize, close, reopen, rename.
  * Exposes window.TodayUI.create(api) → { render(container) }. Styles: today-ui.css (prefix td-).
  */
 (function (global) {
@@ -19,7 +20,7 @@
   var DROP_STEP = 5; // minutes: where a drop or a resize lands
   var CLICK_STEP = 15; // minutes: where a click on an empty hour lands
   var PRIO_COLORS = ['#c9372c', '#e2740b', '#b38600', '#5e6ad2'];
-  var KEYS = { zoom: 'tp-today-zoom', week: 'tp-today-week', sugg: 'tp-today-sugg' };
+  var KEYS = { zoom: 'tp-today-zoom', week: 'tp-today-week', sugg: 'tp-today-sugg', layout: 'tp-today-layout' };
 
   function TM() { return global.TodayModel; }
   function DM() { return global.DashboardModel; }
@@ -88,6 +89,12 @@
       zoom: Math.max(0, Math.min(ZOOMS.length - 1, parseInt(recall(KEYS.zoom), 10) || DEFAULT_ZOOM)),
       week: recall(KEYS.week) === '1',
       sugg: recall(KEYS.sugg), // '1' open, '0' closed, null: open only when the day is light
+      layout: null,
+      scrolls: {},
+      narrow: false,
+      widgetGesture: false,
+      editing: null,
+      boardEl: null,
       listScroll: 0,
       planScroll: null, // null: scroll to the clock on the next render
       compose: null, // { at, text } while a task is typed on the timeline
@@ -118,14 +125,14 @@
       var typing = a && ui.root && ui.root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
       var menu = document.querySelector('.tp-context-menu, .wx-pop');
       var fields = global.CardFields && typeof global.CardFields.isOpen === 'function' && global.CardFields.isOpen();
-      return !!(typing || ui.drag || ui.resizing || menu || fields || ui.preview);
+      return !!(typing || ui.drag || ui.resizing || ui.widgetGesture || ui.editing || menu || fields || ui.preview);
     }
 
     function start() {
       if (ui.started) return;
       ui.started = true;
       WX().subscribe(function () {
-        repaintHero();
+        repaintSky();
         repaintGutter();
       });
       setInterval(tick, 30000);
@@ -166,7 +173,7 @@
       }).then(function (n) {
         if (n && n !== ui.name) {
           ui.name = n;
-          repaintHero();
+          repaintSky();
         }
       }, function () { /* the greeting works without a name */ });
     }
@@ -234,8 +241,9 @@
           type: 'button',
           title: 'Aller aux tâches en retard',
           onclick: function () {
-            var g = ui.root && ui.root.querySelector('.td-group--late');
-            if (g && g.scrollIntoView) g.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            var g = ui.root && ui.root.querySelector('.td-widget--late');
+            if (g && g.scrollIntoView) g.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            else commitLayout(TM().layout.open(ui.layout, 'late'));
           },
         }, [icon('alert-circle'), h('b', { text: String(s.overdue) }), h('small', { text: 'en retard' })]));
       }
@@ -256,36 +264,56 @@
       WUI().placePicker(anchor, { onPick: function (p) { WX().setPlace(p); } });
     }
 
-    function buildHero() {
+    function skyScene() {
       var live = WX().current();
       var model = live.model;
       var d = model ? WX().describe(model.now.code, model.now.isDay) : null;
       var hr = ui.now.getHours();
       var isDay = model ? model.now.isDay : hr >= 7 && hr < 19;
-      var scene = d ? d.scene : isDay ? 'clear-day' : 'clear-night';
-      return h('header', { class: 'td-hero', 'data-scene': scene }, [
-        WUI().sky(scene, isDay),
-        h('div', { class: 'td-hero-in' }, [
-          buildHello(),
-          WUI().panel(live, {
-            expanded: ui.week,
-            onPlace: openPlacePicker,
-            onToggle: function () {
-              ui.week = !ui.week;
-              remember(KEYS.week, ui.week ? '1' : '0');
-              repaintHero();
-            },
-            onRefresh: function () { WX().refresh({ force: true }); },
-          }),
-        ]),
-      ]);
+      return { live: live, scene: d ? d.scene : isDay ? 'clear-day' : 'clear-night', isDay: isDay };
     }
 
-    function repaintHero() {
-      if (!ui.heroEl || !ui.heroEl.isConnected || !ui.day) return;
-      var fresh = buildHero();
-      ui.heroEl.replaceWith(fresh);
-      ui.heroEl = fresh;
+    function buildWeatherPanel(info) {
+      return WUI().panel(info.live, {
+        expanded: ui.week,
+        onPlace: openPlacePicker,
+        onToggle: function () {
+          ui.week = !ui.week;
+          remember(KEYS.week, ui.week ? '1' : '0');
+          repaintSky();
+        },
+        onRefresh: function () { WX().refresh({ force: true }); },
+      });
+    }
+
+    /** Greeting and weather keep their sky when the forecast or the name arrives. */
+    function repaintSky() {
+      if (!ui.root || !ui.root.isConnected || !ui.day || ui.editing) return;
+      var info = skyScene();
+      ['hello', 'weather'].forEach(function (id) {
+        var el = ui.root.querySelector('.td-widget--' + id);
+        if (!el) return;
+        el.setAttribute('data-scene', info.scene);
+        var sky = WUI().sky(info.scene, info.isDay);
+        var oldSky = el.querySelector(':scope > .wx-sky');
+        if (oldSky) oldSky.replaceWith(sky);
+        else el.insertBefore(sky, el.firstChild);
+        if (id === 'hello') {
+          var hello = el.querySelector('.td-hello');
+          if (hello) {
+            var freshHello = buildHello();
+            freshHello.classList.add('td-widget-body');
+            hello.replaceWith(freshHello);
+          }
+        } else {
+          var panel = el.querySelector('.wx');
+          if (panel) {
+            var freshWx = buildWeatherPanel(info);
+            freshWx.classList.add('td-widget-body');
+            panel.replaceWith(freshWx);
+          }
+        }
+      });
     }
 
     /* ── Rows ─────────────────────────────────────────────────────── */
@@ -407,18 +435,6 @@
       return el;
     }
 
-    function group(cls, iconName, title, count, rows, extra) {
-      var head = h('div', { class: 'td-group-h' }, [
-        icon(iconName),
-        h('span', { class: 'td-group-t', text: title }),
-        h('span', { class: 'td-count', text: String(count) }),
-        h('span', { class: 'td-spacer' }),
-        extra || null,
-      ]);
-      var body = h('div', { class: 'td-rows' }, rows);
-      return h('section', { class: 'td-group ' + cls }, [head, body]);
-    }
-
     /* ── Now / next ───────────────────────────────────────────────── */
 
     function focusCard(day) {
@@ -507,30 +523,9 @@
 
     /* ── À planifier ──────────────────────────────────────────────── */
 
-    function suggestions(day) {
+    function suggestionRows(day) {
       var skip = day.focus && day.focus.state === 'backlog' ? day.focus.row.id : null;
-      var list = TM().suggest(api.rows(), ui.today, 6, skip);
-      if (!list.length) return null;
-      var open = ui.sugg == null ? day.stats.open < 3 : ui.sugg === '1';
-      var head = h('button', {
-        class: 'td-group-h td-group-h--btn',
-        type: 'button',
-        'aria-expanded': open ? 'true' : 'false',
-        onclick: function () {
-          ui.sugg = open ? '0' : '1';
-          remember(KEYS.sugg, ui.sugg);
-          api.rerender();
-        },
-      }, [
-        icon('bulb'),
-        h('span', { class: 'td-group-t', text: 'À planifier' }),
-        h('span', { class: 'td-count', text: String(list.length) }),
-        h('span', { class: 'td-spacer' }),
-        icon(open ? 'chevron-up' : 'chevron-down', 'td-caret'),
-      ]);
-      var kids = [head];
-      if (open) kids.push(h('div', { class: 'td-rows' }, list.map(function (r) { return taskRow(r, 'sugg'); })));
-      return h('section', { class: 'td-group td-group--sugg' }, kids);
+      return TM().suggest(api.rows(), ui.today, 6, skip);
     }
 
     /* ── Left column ──────────────────────────────────────────────── */
@@ -547,61 +542,45 @@
       }, [icon(HD.icon(hidden)), h('span', { text: HD.label(hidden, count) })]);
     }
 
-    function buildList(day) {
+    function replanChip(rows) {
+      return api.menuChip('td-replan', 'Replanifier les tâches en retard', 'calendar-event', 'Replanifier', function () {
+        function go(iso, label) {
+          return function () {
+            api.planMany(rows.map(function (r) { return { id: r.id, date: iso, time: '' }; }), plural(rows.length, 'tâche replanifiée', 'tâches replanifiées') + ' : ' + label);
+          };
+        }
+        var tomorrow = DM().addDays(ui.today, 1);
+        return [
+          { id: 'rep:today', label: 'À aujourd’hui', icon: 'sun', action: go(ui.today, 'aujourd’hui') },
+          { id: 'rep:tomorrow', label: 'À demain', icon: 'arrow-curve-right', action: go(tomorrow, 'demain') },
+          { id: 'rep:monday', label: 'À lundi', icon: 'calendar-event', action: go(nextMonday(ui.today), 'lundi') },
+        ];
+      });
+    }
+
+    function buildTasksBody(day) {
       var s = day.stats;
       var scroll = h('div', { class: 'td-scroll' });
-      var focus = focusCard(day);
-      if (focus) scroll.appendChild(focus);
-
-      if (day.overdue.length) {
-        var replan = api.menuChip('td-replan', 'Replanifier les tâches en retard', 'calendar-event', 'Replanifier', function () {
-          var rows = day.overdue;
-          function go(iso, label) {
-            return function () {
-              api.planMany(rows.map(function (r) { return { id: r.id, date: iso, time: '' }; }), plural(rows.length, 'tâche replanifiée', 'tâches replanifiées') + ' : ' + label);
-            };
-          }
-          var tomorrow = DM().addDays(ui.today, 1);
-          return [
-            { id: 'rep:today', label: 'À aujourd’hui', icon: 'sun', action: go(ui.today, 'aujourd’hui') },
-            { id: 'rep:tomorrow', label: 'À demain', icon: 'arrow-curve-right', action: go(tomorrow, 'demain') },
-            { id: 'rep:monday', label: 'À lundi', icon: 'calendar-event', action: go(nextMonday(ui.today), 'lundi') },
-          ];
-        });
-        scroll.appendChild(group('td-group--late', 'alert-circle', 'En retard', day.overdue.length, day.overdue.map(function (r) { return taskRow(r, 'late'); }), replan));
-      }
-
       var todayRows = day.planned.map(function (r) { return taskRow(r, 'today'); });
       if (ui.showDone) day.done.forEach(function (r) { todayRows.push(taskRow(r, 'done')); });
-      var body;
+      var rows = h('div', { class: 'td-rows' }, todayRows);
       if (!todayRows.length) {
-        body = h('div', { class: 'td-empty' }, [
+        rows.appendChild(h('div', { class: 'td-empty' }, [
           icon(s.total ? 'circle-check' : 'sun'),
           h('p', { text: s.total ? 'Tout est fait.' : 'Rien de prévu aujourd’hui.' }),
           h('button', { class: 'db-btn', type: 'button', onclick: function () { api.go('orchestrator'); } }, [icon('calendar-event'), text('Ouvrir l’orchestrateur')]),
-        ]);
+        ]));
       }
-      var g = group('td-group--today', 'sun', 'Aujourd’hui', day.planned.length, todayRows);
-      if (body) g.querySelector('.td-rows').appendChild(body);
-      g.appendChild(addLine());
+      scroll.appendChild(rows);
+      scroll.appendChild(addLine());
       if (global.InsertGap && todayRows.length) {
-        global.InsertGap.watch(g.querySelector('.td-rows'), {
+        global.InsertGap.watch(rows, {
           item: '.td-task',
           placeholder: 'Titre…',
           onCreate: function (title) { createFromText(title); },
         });
       }
-      scroll.appendChild(g);
-
-      var sugg = suggestions(day);
-      if (sugg) scroll.appendChild(sugg);
-      var review = api.review();
-      if (review) {
-        review.classList.add('td-review');
-        scroll.appendChild(review);
-      }
-
-      scroll.addEventListener('scroll', function () { ui.listScroll = scroll.scrollTop; }, { passive: true });
+      scroll.addEventListener('scroll', function () { ui.scrolls.tasks = scroll.scrollTop; }, { passive: true });
       // Dropping a card here plans it for today without an hour (it also takes the hour off a block).
       scroll.addEventListener('dragover', function (e) {
         if (!ui.drag) return;
@@ -619,18 +598,8 @@
         ui.drag = null;
         if (row && !(DM().plannedDay(row) === ui.today && !TM().rowRange(row, ui.today))) api.plan(row, ui.today, '', '');
       });
-
-      var col = h('section', { class: 'td-col td-col--list', 'aria-label': 'À faire' }, [
-        h('div', { class: 'td-col-head' }, [
-          h('h2', { class: 'td-h', text: 'À faire' }),
-          h('span', { class: 'td-count', text: String(s.open) }),
-          h('span', { class: 'td-spacer' }),
-          hideDoneButton(s.done),
-        ]),
-        scroll,
-      ]);
       ui.listEl = scroll;
-      return col;
+      return scroll;
     }
 
     /* ── Timeline ─────────────────────────────────────────────────── */
@@ -1049,11 +1018,11 @@
         onclick: function () { setZoom(ui.zoom + 1); },
       }, [icon('zoom-in')]));
 
-      return h('section', { class: 'td-col td-col--plan', 'aria-label': 'Planning' }, [
-        h('div', { class: 'td-col-head' }, [h('h2', { class: 'td-h', text: 'Planning' }), h('span', { class: 'td-spacer' })].concat(tools)),
-        warn,
-        scroller,
-      ]);
+      ui.planTools = tools;
+      var wrap = h('div', { class: 'td-plan-wrap' });
+      if (warn) wrap.appendChild(warn);
+      wrap.appendChild(scroller);
+      return wrap;
     }
 
     function setZoom(i) {
@@ -1073,6 +1042,333 @@
       else el.scrollTop = y;
     }
 
+    /* ── Widget board ─────────────────────────────────────────────── */
+
+    function loadLayout() {
+      if (ui.layout) return ui.layout;
+      var parsed = null;
+      var raw = recall(KEYS.layout);
+      if (raw) {
+        try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      }
+      ui.layout = TM().layout.normalize(parsed);
+      return ui.layout;
+    }
+
+    function commitLayout(next) {
+      ui.layout = TM().layout.normalize(next);
+      remember(KEYS.layout, JSON.stringify(ui.layout));
+      api.rerender();
+    }
+
+    function placed(id) {
+      var items = ui.layout && ui.layout.items;
+      if (!items) return null;
+      for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
+      return null;
+    }
+
+    function gridStyle(it) {
+      return 'grid-column:' + (it.c + 1) + ' / span ' + it.w + ';grid-row:' + (it.r + 1) + ' / span ' + it.h;
+    }
+
+    function cellAt(board, clientX, clientY, w) {
+      var rect = board.getBoundingClientRect();
+      var x = clientX - rect.left + board.scrollLeft;
+      var y = clientY - rect.top + board.scrollTop;
+      var cols = TM().layout.COLS;
+      var colW = Math.max(1, board.clientWidth / cols);
+      var c = Math.round(x / colW);
+      var r = Math.round(y / TM().layout.ROW);
+      return { c: Math.max(0, Math.min(cols - (w || 1), c)), r: Math.max(0, r) };
+    }
+
+    function placeSlot(c, r, w, hh) {
+      if (!ui.boardEl) return;
+      if (!ui.slot) {
+        ui.slot = h('div', { class: 'td-slot' });
+        ui.boardEl.appendChild(ui.slot);
+      }
+      ui.slot.hidden = false;
+      ui.slot.style.gridColumn = (c + 1) + ' / span ' + w;
+      ui.slot.style.gridRow = (r + 1) + ' / span ' + hh;
+    }
+
+    function clearSlot() {
+      if (ui.slot && ui.slot.parentNode) ui.slot.parentNode.removeChild(ui.slot);
+      ui.slot = null;
+    }
+
+    function beginRename(id) {
+      if (ui.editing || !ui.root) return;
+      var el = ui.root.querySelector('.td-widget--' + id);
+      if (!el) return;
+      ui.editing = id;
+      var input = h('input', {
+        class: 'td-widget-name',
+        type: 'text',
+        value: TM().layout.label(ui.layout, id),
+        maxlength: '40',
+        'aria-label': 'Nom',
+      });
+      var title = el.querySelector('.td-widget-title');
+      if (title) title.replaceWith(input);
+      else {
+        input.classList.add('td-widget-name--float');
+        el.appendChild(input);
+      }
+      input.focus();
+      input.select();
+      var done = false;
+      function finish(save) {
+        if (done) return;
+        done = true;
+        ui.editing = null;
+        if (save) commitLayout(TM().layout.rename(ui.layout, id, input.value));
+        else api.rerender();
+      }
+      input.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+    }
+
+    function startMove(e, id, grip) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var el = grip.closest('.td-widget');
+      var board = ui.boardEl;
+      var geom = (el && el._geom) || placed(id);
+      if (!el || !board || !geom) return;
+      var x0 = e.clientX;
+      var y0 = e.clientY;
+      var started = false;
+      var cell = { c: geom.c, r: geom.r };
+      var span = ui.narrow ? TM().layout.COLS : geom.w;
+      ui.widgetGesture = true;
+      try { grip.setPointerCapture(e.pointerId); } catch (err) { /* the document listeners still follow the pointer */ }
+      function onMove(ev) {
+        var dx = ev.clientX - x0;
+        var dy = ev.clientY - y0;
+        if (!started && Math.abs(dx) + Math.abs(dy) < 4) return;
+        started = true;
+        el.classList.add('is-lifting');
+        el.style.zIndex = '30';
+        el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+        board.classList.add('is-gesturing');
+        var box = el.getBoundingClientRect();
+        cell = cellAt(board, box.left, box.top, span);
+        placeSlot(cell.c, cell.r, span, geom.h);
+      }
+      function onUp() {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        ui.widgetGesture = false;
+        clearSlot();
+        board.classList.remove('is-gesturing');
+        if (!started) {
+          el.classList.remove('is-lifting');
+          el.style.transform = '';
+          el.style.zIndex = '';
+          return;
+        }
+        commitLayout(TM().layout.move(ui.layout, id, cell.c, cell.r));
+      }
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    }
+
+    function startResize(e, id, axis, handle) {
+      if (e.button !== 0 || (ui.narrow && axis !== 's')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var el = handle.closest('.td-widget');
+      var board = ui.boardEl;
+      var geom = (el && el._geom) || placed(id);
+      if (!el || !board || !geom) return;
+      var x0 = e.clientX;
+      var y0 = e.clientY;
+      var rect = el.getBoundingClientRect();
+      var preview = { w: geom.w, h: geom.h };
+      ui.widgetGesture = true;
+      el.classList.add('is-resizing-widget');
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* the document listeners still follow the pointer */ }
+      function onMove(ev) {
+        var colW = Math.max(1, board.clientWidth / TM().layout.COLS);
+        var w = geom.w;
+        var hh = geom.h;
+        if (axis !== 's') w = Math.round((rect.width + 12 + (ev.clientX - x0)) / colW);
+        if (axis !== 'e') hh = Math.round((rect.height + 12 + (ev.clientY - y0)) / TM().layout.ROW);
+        w = Math.max(TM().layout.MIN_W, Math.min(TM().layout.COLS - geom.c, w));
+        hh = Math.max(TM().layout.MIN_H, Math.min(TM().layout.MAX_H, hh));
+        preview = { w: w, h: hh };
+        el.style.gridColumn = (geom.c + 1) + ' / span ' + (ui.narrow ? TM().layout.COLS : w);
+        el.style.gridRow = (geom.r + 1) + ' / span ' + hh;
+      }
+      function onUp() {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        ui.widgetGesture = false;
+        el.classList.remove('is-resizing-widget');
+        if (preview.w === geom.w && preview.h === geom.h) return;
+        commitLayout(TM().layout.resize(ui.layout, id, ui.narrow ? null : preview.w, preview.h));
+      }
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    }
+
+    function widgetTools(id) {
+      var label = TM().layout.label(ui.layout, id);
+      var grip = h('button', { class: 'td-icon td-widget-grip', type: 'button', title: 'Déplacer', 'aria-label': 'Déplacer ' + label }, [icon('grip-vertical')]);
+      var edit = h('button', { class: 'td-icon td-widget-edit', type: 'button', title: 'Renommer', 'aria-label': 'Renommer ' + label }, [icon('pencil')]);
+      var close = h('button', { class: 'td-icon td-widget-close', type: 'button', title: 'Fermer', 'aria-label': 'Fermer ' + label }, [icon('x')]);
+      grip.addEventListener('pointerdown', function (e) { startMove(e, id, grip); });
+      edit.addEventListener('click', function (e) { e.stopPropagation(); beginRename(id); });
+      close.addEventListener('click', function (e) {
+        e.stopPropagation();
+        commitLayout(TM().layout.close(ui.layout, id));
+      });
+      return h('div', { class: 'td-widget-tools' }, [grip, edit, close]);
+    }
+
+    function widget(id, geom, body, opts) {
+      opts = opts || {};
+      var label = TM().layout.label(ui.layout, id);
+      var info = opts.sky ? skyScene() : null;
+      var tools = widgetTools(id);
+      var head = null;
+      if (opts.head !== false) {
+        var title = h('h2', { class: 'td-h td-widget-title', text: label });
+        title.addEventListener('dblclick', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          beginRename(id);
+        });
+        var kids = [title];
+        if (opts.count != null) kids.push(h('span', { class: 'td-count', text: String(opts.count) }));
+        kids.push(h('span', { class: 'td-spacer' }));
+        (opts.extra || []).forEach(function (n) { if (n) kids.push(n); });
+        kids.push(tools);
+        head = h('div', { class: 'td-col-head' }, kids);
+      }
+      if (body) body.classList.add('td-widget-body');
+      var el = h('section', {
+        class: 'td-widget td-widget--' + id + (opts.sky ? ' td-widget--sky' : ''),
+        'data-widget': id,
+        'aria-label': label,
+        style: gridStyle(geom),
+      }, [
+        info ? WUI().sky(info.scene, info.isDay) : null,
+        opts.head === false ? tools : null,
+        head,
+        body,
+        ui.narrow ? null : h('span', { class: 'td-resize td-resize-e' }),
+        h('span', { class: 'td-resize td-resize-s' }),
+        ui.narrow ? null : h('span', { class: 'td-resize td-resize-se' }),
+      ]);
+      if (info) el.setAttribute('data-scene', info.scene);
+      el._geom = geom;
+      Array.prototype.forEach.call(el.querySelectorAll('.td-resize'), function (handle) {
+        var axis = handle.classList.contains('td-resize-e') ? 'e' : handle.classList.contains('td-resize-s') ? 's' : 'se';
+        handle.addEventListener('pointerdown', function (e) { startResize(e, id, axis, handle); });
+      });
+      return el;
+    }
+
+    function openWidgetMenu(btn) {
+      var L = TM().layout;
+      var have = {};
+      ui.layout.items.forEach(function (it) { have[it.id] = true; });
+      var items = L.widgets().map(function (w) {
+        return {
+          id: 'widget:' + w.id,
+          label: w.label,
+          icon: w.icon,
+          checked: !!have[w.id],
+          action: function () {
+            commitLayout(have[w.id] ? L.close(ui.layout, w.id) : L.open(ui.layout, w.id));
+          },
+        };
+      });
+      if (!L.same(ui.layout, L.defaults())) {
+        items.push({ sep: true });
+        items.push({
+          id: 'layout:reset',
+          label: 'Disposition d’origine',
+          icon: 'rotate',
+          action: function () { commitLayout(L.defaults()); },
+        });
+      }
+      if (!global.ContextMenu) return;
+      var rect = btn.getBoundingClientRect();
+      global.ContextMenu.show({ clientX: rect.left, clientY: rect.top }, items);
+    }
+
+    function buildBoard(day) {
+      var geoms = {};
+      TM().layout.present(loadLayout(), ui.narrow).forEach(function (it) { geoms[it.id] = it; });
+      var board = h('div', { class: 'td-board' });
+      ui.boardEl = board;
+      var s = day.stats;
+      if (geoms.hello) board.appendChild(widget('hello', geoms.hello, buildHello(), { head: false, sky: true }));
+      if (geoms.weather) board.appendChild(widget('weather', geoms.weather, buildWeatherPanel(skyScene()), { head: false, sky: true }));
+      if (geoms.focus) board.appendChild(widget('focus', geoms.focus, focusCard(day), { head: false }));
+      if (geoms.late) {
+        board.appendChild(widget('late', geoms.late, h('div', { class: 'td-rows td-group--late' }, day.overdue.map(function (r) { return taskRow(r, 'late'); })), {
+          count: day.overdue.length,
+          extra: day.overdue.length ? [replanChip(day.overdue)] : [],
+        }));
+      }
+      if (geoms.tasks) {
+        board.appendChild(widget('tasks', geoms.tasks, buildTasksBody(day), {
+          count: s.open,
+          extra: [hideDoneButton(s.done)],
+        }));
+      }
+      if (geoms.sugg) {
+        var sugg = suggestionRows(day);
+        board.appendChild(widget('sugg', geoms.sugg, h('div', { class: 'td-rows' }, sugg.map(function (r) { return taskRow(r, 'sugg'); })), {
+          count: sugg.length,
+        }));
+      }
+      if (geoms.review) {
+        var review = api.review();
+        if (review) review.classList.add('td-review');
+        board.appendChild(widget('review', geoms.review, review, {}));
+      }
+      if (geoms.plan) board.appendChild(widget('plan', geoms.plan, buildPlan(day), { extra: ui.planTools || [] }));
+      return board;
+    }
+
+    function captureScrolls() {
+      if (!ui.root) return;
+      Array.prototype.forEach.call(ui.root.querySelectorAll('[data-widget]'), function (w) {
+        var sc = w.querySelector('.td-scroll, .td-plan-scroll');
+        if (sc) ui.scrolls[w.getAttribute('data-widget')] = sc.scrollTop;
+      });
+      if (ui.planEl && ui.planScroll != null) ui.planScroll = ui.planEl.scrollTop;
+    }
+
+    function watchWidth(container) {
+      if (ui.watched || !global.ResizeObserver) return;
+      ui.watched = true;
+      var ro = new ResizeObserver(function () {
+        var w = container.clientWidth || 0;
+        var narrow = w > 0 && w < 900;
+        if (narrow === ui.narrow || ui.widgetGesture || ui.editing) return;
+        ui.narrow = narrow;
+        if (ui.root && ui.root.isConnected && api.section() === 'today') api.rerender();
+      });
+      ro.observe(container);
+    }
+
     /* ── Page ─────────────────────────────────────────────────────── */
 
     function celebrate(day) {
@@ -1087,28 +1383,43 @@
     function render(container) {
       start();
       askName();
+      captureScrolls();
+      loadLayout();
+      var width = container.clientWidth || 0;
+      if (width > 0) ui.narrow = width < 900;
       var st = api.state();
       var now = new Date();
       ui.now = now;
       ui.nowMin = now.getHours() * 60 + now.getMinutes();
       ui.today = api.today();
       ui.showDone = global.HideDone ? !global.HideDone.get() : false;
+      ui.listEl = null;
+      ui.planEl = null;
+      ui.planTools = null;
       var day = TM().buildDay(api.rows(), { today: ui.today, nowMin: ui.nowMin, capacity: st.capacity });
       ui.day = day;
       ui.flowKey = Math.floor(ui.nowMin / TM().STEP);
       ui.blockById = {};
       day.blocks.forEach(function (b) { ui.blockById[b.id] = b; });
 
-      var page = h('div', { class: 'td-page' });
-      ui.heroEl = buildHero();
-      page.appendChild(ui.heroEl);
-      page.appendChild(h('div', { class: 'td-body' }, [buildList(day), buildPlan(day)]));
+      var page = h('div', { class: 'td-page' + (ui.narrow ? ' is-narrow' : '') });
+      page.appendChild(buildBoard(day));
+      page.appendChild(h('button', {
+        class: 'td-icon td-widgets-add',
+        type: 'button',
+        title: 'Widgets',
+        'aria-label': 'Widgets',
+        onclick: function (e) { e.stopPropagation(); openWidgetMenu(e.currentTarget); },
+      }, [icon('plus')]));
       container.appendChild(page);
       ui.root = page;
+      watchWidth(container);
 
-      ui.listEl.scrollTop = ui.listScroll;
-      if (ui.planScroll == null) scrollToNow(false);
-      else ui.planEl.scrollTop = ui.planScroll;
+      if (ui.listEl) ui.listEl.scrollTop = ui.scrolls.tasks || 0;
+      if (ui.planEl) {
+        if (ui.planScroll == null) scrollToNow(false);
+        else ui.planEl.scrollTop = ui.planScroll;
+      }
       if (ui.compose && ui.composeInput && ui.composeInput.isConnected) ui.composeInput.focus({ preventScroll: true });
       else if (ui.refocusAdd) {
         ui.refocusAdd = false;

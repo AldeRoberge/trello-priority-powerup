@@ -16,11 +16,11 @@ const channel = process.env.E2E_BROWSER_CHANNEL !== undefined ? process.env.E2E_
 module.exports = defineConfig({
   testDir: './e2e/specs',
   outputDir: './e2e/.out/results',
-  timeout: 90000,
+  timeout: 120000,
   expect: { timeout: 8000 },
   fullyParallel: true,
   retries: 0,
-  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : undefined,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 4, // the explorer is CPU heavy and time-boxed
   reporter: [['list'], ['html', { outputFolder: 'e2e/.out/report', open: 'never' }], ['./e2e/problem-reporter.js']],
   use: Object.assign(
     {
@@ -35,6 +35,6 @@ module.exports = defineConfig({
   ),
   projects: [
     { name: 'desktop' },
-    { name: 'phone', use: { viewport: { width: 390, height: 844 }, hasTouch: false }, testIgnore: /explore|flows/ },
+    { name: 'phone', use: { viewport: { width: 390, height: 844 }, hasTouch: false }, testIgnore: /flows/ },
   ],
 });

@@ -1862,6 +1862,20 @@
   }
 
   /**
+   * Name worth offering as a new person. Empty when the query is too short,
+   * too long for a card assignee, or already someone's name.
+   */
+  function personDraft(labels, query) {
+    var name = String(query == null ? '' : query).replace(/\s+/g, ' ').trim();
+    if (name.length < 2 || name.length > 60) return '';
+    var q = fold(name);
+    var exact = (labels || []).some(function (label) {
+      return fold(label) === q;
+    });
+    return exact ? '' : name;
+  }
+
+  /**
    * Grouped, ranked results for the picker.
    * @returns {{type:string, label:string, items:object[], total:number}[]} (empty groups omitted)
    */
@@ -2291,6 +2305,16 @@
         return (f.parent || '') === fid && (showArchived || !f.archived) && (nameHit(f) || matchesIn(f.id));
       });
     }
+    function directKids(fid) {
+      var n = 0;
+      (byFolder[fid] || []).forEach(function (d) { if (!q || docMatches(d)) n += 1; });
+      idx.folders.forEach(function (x) {
+        if ((x.parent || '') !== fid || (!showArchived && x.archived)) return;
+        if (q && !nameHit(x) && !matchesIn(x.id)) return;
+        n += 1;
+      });
+      return n;
+    }
     var cmp = docComparator(sort);
     var dir = sort === 'name-desc' ? -1 : 1;
     var rows = [];
@@ -2310,9 +2334,10 @@
         })
         .forEach(function (f) {
           if (q && !nameHit(f) && !matchesIn(f.id)) return;
-          var o = isOpen(f.id);
+          var kidsN = directKids(f.id);
+          var o = kidsN > 0 && isOpen(f.id);
           var linked = f.doc && byId[f.doc] ? byId[f.doc] : null;
-          rows.push({ type: 'folder', depth: depth, folder: f, doc: linked, count: countIn(f.id), open: o, archived: !!f.archived });
+          rows.push({ type: 'folder', depth: depth, folder: f, doc: linked, count: countIn(f.id), childCount: kidsN, open: o, archived: !!f.archived });
           if (o) walk(f.id, depth + 1);
         });
       (byFolder[fid] || []).slice().sort(cmp).forEach(function (d) {
@@ -2423,6 +2448,7 @@
     buildMentionIndex: buildMentionIndex,
     resolveMention: resolveMention,
     searchMentions: searchMentions,
+    personDraft: personDraft,
     initialsOf: initialsOf,
     countWords: countWords,
     sizeInfo: sizeInfo,

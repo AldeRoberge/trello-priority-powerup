@@ -503,6 +503,14 @@ describe('DocsModel', () => {
       assert.equal(DM.searchMentions(ix, 'all', 'mt')[0].items[0].label, 'Marie Tremblay', 'a merged contact alias matches the member');
     });
 
+    it('offers a new person only when the typed name is not already someone', () => {
+      assert.equal(DM.personDraft(['Marie Tremblay'], '  Martin   Catudal '), 'Martin Catudal');
+      assert.equal(DM.personDraft(['Marie Tremblay'], '  marie   tremblay '), '');
+      assert.equal(DM.personDraft(['Éric Gagnon'], 'eric gagnon'), '');
+      assert.equal(DM.personDraft([], 'M'), '');
+      assert.equal(DM.personDraft([], '   '), '');
+    });
+
     it('scopes @@ to tasks and @@@ to documents', () => {
       const ix = index();
       const tasks = DM.searchMentions(ix, 'task', '');

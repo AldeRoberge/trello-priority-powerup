@@ -4,6 +4,12 @@ Shared working-tree coordination. Claim files before editing; leave a short note
 
 | Agent | Files claimed | Status / note |
 |---|---|---|
+| search-ph | search placeholders only: `side-panel.js`, `dashboard-ui.js`, `table-ui.js`, `kanban-ui.js`, `gantt-filters.js`, `mindmap-ui.js`, `journey-ui.js`, `docs-ui.js` (search input only), `entities-ui.js`, matching `*.html` cache queries, `CHANGELOG.md` one line | « Filtrer… » becomes « Rechercher… » |
+| proj-edit | `table-model.js`, `table-ui.js`, `table-ui.css`, `table.html` cache, `work-os.js` (priority on `withNodeEdit` only), `mindmap-model.js` (`normalizeGoals` priority only), `kanban-ui.js` (project head + drop on a shell), `kanban-ui.css`, `kanban.html` cache, `gantt-model.js` (header `priority` only), `gantt-ui.js` (project section priority + progress only), `gantt-ui.css`, `gantt.html` cache, `mindmap.html` + `dashboard.html` + `journey.html` (mindmap-model query only), tests, `CHANGELOG.md` one line | Drag tasks between projects. Header shows priority and task progress. Not `docs.html` (other agents). |
+| empty-chev | (released) | Empty folders hide the fold arrow. `docs-ui.js?v=chev-1`, `docs-model.js?v=chev-1` on `docs.html`. |
+| doc-person | (released) | Personnes in Documents: unknown name creates the contact and, on a task, assigns the card. `@` does the same. Cache is `person-1` on docs-model and docs-ui. |
+| today-widgets | (released) `today-model.js` layout, `today-ui.js`, `today-ui.css`, `weather-ui.css` dark sky, `test/today-model.test.js`, `dashboard.html` cache `widget-1`, `CHANGELOG.md` one line | Widgets are in the working tree. Dashboard cache is `widget-1`. |
+| tab-line | `view-tabs.css` (active underline only), `CHANGELOG.md` one line | Assistant tab keeps the same blue underline as Gantt |
 | rich-desc | (released) | Triage description is an inline rich section. Card and project panes. Dashboard cache is `rich-1`. |
 | paste-img | (released) | Description pictures are `note-` attachments. Goal map text is not updated. Dashboard cache is `paste-2`. |
 | quick-find | (released) | Ctrl+F index is in the working tree. `quick-find.js` loads right after `command-palette.js`. |

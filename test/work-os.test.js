@@ -168,6 +168,10 @@ describe('WorkOS', () => {
       const marked = WO.withNodeEdit(goals(), 'p', { icon: { i: 'rocket', c: '#0c66e4' } });
       assert.deepEqual(marked.nodes.find((n) => n.id === 'p').icon, { i: 'rocket', c: '#0c66e4' });
       assert.equal('icon' in WO.withNodeEdit(marked, 'p', { icon: null }).nodes.find((n) => n.id === 'p'), false);
+      const scored = WO.withNodeEdit(goals(), 'p', { priority: 6.55 });
+      assert.equal(scored.nodes.find((n) => n.id === 'p').priority, 6.6);
+      assert.equal(WO.withNodeEdit(scored, 'p', { name: 'Autre' }).nodes.find((n) => n.id === 'p').priority, 6.6);
+      assert.equal('priority' in WO.withNodeEdit(scored, 'p', { priority: null }).nodes.find((n) => n.id === 'p'), false);
     });
 
     it('withTaskProject moves a task to another project and keeps its dependencies', () => {

@@ -102,6 +102,10 @@ describe('DocsModel folders and nested documents', () => {
     const notes = open.filter((r) => r.folder && r.folder.id === 'f')[0];
     assert.equal(notes.doc.id, 'a');
     assert.equal(notes.count, 1);
+    assert.equal(notes.childCount, 2);
+    assert.equal(open.filter((r) => r.folder && r.folder.id === 'h')[0].childCount, 0);
+    assert.equal(open.filter((r) => r.folder && r.folder.id === 'h')[0].open, false);
+    assert.equal(open.filter((r) => r.folder && r.folder.id === 'g')[0].childCount, 0);
     assert.equal(labels(DM.folderRows(docs, raw, {}, 'notes', 'name')), 'folder0Notes');
     assert.equal(labels(DM.folderRows(docs, raw, {}, 'sous', 'name')), 'folder0Notes,folder1Sous');
   });

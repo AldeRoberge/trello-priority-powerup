@@ -456,14 +456,6 @@
     var ago = born ? D.ageLabel(born, Date.now()) : '';
     body.appendChild(h('div', { class: 'tri-top' }, [
       h('span', { class: 'tri-origin' }, [icon('inbox'), text((row.statut || 'Inbox') + (ago ? ' · ' + ago : ''))]),
-      h('button', {
-        class: 'tri-blocked' + (row.blocked ? ' is-on' : ''),
-        type: 'button',
-        title: row.blocked ? 'Bloquée · cliquer pour débloquer' : 'Marquer comme bloquée',
-        'aria-pressed': row.blocked ? 'true' : 'false',
-        'data-fk': 'blocked',
-        onclick: function () { host.perform(row, 'blocked'); },
-      }, [icon('player-pause'), text(row.blocked ? 'Bloquée' : 'Bloquer')]),
       h('span', { class: 'tri-spacer' }),
       iconButton('external-link', 'Ouvrir la carte', function () { host.openCard(row); }),
       iconButton('dots', 'Plus d’actions', function (e) { host.cardMenu(row, e.currentTarget); }),
@@ -642,7 +634,7 @@
     var dayOptions = quick.map(function (d) {
       return { id: d.id, label: DAY_LABEL[d.id], title: d.id === 'monday' ? host.dayLabel(d.iso) : null, iso: d.iso };
     });
-    dayOptions.push({ id: 'other', label: 'Autre…', icon: 'calendar-event' });
+    dayOptions.push({ id: 'other', label: 'Autre…', icon: 'chevron-down' });
     var day = segmented({
       label: 'Jour prévu',
       key: 'day',
@@ -657,7 +649,7 @@
     function paintDay() {
       var which = D.quickDayOf(row, host.today);
       day.set(which);
-      setOption(day.buttons[day.buttons.length - 1], which === 'other' ? host.dayText(row) : 'Autre…', which === 'other' ? host.dayIcon(row) : 'calendar-event');
+      setOption(day.buttons[day.buttons.length - 1], which === 'other' ? host.dayText(row) : 'Autre…', which === 'other' ? host.dayIcon(row) : 'chevron-down');
     }
     paintDay();
 
@@ -694,7 +686,20 @@
       progNum.textContent = progValue() === '' && p > 0 ? p + ' %' : '';
     }
     paintProg();
-    props.appendChild(prop('Avancement', [prog.el, progNum]));
+    // Bloquer: right of the Avancement steps; quiet until the task is blocked.
+    var blockBtn = h('button', { class: 'tri-blocked', type: 'button', 'data-fk': 'blocked' }, [icon('player-pause'), h('span', { class: 'tri-blocked-t' })]);
+    function paintBlocked() {
+      blockBtn.classList.toggle('is-on', !!row.blocked);
+      blockBtn.title = row.blocked ? 'Bloquée · cliquer pour débloquer' : 'Marquer comme bloquée';
+      blockBtn.setAttribute('aria-pressed', row.blocked ? 'true' : 'false');
+      blockBtn.querySelector('.tri-blocked-t').textContent = row.blocked ? 'Bloquée' : 'Bloquer';
+    }
+    blockBtn.addEventListener('click', function () {
+      host.perform(row, 'blocked');
+      paintBlocked();
+    });
+    paintBlocked();
+    props.appendChild(prop('Avancement', [prog.el, progNum, blockBtn]));
 
     // Sous-tâches: each one ticks in place, a field adds the next.
     var subs = h('div', { class: 'tri-subs' });

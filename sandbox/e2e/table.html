@@ -116,6 +116,18 @@
       render: function (fn) { fn(); },
       sizeTo: function () {},
     };
+    // A goal map with two projects, so the grid shows its fold lines (Projet sections); c4 stays "Sans projet".
+    window.MindmapGoalsTrello = {
+      load: function () {
+        return Promise.resolve({
+          nodes: [
+            { id: 'g:p1', level: 'project', name: 'Semaine des bibliothèques publiques', icon: { i: 'book' } },
+            { id: 'g:p2', level: 'project', name: 'Vidéo avec Jonny pour les travaux ouest', icon: { i: 'stack-2' } },
+          ],
+          links: [{ from: 'c1', to: 'g:p1' }, { from: 'c2', to: 'g:p1' }, { from: 'c3', to: 'g:p2' }],
+        });
+      },
+    };
     ViewTabs.mount(document.getElementById('viewTabs'), { active: 'table' });
     TableUI.mount(document.getElementById('tableMount'), t);
   </script>

@@ -18,6 +18,9 @@ const { runChecks, waitSettled } = require('./page-checks');
 
 const STRICT = process.env.E2E_STRICT === '1';
 
+// A URL built from a missing value: https://undefined/..., /cards/undefined, ?x=undefined, /null, =NaN
+const BAD_URL = new RegExp(['^https?://undefined[/:]', '/undefined(/|\\?|$)', '[?&=]undefined(&|$)', '/null(/|\\?|$)', '\\[object Object\\]', '=NaN'].join('|'));
+
 class App {
   constructor(page, context, server, problems, testInfo) {
     this.page = page;
@@ -79,7 +82,7 @@ class App {
   /** Runs the layout / text checks now and records what they find as warnings. */
   async check(label) {
     const issues = await runChecks(this.page);
-    issues.forEach((i) => this.problems.warn(i.kind, (label ? label + ': ' : '') + i.message));
+    issues.forEach((i) => this.problems.warn(i.kind, i.message));
     return issues;
   }
 
@@ -136,7 +139,32 @@ exports.test = base.test.extend({
     const app = new App(page, context, server, problems, testInfo);
     const local = server.url;
 
-    await installMocks(context, local, (url) => problems.warn('unmocked-external', 'Request to ' + url.slice(0, 120) + ' was blocked (no mock for this host)'));
+    // The app's TpDebug.error() prints only the error name unless debug logging is on; keep the
+    // message / stack on a console.debug line so a failure says what actually broke.
+    await context.addInitScript(() => {
+      let tp;
+      Object.defineProperty(window, 'TpDebug', {
+        configurable: true,
+        get() {
+          return tp;
+        },
+        set(v) {
+          tp = v;
+          if (v && typeof v.error === 'function' && !v.__e2eWrapped) {
+            const orig = v.error;
+            v.__e2eWrapped = true;
+            v.error = function (domain, event, err) {
+              try {
+                const why = String((err && (err.stack || err.message)) || err);
+                console.debug('__tp_detail__' + domain + '.' + event + ' :: ' + why.split(String.fromCharCode(10)).slice(0, 4).join(' | '));
+              } catch (e) { /* ignore */ }
+              return orig.apply(this, arguments);
+            };
+          }
+        },
+      });
+    });
+    await installMocks(context, local, (url) => !/undefined|null|NaN/.test(url) && problems.warn('unmocked-external', 'Request to ' + url.slice(0, 120) + ' was blocked (no mock for this host)'));
 
     const pathOf = (u) => {
       try {
@@ -147,11 +175,34 @@ exports.test = base.test.extend({
       }
     };
 
-    page.on('pageerror', (err) => problems.error('pageerror', (err && err.message) + (err && err.stack ? '\n' + String(err.stack).split('\n').slice(1, 3).join(' ') : '')));
+    // Requests cut short because the user changed page are not errors of the page being left.
+    let navAt = 0;
+    const leaving = () => Date.now() - navAt < 2500;
+    page.on('request', (req) => {
+      if (req.isNavigationRequest() && req.frame() === page.mainFrame()) navAt = Date.now();
+      const u = req.url();
+      let decoded = u;
+      try {
+        decoded = decodeURIComponent(u);
+      } catch (e) { /* keep raw */ }
+      if (BAD_URL.test(decoded)) {
+        problems.error('bad-url', req.method() + ' ' + pathOf(u).slice(0, 160) + ' (a value was undefined/null when the URL was built)');
+      }
+    });
+    page.on('pageerror', (err) => !(leaving() && /Failed to fetch|Load failed|NetworkError|aborted/i.test(err && err.message)) && problems.error('pageerror', (err && err.message) + (err && err.stack ? '\n' + String(err.stack).split('\n').slice(1, 3).join(' ') : '')));
     page.on('crash', () => problems.error('crash', 'The page crashed'));
+    const details = {};
     page.on('console', (msg) => {
+      if (msg.type() === 'debug' && msg.text().indexOf('__tp_detail__') === 0) {
+        const m = /^__tp_detail__(\S+) :: (.*)$/.exec(msg.text());
+        if (m) details[m[1]] = m[2];
+        return;
+      }
       if (msg.type() !== 'error') return;
-      const text = msg.text();
+      let text = msg.text();
+      const tag = /^\[Cerveau\] (\S+)/.exec(text);
+      if (tag && details[tag[1]]) text += ' — ' + details[tag[1]];
+      if (leaving() && /Failed to fetch|Load failed|NetworkError|aborted/i.test(text)) return;
       // The status of a failed request is reported by the response listener below.
       if (/^Failed to load resource: (the server responded with a status of \d+|net::ERR_)/.test(text)) return;
       const loc = msg.location();
@@ -203,7 +254,7 @@ exports.test = base.test.extend({
     server.model.violations.forEach((v) => problems.error('plugin-data-limit', 'pluginData ' + v.bucket + ' reached ' + v.size + ' characters writing "' + v.key + '" (Trello refuses over 4096)'));
 
     const all = problems.list.filter((p) => !app.isAllowed(p));
-    await testInfo.attach('problems', { body: JSON.stringify({ test: testInfo.titlepath.join(' › '), project: testInfo.project.name, problems: all }, null, 2), contentType: 'application/json' });
+    await testInfo.attach('problems', { body: JSON.stringify({ test: testInfo.titlePath.join(' › '), project: testInfo.project.name, problems: all }, null, 2), contentType: 'application/json' });
     all.filter((p) => p.severity === 'warn').forEach((p) => testInfo.annotations.push({ type: 'warn:' + p.kind, description: p.message }));
     const failing = all.filter((p) => p.severity === 'error' || (STRICT && p.severity === 'warn'));
     if (failing.length) {

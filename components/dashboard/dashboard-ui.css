@@ -149,7 +149,9 @@ button.db-chip:focus-visible { outline: 2px solid var(--tp-primary); outline-off
 .db-empty > .ti { font-size: 32px; }
 
 /* ── Triage (the pane on the right is in triage-ui.css) ─────────────── */
-.db-split-l { flex: 0 0 min(420px, 45%); min-width: 0; padding: 20px 0 0; border-right: 1px solid var(--tp-border); overflow: auto; }
+.db-split-gripbox { flex: none; position: relative; width: 0; }
+@media (max-width: 760px) { .db-split-gripbox { display: none; } }
+.db-split-l { flex: 0 0 var(--db-split-w, min(420px, 45%)); min-width: 0; padding: 20px 0 0; border-right: 1px solid var(--tp-border); overflow: auto; }
 .db-split-l .db-head { padding: 0 16px; }
 .db-split-r { flex: 1; min-width: 0; padding: 0; overflow: auto; container-type: inline-size; }
 .tri-row.is-sel { box-shadow: inset 2px 0 0 var(--tp-primary); }

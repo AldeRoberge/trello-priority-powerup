@@ -127,6 +127,20 @@ describe('MindmapModel', () => {
       assert.equal(n.nodes[0].level, 'project');
     });
 
+    it('keeps a project priority and drops it on any other level', () => {
+      const n = MM.normalizeGoals({
+        nodes: [
+          { id: 'g:p', level: 'project', name: 'P', priority: 9.34 },
+          { id: 'g:v', level: 'vision', name: 'V', priority: 3 },
+          { id: 'g:q', level: 'project', name: 'Q', priority: 'haute' },
+        ],
+        links: [],
+      });
+      assert.equal(n.nodes.find((x) => x.id === 'g:p').priority, 9.3);
+      assert.equal('priority' in n.nodes.find((x) => x.id === 'g:v'), false);
+      assert.equal('priority' in n.nodes.find((x) => x.id === 'g:q'), false);
+    });
+
     describe('context (breadcrumb and flags)', () => {
       const chain = {
         nodes: [

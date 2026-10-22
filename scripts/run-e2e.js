@@ -2,7 +2,7 @@
 /* Real-browser E2E: serves the repo statically, opens the sandbox/e2e pages (Assistant chat,
  * Documents view) in headless Edge/Chrome (no npm deps) and prints each in-page report.
  *   npm run test:e2e                    headless run of every page, exit 1 on failure
- *   npm run test:e2e -- --page=docs     only one page (assistant | docs | docs-unauth)
+ *   npm run test:e2e -- --page=docs     only one page (assistant | assistant-chats | docs | docs-unauth)
  *   npm run test:e2e -- --serve         serve only (E2E_PORT=4180 to change the port), then open the printed URLs
  */
 const http = require('http');
@@ -54,7 +54,7 @@ function findBrowser() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Drive the page over the DevTools protocol (Node's built-in WebSocket, no deps). */
-async function readReportViaCdp(port, url) {
+async function readReportViaCdp(port, url, viewport) {
   let targets = null;
   for (let i = 0; i < 60 && !targets; i++) {
     try {
@@ -87,6 +87,15 @@ async function readReportViaCdp(port, url) {
       ws.send(JSON.stringify({ id: n, method, params: params || {} }));
     });
   await call('Page.enable');
+  // Headless browsers keep a minimum window width (~500px): pages that depend on the width ask for an exact viewport.
+  if (viewport) {
+    await call('Emulation.setDeviceMetricsOverride', {
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+  }
   await call('Page.navigate', { url });
   const deadline = Date.now() + 110000;
   let last = '';
@@ -106,6 +115,7 @@ async function readReportViaCdp(port, url) {
 // Each page reports through #e2e-report ("PASS ..." / "FAIL ..." / "E2E DONE pass=N fail=M").
 const PAGES = [
   { name: 'assistant', path: '/sandbox/e2e/assistant.html', size: '420,900' },
+  { name: 'assistant-chats', path: '/sandbox/e2e/assistant.html?chats', size: '1100,800', exactViewport: true },
   { name: 'docs', path: '/sandbox/e2e/docs.html?run', size: '1280,900' },
   { name: 'docs-unauth', path: '/sandbox/e2e/docs.html?run&unauth', size: '1280,900' }
 ];
@@ -129,7 +139,8 @@ async function runPage(browser, page) {
   );
   let text = 'no report found in page output';
   try {
-    text = await readReportViaCdp(debugPort, url);
+    const [width, height] = page.size.split(',').map(Number);
+    text = await readReportViaCdp(debugPort, url, page.exactViewport ? { width, height } : null);
   } catch (err) {
     text = 'E2E runner error: ' + err.message;
   }
@@ -139,7 +150,7 @@ async function runPage(browser, page) {
       fs.rmSync(profile, { recursive: true, force: true });
     } catch (e) { /* ignore */ }
   }, 1000);
-  const done = /E2E DONE pass=(d+) fail=(d+)/.exec(text);
+  const done = /E2E DONE pass=(\d+) fail=(\d+)/.exec(text);
   return { text, ok: !!(done && done[2] === '0') };
 }
 

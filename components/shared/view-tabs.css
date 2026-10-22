@@ -1,5 +1,7 @@
 /* Project view tabs (Gantt / Tableau / Kanban / Documents) — shared top strip. */
 .vt-bar {
+  position: relative;
+  z-index: 4;
   flex: none;
   display: flex;
   align-items: flex-end;
@@ -61,6 +63,10 @@ html body.tp-page--has-tabs {
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
+  /* overflow-x: auto also clips the vertical axis, which cut the active
+     underline (the Assistant page then painted its column over that edge). */
+  padding-bottom: 2px;
+  margin-bottom: -2px;
 }
 .vt-tabs::-webkit-scrollbar { display: none; }
 .vt-tab {
@@ -86,7 +92,11 @@ html body.tp-page--has-tabs {
   color: var(--tp-text);
   font-weight: 500;
   border-bottom-color: var(--tp-primary);
+  background: transparent;
   cursor: default;
+}
+.vt-tab.is-on:hover {
+  background: transparent;
 }
 .vt-tab .ti {
   font-size: 16px;
@@ -97,6 +107,10 @@ html body.tp-page--has-tabs {
   background: var(--tp-surface-hover);
   box-shadow: inset 0 0 0 1px var(--tp-text-muted);
   border-radius: 4px 4px 0 0;
+}
+.vt-tab.is-on:focus-visible {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--tp-text-muted);
 }
 /* Icon-only pages pinned top right: full AI chat, settings (and the open task). Same box as a tab, color-only states. */
 .vt-utils {

@@ -1897,6 +1897,7 @@
       sectionKey: 'project',
       projectId: id,
       icon: project && project.icon ? project.icon : null,
+      priority: project && typeof project.priority === 'number' ? project.priority : null,
       name: project && project.name ? String(project.name) : 'Sans projet',
       category: null,
       categoryLabel: '',
@@ -1955,7 +1956,13 @@
       var id = String(p.id);
       var g = byId[id];
       if (!g) {
-        g = { id: id, name: String(p.name || 'Projet'), icon: p.icon || null, rows: [] };
+        g = {
+          id: id,
+          name: String(p.name || 'Projet'),
+          icon: p.icon || null,
+          priority: typeof p.priority === 'number' ? p.priority : null,
+          rows: [],
+        };
         byId[id] = g;
         buckets.push(g);
       }

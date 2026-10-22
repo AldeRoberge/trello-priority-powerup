@@ -6,3 +6,6 @@ coverage/
 .dev-cert/
 .idea/
 test-out.txt
+e2e/.out/
+test-results/
+playwright-report/

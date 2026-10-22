@@ -304,6 +304,8 @@
 
   // ── mount() — builds settings + chat panels into cardEl ──────────────────
 
+  var CHATS_OPEN_STORAGE_KEY = 'trello-priority-powerup/assistant-chats-open';
+
   function mount(cardEl, options) {
     if (!cardEl) throw new Error('AgentUI.mount: cardEl required');
     options = options || {};
@@ -413,6 +415,19 @@
     var sessionModelTier = null;
     var chatRestored = false;
     var chatPersistTimer = null;
+    /**
+     * The Assistant page (project scope with options.chatList) opens on a new conversation and lists the
+     * earlier ones on the left (components/agent/agent-chats.js). Elsewhere the single saved chat is kept.
+     */
+    var chats =
+      isProjectScope && options.chatList && global.AgentChats && global.AgentChatsUI
+        ? global.AgentChats.createController({
+            key: global.AgentChats.keyFor(options.chatList.key),
+            storage: options.chatList.storage
+          })
+        : null;
+    var chatsUi = null;
+    var chatsBooted = false;
     var pending = false;
     var turnEstimateMs = 8000;
     /** Bumped to invalidate in-flight turns when the user resumes from an earlier message. */
@@ -542,6 +557,29 @@
     settingsIcon.setAttribute('aria-hidden', 'true');
     settingsBtn.appendChild(settingsIcon);
 
+    // Show / hide the conversation list, and a new conversation when the list is hidden.
+    var chatsToggleBtn = null;
+    var chatsNewBtn = null;
+    if (chats) {
+      chatsToggleBtn = el('button', 'agent-settings-btn agent-chats-head-toggle', {
+        type: 'button',
+        'aria-label': 'Conversations',
+        title: 'Conversations',
+        'aria-expanded': 'false'
+      });
+      var chatsToggleIcon = el('i', 'ti ti-layout-sidebar');
+      chatsToggleIcon.setAttribute('aria-hidden', 'true');
+      chatsToggleBtn.appendChild(chatsToggleIcon);
+      chatsNewBtn = el('button', 'agent-settings-btn agent-chats-head-new', {
+        type: 'button',
+        'aria-label': 'Nouvelle conversation',
+        title: 'Nouvelle conversation'
+      });
+      var chatsNewIcon = el('i', 'ti ti-plus');
+      chatsNewIcon.setAttribute('aria-hidden', 'true');
+      chatsNewBtn.appendChild(chatsNewIcon);
+    }
+
     var chrome;
     if (standalone) {
       // Full-page / project Assistant: static header (no collapse chevron).
@@ -560,6 +598,10 @@
       textWrap.appendChild(titleEl);
       heading.appendChild(textWrap);
       head.appendChild(heading);
+      if (chats) {
+        head.insertBefore(chatsToggleBtn, heading);
+        head.appendChild(chatsNewBtn);
+      }
       head.appendChild(settingsBtn);
       field.appendChild(head);
       chrome = {
@@ -1383,7 +1425,34 @@
       field.appendChild(body);
     }
     section.appendChild(field);
-    cardEl.appendChild(section);
+    var chatsLayout = null;
+    if (chats) {
+      chatsLayout = el('div', 'agent-chats-layout');
+      var chatsAside = el('aside');
+      chatsLayout.appendChild(chatsAside);
+      chatsLayout.appendChild(section);
+      cardEl.appendChild(chatsLayout);
+      chatsUi = global.AgentChatsUI.mount(chatsAside, {
+        getView: function () {
+          return chats.view();
+        },
+        isLocked: chatBusy,
+        onNew: newConversation,
+        onOpen: openConversation,
+        onArchive: archiveConversation,
+        onRestore: restoreConversation
+      });
+      chats.onChange(function () {
+        chatsUi.render();
+      });
+      setChatsOpen(readChatsOpen(), false);
+      chatsToggleBtn.addEventListener('click', function () {
+        setChatsOpen(!chatsLayout.classList.contains('is-chats-open'), true);
+      });
+      chatsNewBtn.addEventListener('click', newConversation);
+    } else {
+      cardEl.appendChild(section);
+    }
 
     var debugOpen = false;
     var debugLog = [];
@@ -1562,6 +1631,7 @@
     }
 
     function notifyLayout() {
+      if (chatsUi) chatsUi.syncLock(); // runs whenever a turn starts or settles
       onLayoutChange();
     }
 
@@ -7898,6 +7968,10 @@
     }
 
     async function persistChatHistory() {
+      if (chats) {
+        chats.saveMessages(history);
+        return null;
+      }
       if (!t) return null;
       try {
         if (isProjectScope && typeof Agent.saveBoardChat === 'function') {
@@ -7914,19 +7988,45 @@
     }
 
     function schedulePersistChatHistory() {
-      if (!t) return;
-      if (
-        !(isProjectScope
-          ? typeof Agent.saveBoardChat === 'function'
-          : typeof Agent.saveCardChat === 'function')
-      ) {
-        return;
+      if (!chats) {
+        if (!t) return;
+        if (
+          !(isProjectScope
+            ? typeof Agent.saveBoardChat === 'function'
+            : typeof Agent.saveCardChat === 'function')
+        ) {
+          return;
+        }
       }
       if (chatPersistTimer) clearTimeout(chatPersistTimer);
       chatPersistTimer = setTimeout(function () {
         chatPersistTimer = null;
         persistChatHistory();
       }, 250);
+    }
+
+    /** Puts stored messages back into `history` and on screen (text only, like a reload). */
+    function replayMessages(msgs) {
+      history.length = 0;
+      sessionModelTier = null;
+      for (var i = 0; i < msgs.length; i++) {
+        var entry = msgs[i];
+        if (!entry || !entry.role || !entry.content) continue;
+        var selfPromptEntry =
+          !!entry.selfPrompt || isSelfPromptHistoryText(entry.content);
+        history.push({
+          role: entry.role,
+          content: entry.content,
+          selfPrompt: selfPromptEntry
+        });
+        if (selfPromptEntry && entry.role === 'user') continue;
+        appendMessage(entry.role, entry.content, {
+          silent: true,
+          noSound: true,
+          noUnread: true
+        });
+      }
+      return history.length > 0;
     }
 
     async function restoreChatHistory() {
@@ -7937,26 +8037,7 @@
         var stored = await loader.call(Agent, t);
         var msgs = (stored && stored.messages) || [];
         if (!msgs.length) return false;
-        history.length = 0;
-        sessionModelTier = null;
-        for (var i = 0; i < msgs.length; i++) {
-          var entry = msgs[i];
-          if (!entry || !entry.role || !entry.content) continue;
-          var selfPromptEntry =
-            !!entry.selfPrompt || isSelfPromptHistoryText(entry.content);
-          history.push({
-            role: entry.role,
-            content: entry.content,
-            selfPrompt: selfPromptEntry
-          });
-          if (selfPromptEntry && entry.role === 'user') continue;
-          appendMessage(entry.role, entry.content, {
-            silent: true,
-            noSound: true,
-            noUnread: true
-          });
-        }
-        if (!history.length) return false;
+        if (!replayMessages(msgs)) return false;
         chatRestored = true;
         if (collapse && collapse.refreshSummary) collapse.refreshSummary();
         notifyLayout();
@@ -7966,6 +8047,169 @@
         console.error('AgentUI loadChat failed', err);
         return false;
       }
+    }
+
+    // ── Conversations (Assistant page): new, open, archive, restore ──────────
+
+    /** True while the assistant is answering: switching conversation would mix the answer into another one. */
+    function chatBusy() {
+      return !!(pending || messageQueue.length > 0 || activeLaneCount > 0 || interviewActive);
+    }
+
+    function chatsNarrow() {
+      return !!(global.matchMedia && global.matchMedia('(max-width: 759px)').matches);
+    }
+
+    function readChatsOpen() {
+      if (chatsNarrow()) return false; // narrow: the list floats over the chat, so it starts hidden
+      try {
+        if (global.localStorage.getItem(CHATS_OPEN_STORAGE_KEY) === '0') return false;
+      } catch (e) {
+        /* storage blocked: default */
+      }
+      return true;
+    }
+
+    function setChatsOpen(open, remember) {
+      chatsLayout.classList.toggle('is-chats-open', !!open);
+      chatsToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      chatsToggleBtn.classList.toggle('is-active', !!open);
+      if (remember && !chatsNarrow()) {
+        try {
+          global.localStorage.setItem(CHATS_OPEN_STORAGE_KEY, open ? '1' : '0');
+        } catch (e) {
+          /* storage blocked: the choice lasts until reload */
+        }
+      }
+      notifyLayout();
+    }
+
+    function closeChatsOverlay() {
+      if (chatsNarrow()) setChatsOpen(false, false);
+    }
+
+    /** Saves right now what the debounce was still holding, so a switch never loses the last exchange. */
+    function flushChatPersist() {
+      if (chatPersistTimer) {
+        clearTimeout(chatPersistTimer);
+        chatPersistTimer = null;
+      }
+      if (chats) chats.saveMessages(history);
+    }
+
+    /** Empties the chat on screen: the same state as a fresh page, nothing carried over. */
+    function resetChatView() {
+      chatTurnGen += 1;
+      laneEpoch += 1;
+      laneDeferred = [];
+      messageQueue = [];
+      pending = false;
+      stopThinkingMotions();
+      clearSuggestions();
+      clearFollowUps();
+      clearPrompts();
+      clearApplySuggestions();
+      awaitingFeedback = null;
+      syncComposerPlaceholder();
+      if (activeOffer) {
+        activeOffer = null;
+        setListenBarState('idle');
+        syncApplySummary();
+      }
+      messagesEl.replaceChildren();
+      history.length = 0;
+      sessionModelTier = null;
+      chatRestored = false;
+      sessionStats = {
+        turns: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        estimated: false,
+        lastUsage: null
+      };
+      renderChatStats();
+      setError('');
+      input.value = '';
+      refreshComposerTypingGaze();
+      updateComposerEnabled();
+      emptyState.classList.toggle('is-hidden', Agent.isConfigured(provider));
+    }
+
+    /** Shows a stored conversation, or an empty one when `chat` is null, and offers the usual starters. */
+    function showConversation(chat) {
+      if (settingsOpen) setSettingsOpen(false);
+      resetChatView();
+      if (chat && replayMessages(chat.messages)) {
+        chatRestored = true;
+        scrollMessagesToBottom();
+      }
+      emptyState.classList.toggle('is-hidden', history.length > 0 || Agent.isConfigured(provider));
+      if (collapse && collapse.refreshSummary) collapse.refreshSummary();
+      notifyLayout();
+      refreshSuggestions({ animate: true });
+      focusComposerInput();
+    }
+
+    function newConversation() {
+      if (!chats || chatBusy()) return;
+      flushChatPersist();
+      if (chats.view().isDraft && !history.length) {
+        focusComposerInput(); // already on an empty conversation
+      } else {
+        chats.startNew();
+        showConversation(null);
+      }
+      closeChatsOverlay();
+    }
+
+    function openConversation(id) {
+      if (!chats || chatBusy()) return;
+      if (chats.current().id === id) {
+        focusComposerInput();
+        closeChatsOverlay();
+        return;
+      }
+      flushChatPersist();
+      var chat = chats.open(id);
+      if (!chat) return;
+      showConversation(chat);
+      closeChatsOverlay();
+    }
+
+    function archiveConversation(id) {
+      if (!chats) return;
+      var isCurrent = chats.current().id === id;
+      if (isCurrent && chatBusy()) return;
+      flushChatPersist();
+      var res = chats.archive(id);
+      if (res.wasCurrent) showConversation(null);
+    }
+
+    /** arg = { id, open }: bring an archived conversation back, and open it when it was clicked. */
+    function restoreConversation(arg) {
+      if (!chats || !arg) return;
+      if (arg.open && !chatBusy()) return openConversation(arg.id);
+      chats.restore(arg.id);
+    }
+
+    /** Carries the old single chat over once, then the list is drawn. The page itself opens on a new conversation. */
+    async function bootChats() {
+      if (!chats || chatsBooted) return;
+      chatsBooted = true;
+      if (chats.legacyPending() && t && typeof Agent.loadBoardChat === 'function') {
+        try {
+          var made = chats.importLegacy(await Agent.loadBoardChat(t));
+          // The old chat now lives in the list: free its room in Trello plugin data.
+          if (made && chats.persisted() && typeof Agent.saveBoardChat === 'function') {
+            await Agent.saveBoardChat(t, { messages: [] });
+          }
+        } catch (err) {
+          console.error('AgentUI previous chat import failed', err);
+        }
+      }
+      chatsUi.render();
     }
 
     async function applyCardPatchesFromTurn(patches) {
@@ -8661,8 +8905,10 @@
             console.error('AgentUI load profile failed', profErr);
           }
         }
+        if (chats) await bootChats();
         if (Agent.isConfigured(provider)) {
-          await restoreChatHistory();
+          // The Assistant page opens on a new conversation; the old ones wait in the list.
+          if (!chats) await restoreChatHistory();
           if (isProjectScope) {
             interviewBootstrapped = true;
             markSettleReady();
@@ -9467,6 +9713,7 @@
       collapse: collapse,
       focusComposer: openAndFocusComposer,
       scrollMessagesToBottom: scrollMessagesToBottom,
+      chats: chats,
       openSettings: function (opts) {
         setSettingsOpen(true);
         if (opts && opts.memory) {

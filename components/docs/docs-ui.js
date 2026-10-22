@@ -5,7 +5,7 @@
  *  - each line is a block: the left handle drags it, turns it into another type, or adds one (including a picture)
  *  - typing ** * ~~ == ++ ` renders the mark; the signs show again while the caret is in the word. [[ links a document
  *  - the link button and Ctrl+K search documents; the selected words stay. A pasted address stays a web link
- *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; chips open the card / document
+ *  - "@" mentions: @ people (and everything), @@ tasks, @@@ documents; an unknown name can be created; chips open the card / document
  *    a known entity is linked in place (faint until hover); the words stay as typed
  *    a task chip grows a pin when the pointer is close: parent (top), sibling (right), person (left)
  *    Backspace right after a person keeps the first name; another Backspace removes the mention
@@ -251,7 +251,7 @@
       banner: h('div', { class: 'dc-banner', hidden: true }),
       side: h('aside', { class: 'dc-side', 'aria-label': 'Documents' }),
       sideList: h('div', { class: 'dc-list', role: 'listbox' }),
-      search: h('input', { class: 'dc-search-input', type: 'search', placeholder: 'Filtrer…', 'aria-label': 'Filtrer les documents', autocomplete: 'off' }),
+      search: h('input', { class: 'dc-search-input', type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher les documents', autocomplete: 'off' }),
       main: h('section', { class: 'dc-doc' }),
       head: h('div', { class: 'dc-head' }),
       headTitle: h('span', { class: 'dc-head-title' }),
@@ -849,12 +849,16 @@
           openFolderMenu(more, f.id);
         },
       }, [icon('dots')]);
-      var chev = icon(r.open ? 'chevron-down' : 'chevron-right', 'dc-folder-chev dc-doc-chev');
-      chev.addEventListener('click', function (e) {
-        e.stopPropagation();
-        setFolderOpen(f.id, !state.openFolders[f.id]);
-        paintList();
-      });
+      var chev = r.childCount
+        ? icon(r.open ? 'chevron-down' : 'chevron-right', 'dc-folder-chev dc-doc-chev')
+        : h('span', { class: 'dc-chev-gap' });
+      if (r.childCount) {
+        chev.addEventListener('click', function (e) {
+          e.stopPropagation();
+          setFolderOpen(f.id, !state.openFolders[f.id]);
+          paintList();
+        });
+      }
       var when = r.doc
         ? DM().relativeTime(r.doc.updatedAt) + (/^size/.test(state.sort) ? ' · ' + sizeLabel(r.doc.size) : '')
         : String(r.count);
@@ -863,7 +867,7 @@
         style: 'padding-left:' + (8 + r.depth * 16) + 'px',
         role: 'treeitem',
         'aria-label': (r.doc && r.doc.title) || f.name,
-        'aria-expanded': r.open ? 'true' : 'false',
+        'aria-expanded': r.childCount ? (r.open ? 'true' : 'false') : null,
         'aria-selected': on ? 'true' : 'false',
         tabindex: '0',
         'data-folder': f.id,
@@ -1072,7 +1076,7 @@
       });
       input.addEventListener('blur', function () { finish(true); });
       var row = h('div', { class: 'dc-item dc-folder dc-folder-new', style: 'padding-left:' + (8 + depth * 16) + 'px' }, [
-        icon('chevron-right', 'dc-folder-chev'),
+        h('span', { class: 'dc-chev-gap' }),
         icon('folder', 'dc-item-icon'),
         input,
       ]);
@@ -1601,12 +1605,26 @@
       return { tags: p && p.tags ? p.tags.slice() : [], people: p && p.people ? p.people.slice() : [] };
     }
 
+    function customAssignees() {
+      var inputs = state.taskFields && state.taskFields.inputs;
+      return ((inputs && inputs.customAssignees) || []).map(function (c) {
+        return c && c.id && c.name ? { id: String(c.id), name: c.name } : null;
+      }).filter(Boolean);
+    }
+
     function memberName(id) {
+      var key = String(id);
       var src = (state.sources && state.sources.members) || [];
-      var m = src.filter(function (x) { return x.id === id; })[0];
-      if (m) return m.fullName || m.name || m.username || id;
-      var fm = state.face && (state.face.members || []).filter(function (x) { return x.id === id; })[0];
-      return (fm && fm.name) || id;
+      var m = src.filter(function (x) { return String(x.id) === key; })[0];
+      if (m) return m.fullName || m.name || m.username || key;
+      var fm = state.face && (state.face.members || []).filter(function (x) { return String(x.id) === key; })[0];
+      if (fm && fm.name) return fm.name;
+      var contact = ((state.sources && state.sources.contacts) || []).filter(function (x) { return x && String(x.id) === key; })[0];
+      if (contact && contact.name) return contact.name;
+      var custom = customAssignees().filter(function (x) { return x.id === key; })[0];
+      if (custom) return custom.name;
+      var item = state.index && DM().resolveMention(state.index, 'person', key);
+      return (item && item.label) || key;
     }
 
     function isTaskPage() {
@@ -1725,7 +1743,51 @@
       );
     }
 
-    function togglePerson(id) {
+    function isBoardMember(id) {
+      var key = String(id);
+      return ((state.sources && state.sources.members) || []).some(function (m) { return String(m.id) === key; });
+    }
+
+    function assignedIds() {
+      if (isTaskPage()) {
+        return (state.face.members || []).map(function (m) { return String(m.id); })
+          .concat(customAssignees().map(function (c) { return c.id; }));
+      }
+      return pageProps().people.map(String);
+    }
+
+    /** Hors Trello person on the task card. `onlyAdd` leaves them in place when already assigned. */
+    function writeCustom(id, name, onlyAdd) {
+      var cardId = state.current && state.current.subject && state.current.subject.id;
+      var PT = global.PriorityTrello;
+      if (!cardId || !PT || typeof PT.getCardInputsById !== 'function' || typeof PT.saveCardInputsById !== 'function') {
+        failure(new Error('Enregistrement indisponible'));
+        return Promise.resolve();
+      }
+      return PT.getCardInputsById(t, cardId).then(function (inputs) {
+        var list = ((inputs && inputs.customAssignees) || []).map(function (c) {
+          return { id: String(c.id), name: c.name };
+        });
+        var at = -1;
+        for (var i = 0; i < list.length; i++) if (list[i].id === String(id)) at = i;
+        if (at >= 0) {
+          if (onlyAdd) return;
+          list.splice(at, 1);
+        } else {
+          var entry = { id: String(id), name: name || memberName(id) };
+          var PU = global.PriorityUI;
+          if (PU && typeof PU.normalizeCustomAssigneeEntry === 'function') entry = PU.normalizeCustomAssigneeEntry(entry) || entry;
+          list.push(entry);
+        }
+        return PT.saveCardInputsById(t, cardId, { customAssignees: list }).then(function () { loadFace(); });
+      }, failure);
+    }
+
+    function togglePerson(id, name) {
+      if (isTaskPage() && !isBoardMember(id)) {
+        writeCustom(id, name || memberName(id), false);
+        return;
+      }
       if (isTaskPage()) {
         var ids = (state.face.members || []).map(function (m) { return m.id; });
         var at = ids.indexOf(id);
@@ -1741,17 +1803,134 @@
       patchPage({ props: props }).then(function () { paintProps(); });
     }
 
-    function openPeoplePicker(anchor) {
-      var members = (state.sources && state.sources.members) || [];
-      var on = isTaskPage() ? (state.face.members || []).map(function (m) { return m.id; }) : pageProps().people;
-      openPicker(anchor, members.map(function (m) {
-        return {
-          label: m.fullName || m.name || m.username || m.id,
+    function publishAssignee(person) {
+      var PT = global.PriorityTrello;
+      var People = global.People;
+      if (!person || !PT || !People || typeof PT.getCustomAssigneeCatalog !== 'function' || typeof PT.saveCustomAssigneeCatalog !== 'function' || typeof People.mergeIntoAssigneeCatalog !== 'function') {
+        return Promise.resolve();
+      }
+      return PT.getCustomAssigneeCatalog(t).then(function (catalog) {
+        var merged = People.mergeIntoAssigneeCatalog(catalog || [], { people: [person] });
+        if (!merged.changed) return;
+        return PT.saveCustomAssigneeCatalog(t, merged.catalog);
+      }).catch(function () {});
+    }
+
+    /** Saves the name in the private directory and returns the person. An existing name is reused. */
+    function savePerson(name) {
+      var People = global.People;
+      if (!People || typeof People.load !== 'function' || typeof People.upsert !== 'function' || typeof People.save !== 'function' || typeof People.findByAliasOrName !== 'function') {
+        return Promise.reject(new Error('Enregistrement indisponible'));
+      }
+      return People.load(t).then(function (dir) {
+        var before = People.findByAliasOrName(dir, name);
+        var next = People.upsert(dir || { people: [] }, { name: name });
+        var person = People.findByAliasOrName(next, name);
+        if (!person || !person.id) throw new Error('Nom invalide');
+        var stored = before ? Promise.resolve(next) : People.save(t, next);
+        return stored.then(function (saved) {
+          var list = (saved && saved.people) || next.people || [];
+          if (!state.sources) state.sources = { members: [], contacts: [], cards: [], lists: [], failed: [] };
+          state.sources.contacts = list.slice();
+          rebuildIndex();
+          return publishAssignee(person).then(function () { return person; });
+        });
+      });
+    }
+
+    function assignPerson(person) {
+      if (!person) return Promise.resolve();
+      if (isTaskPage()) return writeCustom(person.id, person.name, true);
+      if (String(person.id).length > 32) return Promise.resolve();
+      var props = pageProps();
+      if (props.people.indexOf(person.id) >= 0) return Promise.resolve();
+      if (props.people.length >= 8) {
+        toast('Huit personnes au maximum.', 'error');
+        return Promise.resolve();
+      }
+      props.people.push(person.id);
+      return patchPage({ props: props }).then(function () { paintProps(); });
+    }
+
+    function addPerson(name) {
+      savePerson(name).then(assignPerson, failure);
+    }
+
+    function personChoices(catalog) {
+      var on = assignedIds();
+      var rows = [];
+      var seen = Object.create(null);
+      function push(id, label) {
+        id = String(id || '');
+        label = String(label || '').trim();
+        if (!id || !label || seen[id]) return;
+        seen[id] = true;
+        rows.push({
+          id: id,
+          label: label,
           icon: 'user',
-          on: on.indexOf(m.id) >= 0,
-          run: function () { closePop(); togglePerson(m.id); },
-        };
-      }));
+          on: on.indexOf(id) >= 0,
+          run: function () { closePop(); togglePerson(id, label); },
+        });
+      }
+      ((state.sources && state.sources.members) || []).forEach(function (m) {
+        push(m.id, m.fullName || m.name || m.username || m.id);
+      });
+      ((state.sources && state.sources.contacts) || []).forEach(function (p) {
+        if (!p || !p.name) return;
+        if (p.trelloMemberId && seen[String(p.trelloMemberId)]) return;
+        push(p.id, p.name);
+      });
+      (catalog || []).forEach(function (c) {
+        if (!c || !c.name) return;
+        if (c.trelloMemberId && seen[String(c.trelloMemberId)]) return;
+        push(c.id, c.name);
+      });
+      if (isTaskPage()) customAssignees().forEach(function (c) { push(c.id, c.name); });
+      return rows;
+    }
+
+    function openPeoplePicker(anchor) {
+      var PT = global.PriorityTrello;
+      var pending = PT && typeof PT.getCustomAssigneeCatalog === 'function'
+        ? PT.getCustomAssigneeCatalog(t)
+        : Promise.resolve([]);
+      pending.then(function (catalog) {
+        showPeoplePicker(anchor, catalog || []);
+      }, function () {
+        showPeoplePicker(anchor, []);
+      });
+    }
+
+    function showPeoplePicker(anchor, catalog) {
+      var rows = personChoices(catalog);
+      openPicker(anchor, rows, function (list, q, shown) {
+        var name = DM().personDraft(rows.map(function (r) { return r.label; }), q);
+        if (!name) return;
+        var btn = h('button', {
+          class: 'dc-menu-item',
+          type: 'button',
+          onclick: function () { closePop(); addPerson(name); },
+        }, [icon('plus'), h('span', { text: 'Ajouter « ' + name + ' »' })]);
+        list.appendChild(btn);
+        if (!shown && pop) {
+          var search = pop.querySelector('.dc-picker-search');
+          if (search && !search._personEnter) {
+            search._personEnter = true;
+            search.addEventListener('keydown', function (e) {
+              if (e.key !== 'Enter') return;
+              var typed = DM().personDraft(rows.map(function (r) { return r.label; }), search.value);
+              if (!typed) return;
+              var query = DM().fold(search.value || '');
+              var hits = rows.filter(function (r) { return !query || DM().fold(r.label).indexOf(query) >= 0; });
+              if (hits.length) return;
+              e.preventDefault();
+              closePop();
+              addPerson(typed);
+            });
+          }
+        }
+      });
     }
 
     function FC() {
@@ -2122,12 +2301,14 @@
       }
       if (isTaskPage()) {
         els.props.appendChild(propRow('users', 'Personnes', function (v) {
-          var members = state.face.members || [];
-          if (!members.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openPeoplePicker(e.currentTarget); }));
-          members.forEach(function (m) {
+          var people = (state.face.members || []).map(function (m) {
+            return { id: m.id, name: m.name || memberName(m.id) };
+          }).concat(customAssignees());
+          if (!people.length) v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openPeoplePicker(e.currentTarget); }));
+          people.forEach(function (m) {
             v.appendChild(chip(m.name || memberName(m.id), {
               onClick: function (e) { openPeoplePicker(e.currentTarget); },
-              onRemove: function () { togglePerson(m.id); },
+              onRemove: function () { togglePerson(m.id, m.name); },
             }));
           });
         }));
@@ -4362,6 +4543,11 @@
         if (trig.scope === 'doc' && trig.query.trim()) {
           entries.push({ kind: 'create', title: DM().cleanTitle(trig.query) });
         }
+        if (trig.scope === 'all' && trig.query.trim()) {
+          var names = ((state.index && state.index.person) || []).map(function (p) { return p.label; });
+          var drafted = DM().personDraft(names, trig.query);
+          if (drafted) entries.push({ kind: 'create-person', title: drafted });
+        }
         var keep = sugg && sugg.kind === 'mention' && sugg.trig.scope === trig.scope && sugg.trig.query === trig.query ? sugg.active : 0;
         sugg = { kind: 'mention', trig: trig, entries: entries, groups: groups, active: Math.min(keep, Math.max(0, entries.length - 1)) };
         paintSuggest();
@@ -4428,10 +4614,10 @@
             h('span', { class: 'dc-sg-label', text: it.label }),
             it.sub ? h('span', { class: 'dc-sg-sub', text: it.sub }) : null,
           ]);
-        } else if (en.kind === 'create') {
+        } else if (en.kind === 'create' || en.kind === 'create-person') {
           row = h('div', { class: 'dc-sg-row dc-sg-row--create' }, [
             icon('plus', 'dc-sg-icon dc-sg-icon--doc'),
-            h('span', { class: 'dc-sg-label', text: 'Créer le document « ' + en.title + ' »' }),
+            h('span', { class: 'dc-sg-label', text: (en.kind === 'create-person' ? 'Créer la personne « ' : 'Créer le document « ') + en.title + ' »' }),
           ]);
         } else {
           row = h('div', { class: 'dc-sg-row' }, [
@@ -4607,7 +4793,21 @@
         document.execCommand('delete');
         saveSel();
         createFromMention(entry.title);
+      } else if (entry.kind === 'create-person') {
+        document.execCommand('delete');
+        saveSel();
+        createPersonMention(entry.title);
       }
+    }
+
+    function createPersonMention(title) {
+      var range = lastRange;
+      savePerson(title).then(function (person) {
+        if (!person) return;
+        lastRange = range;
+        restoreSel();
+        insertMention({ type: 'person', id: person.id, label: person.name, initials: DM().initialsOf(person.name), contact: true });
+      }, failure);
     }
 
     function createFromMention(title) {

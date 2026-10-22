@@ -8,6 +8,7 @@
  *           best first. It is only a preview: "Planifier ma journée" writes it, dragging a block fixes one.
  * Overdue tasks always flow: their old time belongs to a day that is gone.
  * Minutes are minutes since midnight; days are local ISO days.
+ * The page is a board of widgets (layout): each one has a column, a row and a size.
  * Exposes window.TodayModel.
  */
 (function (global) {
@@ -554,6 +555,310 @@
     return stats.open + (stats.open > 1 ? ' tâches' : ' tâche') + ' à faire';
   }
 
+  /* ── Widget board ──────────────────────────────────────────────── */
+
+  var LAYOUT_COLS = 12;
+  var LAYOUT_ROW = 16; // one grid row, in px. The page and the tests share this.
+  var LAYOUT_MIN_W = 3;
+  var LAYOUT_MIN_H = 5;
+  var LAYOUT_MAX_H = 96;
+  var LAYOUT_TITLE = 40;
+
+  // Default geometry: greeting and weather on the first band, then the day's
+  // sections down the left and the clock beside them. h is in grid rows.
+  var WIDGETS = [
+    { id: 'hello', label: 'Bonjour', icon: 'sun', w: 7, h: 16 },
+    { id: 'weather', label: 'Météo', icon: 'cloud', w: 5, h: 16 },
+    { id: 'focus', label: 'Prochaine', icon: 'target-arrow', w: 7, h: 11 },
+    { id: 'late', label: 'En retard', icon: 'alert-circle', w: 7, h: 16 },
+    { id: 'tasks', label: 'À faire', icon: 'list-check', w: 7, h: 16 },
+    { id: 'sugg', label: 'À planifier', icon: 'bulb', w: 7, h: 12 },
+    { id: 'review', label: 'Revue', icon: 'list-search', w: 7, h: 12 },
+    { id: 'plan', label: 'Planning', icon: 'calendar-time', w: 5, h: 55 },
+  ];
+
+  function widgetById(id) {
+    for (var i = 0; i < WIDGETS.length; i++) if (WIDGETS[i].id === id) return WIDGETS[i];
+    return null;
+  }
+
+  function copyItem(it) {
+    return { id: it.id, c: it.c, r: it.r, w: it.w, h: it.h };
+  }
+
+  function cloneLayout(layout) {
+    return JSON.parse(JSON.stringify(layout));
+  }
+
+  /** The arrangement a new visitor sees. */
+  function defaultLayout() {
+    var left = [
+      { id: 'focus', w: 7, h: 11 },
+      { id: 'late', w: 7, h: 16 },
+      { id: 'tasks', w: 7, h: 16 },
+      { id: 'sugg', w: 7, h: 12 },
+      { id: 'review', w: 7, h: 12 },
+    ];
+    var items = [
+      { id: 'hello', c: 0, r: 0, w: 7, h: 16 },
+      { id: 'weather', c: 7, r: 0, w: 5, h: 16 },
+    ];
+    var r = 16;
+    var span = 0;
+    left.forEach(function (it) {
+      items.push({ id: it.id, c: 0, r: r, w: it.w, h: it.h });
+      r += it.h;
+      span += it.h;
+    });
+    items.push({ id: 'plan', c: 7, r: 16, w: 5, h: span });
+    return { titles: {}, items: items };
+  }
+
+  function clampBox(it) {
+    var w = clamp(it.w | 0, LAYOUT_MIN_W, LAYOUT_COLS);
+    var c = clamp(it.c | 0, 0, LAYOUT_COLS - w);
+    return {
+      id: String(it.id),
+      c: c,
+      r: Math.max(0, it.r | 0),
+      w: w,
+      h: clamp(it.h | 0, LAYOUT_MIN_H, LAYOUT_MAX_H),
+    };
+  }
+
+  function boxesOverlap(a, b) {
+    return a.c < b.c + b.w && a.c + a.w > b.c && a.r < b.r + b.h && a.r + a.h > b.r;
+  }
+
+  function cleanTitle(value) {
+    return String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, LAYOUT_TITLE);
+  }
+
+  /**
+   * A saved board, or the default when nothing was saved. An empty item list is kept:
+   * the visitor closed every widget. Unknown ids and duplicates are dropped.
+   */
+  function normalizeLayout(raw) {
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.items)) return defaultLayout();
+    var items = [];
+    var seen = {};
+    raw.items.forEach(function (it) {
+      if (!it || !widgetById(it.id) || seen[it.id]) return;
+      seen[it.id] = true;
+      items.push(clampBox(it));
+    });
+    var titles = {};
+    var src = raw.titles && typeof raw.titles === 'object' ? raw.titles : {};
+    Object.keys(src).forEach(function (id) {
+      if (!widgetById(id)) return;
+      var t = cleanTitle(src[id]);
+      if (t) titles[id] = t;
+    });
+    return { titles: titles, items: items };
+  }
+
+  function layoutLabel(layout, id) {
+    var cat = widgetById(id);
+    if (!cat) return '';
+    var custom = layout && layout.titles && layout.titles[id];
+    return custom || cat.label;
+  }
+
+  function hiddenWidgets(layout) {
+    var have = {};
+    ((layout && layout.items) || []).forEach(function (it) { have[it.id] = true; });
+    return WIDGETS.filter(function (w) { return !have[w.id]; }).map(function (w) {
+      return { id: w.id, label: w.label, icon: w.icon };
+    });
+  }
+
+  function findItem(items, id) {
+    for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
+    return null;
+  }
+
+  /** The widget immediately to the right, the one a width drag should share the row with. */
+  function rightNeighbor(items, it) {
+    var best = null;
+    items.forEach(function (o) {
+      if (o.id === it.id || o.c !== it.c + it.w) return;
+      var overlap = Math.min(it.r + it.h, o.r + o.h) - Math.max(it.r, o.r);
+      if (overlap <= 0) return;
+      if (!best || overlap > best.overlap) best = { item: o, overlap: overlap };
+    });
+    return best ? best.item : null;
+  }
+
+  function choosePush(a, b, i, j, pinnedId) {
+    if (a.id === pinnedId) return b;
+    if (b.id === pinnedId) return a;
+    if (a.r !== b.r) return a.r > b.r ? a : b;
+    return i > j ? a : b;
+  }
+
+  /** Move whatever sits on `pinnedId` downward until nothing overlaps. */
+  function pushDown(items, pinnedId) {
+    var changed = false;
+    var guard = 0;
+    var limit = items.length * items.length + 2;
+    while (guard++ < limit) {
+      var hit = false;
+      for (var i = 0; i < items.length; i++) {
+        for (var j = 0; j < items.length; j++) {
+          if (i === j || !boxesOverlap(items[i], items[j])) continue;
+          var push = choosePush(items[i], items[j], i, j, pinnedId);
+          var other = push === items[i] ? items[j] : items[i];
+          var nr = other.r + other.h;
+          if (push.r !== nr) {
+            push.r = nr;
+            hit = true;
+            changed = true;
+          }
+        }
+      }
+      if (!hit) break;
+    }
+    return changed;
+  }
+
+  /** Slide every widget except the one the visitor just placed up into the free cells. */
+  function compactUp(items, pinnedId) {
+    var changed = false;
+    var sorted = items.slice().sort(function (a, b) { return a.r - b.r || a.c - b.c; });
+    sorted.forEach(function (it) {
+      if (it.id === pinnedId) return;
+      var r = it.r;
+      while (r > 0) {
+        var trial = { id: it.id, c: it.c, r: r - 1, w: it.w, h: it.h };
+        var blocked = false;
+        for (var i = 0; i < items.length; i++) {
+          if (items[i] !== it && boxesOverlap(trial, items[i])) { blocked = true; break; }
+        }
+        if (blocked) break;
+        r--;
+      }
+      if (r !== it.r) {
+        it.r = r;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function settle(items, pinnedId) {
+    var guard = 0;
+    while (guard++ < 16) {
+      var pushed = pushDown(items, pinnedId);
+      var compacted = compactUp(items, pinnedId);
+      if (!pushed && !compacted) return;
+    }
+    pushDown(items, pinnedId);
+  }
+
+  function applyWidth(items, it, w) {
+    var want = clamp(w, LAYOUT_MIN_W, LAYOUT_COLS - it.c);
+    var nb = rightNeighbor(items, it);
+    if (!nb) {
+      it.w = want;
+      return;
+    }
+    var nbW = nb.w - (want - it.w);
+    if (nbW < LAYOUT_MIN_W) {
+      want -= LAYOUT_MIN_W - nbW;
+      nbW = LAYOUT_MIN_W;
+    }
+    if (want < LAYOUT_MIN_W) want = LAYOUT_MIN_W;
+    it.w = want;
+    nb.w = nbW;
+    nb.c = it.c + it.w;
+    if (nb.c + nb.w > LAYOUT_COLS) nb.w = LAYOUT_COLS - nb.c;
+  }
+
+  function withItems(layout, fn) {
+    var next = cloneLayout(normalizeLayout(layout));
+    fn(next);
+    return next;
+  }
+
+  function closeLayout(layout, id) {
+    return withItems(layout, function (next) {
+      next.items = next.items.filter(function (it) { return it.id !== id; });
+      settle(next.items, null);
+    });
+  }
+
+  function openLayout(layout, id) {
+    return withItems(layout, function (next) {
+      if (!widgetById(id) || findItem(next.items, id)) return;
+      var cat = widgetById(id);
+      var bottom = 0;
+      next.items.forEach(function (it) { bottom = Math.max(bottom, it.r + it.h); });
+      next.items.push({ id: id, c: 0, r: bottom, w: cat.w, h: cat.h });
+      settle(next.items, id);
+    });
+  }
+
+  /** `w` or `h` null keeps that side. A width change shares the row with the widget on the right. */
+  function resizeLayout(layout, id, w, h) {
+    return withItems(layout, function (next) {
+      var it = findItem(next.items, id);
+      if (!it) return;
+      if (w != null && w !== it.w) applyWidth(next.items, it, w);
+      if (h != null && h !== it.h) it.h = clamp(h, LAYOUT_MIN_H, LAYOUT_MAX_H);
+      settle(next.items, id);
+    });
+  }
+
+  function moveLayout(layout, id, c, r) {
+    return withItems(layout, function (next) {
+      var it = findItem(next.items, id);
+      if (!it) return;
+      var box = clampBox({ id: id, c: c, r: r, w: it.w, h: it.h });
+      it.c = box.c;
+      it.r = box.r;
+      settle(next.items, id);
+    });
+  }
+
+  function renameLayout(layout, id, title) {
+    return withItems(layout, function (next) {
+      var cat = widgetById(id);
+      if (!cat) return;
+      var t = cleanTitle(title);
+      if (!t || t === cat.label) delete next.titles[id];
+      else next.titles[id] = t;
+    });
+  }
+
+  /** Narrow screens stack the open widgets, full width, in reading order. The saved board is untouched. */
+  function presentLayout(layout, narrow) {
+    var items = normalizeLayout(layout).items.map(copyItem);
+    if (!narrow) return items;
+    items.sort(function (a, b) { return a.r - b.r || a.c - b.c; });
+    var r = 0;
+    items.forEach(function (it) {
+      it.c = 0;
+      it.w = LAYOUT_COLS;
+      it.r = r;
+      r += it.h;
+    });
+    return items;
+  }
+
+  function layoutSignature(layout) {
+    var n = normalizeLayout(layout);
+    var items = n.items.map(copyItem).sort(function (a, b) {
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    var titles = {};
+    Object.keys(n.titles).sort().forEach(function (k) { titles[k] = n.titles[k]; });
+    return JSON.stringify({ titles: titles, items: items });
+  }
+
+  function layoutSame(a, b) {
+    return layoutSignature(a) === layoutSignature(b);
+  }
+
   global.TodayModel = {
     WORK_END: WORK_END,
     WORK_START: WORK_START,
@@ -585,5 +890,24 @@
     buildDay: buildDay,
     suggest: suggest,
     headline: headline,
+    layout: {
+      COLS: LAYOUT_COLS,
+      ROW: LAYOUT_ROW,
+      MIN_W: LAYOUT_MIN_W,
+      MIN_H: LAYOUT_MIN_H,
+      MAX_H: LAYOUT_MAX_H,
+      widgets: function () { return WIDGETS.map(function (w) { return { id: w.id, label: w.label, icon: w.icon, w: w.w, h: w.h }; }); },
+      defaults: defaultLayout,
+      normalize: normalizeLayout,
+      label: layoutLabel,
+      hidden: hiddenWidgets,
+      close: closeLayout,
+      open: openLayout,
+      resize: resizeLayout,
+      move: moveLayout,
+      rename: renameLayout,
+      present: presentLayout,
+      same: layoutSame,
+    },
   };
 })(typeof window !== 'undefined' ? window : this);

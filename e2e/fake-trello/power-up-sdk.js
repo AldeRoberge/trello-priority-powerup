@@ -258,17 +258,46 @@
     var t = {};
     var NOT_IMPLEMENTED = ['boardBar', 'overlay', 'closeOverlay', 'attach', 'requestWithContext', 'getNavigationInfo', 'localizeNode', 'cardBackSection', 'setAll'];
 
+    // The real client returns Bluebird promises: t.card('id').get('id'), .spread(), .tap().
+    function chain(p) {
+      p.get = function (key) {
+        return chain(
+          p.then(function (v) {
+            return v == null ? v : v[key];
+          })
+        );
+      };
+      p.spread = function (fn) {
+        return chain(
+          p.then(function (v) {
+            return fn.apply(null, v);
+          })
+        );
+      };
+      p.tap = function (fn) {
+        return chain(
+          p.then(function (v) {
+            return Promise.resolve(fn(v)).then(function () {
+              return v;
+            });
+          })
+        );
+      };
+      return p;
+    }
     function data(name) {
       return function () {
         var a = Array.prototype.slice.call(arguments);
-        return postJson('/rpc', { method: name, args: a, ctx: ctx }).then(function (r) {
-          if (r.error) {
-            var e = new Error(r.error.message);
-            e.name = r.error.name || 'Error';
-            throw e;
-          }
-          return r.result;
-        });
+        return chain(
+          postJson('/rpc', { method: name, args: a, ctx: ctx }).then(function (r) {
+            if (r.error) {
+              var e = new Error(r.error.message);
+              e.name = r.error.name || 'Error';
+              throw e;
+            }
+            return r.result;
+          })
+        );
       };
     }
     ['get', 'set', 'remove', 'getAll', 'board', 'lists', 'cards', 'card', 'list', 'member', 'organization', 'isMemberSignedIn', 'memberCanWriteToModel', 'loadSecret', 'storeSecret'].forEach(function (name) {
@@ -339,6 +368,7 @@
     t.modal = function (opts) {
       opts = Object.assign({}, opts);
       opts.url = new URL(opts.url, base).href;
+      opts.ctx = ctx; // a modal opened from a card keeps that card as its context
       return getHost().openModal(opts, window);
     };
     t.closeModal = function () {
@@ -347,6 +377,7 @@
     t.popup = function (opts) {
       opts = Object.assign({}, opts);
       if (opts.url) opts.url = new URL(opts.url, base).href;
+      opts.ctx = ctx;
       return getHost().openPopup(opts, window, function () {
         return makeClient({ ctx: ctx, args: args, base: base });
       });

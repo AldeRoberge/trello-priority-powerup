@@ -278,6 +278,11 @@
         if (listId) next.listId = listId;
         else delete next.listId;
       }
+      if (patch && Object.prototype.hasOwnProperty.call(patch, 'priority')) {
+        if (typeof patch.priority === 'number' && isFinite(patch.priority)) {
+          next.priority = Math.round(Math.max(0, Math.min(10, patch.priority)) * 10) / 10;
+        } else delete next.priority;
+      }
       return next;
     });
     return { nodes: nodes, links: ((goals && goals.links) || []).slice() };

@@ -510,6 +510,28 @@ describe('ContextMenu', () => {
     assert.ok(msg.some((i) => i.id === 'copy'));
   });
 
+  it('buildAgentChatItems opens and archives a conversation, or restores an archived one', () => {
+    const calls = [];
+    const live = ContextMenu.buildAgentChatItems({
+      onOpen: () => calls.push('open'),
+      onArchive: () => calls.push('archive'),
+      onRestore: () => calls.push('restore'),
+    });
+    assert.deepEqual(live.filter((i) => !i.sep).map((i) => i.id), ['open-chat', 'archive-chat']);
+    live.filter((i) => !i.sep).forEach((i) => i.action());
+    const archived = ContextMenu.buildAgentChatItems({
+      archived: true,
+      onOpen: () => calls.push('open'),
+      onArchive: () => calls.push('archive'),
+      onRestore: () => calls.push('restore'),
+    });
+    assert.deepEqual(archived.filter((i) => !i.sep).map((i) => i.id), ['open-chat', 'restore-chat']);
+    archived.filter((i) => !i.sep).forEach((i) => i.action());
+    assert.deepEqual(calls, ['open', 'archive', 'open', 'restore']);
+    assert.equal(ContextMenu.iconFor(live[0]), 'message-circle');
+    assert.equal(ContextMenu.iconFor(archived[2]), 'archive-off');
+  });
+
   it('buildOverviewTaskItems and history entry items', () => {
     let jumped = false;
     const tasks = ContextMenu.buildOverviewTaskItems({

@@ -817,7 +817,7 @@ describe('GanttModel', () => {
     ];
     const map = {
       a: { id: 'p2', name: 'Zèbre' },
-      b: { id: 'p1', name: 'Alpha' },
+      b: { id: 'p1', name: 'Alpha', priority: 5 },
     };
     const grouped = GanttModel.sortTreeRootsGroupedByProject(nodes, 'name', 'asc', {
       projectOf: (n) => map[n.cardId] || null,
@@ -828,6 +828,7 @@ describe('GanttModel', () => {
     );
     assert.equal(grouped[0].sectionKey, 'project');
     assert.equal(grouped[0].projectId, 'p1');
+    assert.equal(grouped[0].priority, 5);
     assert.equal(grouped[0].id, 'section:project:p1');
     assert.deepEqual(
       grouped[0].children.map((n) => n.cardId),

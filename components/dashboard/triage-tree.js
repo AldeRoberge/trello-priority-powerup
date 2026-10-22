@@ -262,6 +262,7 @@
       'data-iso-label': n.free ? null : (n.name || null),
     });
     indent(row, 0);
+    row.appendChild(el('span', 'tt-count', { text: String(n.count) }));
     row.appendChild(chevron(n.open, true, function () { ctx.toggle(n.key); }));
     row.appendChild(projectGlyph(n, ctx));
     var name = el('span', 'tt-name', { text: n.name, title: n.name });
@@ -274,7 +275,6 @@
     row.appendChild(name);
     row.appendChild(progressEl(n.progress));
     row.appendChild(prioCol(n.priority, n.tierI));
-    row.appendChild(el('span', 'tt-count', { text: String(n.count) }));
     // The rest of the line opens the project in the pane (the free group has none: it folds).
     row.addEventListener('click', function () {
       if (pickable) ctx.selectProject(n.id);
