@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Documents : le titre d'un document n'est plus coupé, il passe à la ligne.
 - Triage : le cercle, la barre et le % forment un bloc légèrement plus foncé titré « Avancement », suivi d'un bloc « Priorité » encore plus foncé.
 - Assistant en bas : fond plus foncé comme Triage, et une poignée en haut pour ouvrir l'historique (clic) ou en montrer plus ou moins (glisser).
 - Une fenêtre « Une nouvelle version est disponible, veuillez actualiser » apparaît en bas à droite dès qu'une nouvelle version est publiée (vérification en arrière-plan toutes les 30 secondes), au lieu de recharger la page sans prévenir.

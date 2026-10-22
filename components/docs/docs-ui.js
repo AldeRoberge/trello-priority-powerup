@@ -261,7 +261,7 @@
       page: h('article', { class: 'dc-page' }),
       cover: h('div', { class: 'dc-cover', hidden: true }),
       coverAdd: h('div', { class: 'dc-cover-add' }),
-      title: h('input', { class: 'dc-title', type: 'text', placeholder: 'Sans titre', maxlength: String(DM().MAX_TITLE), 'aria-label': 'Titre du document', spellcheck: 'true' }),
+      title: h('textarea', { class: 'dc-title', rows: '1', placeholder: 'Sans titre', maxlength: String(DM().MAX_TITLE), 'aria-label': 'Titre du document', spellcheck: 'true' }),
       parent: h('button', { class: 'dc-parent', type: 'button', hidden: true }),
       props: h('div', { class: 'dc-props' }),
       meta: h('div', { class: 'dc-meta' }),
