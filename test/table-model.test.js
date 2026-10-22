@@ -271,6 +271,11 @@ describe('TableModel.subtaskRows', () => {
     assert.equal(stats.tasks, 3);
     assert.equal(TM.sectionStats([{ items: [{ done: true }] }]).progress, 100);
     assert.equal(TM.sectionStats([{ progress: null }]).progress, null);
+    assert.equal(TM.sectionStats([{ progress: 0, blocked: true }]).blocked, true);
+    assert.equal(TM.sectionStats([{ progress: 0, items: [{ text: 'a', blocked: true, progress: 0 }] }]).blocked, true);
+    assert.equal(TM.sectionStats([{ progress: 100, blocked: true }]).blocked, false);
+    assert.equal(TM.sectionStats([{ progress: 40, statutKey: 'completed', blocked: true }]).blocked, false);
+    assert.equal(TM.sectionStats([{ progress: 10 }]).blocked, false);
   });
 
   it('groupByProject keeps an empty project and the priority set on it', () => {

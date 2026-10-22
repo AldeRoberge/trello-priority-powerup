@@ -971,10 +971,54 @@
       var stats = global.TableModel && global.TableModel.sectionStats
         ? global.TableModel.sectionStats(projectTaskRows(projectId))
         : { progress: null, subs: 0 };
-      return h('span', {
-        class: 'kb-proj-prog' + (stats.progress == null ? ' is-empty' : ''),
-        title: stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches',
-        text: stats.progress == null ? '-' : stats.progress + '%',
+      var prog = stats.progress;
+      if (stats.blocked && prog == null) prog = 0;
+      var box = h('span', {
+        class: 'kb-proj-prog' + (prog == null ? ' is-empty' : '') + (stats.blocked ? ' is-blocked' : ''),
+        title: stats.blocked ? 'Une tâche est bloquée' : ((prog != null && prog >= 100) ? 'Rouvrir les tâches' : 'Terminer les tâches'),
+        text: prog == null ? '-' : prog + '%',
+      });
+      var rows = projectTaskRows(projectId);
+      if (rows.length) {
+        box.style.cursor = 'pointer';
+        box.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+        box.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var CT = global.CompletionTrello;
+          var next = CT && typeof CT.parentClickPercent === 'function' ? CT.parentClickPercent(prog) : ((prog != null && prog >= 100) ? 0 : 100);
+          saveProjectProgress(projectId, rows, next);
+        });
+        box.addEventListener('dragstart', function (e) { e.preventDefault(); e.stopPropagation(); });
+      }
+      return box;
+    }
+
+    /** Project header: the same percent on every task of the project, then the header follows. */
+    function saveProjectProgress(projectId, rows, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.saveProgressTree !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
+      var wasDone = {};
+      (rows || []).forEach(function (r) { wasDone[r.id] = r.statutKey === 'completed'; });
+      var name = '';
+      projectNodes().forEach(function (n) { if (n.id === projectId) name = n.name || ''; });
+      setStatus('Enregistrement…', 'busy');
+      CT.saveProgressTree(t, rows, pct).then(function (ids) {
+        if (pct < 100) return null;
+        var list = state.lists.filter(function (l) { return l.category === 'completed'; })[0];
+        if (!list || !global.TableTrello) return null;
+        var chain = Promise.resolve();
+        (ids || []).forEach(function (id) {
+          if (wasDone[id]) return;
+          chain = chain.then(function () { return global.TableTrello.moveCard(t, id, list.id, 'bottom'); });
+        });
+        return chain;
+      }).then(function () {
+        setStatus(pct >= 100 ? '« ' + (name || 'Projet') + ' » terminé' : 'Enregistré', 'ok');
+        return reload({ quiet: true });
+      }, function (err) {
+        setStatus((err && err.message) || 'Erreur progrès', 'error');
+        reload({ quiet: true });
       });
     }
 
@@ -1016,7 +1060,7 @@
       ]);
       if (!guest) {
         head.ondragstart = function (e) {
-          if (e.target && e.target.closest && e.target.closest('.kb-proj-pri')) {
+          if (e.target && e.target.closest && e.target.closest('.kb-proj-pri, .kb-proj-prog')) {
             e.preventDefault();
             return;
           }
@@ -1036,7 +1080,7 @@
         };
       }
       head.addEventListener('dragstart', function (e) {
-        if (e.target && e.target.closest && e.target.closest('.kb-proj-pri')) {
+        if (e.target && e.target.closest && e.target.closest('.kb-proj-pri, .kb-proj-prog')) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -1441,12 +1485,13 @@
     function writeProgress(cardId, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+      if (typeof CT.saveProgressTree === 'function') return CT.saveProgressTree(t, [{ id: cardId }], pct);
       return CT.getCardCompletionById(t, cardId).then(function (data) {
         data = CT.normalizeCompletionData(data || { items: [] });
         var next = data.items && data.items.length
           ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
           : Object.assign({}, data, { progress: pct });
-        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next));
+        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next)).then(function () { return [cardId]; });
       });
     }
 
@@ -1454,14 +1499,21 @@
     function saveProgress(row, pct) {
       var prev = row.progress;
       var from = { listId: row.listId, statut: row.statut, pos: row.pos };
+      var wasDone = row.statutKey === 'completed';
       row.progress = pct;
       setStatus('Enregistrement…', 'busy');
       writeProgress(row.id, pct)
-        .then(function () {
-          var done = pct >= 100 && row.statutKey !== 'completed'
+        .then(function (ids) {
+          var done = pct >= 100
             ? state.lists.filter(function (l) { return l.category === 'completed'; })[0]
             : null;
-          return done ? TT().moveCard(t, row.id, done.id, 'bottom').then(function () { return done; }) : null;
+          if (!done) return null;
+          var chain = Promise.resolve(null);
+          (ids || [row.id]).forEach(function (id) {
+            if (id === row.id && wasDone) return;
+            chain = chain.then(function () { return TT().moveCard(t, id, done.id, 'bottom').then(function () { return done; }); });
+          });
+          return chain;
         })
         .then(function (done) {
           var known = typeof prev === 'number';

@@ -6,16 +6,20 @@
  *
  *   TriageTree.build(rows, { projectOf(row) -> {id, name, icon?}|null, collapsed: {key: true} })
  *     -> { nodes, tasks }   nodes: every visible line in order; tasks: the task rows in display order (j / k keys)
- *     node kinds: 'project' { key, name, count, open, free, icon }
+ *     node kinds: 'project' { key, name, count, open, free, icon, blocked }
  *                 'task'    { key, row, depth, open, kids, done, total }
  *                 'sub'     { key, taskId, text, done, blocked, linked, depth, open, kids }
  *   TriageTree.render(built, ctx) -> DocumentFragment
  *     ctx: { taskEl(row) -> element (the existing Triage row), toggle(key), select(taskId),
- *            pickIcon(node, icon), selectProject(projectId), selectedProject }
+ *            selectSub(node), selectedKey,
+ *            pickIcon(node, icon), selectProject(projectId), selectedProject, setProgress(node, pct) }
+ *   TriageTree.addUnder(key, depth, ctx) / addField(node, ctx)  the "+" under a task, and its title field
+ *     adding: 't:id' | 's:id:path' | { key, mode: 'task'|'sub' }  'task' inserts a sibling card
  *   TriageTree.carryOver(oldEl, newEl, ctx)  puts the tree decoration of a redrawn task row back
  *   TriageTree.prefs.{treeOn, setTreeOn, collapsed, setCollapsed}  remembered in localStorage
  *
  * `build` is pure (unit tests: test/triage-tree.test.js). Keys: "p:<projectId>", "t:<cardId>", "s:<cardId>:<path>".
+ * A sub node also carries id, parentId ('' at the first level) and linkedCardId. Clicking it calls selectSub.
  */
 (function (global) {
   'use strict';
@@ -27,8 +31,19 @@
     return !!item && (item.done === true || Number(item.progress) >= 100);
   }
 
-  /** Subtask lines of one task (and the nested ones of an open subtask). */
-  function subNodes(taskId, items, depth, path, collapsed, out, adding) {
+  /**
+   * What the open composer is: a string key (a subtask, the old shape) or { key, mode }
+   * with mode 'task' (a sibling card) or 'sub' (a checklist line).
+   */
+  function addingSpec(adding) {
+    if (!adding) return null;
+    if (typeof adding === 'string') return { key: adding, mode: 'sub' };
+    if (typeof adding === 'object') return { key: String(adding.key || ''), mode: adding.mode === 'task' ? 'task' : 'sub' };
+    return null;
+  }
+
+  /** Subtask lines of one task (and the nested ones of an open subtask). parentId is '' on the first level. */
+  function subNodes(taskId, items, depth, path, parentId, collapsed, out, adding) {
     (items || []).forEach(function (it, i) {
       if (!it || typeof it.text !== 'string') return;
       var p = path + (path ? '.' : '') + i;
@@ -40,7 +55,9 @@
         key: key,
         taskId: taskId,
         id: it.id || '',
+        parentId: parentId || '',
         canAdd: !path && !it.linkedCardId && !!it.id, // one level of nesting under a subtask
+        linkedCardId: it.linkedCardId || '',
 
         text: it.text,
         done: isDone(it),
@@ -50,8 +67,8 @@
         open: open,
         kids: !!kids,
       });
-      if (kids && open) subNodes(taskId, it.items, depth + 1, p, collapsed, out, adding);
-      if (adding === key) out.push({ kind: 'add', key: 'a:' + key, taskId: taskId, parentId: it.id || '', depth: depth + 1 });
+      if (kids && open) subNodes(taskId, it.items, depth + 1, p, it.id || '', collapsed, out, adding);
+      if (adding && adding.key === key) out.push({ kind: 'add', key: 'a:' + key, taskId: taskId, parentId: it.id || '', depth: depth + 1, mode: 'sub' });
     });
   }
 
@@ -70,30 +87,66 @@
       total: items.length,
     });
     tasks.push(row);
-    if (items.length && open) subNodes(row.id, items, depth + 1, '', collapsed, out, adding);
-    if (adding === key) out.push({ kind: 'add', key: 'a:' + key, taskId: row.id, parentId: '', depth: depth + 1 });
+    if (items.length && open) subNodes(row.id, items, depth + 1, '', '', collapsed, out, adding);
+    if (adding && adding.key === key) {
+      var asTask = adding.mode === 'task';
+      out.push({
+        kind: 'add',
+        key: 'a:' + key,
+        taskId: row.id,
+        parentId: '',
+        depth: asTask ? depth : depth + 1,
+        mode: asTask ? 'task' : 'sub',
+      });
+    }
   }
 
-  /** A project line's score: its best task priority, and the mean progress of its tasks (null when none has one). */
+  /** A paused checklist item (not a finished one). Same rule as TableModel.taskBlocksProject. */
+  function itemsBlock(items) {
+    var i, it;
+    for (i = 0; i < (items || []).length; i++) {
+      it = items[i];
+      if (!it) continue;
+      if (it.blocked === true && !isDone(it)) return true;
+      if (itemsBlock(it.items)) return true;
+    }
+    return false;
+  }
+
+  /** An open task blocks its project. A finished task does not. */
+  function blocksProject(r) {
+    var TM = global.TableModel;
+    if (TM && typeof TM.taskBlocksProject === 'function') return TM.taskBlocksProject(r);
+    if (!r) return false;
+    if (typeof r.progress === 'number' && r.progress >= 100) return false;
+    if (r.statutKey === 'completed' || r.statutKey === 'canceled') return false;
+    if (r.blocked || r.statutKey === 'blocked') return true;
+    return itemsBlock(r.items);
+  }
+
+  /** A project line's score: its best task priority, the mean progress of its tasks, and whether one is paused. */
   function summary(rows) {
     var best = null;
     var total = 0;
     var n = 0;
+    var blocked = false;
     rows.forEach(function (r) {
       if (typeof r.priority === 'number' && (!best || r.priority > best.priority)) best = r;
       if (typeof r.progress === 'number') { total += Math.max(0, Math.min(100, r.progress)); n++; }
+      if (blocksProject(r)) blocked = true;
     });
     return {
       priority: best ? best.priority : null,
       tierI: best ? best.tierI : null,
-      progress: n ? Math.round(total / n) : null,
+      progress: n ? Math.round(total / n) : (blocked ? 0 : null),
+      blocked: blocked,
     };
   }
 
   function build(rows, opts) {
     opts = opts || {};
     var collapsed = opts.collapsed || {};
-    var adding = opts.adding || '';
+    var adding = addingSpec(opts.adding);
     var projectOf = typeof opts.projectOf === 'function' ? opts.projectOf : function () { return null; };
     var groups = [];
     var byId = Object.create(null);
@@ -123,7 +176,7 @@
       var sum = summary(g.rows);
       nodes.push({
         kind: 'project', key: key, id: g.id, name: g.name, icon: g.icon || null, count: g.rows.length, open: open, free: !!g.free,
-        priority: sum.priority, tierI: sum.tierI, progress: sum.progress,
+        priority: sum.priority, tierI: sum.tierI, progress: sum.progress, blocked: !!sum.blocked,
       });
       if (!open) return;
       g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks, adding); });
@@ -184,7 +237,7 @@
     var live = !!opts.onSet && !!global.ProgressRing;
     if (live && typeof pct !== 'number') pct = 0; // a task without progress yet starts at 0 so it can be set
     var has = typeof pct === 'number';
-    var c = el('span', 'tt-prog' + (has ? '' : ' is-empty') + (has && pct >= 100 ? ' is-done' : '') + (live ? ' is-live' : ''), has ? { title: 'Avancement ' + pct + ' %' } : {});
+    var c = el('span', 'tt-prog' + (has ? '' : ' is-empty') + (has && pct >= 100 && !opts.blocked ? ' is-done' : '') + (live ? ' is-live' : '') + (opts.blocked ? ' is-blocked' : ''), has ? { title: (opts.blocked ? 'Bloqué · ' : 'Avancement ') + pct + ' %' } : {});
     if (!has) return c;
     var ring = null;
     if (global.ProgressRing) {
@@ -273,7 +326,10 @@
       if (pickable) ctx.selectProject(n.id);
     });
     row.appendChild(name);
-    row.appendChild(progressEl(n.progress));
+    row.appendChild(progressEl(n.progress, {
+      blocked: !!n.blocked,
+      onSet: function (pct) { if (typeof ctx.setProgress === 'function') ctx.setProgress(n, pct); },
+    }));
     row.appendChild(prioCol(n.priority, n.tierI));
     // The rest of the line opens the project in the pane (the free group has none: it folds).
     row.addEventListener('click', function () {
@@ -304,28 +360,39 @@
     });
     if (main && main.nextSibling) rowEl.insertBefore(count, main.nextSibling);
     else rowEl.appendChild(count);
-    rowEl.appendChild(addButton(info.key, ctx));
     return rowEl;
   }
 
-  /** The hover "+" that creates a subtask under this line. Its slot is always there, so nothing shifts when it appears. */
-  function addButton(key, ctx) {
-    var b = el('button', 'tt-add', { type: 'button', 'aria-label': 'Nouvelle sous-tâche', title: 'Nouvelle sous-tâche' });
+  /**
+   * The "+" under a line, out of the progress and priority columns. On a task it offers a sibling
+   * card or a subtask; on a subtask it adds a nested line. Hidden while that line's field is open.
+   */
+  function underEl(n, ctx, choices) {
+    if (ctx && ctx.addingKey && ctx.addingKey === n.key) return null;
+    var row = el('div', 'tt-under', { 'data-for': n.key });
+    indent(row, n.depth);
+    var label = choices ? 'Ajouter' : 'Nouvelle sous-tâche';
+    var b = el('button', 'tt-add', { type: 'button', 'aria-label': label, title: label });
     b.appendChild(icon('plus'));
     b.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (typeof ctx.startAdd === 'function') ctx.startAdd(key);
+      e.preventDefault();
+      if (choices && typeof ctx.chooseAdd === 'function') ctx.chooseAdd(n.key, b);
+      else if (typeof ctx.startAdd === 'function') ctx.startAdd(n.key, 'sub');
     });
-    return b;
+    row.appendChild(b);
+    return row;
   }
 
-  /** The inline field of a new subtask: Enter adds it and stays open for the next one, Escape or leaving closes it. */
+  /** The inline field: Enter adds and stays open for the next one, Escape or leaving closes it. */
   function addEl(n, ctx) {
-    var row = el('div', 'tt-sub tt-adding', { role: 'treeitem', 'aria-level': String(n.depth + 1), 'data-key': n.key });
+    var taskMode = n.mode === 'task';
+    var label = taskMode ? 'Nouvelle tâche' : 'Nouvelle sous-tâche';
+    var row = el('div', 'tt-adding' + (taskMode ? '' : ' tt-sub'), { role: 'treeitem', 'aria-level': String(n.depth + 1), 'data-key': n.key });
     indent(row, n.depth);
     row.appendChild(el('span', 'tt-chev is-empty', { 'aria-hidden': 'true' }));
-    row.appendChild(icon('circle'));
-    var input = el('input', 'tt-input', { type: 'text', placeholder: 'Nouvelle sous-tâche', 'aria-label': 'Nouvelle sous-tâche', maxlength: '200' });
+    if (!taskMode) row.appendChild(icon('circle'));
+    var input = el('input', 'tt-input', { type: 'text', placeholder: label, 'aria-label': label, maxlength: '200' });
     var closed = false;
     function close() {
       if (closed) return;
@@ -340,7 +407,8 @@
         var text = input.value.replace(/\s+/g, ' ').trim();
         if (!text) { close(); return; }
         input.value = '';
-        if (typeof ctx.addSub === 'function') ctx.addSub(n.taskId, n.parentId, text);
+        if (taskMode) { if (typeof ctx.addTask === 'function') ctx.addTask(n.taskId, text); }
+        else if (typeof ctx.addSub === 'function') ctx.addSub(n.taskId, n.parentId, text);
       }
     });
     input.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -372,12 +440,19 @@
     var cls = 'db-row tt-sub' + (n.done ? ' is-done' : '') + (n.blocked ? ' is-blocked' : '');
     var row = el('div', cls, { role: 'treeitem', 'aria-level': String(n.depth + 1), 'data-key': n.key, 'data-task': n.taskId });
     if (n.kids) row.setAttribute('aria-expanded', String(n.open));
+    if (ctx.selectedKey && ctx.selectedKey === n.key) {
+      row.classList.add('is-sel');
+      row.setAttribute('aria-selected', 'true');
+    }
     indent(row, n.depth);
     row.appendChild(chevron(n.open, n.kids, function () { ctx.toggle(n.key); }));
     row.appendChild(icon(n.blocked ? 'player-pause' : n.done ? 'circle-check' : n.linked ? 'link' : 'circle'));
     row.appendChild(el('span', 'tt-name', { text: n.text, title: n.text }));
-    row.appendChild(n.canAdd ? addButton(n.key, ctx) : el('span', 'tt-add is-empty', { 'aria-hidden': 'true' }));
-    row.addEventListener('click', function () { ctx.select(n.taskId); });
+    // The line itself is the selection: the pane then edits this subtask, not its parent card.
+    row.addEventListener('click', function () {
+      if (typeof ctx.selectSub === 'function') ctx.selectSub(n);
+      else ctx.select(n.taskId);
+    });
     return row;
   }
 
@@ -393,10 +468,20 @@
     var frag = document.createDocumentFragment();
     frag.appendChild(colHead());
     built.nodes.forEach(function (n) {
+      var under;
       if (n.kind === 'project') frag.appendChild(projectEl(n, ctx));
-      else if (n.kind === 'task') frag.appendChild(decorateTask(ctx.taskEl(n.row), n, ctx));
-      else if (n.kind === 'add') frag.appendChild(addEl(n, ctx));
-      else frag.appendChild(subEl(n, ctx));
+      else if (n.kind === 'task') {
+        frag.appendChild(decorateTask(ctx.taskEl(n.row), n, ctx));
+        under = underEl(n, ctx, true);
+        if (under) frag.appendChild(under);
+      } else if (n.kind === 'add') frag.appendChild(addEl(n, ctx));
+      else {
+        frag.appendChild(subEl(n, ctx));
+        if (n.canAdd) {
+          under = underEl(n, ctx, false);
+          if (under) frag.appendChild(under);
+        }
+      }
     });
     return frag;
   }
@@ -435,6 +520,8 @@
     colHead: colHead,
     build: build,
     render: render,
+    addUnder: function (key, depth, ctx) { return underEl({ key: key, depth: depth || 0 }, ctx, true); },
+    addField: function (n, ctx) { return addEl(n, ctx); },
     carryOver: carryOver,
     prefs: prefs,
     FREE_NAME: FREE_NAME,

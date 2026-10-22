@@ -1281,6 +1281,9 @@
         });
       });
     }
+    var guideHost = el('div', 'ag-guide-host');
+    guideHost.hidden = true;
+    chatPanel.appendChild(guideHost);
     chatPanel.appendChild(suggestionsEl);
     chatPanel.appendChild(composer);
     chatPanel.appendChild(composerFoot);
@@ -1400,6 +1403,28 @@
     debugIcon.setAttribute('aria-hidden', 'true');
     debugBtn.appendChild(debugIcon);
     infoHead.appendChild(debugBtn);
+
+    var schedTasks = [];
+    var schedTimer = null;
+    var schedWrap = el('div', 'agent-sched');
+    schedWrap.hidden = true;
+    var schedBtn = el('button', 'agent-debug-btn', {
+      type: 'button',
+      'aria-label': 'Rappels',
+      title: 'Rappels',
+      'aria-expanded': 'false'
+    });
+    var schedIcon = el('i', 'ti ti-alarm');
+    schedIcon.setAttribute('aria-hidden', 'true');
+    schedBtn.appendChild(schedIcon);
+    var schedCount = el('span', 'agent-sched-count');
+    schedCount.setAttribute('aria-hidden', 'true');
+    schedBtn.appendChild(schedCount);
+    var schedPop = el('div', 'agent-sched-pop');
+    schedPop.hidden = true;
+    schedWrap.appendChild(schedBtn);
+    schedWrap.appendChild(schedPop);
+    infoHead.appendChild(schedWrap);
     infoEl.appendChild(infoHead);
 
     chatPanel.appendChild(infoEl);
@@ -6445,9 +6470,171 @@
      * Visible "work in progress" panel: one row per action, live status
      * (pending → running → done / failed), so it is obvious what the AI is doing.
      */
+    function openGuide(spec) {
+      if (!global.AgentGuides || typeof AgentGuides.mount !== 'function') return;
+      AgentGuides.mount(guideHost, spec);
+      if (typeof notifyLayout === 'function') notifyLayout();
+    }
+
+    function renderSchedPop() {
+      schedPop.replaceChildren();
+      var now = Date.now();
+      schedTasks.forEach(function (task) {
+        var row = el('div', 'agent-sched-row');
+        var text = el('span', 'agent-sched-text');
+        text.textContent = task.message;
+        var time = el('span', 'agent-sched-time');
+        time.textContent = AgentGuides
+          ? AgentGuides.formatRemain(task.at - now)
+          : '';
+        var cancel = el('button', 'agent-sched-x');
+        cancel.type = 'button';
+        cancel.setAttribute('aria-label', 'Annuler');
+        cancel.textContent = '\u00d7';
+        cancel.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          schedTasks = schedTasks.filter(function (item) {
+            return item.id !== task.id;
+          });
+          renderSchedButton();
+        });
+        row.appendChild(text);
+        row.appendChild(time);
+        row.appendChild(cancel);
+        schedPop.appendChild(row);
+      });
+    }
+
+    function placeSchedPop() {
+      var rect = schedBtn.getBoundingClientRect();
+      var width = 240;
+      var left = Math.max(8, rect.right - width);
+      schedPop.style.left = left + 'px';
+      schedPop.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    }
+
+    function renderSchedButton() {
+      var n = schedTasks.length;
+      schedWrap.hidden = n === 0;
+      schedCount.textContent = n ? String(n) : '';
+      if (!n) {
+        schedPop.hidden = true;
+        schedBtn.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      if (!schedPop.hidden) {
+        renderSchedPop();
+        placeSchedPop();
+      }
+    }
+
+    function ensureSchedTimer() {
+      if (schedTimer) return;
+      schedTimer = setInterval(tickSchedules, 1000);
+    }
+
+    function tickSchedules() {
+      if (!global.AgentGuides) return;
+      var split = AgentGuides.dueTasks(schedTasks, Date.now());
+      split.due.forEach(function (task) {
+        appendMessage('assistant', task.message);
+        history.push({ role: 'assistant', content: task.message });
+      });
+      schedTasks = split.pending;
+      if (split.due.length) {
+        schedulePersistChatHistory();
+        scrollMessagesToBottom();
+      }
+      renderSchedButton();
+      if (!schedTasks.length && schedTimer) {
+        clearInterval(schedTimer);
+        schedTimer = null;
+      }
+    }
+
+    function addSchedule(check) {
+      if (!check || !check.message) return;
+      var now = Date.now();
+      schedTasks.push({
+        id: 'c' + now + '-' + schedTasks.length,
+        message: check.message,
+        at: now + check.seconds * 1000
+      });
+      ensureSchedTimer();
+      renderSchedButton();
+    }
+
+    function consumeGuideResults(applied) {
+      var results = applied && applied.results;
+      if (!results || !results.length) return;
+      results.forEach(function (r) {
+        if (!r || r.ok === false) return;
+        if (r.tool === 'show_guide' && r.guide) openGuide(r.guide);
+        if (r.tool === 'schedule_check' && r.schedule) addSchedule(r.schedule);
+      });
+    }
+
+    schedBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!schedTasks.length) return;
+      var open = schedPop.hidden;
+      schedPop.hidden = !open;
+      schedBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        renderSchedPop();
+        placeSchedPop();
+      }
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (schedPop.hidden) return;
+      if (schedWrap.contains(e.target)) return;
+      schedPop.hidden = true;
+      schedBtn.setAttribute('aria-expanded', 'false');
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (global.AgentGuides && guideHost && !guideHost.hidden) {
+        AgentGuides.close(guideHost);
+        if (typeof notifyLayout === 'function') notifyLayout();
+      }
+      if (!schedPop.hidden) {
+        schedPop.hidden = true;
+        schedBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
     function runActionsWithPanel(actions) {
-      var list = Array.isArray(actions) ? actions : [];
-      if (!list.length) return Agent.executeActions(bridge, list);
+      var incoming = Array.isArray(actions) ? actions : [];
+      var guides = [];
+      var list = [];
+      incoming.forEach(function (a) {
+        if (a && (a.tool === 'show_guide' || a.tool === 'schedule_check')) guides.push(a);
+        else if (a) list.push(a);
+      });
+      var guidePromise = guides.length
+        ? Agent.executeActions(bridge, guides).then(function (g) {
+            consumeGuideResults(g);
+            return g;
+          })
+        : Promise.resolve(null);
+      function mergeApplied(applied, g) {
+        if (!g) return applied;
+        if (!applied || !applied.results || !applied.results.length) return g;
+        return {
+          ok: !!(applied.ok && g.ok),
+          results: (g.results || []).concat(applied.results || []),
+          summary: [g.summary, applied.summary].filter(Boolean).join(' '),
+          errors: (g.errors || []).concat(applied.errors || []),
+          recap: applied.recap || g.recap || ''
+        };
+      }
+      if (!list.length) {
+        return guidePromise.then(function (g) {
+          return g || Agent.executeActions(bridge, []);
+        });
+      }
       var panel = el('div', 'agent-work-panel is-running');
       panel.setAttribute('role', 'status');
       panel.setAttribute('aria-live', 'polite');
@@ -6479,7 +6666,8 @@
       messagesEl.appendChild(panel);
       scrollMessagesToBottom();
       notifyLayout();
-      return Agent.executeActions(bridge, list, {
+      return guidePromise.then(function (g) {
+        return Agent.executeActions(bridge, list, {
         onStart: function (i) {
           if (!rows[i]) return;
           rows[i].li.className = 'agent-work-step is-running';
@@ -6506,7 +6694,7 @@
               : 'Modification appliquée'
             : 'Terminé avec des erreurs';
           notifyLayout();
-          return applied;
+          return mergeApplied(applied, g);
         },
         function (err) {
           panel.classList.remove('is-running');
@@ -6516,6 +6704,7 @@
           throw err;
         }
       );
+      });
     }
 
     function appendActionResultBlocks(applied, context) {
@@ -7639,7 +7828,8 @@
           text: item.text,
           heat: item.heat,
           icon: item.icon || null,
-          color: item.color || null
+          color: item.color || null,
+          hl: item.hl || null
         };
         var reachKey = reachKeys[index];
         if (treatAsReach && reachKey && IMPACT_REACH_CHIP[reachKey]) {
@@ -7696,6 +7886,7 @@
         var heat = null;
         var icon = null;
         var color = null;
+        var hl = null;
         if (typeof s === 'string') {
           text = s.trim();
         } else if (s && typeof s === 'object') {
@@ -7710,9 +7901,10 @@
           if (typeof s.color === 'string' && s.color.trim()) {
             color = normalizeSuggestionColorName(s.color);
           }
+          if (typeof s.hl === 'string' && /^[grya]$/.test(s.hl)) hl = s.hl;
         }
         if (!text) return;
-        out.push({ text: text, heat: heat, icon: icon, color: color });
+        out.push({ text: text, heat: heat, icon: icon, color: color, hl: hl });
       });
       // Allow up to 6 answer chips so existing subtasks can all be offered.
       return enrichSuggestionChipItems(out.slice(0, interviewActive ? 5 : 6));
@@ -7815,6 +8007,7 @@
           chip.classList.add('agent-suggestion-chip--scale');
           chip.classList.add('agent-suggestion-chip--heat-' + heat);
         }
+        if (item.hl) chip.classList.add('agent-suggestion-chip--hl-' + item.hl);
         if (options.animate !== false) {
           chip.style.animationDelay = index * 40 + 'ms';
         }
@@ -7848,8 +8041,30 @@
         suggestionsEl.appendChild(confirmEl);
       }
       if (tabComplete) tabComplete.refresh();
+      syncSuggestionHighlightAura();
       notifyLayout();
       if (options.pinScroll) scrollMessagesToBottom();
+    }
+
+    /** Accent highlights ([[a:]]) use the same aura as the reply above the chips. */
+    function syncSuggestionHighlightAura() {
+      if (!suggestionsEl) return;
+      var row = null;
+      if (messagesEl) {
+        var rows = messagesEl.querySelectorAll('.agent-msg--assistant');
+        if (rows.length) row = rows[rows.length - 1];
+      }
+      if (!row) {
+        suggestionsEl.removeAttribute('data-aura');
+        suggestionsEl.style.removeProperty('--agent-hl-accent');
+        return;
+      }
+      var aura = row.getAttribute('data-aura');
+      if (aura) suggestionsEl.setAttribute('data-aura', aura);
+      else suggestionsEl.removeAttribute('data-aura');
+      var accent = row.style.getPropertyValue('--agent-hl-accent');
+      if (accent) suggestionsEl.style.setProperty('--agent-hl-accent', accent.trim());
+      else suggestionsEl.style.removeProperty('--agent-hl-accent');
     }
 
     function setSuggestionsBusy(isBusy) {
@@ -9183,6 +9398,10 @@
       var opts = options || {};
       var msg = (text || '').trim();
       if (!msg) return;
+      if (global.AgentGuides && typeof AgentGuides.matchIntent === 'function') {
+        var guideIntent = AgentGuides.matchIntent(msg);
+        if (guideIntent) openGuide(guideIntent);
+      }
       if (!Agent.isConfigured(provider)) {
         setSettingsOpen(true);
         setError('Configurez d\'abord un fournisseur IA.');
@@ -9728,10 +9947,10 @@
   }
 
   var LOAD_PHASES = [
-    { id: 'prepare', label: 'Pr\u00e9paration', detail: 'Cartes et contexte', at: 0.12 },
-    { id: 'send', label: 'Envoi de la demande', detail: 'Le mod\u00e8le r\u00e9pond', at: 0.36 },
-    { id: 'read', label: 'Lecture de la r\u00e9ponse', detail: 'Mise en forme', at: 0.8 },
-    { id: 'write', label: '\u00c9criture', detail: 'Cartes mises \u00e0 jour', at: 0.92 }
+    { id: 'prepare', label: 'Pr\u00e9paration', icon: 'ti-stack-2', detail: 'Cartes et contexte', at: 0.12 },
+    { id: 'send', label: 'Envoi de la demande', icon: 'ti-send', detail: 'Le mod\u00e8le r\u00e9pond', at: 0.36 },
+    { id: 'read', label: 'Lecture de la r\u00e9ponse', icon: 'ti-book', detail: 'Mise en forme', at: 0.8 },
+    { id: 'write', label: '\u00c9criture', icon: 'ti-pencil', detail: 'Cartes mises \u00e0 jour', at: 0.92 }
   ];
 
   function loadingFrame(phase, elapsedMs, estimateMs, phaseIds) {
@@ -9763,6 +9982,7 @@
     return {
       phase: cur.id,
       label: cur.label,
+      icon: cur.icon,
       detail: cur.detail,
       percent: pct,
       timeLabel: timeLabel,
@@ -9770,6 +9990,7 @@
         return {
           id: p.id,
           label: p.label,
+          icon: p.icon,
           state: n < idx ? 'done' : n === idx ? 'now' : 'wait'
         };
       })
@@ -9798,9 +10019,11 @@
     head.className = 'ai-status-head';
     var label = doc.createElement('span');
     label.className = 'ai-status-label';
+    var steps = doc.createElement('ol');
+    steps.className = 'ai-status-steps';
     var time = doc.createElement('span');
     time.className = 'ai-status-time';
-    head.appendChild(label);
+    head.appendChild(steps);
     head.appendChild(time);
     var track = doc.createElement('div');
     track.className = 'ai-status-track';
@@ -9812,12 +10035,10 @@
     track.appendChild(bar);
     var detail = doc.createElement('p');
     detail.className = 'ai-status-detail';
-    var steps = doc.createElement('ol');
-    steps.className = 'ai-status-steps';
+    root.appendChild(label);
     root.appendChild(head);
     root.appendChild(track);
     root.appendChild(detail);
-    root.appendChild(steps);
     parent.appendChild(root);
     function draw() {
       var view = loadingFrame(phase, Date.now() - t0, estimate, ids);
@@ -9831,7 +10052,11 @@
       view.steps.forEach(function (step) {
         var li = doc.createElement('li');
         li.className = 'ai-status-step is-' + step.state;
-        li.textContent = step.label;
+        li.title = step.label;
+        var icon = doc.createElement('i');
+        icon.className = 'ti ' + step.icon;
+        icon.setAttribute('aria-hidden', 'true');
+        li.appendChild(icon);
         steps.appendChild(li);
       });
     }

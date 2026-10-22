@@ -4,6 +4,7 @@
  * { sep: true } and { title: 'Section' } rows. `children` opens a flyout.
  * Icons are Tabler webfont names (without "ti-").
  * Keyboard: Up/Down/Home/End move, Enter runs, Escape closes.
+ * A letter runs the matching shortcut (A archives) while the menu is open.
  */
 (function (global) {
   'use strict';
@@ -106,6 +107,12 @@
       if (item.color) ic.style.color = item.color;
       row.appendChild(ic);
       row.appendChild(el('span', 'tbm-label', item.label || ''));
+      var key = global.ContextMenu && typeof global.ContextMenu.dedicatedShortcut === 'function'
+        ? global.ContextMenu.dedicatedShortcut(item)
+        : '';
+      if (key && String(item.hint || hint || '').trim().toUpperCase() !== key) {
+        row.appendChild(el('span', 'tbm-hint', key));
+      }
       if (item.checked) row.appendChild(el('i', 'ti ti-check tbm-check'));
       else if (item.hint || hint) {
         var hnt = el('span', 'tbm-hint', item.hint || hint);
@@ -176,6 +183,24 @@
       });
       rows.push({ el: row, item: item });
       list.appendChild(row);
+    }
+
+    function tryShortcut(e, rowList) {
+      if (!e || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return false;
+      var k = e.key || '';
+      if (k.length !== 1) return false;
+      var CM = global.ContextMenu;
+      if (!CM || typeof CM.rowForKey !== 'function') return false;
+      var hit = CM.rowForKey(rowList, k, {
+        filtering: !!(input && String(input.value || '').trim()),
+        searchFocused: !!(input && document.activeElement === input),
+      });
+      if (!hit) return false;
+      e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      if (hit.item.children && hit.item.children.length) openSub(hit.el, hit.item);
+      else run(hit.item);
+      return true;
     }
 
     function render(query) {
@@ -262,6 +287,8 @@
       },
       onBlur: hide,
       onKey: function (e) {
+        var pool = sub && sub.rows.length ? sub.rows : rows;
+        if (tryShortcut(e, pool)) return;
         if (sub && sub.rows.length) {
           var subEnabled = sub.rows.map(function (r, i) { return r.item.disabled ? -1 : i; }).filter(function (i) { return i >= 0; });
           if (e.key === 'Escape' || e.key === 'ArrowLeft') {

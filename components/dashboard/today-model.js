@@ -555,6 +555,81 @@
     return stats.open + (stats.open > 1 ? ' tâches' : ' tâche') + ' à faire';
   }
 
+  /* ── Bilan de la semaine ───────────────────────────────────────── */
+
+  function parseDay(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+
+  /** Monday of the week that contains `iso` ('' when the day is not a date). */
+  function weekStart(iso) {
+    var d = parseDay(iso);
+    if (!d) return '';
+    var day = d.getDay();
+    return DM().addDays(iso, day === 0 ? -6 : 1 - day);
+  }
+
+  /** "Aujourd’hui", "Hier", or "lundi 12". */
+  function dayLabel(iso, today) {
+    if (iso && iso === today) return 'Aujourd’hui';
+    var dm = DM();
+    if (iso && iso === dm.addDays(today, -1)) return 'Hier';
+    var d = parseDay(iso);
+    if (!d) return '';
+    return DAYS_LONG[d.getDay()] + ' ' + d.getDate();
+  }
+
+  /** Minutes the card actually carries. A missing estimate stays 0 (no invented half hour). */
+  function loggedMinutes(list) {
+    return (list || []).reduce(function (n, r) {
+      return n + (r && r.estimate > 0 ? Math.round(r.estimate) : 0);
+    }, 0);
+  }
+
+  function byDoneOrder(a, b) {
+    var dm = DM();
+    var as = dm.parseClock(a.startTime || a.dueTime || '');
+    var bs = dm.parseClock(b.startTime || b.dueTime || '');
+    if (as == null) as = 9999;
+    if (bs == null) bs = 9999;
+    return as - bs || (a.pos || 0) - (b.pos || 0);
+  }
+
+  /**
+   * Completed work whose planned day falls in this week (Monday through Sunday).
+   * A card with no day, a vague horizon, or a day outside the week stays out:
+   * the page has no completion date, so the planned day is the day it counts for
+   * (same rule as today's done list).
+   * Returns { from, to, days: [{ iso, label, rows, minutes }], count, minutes }.
+   */
+  function weekRecap(rows, today) {
+    var from = weekStart(today);
+    var empty = { from: '', to: '', days: [], count: 0, minutes: 0 };
+    if (!from) return empty;
+    var dm = DM();
+    var to = dm.addDays(from, 6);
+    var byDay = {};
+    (rows || []).forEach(function (r) {
+      if (!isDone(r)) return;
+      var day = dm.plannedDay(r);
+      if (!day || day < from || day > to) return;
+      if (!byDay[day]) byDay[day] = [];
+      byDay[day].push(r);
+    });
+    var days = Object.keys(byDay).sort().map(function (iso) {
+      var list = byDay[iso].slice().sort(byDoneOrder);
+      return { iso: iso, label: dayLabel(iso, today), rows: list, minutes: loggedMinutes(list) };
+    });
+    return {
+      from: from,
+      to: to,
+      days: days,
+      count: days.reduce(function (n, d) { return n + d.rows.length; }, 0),
+      minutes: days.reduce(function (n, d) { return n + d.minutes; }, 0),
+    };
+  }
+
   /* ── Widget board ──────────────────────────────────────────────── */
 
   var LAYOUT_COLS = 12;
@@ -563,6 +638,7 @@
   var LAYOUT_MIN_H = 5;
   var LAYOUT_MAX_H = 96;
   var LAYOUT_TITLE = 40;
+  var LAYOUT_V = 2; // 2 introduces the week recap on boards saved before it existed.
 
   // Default geometry: greeting and weather on the first band, then the day's
   // sections down the left and the clock beside them. h is in grid rows.
@@ -574,6 +650,7 @@
     { id: 'tasks', label: 'À faire', icon: 'list-check', w: 7, h: 16 },
     { id: 'sugg', label: 'À planifier', icon: 'bulb', w: 7, h: 12 },
     { id: 'review', label: 'Revue', icon: 'list-search', w: 7, h: 12 },
+    { id: 'week', label: 'Bilan de la semaine', icon: 'calendar-week', w: 7, h: 14 },
     { id: 'plan', label: 'Planning', icon: 'calendar-time', w: 5, h: 55 },
   ];
 
@@ -596,6 +673,7 @@
       { id: 'focus', w: 7, h: 11 },
       { id: 'late', w: 7, h: 16 },
       { id: 'tasks', w: 7, h: 16 },
+      { id: 'week', w: 7, h: 14 },
       { id: 'sugg', w: 7, h: 12 },
       { id: 'review', w: 7, h: 12 },
     ];
@@ -611,7 +689,30 @@
       span += it.h;
     });
     items.push({ id: 'plan', c: 7, r: 16, w: 5, h: span });
-    return { titles: {}, items: items };
+    return { v: LAYOUT_V, titles: {}, items: items };
+  }
+
+  /**
+   * A board saved before the week recap existed gets that widget once, under the
+   * left column. Closing it afterwards stays closed (the saved version is current).
+   * An empty board stays empty: the visitor closed every widget on purpose.
+   */
+  function adoptWeek(layout) {
+    if (!layout.items.length || findItem(layout.items, 'week')) return;
+    var cat = widgetById('week');
+    var anchor = null;
+    layout.items.forEach(function (it) {
+      if (it.c >= 7) return;
+      if (!anchor || it.r + it.h > anchor.r + anchor.h) anchor = it;
+    });
+    var box = clampBox({ id: 'week', c: anchor ? anchor.c : 0, r: anchor ? anchor.r + anchor.h : 0, w: cat.w, h: cat.h });
+    layout.items.push(box);
+    var plan = findItem(layout.items, 'plan');
+    if (plan && anchor && plan.c >= box.c + box.w && plan.r <= anchor.r) {
+      var need = box.r + box.h - plan.r;
+      if (need > plan.h) plan.h = Math.min(need, LAYOUT_MAX_H);
+    }
+    pushDown(layout.items, 'week');
   }
 
   function clampBox(it) {
@@ -654,7 +755,9 @@
       var t = cleanTitle(src[id]);
       if (t) titles[id] = t;
     });
-    return { titles: titles, items: items };
+    var layout = { v: LAYOUT_V, titles: titles, items: items };
+    if ((raw.v | 0) < LAYOUT_V) adoptWeek(layout);
+    return layout;
   }
 
   function layoutLabel(layout, id) {
@@ -890,6 +993,7 @@
     buildDay: buildDay,
     suggest: suggest,
     headline: headline,
+    weekRecap: weekRecap,
     layout: {
       COLS: LAYOUT_COLS,
       ROW: LAYOUT_ROW,

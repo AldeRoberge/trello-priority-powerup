@@ -246,6 +246,7 @@
         icon: it.icon ? String(it.icon) : '',
         group: it.group ? String(it.group) : '',
         hint: it.hint ? String(it.hint) : '',
+        shortcut: dedicatedShortcut(it),
         keywords: it.keywords ? String(it.keywords) : '',
         checked: !!it.checked,
         disabled: !!it.disabled,
@@ -268,6 +269,68 @@
       /* no String.prototype.normalize */
     }
     return s;
+  }
+
+  /**
+   * Letter that runs the item while the menu is open. A is Archiver
+   * (and « Archiver la carte », « Archiver… »). An explicit `shortcut`
+   * of one character wins. A one-letter hint is not a dedicated shortcut.
+   */
+  function dedicatedShortcut(it) {
+    if (!it || it.sep || it.title) return '';
+    if (it.shortcut != null && String(it.shortcut).trim()) {
+      var raw = String(it.shortcut).trim();
+      if (raw.length === 1) return raw.toUpperCase();
+    }
+    var lab = fold(it.label != null ? it.label : '').replace(/^[^a-z]+/, '');
+    if (lab.indexOf('archiver') === 0) return 'A';
+    return '';
+  }
+
+  function shortcutLetters(items, into) {
+    into = into || {};
+    (items || []).forEach(function (it) {
+      if (!it || it.sep) return;
+      if (it.shortcut) into[it.shortcut] = true;
+      if (it.children) shortcutLetters(it.children, into);
+    });
+    return into;
+  }
+
+  /** Dedicated shortcut, or a one-character hint (C, 1, …) shown as a key. */
+  function accessKey(item) {
+    var owned = dedicatedShortcut(item);
+    if (owned) return owned;
+    var h = item && item.hint ? String(item.hint).trim() : '';
+    if (h.length === 1 && /^[A-Za-z0-9]$/.test(h)) return h.toUpperCase();
+    return '';
+  }
+
+  /**
+   * Row a typed key should run. Dedicated shortcuts win over a hint that
+   * uses the same letter (A archives, even when Accepter also shows A).
+   * A hint key waits until the search field is not focused. Nothing runs
+   * once a search query has started.
+   * rows: [{ item }]. opts: { filtering, searchFocused }.
+   */
+  function rowForKey(rows, key, opts) {
+    opts = opts || {};
+    if (!key || String(key).length !== 1 || opts.filtering) return null;
+    var ch = String(key).toUpperCase();
+    var hits = [];
+    var owned = [];
+    var list = rows || [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i] && list[i].item;
+      if (!item || item.disabled || item.sep || item.title) continue;
+      if (accessKey(item) !== ch) continue;
+      hits.push(list[i]);
+      if (dedicatedShortcut(item) === ch) owned.push(list[i]);
+    }
+    if (owned.length) return owned[0];
+    if (opts.searchFocused) return null;
+    if (hits.length === 1) return hits[0];
+    return null;
   }
 
   function levenshtein(a, b) {
@@ -458,8 +521,9 @@
   var SEARCH_MIN_ITEMS = 4;
 
   /**
-   * Item: { id, label, icon?, group?, hint?, keywords?, checked?, danger?, disabled?,
+   * Item: { id, label, icon?, group?, hint?, shortcut?, keywords?, checked?, danger?, disabled?,
    * action?, children? } or { sep: true }. `children` opens a submenu (flyout).
+   * `shortcut` is one letter that runs the item while the menu is open. Archiver is A.
    * Icons are Tabler webfont names; missing ones are derived from the id.
    * @param {{ clientX: number, clientY: number }|Event} point
    * @param {Array} items
@@ -468,6 +532,7 @@
     hide();
     var normalized = normalizeItems(items);
     if (!normalized.length) return null;
+    var taken = shortcutLetters(normalized);
 
     var d = doc();
     if (!d || typeof d.createElement !== 'function') return null;
@@ -565,6 +630,23 @@
       lab.textContent = item.label;
       btn.appendChild(lab);
       var hint = opts.hint || item.hint;
+      if (
+        !opts.hint &&
+        hint &&
+        String(hint).trim().length === 1 &&
+        taken[String(hint).trim().toUpperCase()] &&
+        item.shortcut !== String(hint).trim().toUpperCase()
+      ) {
+        hint = '';
+      }
+      var key = item.shortcut || '';
+      if (key && String(hint || '').trim().toUpperCase() !== key) {
+        var kbd = d.createElement('span');
+        kbd.className = 'tp-context-menu-key';
+        kbd.textContent = key;
+        btn.appendChild(kbd);
+        btn.setAttribute('aria-keyshortcuts', key);
+      }
       if (hint) {
         var h = d.createElement('span');
         h.className = 'tp-context-menu-hint';
@@ -801,16 +883,21 @@
           if (target.item.children) openSub(target);
           else runItem(target.item);
         }
-      } else if (
-        input &&
-        k.length === 1 &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey &&
-        d.activeElement !== input &&
-        typeof input.focus === 'function'
-      ) {
-        input.focus();
+      } else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !e.isComposing) {
+        var filtering = !!(input && String(input.value || '').trim());
+        var searchFocused = !!(input && d.activeElement === input);
+        var pool = nav.sub ? nav.subRows : nav.rows;
+        var hit = rowForKey(pool, k, { filtering: filtering, searchFocused: searchFocused });
+        if (hit) {
+          e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          if (hit.item.children) {
+            openSub(hit);
+            if (nav.subRows.length) setActive(nav.subRows, firstEnabled(nav.subRows), true);
+          } else runItem(hit.item);
+        } else if (input && !searchFocused && typeof input.focus === 'function') {
+          input.focus();
+        }
       }
     }
 
@@ -2249,6 +2336,9 @@
     fold: fold,
     levenshtein: levenshtein,
     iconFor: iconFor,
+    dedicatedShortcut: dedicatedShortcut,
+    accessKey: accessKey,
+    rowForKey: rowForKey,
     buildExpandToggleItem: buildExpandToggleItem,
     buildAgentItems: buildAgentItems,
     buildOverviewItems: buildOverviewItems,

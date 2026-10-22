@@ -405,3 +405,23 @@
 .tri-sub-add::placeholder { color: var(--tp-text-muted); opacity: 0.55; }
 .tri-sub-add:hover::placeholder, .tri-sub-add:focus::placeholder { opacity: 0.8; }
 .tri-sub-add:focus { border-bottom-color: var(--tp-border); }
+
+/* Back to the parent task from a selected subtask. Color only: the line does not grow. */
+.tri-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 70%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tri-back:hover { color: var(--tp-text); }
+.tri-back > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tri-back > .ti { flex: none; font-size: 14px; }

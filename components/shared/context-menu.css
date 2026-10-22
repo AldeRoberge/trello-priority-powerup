@@ -166,11 +166,17 @@
   background: var(--tp-surface-hover, color-mix(in srgb, var(--text-primary, var(--tp-text, #172b4d)) 8%, transparent));
 }
 
-.tp-context-menu-hint {
+.tp-context-menu-hint,
+.tp-context-menu-key {
   flex: 0 0 auto;
   margin-left: 12px;
   font-size: 11px;
   opacity: 0.55;
+}
+
+.tp-context-menu-key {
+  min-width: 1.2em;
+  text-align: right;
 }
 
 .tp-context-menu-check,

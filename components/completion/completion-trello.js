@@ -3123,6 +3123,126 @@
     throw new Error('PriorityTrello.initIframePage is required for completion iframe pages');
   }
 
+  /** Trello card id on a row. Tree ids (`card:…`, `section:…`) are not card ids. */
+  function cardIdOf(row) {
+    if (!row || typeof row !== 'object') return '';
+    var card = row.cardId != null ? String(row.cardId).trim() : '';
+    if (card) return card;
+    var id = row.id != null ? String(row.id).trim() : '';
+    if (!id || id.indexOf('section:') === 0 || id.indexOf('card:') === 0) return '';
+    return id;
+  }
+
+  /** The card and every linked subtask under it (and nested cards), each id once. */
+  function collectProgressCardIds(rows) {
+    var ids = [];
+    var seen = Object.create(null);
+    function add(id) {
+      id = id == null ? '' : String(id).trim();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    }
+    function walk(list) {
+      (list || []).forEach(function (it) {
+        if (!it || typeof it !== 'object') return;
+        var linked = it.linkedCardId != null ? String(it.linkedCardId).trim() : '';
+        if (linked) add(linked);
+        if (it.kind === 'card' && it.cardId) add(String(it.cardId).trim());
+        if (it.items) walk(it.items);
+        if (it.children) walk(it.children);
+      });
+    }
+    (rows || []).forEach(function (row) {
+      add(cardIdOf(row));
+      if (!row) return;
+      walk(row.items);
+      walk(row.children);
+    });
+    return ids;
+  }
+
+  /** A click on a parent progress ring: 100 % reopens, anything else finishes. */
+  function parentClickPercent(progress) {
+    var n = Number(progress);
+    return isFinite(n) && n >= PROGRESS_MAX ? PROGRESS_MIN : PROGRESS_MAX;
+  }
+
+  function stampLinkedProgress(items, pct) {
+    return (items || []).map(function (it) {
+      if (!it) return it;
+      var copy = Object.assign({}, it);
+      if (itemLinkedCardId(copy)) {
+        copy.progress = pct;
+        copy.done = pct >= PROGRESS_MAX;
+        if (copy.done) {
+          delete copy.blocked;
+          delete copy.blockedReasons;
+        }
+      }
+      if (copy.items) copy.items = stampLinkedProgress(copy.items, pct);
+      return copy;
+    });
+  }
+
+  /**
+   * Next completion payload for one card. At 0 % or 100 % linked subtasks are
+   * stamped to the same value and their card ids are returned so the caller
+   * can write those cards too. A partial % leaves linked cards alone.
+   */
+  function prepareProgressWrite(data, pct) {
+    var normalized = normalizeCompletionData(data || { items: [] });
+    var target = clampProgress(pct);
+    var follow = target === PROGRESS_MIN || target === PROGRESS_MAX;
+    var linked = [];
+    var seen = Object.create(null);
+    if (follow) {
+      (function walk(items) {
+        (items || []).forEach(function (it) {
+          if (!it) return;
+          var id = itemLinkedCardId(it);
+          if (id && !seen[id]) {
+            seen[id] = true;
+            linked.push(id);
+          }
+          walk(it.items);
+        });
+      })(normalized.items);
+    }
+    var items = normalized.items && normalized.items.length
+      ? applyMasterProgress(normalized.items, target)
+      : null;
+    if (items && follow) items = stampLinkedProgress(items, target);
+    var next = items
+      ? Object.assign({}, normalized, { items: items })
+      : Object.assign({}, normalized, { progress: target });
+    return { data: normalizeCompletionData(next), linked: linked };
+  }
+
+  /** Writes `pct` on every card in `rows` and, at 0 % or 100 %, on linked subtasks. */
+  function saveProgressTree(t, rows, pct) {
+    var queue = collectProgressCardIds(rows);
+    var seen = Object.create(null);
+    var saved = [];
+    queue.forEach(function (id) { seen[id] = true; });
+    var target = clampProgress(pct);
+    function run() {
+      if (!queue.length) return Promise.resolve(saved.slice());
+      var id = queue.shift();
+      saved.push(id);
+      return getCardCompletionById(t, id).then(function (data) {
+        var prep = prepareProgressWrite(data, target);
+        (prep.linked || []).forEach(function (linked) {
+          if (seen[linked]) return;
+          seen[linked] = true;
+          queue.push(linked);
+        });
+        return saveCardCompletionById(t, id, prep.data);
+      }).then(run);
+    }
+    return run();
+  }
+
   async function getCardName(t) {
     if (global.PriorityTrello && typeof global.PriorityTrello.getCardName === 'function') {
       return global.PriorityTrello.getCardName(t);
@@ -3222,6 +3342,10 @@
     getDueCompleteSuppressed: getDueCompleteSuppressed,
     syncCardDueCompleteFromProgress: syncCardDueCompleteFromProgress,
     applyMasterProgress: applyMasterProgress,
+    collectProgressCardIds: collectProgressCardIds,
+    parentClickPercent: parentClickPercent,
+    prepareProgressWrite: prepareProgressWrite,
+    saveProgressTree: saveProgressTree,
     applyItemProgress: applyItemProgress,
     applyChecklistItemProgress: applyChecklistItemProgress,
     applyChecklistItemEstimate: applyChecklistItemEstimate,

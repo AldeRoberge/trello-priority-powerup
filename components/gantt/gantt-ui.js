@@ -2261,11 +2261,62 @@
       var stats = global.TableModel && typeof global.TableModel.sectionStats === 'function'
         ? global.TableModel.sectionStats(row.children || [])
         : { progress: null, subs: 0 };
-      nodes.push(el('span', 'gantt-section-prog' + (stats.progress == null ? ' is-empty' : ''), {
-        text: stats.progress == null ? '-' : stats.progress + '%',
-        title: stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches',
-      }));
+      var prog = stats.progress;
+      if (stats.blocked && prog == null) prog = 0;
+      var progEl = el('span', 'gantt-section-prog' + (prog == null ? ' is-empty' : '') + (stats.blocked ? ' is-blocked' : ''), {
+        text: prog == null ? '-' : prog + '%',
+        title: stats.blocked ? 'Une tâche est bloquée' : ((prog != null && prog >= 100) ? 'Rouvrir les tâches' : 'Terminer les tâches'),
+      });
+      if (row.children && row.children.length) {
+        progEl.style.cursor = 'pointer';
+        progEl.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+        progEl.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var CT = global.CompletionTrello;
+          var next = CT && typeof CT.parentClickPercent === 'function' ? CT.parentClickPercent(prog) : ((prog != null && prog >= 100) ? 0 : 100);
+          saveProjectProgress(row, next);
+        });
+      }
+      nodes.push(progEl);
       return nodes;
+    }
+
+    /** Project header: the same percent on every task under it, then the header follows. */
+    function saveProjectProgress(row, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.saveProgressTree !== 'function') {
+        setStatus('Éditeur de progrès indisponible', true);
+        return;
+      }
+      var cards = [];
+      (function walk(list) {
+        (list || []).forEach(function (n) {
+          if (!n) return;
+          if (n.cardId) cards.push(n);
+          else walk(n.children);
+        });
+      })(row.children);
+      if (!cards.length) return;
+      var wasDone = {};
+      cards.forEach(function (n) { if (n.cardId) wasDone[n.cardId] = !!n.dueComplete || n.category === 'completed'; });
+      setStatus('Enregistrement…');
+      CT.saveProgressTree(t, cards, pct).then(function (ids) {
+        if (pct < 100 || !global.TableTrello || typeof global.TableTrello.moveCard !== 'function') return null;
+        var list = (state.boardLists || []).filter(function (l) { return l.category === 'completed'; })[0];
+        if (!list) return null;
+        var chain = Promise.resolve();
+        (ids || []).forEach(function (id) {
+          if (wasDone[id]) return;
+          chain = chain.then(function () { return global.TableTrello.moveCard(t, id, list.id, 'bottom'); });
+        });
+        return chain;
+      }).then(function () {
+        setStatus(pct >= 100 ? '« ' + (row.name || 'Projet') + ' » terminé' : 'Enregistré');
+        return reload({ quiet: true });
+      }, function (err) {
+        setStatus('Erreur progrès : ' + (err && err.message ? err.message : err), true);
+      });
     }
 
     /** The project a card belongs to, or null. Subtasks stay on the card. */

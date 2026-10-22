@@ -738,6 +738,7 @@ html[data-color-mode] .tp-page--kanban {
 .kb-proj-prog { width: 40px; color: var(--tp-text-muted); font-weight: 500; }
 .kb-proj-pri.is-empty,
 .kb-proj-prog.is-empty { opacity: 0.55; color: var(--tp-text-muted); font-weight: 500; }
+.kb-proj-prog.is-blocked { color: var(--tp-danger-text); opacity: 1; }
 .kb-proj-pri:hover { background: var(--tp-surface-hover); opacity: 1; }
 .kb-proj.is-drop-on { box-shadow: inset 0 0 0 2px var(--tp-primary); }
 .kb-proj-n {

@@ -1,13 +1,14 @@
 /*
  * Role: the Aujourd'hui page of the Dashboard.
  *   Hero      greeting, how the day stands, and the weather (sky, now, next hours, next days)
- *   À faire   what to do now, late work, today's tasks, quick add, work worth pulling in, the revue
+ *   À faire   what to do now, late work, today's tasks, quick add, work worth pulling in, the revue,
+ *             and the week's completed-work recap (Bilan de la semaine)
  *   Planning  the day on a clock: tasks with a time sit at that time, the others are laid out from now
  *             (dashed) and become real with "Planifier ma journée". Drag to move, drag the bottom edge to
  *             resize, click an empty hour to add a task there.
  * Logic is in TodayModel (pure); the weather in Weather / WeatherUI. Every write goes through the helpers
  * dashboard-ui.js hands over (`api`), so the right-click menu, undo and Trello writes stay in one place.
- * The page is a board of widgets (TodayModel.layout): move, resize, close, reopen, rename.
+ * The page is a board of widgets (TodayModel.layout). Modifier starts off; while it is on, widgets can be moved, resized, closed and renamed.
  * Exposes window.TodayUI.create(api) → { render(container) }. Styles: today-ui.css (prefix td-).
  */
 (function (global) {
@@ -93,6 +94,7 @@
       scrolls: {},
       narrow: false,
       widgetGesture: false,
+      arrange: false, // Modifier: resize, move, rename, close. Off until the visitor turns it on.
       editing: null,
       boardEl: null,
       listScroll: 0,
@@ -152,9 +154,14 @@
         closePreview();
       }, true);
       document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Escape' || !ui.preview || ui.preview.hold) return;
+        if (e.key !== 'Escape') return;
         if (global.CardFields && typeof global.CardFields.isOpen === 'function' && global.CardFields.isOpen()) return;
-        closePreview();
+        if (ui.preview && !ui.preview.hold) { closePreview(); return; }
+        if (ui.editing || ui.widgetGesture || ui.compose) return;
+        if (document.querySelector('.tp-context-menu, .wx-pop')) return;
+        if (!ui.arrange) return;
+        ui.arrange = false;
+        if (api.section() === 'today') api.rerender();
       });
     }
 
@@ -250,12 +257,35 @@
       return h('div', { class: 'td-pills' }, pills);
     }
 
+    /** The open tasks of the day, by name, so the greeting card says which ones. */
+    function helloTasks(day) {
+      var late = {};
+      (day.overdue || []).forEach(function (r) { late[r.id] = true; });
+      var rows = (day.overdue || []).concat(day.planned || []);
+      if (!rows.length) return null;
+      return h('div', { class: 'td-hello-tasks' }, rows.map(function (r) {
+        var range = late[r.id] ? null : TM().rowRange(r, ui.today);
+        return h('button', {
+          class: 'td-hello-task' + (late[r.id] ? ' is-late' : '') + (r.blocked ? ' is-blocked' : ''),
+          type: 'button',
+          onclick: function () { api.openCard(r); },
+        }, [
+          h('span', { class: 'td-hello-mark' }, [
+            r.blocked ? icon('player-pause') : (late[r.id] ? icon('alert-circle') : null),
+          ]),
+          h('span', { class: 'td-hello-name', text: r.name || '' }),
+          h('span', { class: 'td-hello-when', text: range ? TM().fmtClock(range.start) : '' }),
+        ]);
+      }));
+    }
+
     function buildHello() {
       var title = TM().hello(ui.now) + (ui.name ? ', ' + ui.name : '');
       return h('div', { class: 'td-hello' }, [
         h('div', { class: 'td-date', text: 'Aujourd’hui · ' + TM().dayTitle(ui.today) }),
         h('h1', { class: 'td-title', text: title }),
         h('p', { class: 'td-line', text: TM().headline(ui.day.stats) }),
+        helloTasks(ui.day),
         buildPills(ui.day),
       ]);
     }
@@ -274,7 +304,7 @@
     }
 
     function buildWeatherPanel(info) {
-      return WUI().panel(info.live, {
+      var panel = WUI().panel(info.live, {
         expanded: ui.week,
         onPlace: openPlacePicker,
         onToggle: function () {
@@ -284,6 +314,8 @@
         },
         onRefresh: function () { WX().refresh({ force: true }); },
       });
+      if (ui.week && panel) panel.classList.add('is-open');
+      return panel;
     }
 
     /** Greeting and weather keep their sky when the forecast or the name arrives. */
@@ -394,11 +426,11 @@
     }
 
     /**
-     * One task of the list. kind: 'late' | 'today' | 'done' | 'sugg'.
+     * One task of the list. kind: 'late' | 'today' | 'done' | 'week' | 'sugg'.
      * Score, hour, estimate, day and the arrow are columns: a missing value keeps its place.
      */
     function taskRow(row, kind) {
-      var done = kind === 'done';
+      var done = kind === 'done' || kind === 'week';
       var sugg = kind === 'sugg';
       var blocked = !!row.blocked && !done;
       var range = done || sugg ? null : TM().rowRange(row, ui.today);
@@ -409,7 +441,7 @@
         class: 'td-task' + (kind === 'late' ? ' is-late' : '') + (blocked ? ' is-blocked' : '') + (done ? ' is-done' : '') + (focus ? ' is-focus' : ''),
         'data-card': row.id,
       }, [
-        sugg ? h('span', { class: 'td-check td-check--none' }) : ringButton(row, kind),
+        sugg ? h('span', { class: 'td-check td-check--none' }) : ringButton(row, done ? 'done' : kind),
         h('span', { class: 'td-task-main' }, [
           h('span', { class: 'td-task-name', text: row.name, onclick: function () { api.openCard(row); } }),
           step,
@@ -418,7 +450,7 @@
         h('span', { class: 'td-props' }, [
           prop('time', done || sugg ? null : timeChip(row, range)),
           prop('prio', api.prioBadge(row)),
-          prop('est', done ? null : api.estChip(row)),
+          prop('est', kind === 'done' ? null : api.estChip(row)),
           prop('due', done ? null : sugg
             ? h('button', { class: 'td-btn td-btn--chip', type: 'button', title: 'Faire aujourd’hui', onclick: function () { api.plan(row, ui.today); } }, [icon('sun'), text('Aujourd’hui')])
             : api.dueChip(row)),
@@ -526,6 +558,28 @@
     function suggestionRows(day) {
       var skip = day.focus && day.focus.state === 'backlog' ? day.focus.row.id : null;
       return TM().suggest(api.rows(), ui.today, 6, skip);
+    }
+
+    /* ── Bilan de la semaine ──────────────────────────────────────── */
+
+    function buildWeek(recap) {
+      if (!recap.count) {
+        return h('div', { class: 'td-empty' }, [
+          icon('circle-check'),
+          h('p', { text: 'Rien cette semaine.' }),
+        ]);
+      }
+      var scroll = h('div', { class: 'td-scroll' });
+      recap.days.forEach(function (day) {
+        scroll.appendChild(h('div', { class: 'td-group' }, [
+          h('div', { class: 'td-group-h' }, [
+            h('span', { text: day.label }),
+            day.minutes ? h('span', { class: 'td-day-min', text: TM().fmtDuration(day.minutes) }) : null,
+          ]),
+        ].concat(day.rows.map(function (r) { return taskRow(r, 'week'); }))));
+      });
+      scroll.addEventListener('scroll', function () { ui.scrolls.week = scroll.scrollTop; }, { passive: true });
+      return scroll;
     }
 
     /* ── Left column ──────────────────────────────────────────────── */
@@ -1100,7 +1154,7 @@
     }
 
     function beginRename(id) {
-      if (ui.editing || !ui.root) return;
+      if (!ui.arrange || ui.editing || !ui.root) return;
       var el = ui.root.querySelector('.td-widget--' + id);
       if (!el) return;
       ui.editing = id;
@@ -1136,7 +1190,7 @@
     }
 
     function startMove(e, id, grip) {
-      if (e.button !== 0) return;
+      if (!ui.arrange || e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
       var el = grip.closest('.td-widget');
@@ -1184,7 +1238,7 @@
     }
 
     function startResize(e, id, axis, handle) {
-      if (e.button !== 0 || (ui.narrow && axis !== 's')) return;
+      if (!ui.arrange || e.button !== 0 || (ui.narrow && axis !== 's')) return;
       e.preventDefault();
       e.stopPropagation();
       var el = handle.closest('.td-widget');
@@ -1242,7 +1296,7 @@
       opts = opts || {};
       var label = TM().layout.label(ui.layout, id);
       var info = opts.sky ? skyScene() : null;
-      var tools = widgetTools(id);
+      var tools = ui.arrange ? widgetTools(id) : null;
       var head = null;
       if (opts.head !== false) {
         var title = h('h2', { class: 'td-h td-widget-title', text: label });
@@ -1255,7 +1309,7 @@
         if (opts.count != null) kids.push(h('span', { class: 'td-count', text: String(opts.count) }));
         kids.push(h('span', { class: 'td-spacer' }));
         (opts.extra || []).forEach(function (n) { if (n) kids.push(n); });
-        kids.push(tools);
+        if (tools) kids.push(tools);
         head = h('div', { class: 'td-col-head' }, kids);
       }
       if (body) body.classList.add('td-widget-body');
@@ -1269,9 +1323,9 @@
         opts.head === false ? tools : null,
         head,
         body,
-        ui.narrow ? null : h('span', { class: 'td-resize td-resize-e' }),
-        h('span', { class: 'td-resize td-resize-s' }),
-        ui.narrow ? null : h('span', { class: 'td-resize td-resize-se' }),
+        ui.arrange && !ui.narrow ? h('span', { class: 'td-resize td-resize-e' }) : null,
+        ui.arrange ? h('span', { class: 'td-resize td-resize-s' }) : null,
+        ui.arrange && !ui.narrow ? h('span', { class: 'td-resize td-resize-se' }) : null,
       ]);
       if (info) el.setAttribute('data-scene', info.scene);
       el._geom = geom;
@@ -1343,6 +1397,13 @@
         if (review) review.classList.add('td-review');
         board.appendChild(widget('review', geoms.review, review, {}));
       }
+      if (geoms.week) {
+        var recap = TM().weekRecap(api.rows(), ui.today);
+        board.appendChild(widget('week', geoms.week, buildWeek(recap), {
+          count: recap.count,
+          extra: recap.minutes ? [h('span', { class: 'td-week-min', text: TM().fmtDuration(recap.minutes) })] : [],
+        }));
+      }
       if (geoms.plan) board.appendChild(widget('plan', geoms.plan, buildPlan(day), { extra: ui.planTools || [] }));
       return board;
     }
@@ -1402,20 +1463,36 @@
       ui.blockById = {};
       day.blocks.forEach(function (b) { ui.blockById[b.id] = b; });
 
-      var page = h('div', { class: 'td-page' + (ui.narrow ? ' is-narrow' : '') });
+      var page = h('div', { class: 'td-page' + (ui.narrow ? ' is-narrow' : '') + (ui.arrange ? ' is-arrange' : '') });
       page.appendChild(buildBoard(day));
-      page.appendChild(h('button', {
-        class: 'td-icon td-widgets-add',
-        type: 'button',
-        title: 'Widgets',
-        'aria-label': 'Widgets',
-        onclick: function (e) { e.stopPropagation(); openWidgetMenu(e.currentTarget); },
-      }, [icon('plus')]));
+      page.appendChild(h('div', { class: 'td-board-tools' }, [
+        h('button', {
+          class: 'td-icon td-arrange' + (ui.arrange ? ' is-on' : ''),
+          type: 'button',
+          title: ui.arrange ? 'Terminé' : 'Modifier',
+          'aria-label': ui.arrange ? 'Terminé' : 'Modifier',
+          'aria-pressed': ui.arrange ? 'true' : 'false',
+          onclick: function (e) {
+            e.stopPropagation();
+            ui.arrange = !ui.arrange;
+            api.rerender();
+          },
+        }, [icon('layout-grid')]),
+        h('button', {
+          class: 'td-icon td-widgets-add',
+          type: 'button',
+          title: 'Widgets',
+          'aria-label': 'Widgets',
+          onclick: function (e) { e.stopPropagation(); openWidgetMenu(e.currentTarget); },
+        }, [icon('plus')]),
+      ]));
       container.appendChild(page);
       ui.root = page;
       watchWidth(container);
 
       if (ui.listEl) ui.listEl.scrollTop = ui.scrolls.tasks || 0;
+      var weekScroll = page.querySelector('.td-widget--week .td-scroll');
+      if (weekScroll) weekScroll.scrollTop = ui.scrolls.week || 0;
       if (ui.planEl) {
         if (ui.planScroll == null) scrollToNow(false);
         else ui.planEl.scrollTop = ui.planScroll;

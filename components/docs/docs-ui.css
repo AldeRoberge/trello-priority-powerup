@@ -466,6 +466,7 @@ button.dc-item-icon:hover {
 
 .dc-scroll {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 24px 24px 80px;
@@ -479,6 +480,7 @@ button.dc-item-icon:hover {
   --dc-pad-x: 64px;
   position: relative;
   max-width: 820px;
+  min-width: 0;
   margin: 0 auto;
   padding: 44px 64px 72px;
   min-height: calc(100% - 4px);
@@ -807,7 +809,11 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 }
 .dc-title {
   display: block;
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
   border: 0;
   padding: 0;
   margin: 0 0 4px;
@@ -820,9 +826,8 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   outline: none;
   resize: none;
   overflow: hidden;
-  field-sizing: content;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .dc-title::placeholder {
   color: var(--tp-text-muted);

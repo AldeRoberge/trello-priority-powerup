@@ -191,22 +191,29 @@
   function writeProgress(t, cardId, pct) {
     var CT = global.CompletionTrello;
     if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+    if (typeof CT.saveProgressTree === 'function') return CT.saveProgressTree(t, [{ id: cardId }], pct);
     return CT.getCardCompletionById(t, cardId).then(function (data) {
       data = CT.normalizeCompletionData(data || { items: [] });
       var next = data.items && data.items.length
         ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
         : Object.assign({}, data, { progress: pct });
-      return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next));
+      return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next)).then(function () { return [cardId]; });
     });
   }
 
-  /** Sets the progress; reaching 100 % also moves the card to the board's completed list (like the Table). */
+  /** Sets the progress; reaching 100 % also moves the card and its linked subtasks to the completed list. */
   function setProgress(t, row, lists, pct) {
-    return writeProgress(t, row.id, pct).then(function () {
-      var done = pct >= 100 && row.statutKey !== 'completed'
+    return writeProgress(t, row.id, pct).then(function (ids) {
+      var done = pct >= 100
         ? (lists || []).filter(function (l) { return l.category === 'completed'; })[0]
         : null;
-      return done ? TT().moveCard(t, row.id, done.id, 'bottom').then(function () { return done; }) : null;
+      if (!done || !TT()) return null;
+      var chain = Promise.resolve(null);
+      (ids || [row.id]).forEach(function (id) {
+        if (id === row.id && row.statutKey === 'completed') return;
+        chain = chain.then(function () { return TT().moveCard(t, id, done.id, 'bottom').then(function () { return done; }); });
+      });
+      return chain;
     });
   }
 

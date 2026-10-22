@@ -98,6 +98,20 @@ test('rows without items, odd items and a missing projectOf do not break it', ()
   eq(TT.build(null).tasks, []);
 });
 
+test('a blocked task marks its project blocked; a finished one does not', () => {
+  const paused = Object.assign(card('a'), { blocked: true, progress: 0 });
+  const b = TT.build([paused], { projectOf });
+  const p = b.nodes.find((n) => n.kind === 'project');
+  assert.equal(p.blocked, true);
+  assert.equal(p.progress, 0);
+  const open = TT.build([Object.assign(card('a'), { progress: 40 })], { projectOf });
+  assert.equal(open.nodes.find((n) => n.kind === 'project').blocked, false);
+  const done = TT.build([Object.assign(card('a'), { blocked: true, progress: 100 })], { projectOf });
+  assert.equal(done.nodes.find((n) => n.kind === 'project').blocked, false);
+  const sub = TT.build([Object.assign(card('a'), { progress: 0, items: [{ text: 'attendre', blocked: true, progress: 0 }] })], { projectOf });
+  assert.equal(sub.nodes.find((n) => n.kind === 'project').blocked, true);
+});
+
 test('a project line keeps the icon reported with its tasks', () => {
   const b = TT.build([card('a')], {
     projectOf: (row) => (row.id === 'a' ? { id: 'P1', name: 'Site web', icon: { i: 'rocket', c: '#0c66e4' } } : null),
@@ -187,6 +201,26 @@ test('clicking a project name folds it, the same as the arrow', () => {
   find(free, (c) => c.className === 'tt-name').dispatch('click');
   eq(toggled, ['p:P1', 'p:P1', 'p:']);
   eq(selected, ['P1'], 'Sans projet has no pane');
+
+  const subs = [];
+  const subBuilt = Tree.build([card('z', [
+    { id: 'i1', text: 'Étape', linkedCardId: 'c9' },
+    { id: 'i2', text: 'Suite', items: [{ id: 'i3', text: 'Détail' }] },
+  ])], { projectOf: () => null });
+  const subFrag = Tree.render(subBuilt, {
+    taskEl: () => new Node('div'),
+    toggle() {},
+    select(id) { subs.push(['card', id]); },
+    selectSub(n) { subs.push(['sub', n.taskId, n.id, n.parentId, n.linkedCardId || '']); },
+    selectedKey: 's:z:0',
+  });
+  const step = find(subFrag, (c) => c.className === 'tt-name' && c.textContent === 'Étape');
+  assert.ok(String(step.parent.className).includes('is-sel'), 'the chosen subtask is highlighted');
+  step.dispatch('click');
+  const detail = find(subFrag, (c) => c.className === 'tt-name' && c.textContent === 'Détail');
+  assert.ok(!String(detail.parent.className).includes('is-sel'));
+  detail.dispatch('click');
+  eq(subs, [['sub', 'z', 'i1', '', 'c9'], ['sub', 'z', 'i3', 'i2', '']]);
 });
 
 test('adding: the new-subtask line comes after the task and its subtasks; only top-level subtasks can take a child', () => {
@@ -195,7 +229,9 @@ test('adding: the new-subtask line comes after the task and its subtasks; only t
   eq(kinds(onTask), ['task:t:x', 'sub:s:x:0', 'sub:s:x:0.0', 'sub:s:x:1', 'add:a:t:x']);
   assert.equal(onTask.nodes[4].parentId, '');
   assert.equal(onTask.nodes[4].depth, 1);
+  assert.equal(onTask.nodes[4].mode, 'sub');
   eq(onTask.nodes.filter((n) => n.kind === 'sub').map((n) => n.canAdd), [true, false, true]);
+  eq(onTask.nodes.filter((n) => n.kind === 'sub').map((n) => [n.id, n.parentId]), [['i1', ''], ['i2', 'i1'], ['i3', '']]);
 
   const onSub = TT.build(rows, { projectOf: () => null, adding: 's:x:0' });
   eq(kinds(onSub), ['task:t:x', 'sub:s:x:0', 'sub:s:x:0.0', 'add:a:s:x:0', 'sub:s:x:1']);
@@ -212,4 +248,70 @@ test('a project line carries its best task priority and the mean progress of its
   const b = TT.build(rows, { projectOf });
   const p = b.nodes.filter((n) => n.kind === 'project');
   eq(p.map((n) => [n.priority, n.tierI, n.progress]), [[7.5, 1, 75], [null, null, null]]);
+});
+
+test('a sibling task is inserted after the task block, at the task depth', () => {
+  const rows = [card('x', [{ id: 'i1', text: 'un' }])];
+  const sib = TT.build(rows, { projectOf: () => null, adding: { key: 't:x', mode: 'task' } });
+  eq(kinds(sib), ['task:t:x', 'sub:s:x:0', 'add:a:t:x']);
+  assert.equal(sib.nodes[2].mode, 'task');
+  assert.equal(sib.nodes[2].depth, 0);
+  const nested = TT.build([card('a', [{ id: 'i1', text: 'un' }])], { projectOf, adding: { key: 't:a', mode: 'task' } });
+  const add = nested.nodes.find((n) => n.kind === 'add');
+  assert.equal(add.depth, 1);
+  assert.equal(add.mode, 'task');
+});
+
+test('the + is under the task, not inside the row', () => {
+  function Node() {
+    this.className = '';
+    this.textContent = '';
+    this.children = [];
+    this.listeners = {};
+    this.style = { setProperty() {} };
+    this.parent = null;
+    const self = this;
+    this.classList = { add(c) { self.className += (self.className ? ' ' : '') + c; } };
+  }
+  Node.prototype.setAttribute = function () {};
+  Node.prototype.appendChild = function (c) { this.children.push(c); c.parent = this; return c; };
+  Node.prototype.insertBefore = function (node, before) {
+    const i = this.children.indexOf(before);
+    if (i < 0) this.children.push(node);
+    else this.children.splice(i, 0, node);
+    node.parent = this;
+    return node;
+  };
+  Node.prototype.querySelector = function () { return null; };
+  Object.defineProperty(Node.prototype, 'firstChild', { get() { return this.children[0] || null; } });
+  Node.prototype.addEventListener = function (type, fn) {
+    (this.listeners[type] || (this.listeners[type] = [])).push(fn);
+  };
+  Node.prototype.dispatch = function (type) {
+    const e = { stopPropagation() {}, preventDefault() {} };
+    (this.listeners[type] || []).forEach((fn) => fn(e));
+  };
+  const document = {
+    createElement: () => new Node(),
+    createDocumentFragment() {
+      const frag = { children: [] };
+      frag.appendChild = (c) => { frag.children.push(c); return c; };
+      return frag;
+    },
+  };
+  const win = { document };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'components', 'dashboard', 'triage-tree.js'), 'utf8'), { window: win, document });
+  const Tree = win.TriageTree;
+  const chosen = [];
+  const rows = [card('x', [{ id: 'i1', text: 'un' }])];
+  const frag = Tree.render(Tree.build(rows, { projectOf: () => null }), {
+    taskEl: () => new Node(),
+    toggle() {},
+    select() {},
+    chooseAdd(key) { chosen.push(key); },
+  });
+  eq(frag.children.map((c) => c.className), ['tt-colhead', 'tt-task', 'tt-under', 'db-row tt-sub', 'tt-under']);
+  assert.equal(frag.children[1].children.some((c) => c.className === 'tt-add'), false);
+  frag.children[2].children.find((c) => c.className === 'tt-add').dispatch('click');
+  eq(chosen, ['t:x']);
 });

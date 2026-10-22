@@ -788,6 +788,11 @@
         });
       });
     }
+    var newProjectIds = created.filter(function (d) { return d.subject && d.subject.k === 'project'; }).map(function (d) { return d.id; });
+    var probe = DM().parseFolderIndex(DM().packFolderIndex(getFolderIndex()));
+    if (DP.fileProjects(probe, docs, newProjectIds)) {
+      await updateFolderIndex(t, function (idx) { DP.fileProjects(idx, docs, newProjectIds); });
+    }
     return { docs: docs, created: created };
   }
 

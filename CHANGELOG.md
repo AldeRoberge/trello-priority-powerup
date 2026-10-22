@@ -5,10 +5,20 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Assistant : respiration et étirements (petit personnage, au choix), un rappel plus tard, et une icône des rappels à côté du débogage.
+- Aujourd’hui : la carte du jour nomme les tâches à faire. Un clic ouvre la tâche.
+- Clic droit : A archive tant que le menu est ouvert.
+- Aujourd’hui : « Modifier » est fermé au départ. Une fois ouvert, on change la taille des widgets. La météo, le bonjour, la prochaine action et le planning suivent la taille de leur carte.
+- Triage : le + est sous la tâche. Il ajoute une tâche au même niveau ou une sous-tâche, et les colonnes d’avancement et de priorité restent alignées.
+- Triage, Tableau, Gantt et Kanban : cliquer l'avancement d'un projet termine toutes ses tâches et leurs sous-tâches, et le projet avec elles. Un second clic les remet à 0 %.
+- Tableau : le nom du projet s’aligne sur la colonne Objet, et les tâches en dessous sont en retrait.
+- Une tâche bloquée marque aussi son projet : le cercle du projet passe en pause dans Triage et le Tableau, et le pourcentage du projet passe au rouge dans le Gantt et le Kanban.
+- Assistant : un choix qui reprend une phrase surlignée prend la même couleur (vert, jaune, rouge).
+- Aujourd’hui : « Bilan de la semaine » liste le travail terminé, jour par jour, de lundi à dimanche.
 - Assistant : pendant l’attente, préparation, envoi et lecture sont des icônes.
 - Assistant en bas : la conversation se replie sur une ligne et s’ouvre en glissant le bord du haut (clic pour replier, double-clic pour la taille d’origine), dans toutes les vues.
-- Documents : le titre d'un document n'est plus coupé, il passe à la ligne.
-- Triage : le cercle, la barre et le % forment un bloc légèrement plus foncé titré « Avancement », suivi d'un bloc « Priorité » encore plus foncé.
+- Documents : un long titre s'affiche en entier et passe à la ligne.
+- Triage : cliquer une sous-tâche l’ouvre dans le panneau pour régler son titre, sa durée, son jour, son avancement et la bloquer. Une sous-tâche qui est une carte liée ouvre cette carte.
 - Assistant en bas : fond plus foncé comme Triage, et une poignée en haut pour ouvrir l'historique (clic) ou en montrer plus ou moins (glisser).
 - Une fenêtre « Une nouvelle version est disponible, veuillez actualiser » apparaît en bas à droite dès qu'une nouvelle version est publiée (vérification en arrière-plan toutes les 30 secondes), au lieu de recharger la page sans prévenir.
 - Triage : glisser la séparation entre la liste et le détail pour l'élargir ou la rétrécir (double-clic pour revenir à la taille par défaut).

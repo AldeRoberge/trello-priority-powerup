@@ -113,7 +113,9 @@
     remove_person: true,
     upsert_place: true,
     remove_place: true,
-    trigger_effect: true
+    trigger_effect: true,
+    show_guide: true,
+    schedule_check: true
   };
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
   var DEFAULT_OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -400,7 +402,9 @@
     remove_person: 'Personne retir\u00e9e.',
     set_places: 'Lieux mis \u00e0 jour.',
     upsert_place: 'Lieu mis \u00e0 jour.',
-    remove_place: 'Lieu retir\u00e9.'
+    remove_place: 'Lieu retir\u00e9.',
+    show_guide: 'Module ouvert.',
+    schedule_check: 'Rappel planifi\u00e9.'
   };
 
   var TASK_TYPE_IDS = [
@@ -2682,7 +2686,7 @@
   function linkSuggestionColorsToHighlights(suggestions, message) {
     var list = Array.isArray(suggestions) ? suggestions : [];
     var spans = extractHighlightSpans(message).filter(function (s) {
-      return s.color === 'g' || s.color === 'r' || s.color === 'y';
+      return s.color === 'g' || s.color === 'r' || s.color === 'y' || s.color === 'a';
     });
     if (!list.length || !spans.length) return list;
 
@@ -2734,7 +2738,8 @@
         text: entry.text,
         heat: entry.heat,
         icon: entry.icon || null,
-        color: entry.color || null
+        color: entry.color || null,
+        hl: matched
       };
       if (matched === 'g') {
         next.heat = 0;
@@ -4702,6 +4707,11 @@
       '- Ex. nom\u00a0: user \u00ab\u00a0appelle-toi Nova\u00a0\u00bb \u2192 {"message":"Okay, je m\'appelle Nova maintenant.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_agent_name","args":{"name":"Nova"}}]}',
       '- Ex. couleur\u00a0: user \u00ab\u00a0change ta couleur pour rouge\u00a0\u00bb \u2192 {"message":"Okay, je passe au rouge\u00a0!","emotion":"happy","color":"red","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_color","args":{"color":"red"}}]}',
       '- Ex. personnalit\u00e9\u00a0: user \u00ab\u00a0sois un peu taquin\u00a0\u00bb \u2192 {"message":"Deal. Mode taquin activ\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_personality","args":{"personality":"Un peu taquin, volontiers espi\u00e8gle, reste utile."}}]}',
+      '- show_guide: { kind: "breathe"|"stretch", preset?: "30s"|"426"|"60s", id?: "cou"|"epaules"|"poitrine"|"dos"|"poignets"|"hanches" } (module visuel. M\u00e9ditation / respirer \u2192 breathe. \u00c9tirements \u2192 stretch, sans id pour laisser choisir. Le module montre le geste\u00a0: ne le d\u00e9cris pas en long.)',
+      '- schedule_check: { seconds: number, message: string } (tu reparles plus tard. seconds entre 5 et 3600. INTERDIT de dire que tu ne peux pas revenir plus tard.)',
+      '- Ex. respiration\u00a0: user \u00ab\u00a0on m\u00e9dite\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":[],"followUps":[],"actions":[{"tool":"show_guide","args":{"kind":"breathe"}}]}',
+      '- Ex. \u00e9tirement\u00a0: user \u00ab\u00a0\u00e9tirements\u00a0\u00bb \u2192 {"message":"Okay, choisis.","suggestions":[],"followUps":[],"actions":[{"tool":"show_guide","args":{"kind":"stretch"}}]}',
+      '- Ex. rappel\u00a0: user \u00ab\u00a0dans 45 secondes demande-moi comment je vais\u00a0\u00bb \u2192 {"message":"Okay, je te demande \u00e7a dans 45 secondes.","suggestions":[],"followUps":[],"actions":[{"tool":"schedule_check","args":{"seconds":45,"message":"Comment tu te sens, maintenant?"}}]}',
       'Effets fun dynamiques (trigger_effect)\u00a0:',
       '- Palette visuelle\u00a0: fireworks, confetti, hearts, sparkles, shooting_stars, bubbles, aurora, balloons, petals, flowers, rainbow, disco, fleur_de_lys.',
       '- Palette sons / punchlines\u00a0: beep (BEEP BEEP fun), boop, zap, thunder (tonnerre), fanfare, bonk, laser, coin, drumroll, banner (texte plein \u00e9cran, text obligatoire).',
@@ -8809,6 +8819,20 @@
         Object.prototype.hasOwnProperty.call(args, 'at')
       );
     }
+    if (action.tool === 'show_guide') {
+      var guideKind = String(args.kind || args.guide || args.type || '').toLowerCase();
+      return /breath|respir|medit|stretch|etir|breathe/.test(guideKind);
+    }
+    if (action.tool === 'schedule_check') {
+      var checkSeconds = Number(
+        args.seconds != null ? args.seconds : args.delay != null ? args.delay : args.after
+      );
+      var checkText =
+        (typeof args.message === 'string' && args.message.trim()) ||
+        (typeof args.text === 'string' && args.text.trim()) ||
+        '';
+      return isFinite(checkSeconds) && checkSeconds >= 5 && checkSeconds <= 3600 && !!checkText;
+    }
     if (action.tool === 'set_task_types') {
       var typeArgs =
         args.types != null
@@ -8887,6 +8911,12 @@
     }
     if (action.tool === 'set_places') {
       return 'set_places: from, to, at ou clear requis';
+    }
+    if (action.tool === 'show_guide') {
+      return 'show_guide: kind breathe ou stretch';
+    }
+    if (action.tool === 'schedule_check') {
+      return 'schedule_check: seconds (5\u20133600) et message requis';
     }
     if (action.tool === 'set_task_types') {
       return (
@@ -9521,6 +9551,7 @@
         heat: entry.heat,
         icon: entry.icon || null,
         color: entry.color || null,
+        hl: entry.hl || null,
         rank: suggestionIntensityRank(entry.text)
       };
     });
@@ -9560,7 +9591,8 @@
         text: item.text,
         heat: steps[i],
         icon: item.icon,
-        color: item.color
+        color: item.color,
+        hl: item.hl || null
       };
     });
   }
@@ -15278,6 +15310,33 @@
     var tool = action.tool;
     var args = action.args && typeof action.args === 'object' ? action.args : {};
     try {
+      if (tool === 'show_guide' || tool === 'schedule_check') {
+        var Guides = typeof AgentGuides !== 'undefined' ? AgentGuides : null;
+        if (tool === 'show_guide') {
+          var guide = Guides && Guides.normalizeGuide(args);
+          if (!guide) {
+            return { ok: false, tool: tool, error: 'show_guide: kind breathe ou stretch' };
+          }
+          return {
+            ok: true,
+            tool: tool,
+            args: args,
+            guide: guide,
+            summary: TOOL_LABELS.show_guide
+          };
+        }
+        var check = Guides && Guides.normalizeCheck(args);
+        if (!check) {
+          return { ok: false, tool: tool, error: 'schedule_check: seconds et message requis' };
+        }
+        return {
+          ok: true,
+          tool: tool,
+          args: args,
+          schedule: check,
+          summary: TOOL_LABELS.schedule_check
+        };
+      }
       if (tool === 'set_priority') {
         if (typeof bridge.applyPriority !== 'function') {
           return { ok: false, tool: tool, error: 'Bridge priorit\u00e9 indisponible' };

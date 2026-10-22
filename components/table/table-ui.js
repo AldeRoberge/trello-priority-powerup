@@ -686,6 +686,7 @@
         if (state.expanded[row.id]) renderSubRows(row, body);
       }
       var sections = TM().groupByProject(rows, foldedSections(), state.filter ? null : projectCatalog());
+      state.grouped = !!sections;
       if (!sections) rows.forEach(renderRowTr);
       else sections.forEach(function (g) {
         body.appendChild(sectionRow(g));
@@ -981,31 +982,41 @@
       }, fail);
     }
 
-    /** Master progress over subtasks, else the card's own progress. Rejects if the editor is unavailable. */
+    /** Master progress over subtasks, else the card's own progress. At 0 % or 100 % linked cards follow. */
     function writeProgress(cardId, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+      if (typeof CT.saveProgressTree === 'function') return CT.saveProgressTree(t, [{ id: cardId }], pct);
       return CT.getCardCompletionById(t, cardId).then(function (data) {
         data = CT.normalizeCompletionData(data || { items: [] });
         var next = data.items && data.items.length
           ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
           : Object.assign({}, data, { progress: pct });
-        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next));
+        return CT.saveCardCompletionById(t, cardId, CT.normalizeCompletionData(next)).then(function () { return [cardId]; });
       });
+    }
+
+    function moveToCompleted(ids, wasDone) {
+      var list = state.lists.filter(function (l) { return l.category === 'completed'; })[0];
+      if (!list) return Promise.resolve();
+      var chain = Promise.resolve();
+      (ids || []).forEach(function (id) {
+        if (wasDone && wasDone[id]) return;
+        chain = chain.then(function () { return TT().moveCard(t, id, list.id, 'bottom'); });
+      });
+      return chain;
     }
 
     function saveProgress(row, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
       var prev = row.progress;
+      var wasDone = {};
+      wasDone[row.id] = row.statutKey === 'completed';
       row.progress = pct;
       writeProgress(row.id, pct)
-        .then(function () {
-          // 100 % marks the card complete: move it to the board's completed list.
-          var done = pct >= 100 && row.statutKey !== 'completed'
-            ? state.lists.filter(function (l) { return l.category === 'completed'; })[0]
-            : null;
-          return done ? TT().moveCard(t, row.id, done.id, 'bottom') : null;
+        .then(function (ids) {
+          return pct >= 100 ? moveToCompleted(ids || [row.id], wasDone) : null;
         })
         .then(function () {
           setStatus('Enregistré', 'ok');
@@ -1114,6 +1125,7 @@
 
       if (key === 'name') {
         td.classList.add('tb-cell--name'); // frozen next to the row gutter (see table-ui.css)
+        if (state.grouped) td.classList.add('is-nested');
         td.title = row.name;
         td.appendChild(subToggle(row));
         td.appendChild(h('span', { class: 'tb-name', text: row.name }));
@@ -1187,6 +1199,12 @@
     }
 
     /* ── Subtasks: checklist items shown as child rows under their card ── */
+    /** One step under a project section, so a task sits in from the project name. None when the grid is flat. */
+    var TREE_STEP = 20;
+    function treePad() {
+      return state.grouped ? TREE_STEP : 0;
+    }
+
     /** Chevron before the Objet: toggles the child rows; a placeholder of the same width when there are none. */
     function subToggle(row) {
       var count = TM().subtaskRows(row).length;
@@ -1225,7 +1243,8 @@
       if (key === 'name') {
         td.classList.add('tb-cell--name');
         td.title = sub.name;
-        td.appendChild(h('span', { class: 'tb-sub-indent', style: 'width:' + (36 + 16 * sub.depth) + 'px' }));
+        // 36px matches the card's fold slot, then one step per nesting level, plus the project step.
+        td.style.paddingLeft = (8 + treePad() + 36 + 16 * sub.depth) + 'px';
         td.appendChild(icon(sub.done ? 'circle-check' : 'circle', 'tb-sub-icon'));
         td.appendChild(h('span', { class: 'tb-name' + (sub.done ? ' is-done' : ''), text: sub.name }));
       } else if (key === 'progress') {
@@ -1999,18 +2018,59 @@
 
     function sectionProgress(g) {
       var stats = TM().sectionStats(g.rows);
-      var done = stats.progress >= 100;
+      var pct = stats.progress;
+      var blocked = !!stats.blocked;
+      if (blocked && pct == null) pct = 0;
+      var done = pct >= 100 && !blocked;
       var box = h('span', {
-        class: 'tb-prog tb-section-prog' + (stats.progress == null ? ' is-empty' : '') + (done ? ' is-done' : ''),
-        title: stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches',
+        class: 'tb-prog tb-section-prog' + (pct == null ? ' is-empty' : '') + (done ? ' is-done' : '') + (blocked ? ' is-blocked' : ''),
+        title: blocked ? 'Une tâche est bloquée' : (stats.subs ? 'Avancement des sous-tâches' : 'Avancement des tâches'),
       });
-      if (stats.progress == null) {
+      if (g.rows && g.rows.length) {
+        box.style.cursor = 'pointer';
+        if (!blocked) box.title = done ? 'Rouvrir les tâches' : 'Terminer les tâches';
+        box.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+        box.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var CT = global.CompletionTrello;
+          var next = CT && typeof CT.parentClickPercent === 'function' ? CT.parentClickPercent(pct) : (done ? 0 : 100);
+          saveSectionProgress(g, next);
+        });
+      }
+      if (pct == null) {
         box.textContent = '-';
         return box;
       }
-      box.appendChild(progressRing(stats.progress));
-      box.appendChild(h('span', { class: 'tb-section-pct', text: stats.progress + '%' }));
+      var ring = blocked && global.ProgressRing ? global.ProgressRing.create(pct, true) : progressRing(pct);
+      if (ring && ring.classList) ring.classList.add('tb-prog-ring');
+      box.appendChild(ring);
+      box.appendChild(h('span', { class: 'tb-section-pct', text: pct + '%' }));
       return box;
+    }
+
+    /** Project header: the same percent on every task, its subtasks, and the header. */
+    function saveSectionProgress(g, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.saveProgressTree !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
+      var rows = g.rows || [];
+      if (!rows.length) return;
+      var wasDone = {};
+      rows.forEach(function (r) {
+        wasDone[r.id] = r.statutKey === 'completed';
+        r.progress = pct;
+      });
+      setStatus('Enregistrement…');
+      CT.saveProgressTree(t, rows, pct).then(function (ids) {
+        return pct >= 100 ? moveToCompleted(ids, wasDone) : null;
+      }).then(function () {
+        setStatus(pct >= 100 ? '« ' + g.name + ' » terminé' : 'Enregistré', 'ok');
+        schedulePush();
+        reload({ quiet: true });
+      }, function (err) {
+        fail(err);
+        reload({ quiet: true });
+      });
     }
 
     function sectionRow(g) {
@@ -2026,14 +2086,13 @@
         });
         if (picked) sectionGlyph = picked;
       }
-      var inner = h('div', { class: 'tb-section-in' }, [
-        icon(g.open ? 'chevron-down' : 'chevron-right', 'tb-section-chev'),
-        sectionGlyph,
-        h('span', { class: 'tb-section-name', text: g.name }),
-        sectionPriority(g),
-        sectionProgress(g),
-        h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
-      ]);
+      var cols = shownColumns();
+      var nameKey = cols.indexOf('name') === -1 ? cols[0] : 'name';
+      var trail = [];
+      if (cols.indexOf('priority') === -1) trail.push(sectionPriority(g));
+      if (cols.indexOf('progress') === -1) trail.push(sectionProgress(g));
+      trail.push(h('span', { class: 'tb-section-count', text: String(g.rows.length) }));
+      if (trail.length) trail[0].classList.add('is-trail');
       var pid = g.free ? '' : (g.id || ((g.rows[0] && g.rows[0].projectId) || ''));
       var tr = h('tr', {
         class: 'tb-section' + (g.free ? ' is-free' : ''),
@@ -2042,10 +2101,29 @@
         'data-iso-project': pid || null,
         'data-iso-label': g.free ? null : g.name,
         onclick: function (e) {
-          if (e.target.closest('button, .ip-glyph, .tb-section-pri')) return;
+          if (e.target.closest('button, .ip-glyph, .tb-section-pri, .tb-section-prog')) return;
           toggleSection(g.key);
         },
-      }, [h('td', { class: 'tb-num' }), h('td', { colspan: String(state.columns.length) }, [inner])]);
+      });
+      tr.appendChild(h('td', { class: 'tb-num' }));
+      cols.forEach(function (key) {
+        var spec = TM().COLUMNS[key];
+        var td = h('td', {
+          class: 'tb-cell tb-section-cell tb-cell--' + spec.kind + (key === 'name' ? ' tb-cell--name' : ''),
+        });
+        if (key === nameKey) {
+          td.appendChild(h('div', { class: 'tb-section-in' }, [
+            icon(g.open ? 'chevron-down' : 'chevron-right', 'tb-section-chev'),
+            sectionGlyph,
+            h('span', { class: 'tb-section-name', text: g.name }),
+          ].concat(trail)));
+        } else if (key === 'priority') {
+          td.appendChild(h('div', { class: 'tb-section-slot' }, [sectionPriority(g)]));
+        } else if (key === 'progress') {
+          td.appendChild(h('div', { class: 'tb-section-slot' }, [sectionProgress(g)]));
+        }
+        tr.appendChild(td);
+      });
       tr.addEventListener('dragover', function (e) {
         if (!state.dragId) return;
         var moved = findRow(state.dragId);

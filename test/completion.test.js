@@ -458,4 +458,36 @@ describe('Completion progress', () => {
       indeterminate: true,
     });
   });
+
+  it('a parent progress click finishes every subtask, including a linked card', () => {
+    assert.equal(CT.parentClickPercent(0), 100);
+    assert.equal(CT.parentClickPercent(40), 100);
+    assert.equal(CT.parentClickPercent(100), 0);
+    assert.equal(CT.parentClickPercent(null), 100);
+    const ids = CT.collectProgressCardIds([
+      {
+        id: 'card:skip',
+        cardId: 'parent',
+        items: [{ id: 'local', text: 'Ici', progress: 0 }],
+        children: [{ kind: 'card', cardId: 'child', linkedCardId: 'child' }],
+      },
+    ]);
+    assert.deepEqual(ids, ['parent', 'child']);
+    const prep = CT.prepareProgressWrite({
+      items: [
+        { id: 'local', text: 'Ici', progress: 10 },
+        { id: 'link', text: 'Carte', progress: 0, linkedCardId: 'child' },
+      ],
+    }, 100);
+    assert.deepEqual(prep.linked, ['child']);
+    assert.equal(prep.data.items[0].done, true);
+    assert.equal(prep.data.items[1].progress, 100);
+    assert.equal(prep.data.items[1].done, true);
+    assert.equal(CT.computeCardProgress(prep.data).percent, 100);
+    const partial = CT.prepareProgressWrite({
+      items: [{ id: 'link', text: 'Carte', progress: 0, linkedCardId: 'child' }],
+    }, 40);
+    assert.deepEqual(partial.linked, []);
+    assert.equal(partial.data.items[0].progress, 0);
+  });
 });

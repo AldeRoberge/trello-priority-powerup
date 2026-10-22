@@ -313,6 +313,7 @@
       docOpen: false, // the Document pane (paste text and images, get tasks) replaces the card pane of the Triage
       triageTree: !global.TriageTree || global.TriageTree.prefs.treeOn(), // projects > tasks > subtasks, or the flat list
       triageFold: global.TriageTree ? global.TriageTree.prefs.collapsed() : {}, // folded lines of the tree (keys of TriageTree)
+      subSel: null, // { taskId, itemId, parentId, key } when a subtask, not its card, is open in the pane
     };
     var docUI = null; // built on first use, kept so the draft survives opening a card
     var statusTimer = null;
@@ -820,17 +821,65 @@
       if (Array.isArray(row.items) && row.items.length && CT.applyMasterProgress) row.items = CT.applyMasterProgress(row.items, pct);
       if (state.selected === row.id) render(); // the pane on the right shows it too
       else refreshRow(row);
+      var wasDone = !!row.dueDone || row.statutKey === 'completed';
       save(row, function () {
-        return CT.getCardCompletionById(t, row.id).then(function (data) {
-          data = CT.normalizeCompletionData(data || { items: [] });
-          var next = data.items && data.items.length
-            ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
-            : Object.assign({}, data, { progress: pct });
-          return CT.saveCardCompletionById(t, row.id, CT.normalizeCompletionData(next));
-        }).then(function () {
-          return pct >= 100 && !row.dueDone ? DT().complete(t, row, state.lists, true) : null;
+        var write = typeof CT.saveProgressTree === 'function'
+          ? CT.saveProgressTree(t, [row], pct)
+          : CT.getCardCompletionById(t, row.id).then(function (data) {
+              data = CT.normalizeCompletionData(data || { items: [] });
+              var next = data.items && data.items.length
+                ? Object.assign({}, data, { items: CT.applyMasterProgress(data.items, pct) })
+                : Object.assign({}, data, { progress: pct });
+              return CT.saveCardCompletionById(t, row.id, CT.normalizeCompletionData(next)).then(function () { return [row.id]; });
+            });
+        return write.then(function (ids) {
+          if (pct < 100) return null;
+          var chain = Promise.resolve();
+          (ids || [row.id]).forEach(function (id) {
+            if (id === row.id && wasDone) return;
+            chain = chain.then(function () { return DT().complete(t, { id: id }, state.lists, true); });
+          });
+          return chain;
         });
       }, { ok: pct >= 100 ? '« ' + row.name + ' » terminée' : 'Enregistré', then: function () { if (pct >= 100) row.dueDone = true; } });
+    }
+
+    /** Tasks shown under this project line (the free group is the tasks with no project). */
+    function rowsForProject(node) {
+      var q = DM().triageQueue(viewRows());
+      var want = node && node.id ? String(node.id) : '';
+      return (q || []).filter(function (r) {
+        if (!r || !r.id) return false;
+        var p = WO() && typeof WO().projectOf === 'function' ? WO().projectOf(state.goals, r.id) : null;
+        if (want) return !!(p && String(p.id) === want);
+        return !p || !p.id;
+      });
+    }
+
+    /** The project ring: every task under it, its subtasks, and the project average. */
+    function setProjectProgress(node, pct) {
+      var CT = global.CompletionTrello;
+      if (!CT || typeof CT.saveProgressTree !== 'function') return setStatus('Éditeur de progrès indisponible', 'error');
+      var rows = rowsForProject(node);
+      if (!rows.length) return;
+      var wasDone = {};
+      rows.forEach(function (row) {
+        wasDone[row.id] = !!row.dueDone || row.statutKey === 'completed';
+        row.progress = pct;
+        if (Array.isArray(row.items) && row.items.length && CT.applyMasterProgress) row.items = CT.applyMasterProgress(row.items, pct);
+        if (pct >= 100) row.dueDone = true;
+      });
+      render();
+      var name = (node && node.name) || 'Projet';
+      write(CT.saveProgressTree(t, rows, pct).then(function (ids) {
+        if (pct < 100) return null;
+        var chain = Promise.resolve();
+        (ids || []).forEach(function (id) {
+          if (wasDone[id]) return;
+          chain = chain.then(function () { return DT().complete(t, { id: id }, state.lists, true); });
+        });
+        return chain;
+      }), pct >= 100 ? '« ' + name + ' » terminé' : 'Enregistré');
     }
 
     /** Ticks or unticks one subtask of a card; the card's progress follows (the list line and the pane are redrawn). */
@@ -1132,7 +1181,7 @@
           return p ? { id: p.id, name: p.name, icon: p.icon || null } : null;
         },
         collapsed: state.triageFold,
-        adding: state.subAdding || '',
+        adding: state.subAdding ? { key: state.subAdding, mode: state.addMode === 'task' ? 'task' : 'sub' } : '',
       });
     }
 
@@ -1148,10 +1197,246 @@
       save(row, function () { return DT().addSubtask(t, row.id, parentId, text); }, { ok: 'Sous-tâche ajoutée' });
     }
 
+    /** Opens the inline title under a line. mode 'task' is a sibling card; anything else is a subtask. */
+    function beginAdd(key, mode) {
+      delete state.triageFold[key];
+      state.subAdding = key;
+      state.addMode = mode === 'task' ? 'task' : 'sub';
+      render();
+    }
+
+    /** A new card just after this one, in the same list and the same project. The field stays open for the next. */
+    function addSiblingTask(taskId, text) {
+      var clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return;
+      var row = (state.rows || []).filter(function (r) { return r.id === taskId; })[0];
+      var TT = global.TableTrello;
+      if (!row || !TT || typeof TT.createRow !== 'function') return setStatus('Tâche non ajoutée', 'error');
+      var list = (state.lists || []).filter(function (l) { return l.id === row.listId; })[0];
+      if (!list && DT()) list = DT().listFor(state.lists, ['triage']);
+      if (!list) return setStatus('Ce tableau n’a pas de liste de triage.', 'error');
+      var siblings = (state.rows || []).filter(function (r) { return r.listId === list.id; }).slice().sort(function (a, b) {
+        return (a.pos || 0) - (b.pos || 0);
+      });
+      var index = siblings.length;
+      for (var i = 0; i < siblings.length; i++) if (siblings[i].id === row.id) { index = i + 1; break; }
+      var pos = global.TableModel && global.TableModel.dropPos ? global.TableModel.dropPos(siblings, index) : 'bottom';
+      var project = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
+      TT.createRow(t, clean, list.id, pos).then(function (res) {
+        var cardId = res && res.cardId;
+        if (!cardId) throw new Error('Tâche non ajoutée');
+        state.rows.push({
+          id: cardId,
+          name: clean,
+          listId: list.id,
+          statut: list.name,
+          statutKey: list.category || 'triage',
+          pos: typeof pos === 'number' ? pos : ((row.pos || 0) + 1024),
+          items: [],
+          desc: '',
+          progress: 0,
+        });
+        var placed = project && project.id && WO() && WO().withTaskProject
+          ? commitGoals(WO().withTaskProject(state.goals, cardId, project.id), 'Tâche ajoutée')
+          : Promise.resolve().then(function () {
+            render();
+            setStatus('Tâche ajoutée', 'ok');
+          });
+        return Promise.resolve(placed).then(function () {
+          return reload({ quiet: true }).then(function () {
+            if (state.rows.some(function (r) { return r.id === cardId; })) return null;
+            return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () { return reload({ quiet: true }); });
+          });
+        }, function () { /* commitGoals already reported the project save */ });
+      }, function (err) { fail(err); });
+    }
+
+    /** The checklist item open in the pane, or null (a missing one drops the selection). */
+    function locateItem(items, itemId, parentId) {
+      items = items || [];
+      var i;
+      if (parentId) {
+        for (i = 0; i < items.length; i++) {
+          if (!items[i] || items[i].id !== parentId) continue;
+          var kids = items[i].items || [];
+          for (var k = 0; k < kids.length; k++) if (kids[k] && kids[k].id === itemId) return { item: kids[k], parent: items[i] };
+        }
+        return null;
+      }
+      for (i = 0; i < items.length; i++) if (items[i] && items[i].id === itemId) return { item: items[i], parent: null };
+      return null;
+    }
+
+    function pickedSub(card) {
+      var s = state.subSel;
+      if (!s || !state.triageTree) return null;
+      if (!card || s.taskId !== card.id) { state.subSel = null; return null; }
+      var found = locateItem(card.items, s.itemId, s.parentId);
+      if (!found) { state.subSel = null; return null; }
+      var linkedId = found.item.linkedCardId ? String(found.item.linkedCardId) : '';
+      var linkedRow = linkedId ? (state.rows.filter(function (r) { return r.id === linkedId; })[0] || null) : null;
+      return { card: card, item: found.item, parent: found.parent, linkedRow: linkedRow };
+    }
+
+    /** Writes one checklist field, shows it at once, and rolls the card's progress up. */
+    function mutateSub(row, fn, ok) {
+      var CT = global.CompletionTrello;
+      if (!CT) return setStatus('Éditeur de progrès indisponible', 'error');
+      var local = fn(CT, { items: row.items || [] });
+      if (!local || !local.items) return;
+      row.items = local.items;
+      if (CT.computeCardProgress) row.progress = Math.round(CT.computeCardProgress(local).percent);
+      var finish = row.progress >= 100 && !row.dueDone;
+      render();
+      save(row, function () {
+        return CT.getCardCompletionById(t, row.id).then(function (data) {
+          var next = fn(CT, data || { items: [] });
+          return CT.saveCardCompletionById(t, row.id, next).then(function () {
+            if (!finish) return next;
+            return DT().complete(t, row, state.lists, true).then(function () { return next; });
+          });
+        });
+      }, {
+        ok: finish ? '« ' + row.name + ' » terminée' : (ok || 'Enregistré'),
+        then: function (next) {
+          if (finish) row.dueDone = true;
+          if (next && CT.computeEstimatedTotal) row.estimate = CT.computeEstimatedTotal(next) || 0;
+        },
+      });
+    }
+
+    function openSubEstimate(item, anchor, onPick) {
+      var CM = global.ContextMenu;
+      if (!CM || typeof CM.show !== 'function' || !anchor) return;
+      var cur = item.estimatedMinutes || 0;
+      var r = anchor.getBoundingClientRect();
+      CM.show({ clientX: r.left, clientY: r.bottom + 4 }, QUICK_ESTIMATES.map(function (m) {
+        return {
+          id: 'est:' + m,
+          label: m ? DM().formatMinutes(m) : 'Non estimée',
+          icon: m ? 'clock' : 'clock-off',
+          checked: cur === m,
+          action: function () { onPick(m); },
+        };
+      }));
+    }
+
+    /** The native day picker, hung under the "Autre…" button. An empty day clears the schedule. */
+    function openSubDay(anchor, iso, onPick) {
+      if (!anchor) return;
+      var input = document.createElement('input');
+      input.type = 'date';
+      input.value = iso || '';
+      input.setAttribute('aria-label', 'Jour prévu');
+      input.className = 'tri-day-pop';
+      var box = anchor.getBoundingClientRect();
+      input.style.position = 'fixed';
+      input.style.left = box.left + 'px';
+      input.style.top = box.bottom + 'px';
+      input.style.opacity = '0';
+      input.style.width = box.width + 'px';
+      input.style.height = '1px';
+      document.body.appendChild(input);
+      function close() { if (input.parentNode) input.parentNode.removeChild(input); }
+      input.addEventListener('change', function () { var v = input.value; close(); onPick(v); });
+      input.addEventListener('blur', function () { setTimeout(close, 200); });
+      input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+      if (typeof input.showPicker === 'function') input.showPicker();
+      else input.focus();
+    }
+
+    function subHost(spec) {
+      var card = spec.card;
+      var item = spec.item;
+      var parentId = spec.parent ? spec.parent.id : '';
+      function dates(iso) {
+        return iso
+          ? { startDate: iso, dueDate: iso }
+          : { startDate: '', dueDate: '', startTime: '', dueTime: '' };
+      }
+      return {
+        today: today,
+        dayLabel: function (iso) { return dayLabel(iso, today); },
+        showCard: function () { state.subSel = null; render(); },
+        openCard: function () { openCard({ id: item.linkedCardId, name: item.text || '' }); },
+        rename: function (text) {
+          mutateSub(card, function (CT, data) {
+            return parentId ? CT.applyChecklistItemText(data, parentId, item.id, text) : CT.applyItemText(data, item.id, text);
+          });
+        },
+        setEstimate: function (minutes) {
+          mutateSub(card, function (CT, data) {
+            return parentId
+              ? CT.applyChecklistItemEstimate(data, parentId, item.id, minutes)
+              : CT.applyItemEstimate(data, item.id, minutes);
+          });
+        },
+        openEstimate: function (anchor) {
+          openSubEstimate(item, anchor, function (m) { subHost(spec).setEstimate(m); });
+        },
+        plan: function (iso) {
+          mutateSub(card, function (CT, data) {
+            return CT.applyItemDates(data, parentId || item.id, parentId ? item.id : '', dates(iso));
+          });
+        },
+        openDay: function (anchor, iso) {
+          openSubDay(anchor, iso, function (next) { subHost(spec).plan(next); });
+        },
+        setProgress: function (pct) {
+          mutateSub(card, function (CT, data) {
+            return parentId
+              ? CT.applyChecklistItemProgress(data, parentId, item.id, pct)
+              : CT.applyItemProgress(data, item.id, pct);
+          });
+        },
+        toggleBlocked: function () {
+          var on = item.blocked !== true;
+          mutateSub(card, function (CT, data) { return CT.setItemBlocked(data, item.id, on); }, on ? 'Sous-tâche bloquée' : 'Sous-tâche débloquée');
+        },
+        toggleChild: function (childId, done) {
+          mutateSub(card, function (CT, data) { return CT.applyChecklistItemProgress(data, item.id, childId, done ? 100 : 0); });
+        },
+        addChild: function (text) { addSubtask(card.id, item.id, text); },
+      };
+    }
+
     /** The cards in the order the list shows them (what J / K walk through; folded ones are skipped). */
     function triageOrder(q) {
       var built = triageBuilt(q);
       return built ? built.tasks : q;
+    }
+
+    /** Visible lines J / K walk: each task, and each open subtask under it. */
+    function focusEntries(q) {
+      var built = triageBuilt(q);
+      if (!built) return q.map(function (r) { return { kind: 'task', taskId: r.id }; });
+      var out = [];
+      built.nodes.forEach(function (n) {
+        if (n.kind === 'task') out.push({ kind: 'task', taskId: n.row.id });
+        else if (n.kind === 'sub' && n.id) out.push({ kind: 'sub', taskId: n.taskId, itemId: n.id, parentId: n.parentId || '', key: n.key });
+      });
+      return out;
+    }
+
+    function focusAt(list) {
+      var sub = state.subSel;
+      var i;
+      if (sub) {
+        for (i = 0; i < list.length; i++) if (list[i].kind === 'sub' && list[i].key === sub.key) return i;
+      }
+      for (i = 0; i < list.length; i++) if (list[i].kind === 'task' && list[i].taskId === state.selected) return i;
+      return -1;
+    }
+
+    function applyFocus(entry) {
+      if (!entry) return;
+      state.selected = entry.taskId;
+      state.projectSel = null;
+      state.docOpen = false;
+      state.subSel = entry.kind === 'sub'
+        ? { taskId: entry.taskId, itemId: entry.itemId, parentId: entry.parentId, key: entry.key }
+        : null;
+      render();
     }
 
     /** The project shown in the pane (clicked in the tree), with its note; null once another task is selected. */
@@ -1376,22 +1661,32 @@
         selectedProject: picked ? picked.id : '',
         selectProject: function (id) {
           state.projectSel = { id: id, at: state.selected };
+          state.subSel = null;
           state.docOpen = false;
           render();
         },
         pickIcon: function (node, icon) { saveProject(node.id, { icon: icon }); },
-        startAdd: function (key) {
-          delete state.triageFold[key];
-          state.subAdding = key;
-          render();
+        setProgress: function (node, pct) { setProjectProgress(node, pct); },
+        addingKey: state.subAdding || '',
+        startAdd: function (key, mode) { beginAdd(key, mode); },
+        chooseAdd: function (key, anchor) {
+          var CM = global.ContextMenu;
+          if (!CM || typeof CM.show !== 'function' || !anchor) return beginAdd(key, 'sub');
+          var r = anchor.getBoundingClientRect();
+          CM.show({ clientX: r.left, clientY: r.bottom + 4 }, [
+            { id: 'add-task', label: 'Tâche', icon: 'checkbox', action: function () { beginAdd(key, 'task'); } },
+            { id: 'add-sub', label: 'Sous-tâche', icon: 'subtask', action: function () { beginAdd(key, 'sub'); } },
+          ]);
         },
         stopAdd: function () {
           if (!state.subAdding) return;
           state.subAdding = '';
+          state.addMode = '';
           renderUnlessTyping();
         },
         addSub: addSubtask,
-        taskEl: function (row) { return triageRow(row, !picked && row.id === selId); },
+        addTask: addSiblingTask,
+        taskEl: function (row) { return triageRow(row, !picked && !state.subSel && row.id === selId); },
         toggle: function (key) {
           if (state.triageFold[key]) delete state.triageFold[key];
           else state.triageFold[key] = true;
@@ -1401,17 +1696,48 @@
         select: function (id) {
           state.selected = id;
           state.projectSel = null;
+          state.subSel = null;
           state.docOpen = false;
           render();
         },
+        selectSub: function (n) {
+          if (!n || !n.id) {
+            state.selected = n && n.taskId;
+            state.subSel = null;
+          } else {
+            state.selected = n.taskId;
+            state.subSel = { taskId: n.taskId, itemId: n.id, parentId: n.parentId || '', key: n.key };
+          }
+          state.projectSel = null;
+          state.docOpen = false;
+          render();
+          if (global.matchMedia && global.matchMedia('(max-width: 760px)').matches) els.main.scrollTop = 0;
+        },
+        selectedKey: state.subSel && state.subSel.taskId === selId ? state.subSel.key : '',
       };
     }
 
     function triageListEl(q, selId) {
       var built = triageBuilt(q);
       if (!built) {
-        var flat = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === selId); }));
-        if (global.TriageTree && q.length) flat.insertBefore(global.TriageTree.colHead(), flat.firstChild);
+        var flat = h('div', { class: 'db-list db-triage-list' }, []);
+        if (global.TriageTree && q.length) flat.appendChild(global.TriageTree.colHead());
+        var flatCtx = global.TriageTree ? treeCtx(selId) : null;
+        q.forEach(function (r) {
+          flat.appendChild(triageRow(r, r.id === selId));
+          if (!flatCtx || !global.TriageTree.addUnder) return;
+          var key = 't:' + r.id;
+          var extra = state.subAdding === key
+            ? global.TriageTree.addField({
+              key: 'a:' + key,
+              taskId: r.id,
+              parentId: '',
+              depth: state.addMode === 'task' ? 0 : 1,
+              mode: state.addMode === 'task' ? 'task' : 'sub',
+            }, flatCtx)
+            : global.TriageTree.addUnder(key, 0, flatCtx);
+          if (extra) flat.appendChild(extra);
+        });
         return flat;
       }
       var list = h('div', { class: 'db-list db-triage-list', role: 'tree', 'aria-label': 'Triage' }, []);
@@ -1431,6 +1757,7 @@
         'data-fk': 'triage-tree',
         onclick: function () {
           state.triageTree = !state.triageTree;
+          if (!state.triageTree) state.subSel = null;
           global.TriageTree.prefs.setTreeOn(state.triageTree);
           render();
         },
@@ -1447,6 +1774,7 @@
         onclick: function () {
           state.selected = r.id;
           state.projectSel = null;
+          state.subSel = null;
           state.docOpen = false;
           render();
           // On a phone the pane is above the list: bring it into view.
@@ -1697,23 +2025,29 @@
       }
       var sel = q.filter(function (r) { return r.id === state.selected; })[0] || triageOrder(q)[0] || q[0];
       state.selected = sel.id;
+      var sub = pickedSub(sel);
+      var pane = pickedProject() && global.TriageUI.projectDetail
+        ? global.TriageUI.projectDetail(pickedProject(), {
+          saveProject: saveProject,
+          pickIcon: function (project, icon) { saveProject(project.id, { icon: icon }); },
+          pasteImages: pasteProjectImages,
+          resolveImage: resolveImage,
+          imageError: imageError,
+          shots: function (project) { return shotsOf(projectDocs[project.id]); },
+          loadImages: loadProjectShots,
+          pickOutcome: pickOutcome,
+          saveStep: saveProjectStep,
+          saveMetric: saveProjectMetric,
+        })
+        : sub && sub.linkedRow
+          ? global.TriageUI.detail(sub.linkedRow, triageHost())
+          : sub && global.TriageUI.subDetail
+            ? global.TriageUI.subDetail(sub, subHost(sub))
+            : global.TriageUI.detail(sel, triageHost());
       var list = triageListEl(q, sel.id);
       els.main.appendChild(splitPage(
         h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
-        h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pickedProject() && global.TriageUI.projectDetail
-          ? global.TriageUI.projectDetail(pickedProject(), {
-            saveProject: saveProject,
-            pickIcon: function (project, icon) { saveProject(project.id, { icon: icon }); },
-            pasteImages: pasteProjectImages,
-            resolveImage: resolveImage,
-            imageError: imageError,
-            shots: function (project) { return shotsOf(projectDocs[project.id]); },
-            loadImages: loadProjectShots,
-            pickOutcome: pickOutcome,
-            saveStep: saveProjectStep,
-            saveMetric: saveProjectMetric,
-          })
-          : global.TriageUI.detail(sel, triageHost())])
+        h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pane])
       ));
     }
 
@@ -2760,7 +3094,8 @@
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (state.section !== 'triage') return;
       var q = triageOrder(DM().triageQueue(viewRows()));
-      var i = q.map(function (r) { return r.id; }).indexOf(state.selected);
+      var focus = focusEntries(DM().triageQueue(viewRows()));
+      var i = focusAt(focus);
       // The Document pane shows no card: J / K go back to the list, the decision keys wait.
       if (state.docOpen) {
         if ((k === 'j' || k === 'k' || e.key === 'ArrowDown' || e.key === 'ArrowUp') && q.length) {
@@ -2770,12 +3105,14 @@
         }
         return;
       }
-      if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); if (q[i + 1]) { state.selected = q[i + 1].id; render(); } return; }
-      if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); if (q[i - 1]) { state.selected = q[i - 1].id; render(); } return; }
+      if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); applyFocus(focus[i + 1]); return; }
+      if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); applyFocus(focus[i - 1]); return; }
+      if (state.subSel) return;
       var ex = DM().exitForKey(e.key);
-      if (ex && q[i]) {
+      var card = q.filter(function (r) { return r.id === state.selected; })[0];
+      if (ex && card) {
         e.preventDefault();
-        perform(q[i], ex.id, els.main.querySelector('[data-exit="' + ex.id + '"]'));
+        perform(card, ex.id, els.main.querySelector('[data-exit="' + ex.id + '"]'));
       }
     });
 

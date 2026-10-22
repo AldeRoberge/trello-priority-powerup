@@ -57,6 +57,8 @@ const UNIT_FILES = [
   'agent-blocks.test.js',
   'agent-action-errors.test.js',
   'agent-reply-language.test.js',
+  'agent-guides.test.js',
+  'agent-highlight-chips.test.js',
   'agent-human-profile.test.js',
   'agent-model-tiers.test.js',
   'language-dialect.test.js',
@@ -117,9 +119,12 @@ const UNIT_FILES = [
   'triage-doc-model.test.js',
   'triage-doc-trello.test.js',
   'triage-image.test.js',
+  'triage-sub.test.js',
   'quick-find.test.js',
   'assistant-dock.test.js',
   'agent-chats.test.js',
+  'ai-status.test.js',
+  'today-arrange.test.js',
 ];
 
 function listTests() {

@@ -234,15 +234,44 @@
     return any;
   }
 
+  /** A paused checklist item (not a finished one) blocks the task that holds it. */
+  function itemsBlockProject(items) {
+    var i, it, done;
+    for (i = 0; i < (items || []).length; i++) {
+      it = items[i];
+      if (!it) continue;
+      done = it.done === true || Number(it.progress) >= 100;
+      if (it.blocked === true && !done) return true;
+      if (itemsBlockProject(it.items)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * An open task blocks its project when the card is paused, its list is Bloqué,
+   * or one of its subtasks is paused. A finished task does not.
+   */
+  function taskBlocksProject(row) {
+    if (!row || row.done) return false;
+    if (typeof row.progress === 'number' && row.progress >= 100) return false;
+    var key = row.statutKey || row.category || '';
+    if (key === 'completed' || key === 'canceled') return false;
+    if (row.blocked || key === 'blocked') return true;
+    return itemsBlockProject(row.items);
+  }
+
   /**
    * Progress of a project's tasks. A task with subtasks counts as their average; otherwise its own
-   * progress. The section average weighs each task once. { progress, tasks, subs }.
+   * progress. The section average weighs each task once. { progress, tasks, subs, blocked }.
+   * blocked: at least one open task (or one of its subtasks) is paused.
    */
   function sectionStats(rows) {
     var parts = [];
     var subs = 0;
+    var blocked = false;
     (rows || []).forEach(function (r) {
       if (!r) return;
+      if (taskBlocksProject(r)) blocked = true;
       var leaves = [];
       if (leafProgress(r.items, leaves)) {
         subs += leaves.length;
@@ -255,7 +284,7 @@
     });
     var progress = null;
     if (parts.length) progress = Math.round(parts.reduce(function (a, b) { return a + b; }, 0) / parts.length);
-    return { progress: progress, tasks: (rows || []).filter(Boolean).length, subs: subs };
+    return { progress: progress, tasks: (rows || []).filter(Boolean).length, subs: subs, blocked: blocked };
   }
 
   /**
@@ -552,6 +581,7 @@
     projectTiers: projectTiers,
     projectPriorityItems: projectPriorityItems,
     sectionStats: sectionStats,
+    taskBlocksProject: taskBlocksProject,
     urgencyLabel: function (id) { return URGENCY_LABELS[id] || ''; },
     COLUMNS: COLUMNS,
     DEFAULT_COLUMNS: DEFAULT_COLUMNS,

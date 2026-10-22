@@ -11,6 +11,11 @@
  * card one after the other, so two quick clicks never overwrite each other.
  *
  *   TriageUI.detail(row, host) -> element
+ *   TriageUI.subDetail(spec, host) -> element   one checklist subtask (title, durée, jour, avancement, bloquer)
+ *     spec: { card, item, parent }   parent is the checklist item above it, or null
+ *     host: { today, dayLabel(iso), showCard(), openCard(), rename(text), setEstimate(minutes),
+ *             openEstimate(anchor), plan(iso), openDay(anchor, iso), setProgress(pct),
+ *             toggleBlocked(), toggleChild(id, done), addChild(text) }
  *   host: {
  *     t, today,
  *     save(row, factory, opts),            // queued write: factory() -> promise; opts { ok, then(result) }
@@ -975,8 +980,198 @@
     return root;
   }
 
+  /**
+   * The pane of one checklist subtask. A linked card whose row is already loaded is drawn with detail()
+   * instead: this pane is the local item (or a linked line whose card is not on the board).
+   */
+  function subDetail(spec, host) {
+    var D = DM();
+    var item = spec.item || {};
+    var card = spec.card || {};
+    var nested = !!spec.parent;
+    var linkedOnly = !!item.linkedCardId;
+    var root = h('div', { class: 'tri tri--sub', 'data-card': card.id || '', 'data-sub': item.id || '' });
+    var body = h('div', { class: 'tri-body' });
+    root.appendChild(body);
+
+    body.appendChild(h('div', { class: 'tri-top' }, [
+      h('button', {
+        class: 'tri-back',
+        type: 'button',
+        title: card.name || 'Tâche',
+        onclick: function () { host.showCard(); },
+      }, [icon('list-check'), h('span', { text: card.name || 'Tâche' })]),
+      h('span', { class: 'tri-spacer' }),
+      linkedOnly ? iconButton('external-link', 'Ouvrir la carte', function () { host.openCard(); }) : null,
+    ]));
+
+    var title = h('textarea', { class: 'tri-title', rows: '1', maxlength: '500', spellcheck: 'true', 'aria-label': 'Titre', 'data-fk': 'title' });
+    title.value = item.text || '';
+    function fitTitle() {
+      title.style.height = 'auto';
+      title.style.height = title.scrollHeight + 'px';
+    }
+    title.addEventListener('input', fitTitle);
+    title.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); title.blur(); }
+      else if (e.key === 'Escape') { title.value = item.text || ''; fitTitle(); title.blur(); }
+    });
+    title.addEventListener('blur', function () {
+      var v = clean(title.value);
+      if (!v) { title.value = item.text || ''; fitTitle(); return; }
+      title.value = v;
+      if (v === item.text) return;
+      host.rename(v);
+    });
+    body.appendChild(title);
+    setTimeout(fitTitle, 0);
+    if (linkedOnly) return root;
+
+    function prop(label, parts) {
+      return h('div', { class: 'tri-prop' }, [
+        h('span', { class: 'tri-k', text: label }),
+        h('div', { class: 'tri-v' }, parts),
+      ]);
+    }
+    function minutesOf() {
+      var CT = global.CompletionTrello;
+      var m = CT && CT.itemEstimatedMinutes ? CT.itemEstimatedMinutes(item) : item.estimatedMinutes;
+      return m || 0;
+    }
+    function dueOf() {
+      return item.dueDate || item.startDate || '';
+    }
+    function dayId() {
+      var day = dueOf();
+      if (!day || !D) return '';
+      var days = D.quickDays(host.today);
+      for (var i = 0; i < days.length; i++) if (days[i].iso && days[i].iso === day) return days[i].id;
+      return 'other';
+    }
+
+    var props = h('div', { class: 'tri-props' });
+
+    function estValue() {
+      var m = minutesOf();
+      return !m ? '' : D.ESTIMATE_CHIPS.indexOf(m) >= 0 ? m : 'other';
+    }
+    var estOptions = D.ESTIMATE_CHIPS.map(function (m) { return { id: m, label: D.formatMinutes(m) }; });
+    estOptions.push({ id: 'other', label: 'Autre…', icon: 'chevron-down' });
+    var est = segmented({
+      label: 'Estimation',
+      key: 'est',
+      options: estOptions,
+      value: estValue(),
+      onPick: function (o) {
+        if (o.id === 'other') return host.openEstimate(est.buttons[est.buttons.length - 1]);
+        host.setEstimate(o.id === estValue() ? 0 : o.id);
+      },
+    });
+    function paintEst() {
+      est.set(estValue());
+      setOption(est.buttons[est.buttons.length - 1], estValue() === 'other' ? D.formatMinutes(minutesOf()) : 'Autre…');
+    }
+    paintEst();
+
+    var quick = D.quickDays(host.today);
+    var dayOptions = quick.map(function (d) {
+      return { id: d.id, label: DAY_LABEL[d.id], title: d.id === 'monday' ? host.dayLabel(d.iso) : null, iso: d.iso };
+    });
+    dayOptions.push({ id: 'other', label: 'Autre…', icon: 'chevron-down' });
+    var day = segmented({
+      label: 'Jour prévu',
+      key: 'day',
+      options: dayOptions,
+      value: dayId(),
+      onPick: function (o) {
+        if (o.id === 'other') return host.openDay(day.buttons[day.buttons.length - 1], dueOf());
+        var cur = dayId();
+        host.plan(o.id === cur ? '' : o.iso);
+      },
+    });
+    function paintDay() {
+      var which = dayId();
+      day.set(which);
+      setOption(day.buttons[day.buttons.length - 1], which === 'other' && dueOf() ? host.dayLabel(dueOf()) : 'Autre…', which === 'other' ? 'calendar' : 'chevron-down');
+    }
+    paintDay();
+
+    props.appendChild(prop('Estimation', [est.el]));
+    props.appendChild(prop('Jour prévu', [day.el]));
+
+    var STEPS = [0, 25, 50, 75, 100];
+    function progValue() {
+      var p = typeof item.progress === 'number' ? Math.round(item.progress) : (item.done ? 100 : 0);
+      return STEPS.indexOf(p) >= 0 ? p : '';
+    }
+    var progNum = h('span', { class: 'tri-quiet' });
+    var prog = segmented({
+      label: 'Avancement',
+      key: 'prog',
+      fill: 'plain',
+      cls: 'tri-scale tri-scale--plain',
+      options: STEPS.map(function (n) { return { id: n, label: n + ' %', title: n + ' %' }; }),
+      value: progValue(),
+      onPick: function (o) {
+        var cur = typeof item.progress === 'number' ? Math.round(item.progress) : 0;
+        host.setProgress(o.id === cur && o.id > 0 ? 0 : o.id);
+      },
+    });
+    function paintProg() {
+      var p = typeof item.progress === 'number' ? Math.round(item.progress) : (item.done ? 100 : 0);
+      prog.set(progValue());
+      prog.buttons.forEach(function (b, i) { b.classList.toggle('is-fill', p >= STEPS[i] && p > 0); });
+      prog.el.classList.toggle('is-done', p >= 100);
+      progNum.textContent = progValue() === '' && p > 0 ? p + ' %' : '';
+    }
+    paintProg();
+    var progParts = [prog.el, progNum];
+    if (!nested) {
+      var blockBtn = h('button', { class: 'tri-blocked', type: 'button', 'data-fk': 'blocked' }, [icon('player-pause'), h('span', { class: 'tri-blocked-t' })]);
+      blockBtn.classList.toggle('is-on', !!item.blocked);
+      blockBtn.title = item.blocked ? 'Bloquée · cliquer pour débloquer' : 'Marquer comme bloquée';
+      blockBtn.setAttribute('aria-pressed', item.blocked ? 'true' : 'false');
+      blockBtn.querySelector('.tri-blocked-t').textContent = item.blocked ? 'Bloquée' : 'Bloquer';
+      blockBtn.addEventListener('click', function () { host.toggleBlocked(); });
+      progParts.push(blockBtn);
+    }
+    props.appendChild(prop('Avancement', progParts));
+
+    if (!nested) {
+      var subs = h('div', { class: 'tri-subs' });
+      (item.items || []).forEach(function (it) {
+        if (!it || typeof it.text !== 'string') return;
+        var done = it.done === true || Number(it.progress) >= 100;
+        subs.appendChild(h('button', {
+          class: 'tri-sub' + (done ? ' is-done' : '') + (it.blocked && !done ? ' is-blocked' : ''),
+          type: 'button',
+          role: 'checkbox',
+          'aria-checked': done ? 'true' : 'false',
+          title: done ? 'Rouvrir' : 'Terminer',
+          onclick: function () { host.toggleChild(it.id, !done); },
+        }, [icon(done ? 'circle-check' : 'circle'), h('span', { class: 'tri-sub-t', text: it.text })]));
+      });
+      var add = h('input', { class: 'tri-sub-add', type: 'text', placeholder: 'Nouvelle sous-tâche', 'aria-label': 'Nouvelle sous-tâche', maxlength: '200' });
+      add.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var v = add.value.replace(/\s+/g, ' ').trim();
+        if (!v) return;
+        add.value = '';
+        host.addChild(v);
+      });
+      subs.appendChild(add);
+      props.appendChild(prop('Sous-tâches', [subs]));
+    }
+    body.appendChild(props);
+    return root;
+  }
+
   global.TriageUI = {
     detail: detail,
+    subDetail: subDetail,
     projectDetail: projectDetail,
     segmented: segmented,
     appendImage: appendImage,

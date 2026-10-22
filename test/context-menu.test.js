@@ -741,4 +741,109 @@ describe('ContextMenu', () => {
       .map((i) => i.id);
     assert.deepEqual(ids, ['undo', 'redo', 'cut', 'copy', 'paste', 'select-all']);
   });
+
+  function press(key) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        global.document._dispatch('keydown', {
+          type: 'keydown',
+          key: key,
+          preventDefault() {},
+          stopPropagation() {},
+        });
+        resolve();
+      }, 5);
+    });
+  }
+
+  it('A is Archiver, including « Archiver la carte »', () => {
+    assert.equal(ContextMenu.dedicatedShortcut({ label: 'Archiver' }), 'A');
+    assert.equal(ContextMenu.dedicatedShortcut({ label: 'Archiver la carte' }), 'A');
+    assert.equal(ContextMenu.dedicatedShortcut({ label: 'Archiver…' }), 'A');
+    assert.equal(ContextMenu.dedicatedShortcut({ id: 'archive', label: 'Archivages' }), '');
+    assert.equal(ContextMenu.dedicatedShortcut({ label: 'Supprimer' }), '');
+    assert.equal(ContextMenu.dedicatedShortcut({ label: 'Ouvrir', shortcut: 'o' }), 'O');
+  });
+
+  it('A archives while the menu is open and the letter is shown', () => {
+    const calls = [];
+    const menu = ContextMenu.show({ clientX: 8, clientY: 8 }, [
+      { id: 'open-chat', label: 'Ouvrir', icon: 'message-circle', action() { calls.push('open'); } },
+      { id: 'archive-chat', label: 'Archiver', icon: 'archive', danger: true, action() { calls.push('archive'); } },
+    ]);
+    assert.equal(menu.querySelector('.tp-context-menu-key').textContent, 'A');
+    assert.equal(menu.querySelectorAll('.tp-context-menu-key').length, 1);
+    return press('o').then(() => {
+      assert.deepEqual(calls, []);
+      assert.ok(global.document.body.querySelector('.tp-context-menu'));
+      return press('a');
+    }).then(() => {
+      assert.deepEqual(calls, ['archive']);
+      assert.equal(global.document.body.querySelector('.tp-context-menu'), null);
+    });
+  });
+
+  it('A archives even when another item shows A, and a search in progress keeps the key', () => {
+    const calls = [];
+    const items = [
+      { id: 'archive', label: 'Archiver', action() { calls.push('archive'); } },
+      { id: 'accept', label: 'Accepter', hint: 'A', action() { calls.push('accept'); } },
+      { id: 'open', label: 'Ouvrir', action() { calls.push('open'); } },
+      { id: 'copy', label: 'Copier', hint: 'C', action() { calls.push('copy'); } },
+    ];
+    const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, items);
+    const input = menu.querySelector('.tp-context-menu-search-input');
+    assert.ok(input);
+    assert.equal(menu.querySelectorAll('.tp-context-menu-key').length, 1);
+    assert.deepEqual(
+      menu.querySelectorAll('.tp-context-menu-hint').map((h) => h.textContent),
+      ['C']
+    );
+    global.document.activeElement = input;
+    return press('a').then(() => {
+      assert.deepEqual(calls, ['archive']);
+      calls.length = 0;
+      const again = ContextMenu.show({ clientX: 1, clientY: 1 }, items);
+      const field = again.querySelector('.tp-context-menu-search-input');
+      field.value = 'ou';
+      global.document.activeElement = field;
+      return press('a');
+    }).then(() => {
+      assert.deepEqual(calls, []);
+      assert.ok(global.document.body.querySelector('.tp-context-menu'));
+      ContextMenu.hide();
+      ContextMenu.show({ clientX: 1, clientY: 1 }, items);
+      global.document.activeElement = global.document.body;
+      return press('c');
+    }).then(() => {
+      assert.deepEqual(calls, ['copy']);
+    });
+  });
+
+  it('a hint letter does not run while the search field is focused', () => {
+    const calls = [];
+    const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, [
+      { id: 'archive', label: 'Archiver', action() { calls.push('archive'); } },
+      { id: 'open', label: 'Ouvrir', action() {} },
+      { id: 'copy', label: 'Copier', hint: 'C', action() { calls.push('copy'); } },
+      { id: 'edit', label: 'Modifier', action() {} },
+    ]);
+    global.document.activeElement = menu.querySelector('.tp-context-menu-search-input');
+    return press('c').then(() => {
+      assert.deepEqual(calls, []);
+      assert.ok(global.document.body.querySelector('.tp-context-menu'));
+    });
+  });
+
+  it('a disabled Archiver ignores A', () => {
+    const calls = [];
+    ContextMenu.show({ clientX: 1, clientY: 1 }, [
+      { id: 'archive', label: 'Archiver', disabled: true, action() { calls.push('archive'); } },
+      { id: 'open', label: 'Ouvrir', action() { calls.push('open'); } },
+    ]);
+    return press('A').then(() => {
+      assert.deepEqual(calls, []);
+      assert.ok(global.document.body.querySelector('.tp-context-menu'));
+    });
+  });
 });

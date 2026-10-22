@@ -692,6 +692,7 @@
 .gantt-section-prog { width: 40px; color: var(--tp-text-muted, #44546f); font-weight: 500; }
 .gantt-section-pri.is-empty,
 .gantt-section-prog.is-empty { opacity: 0.55; color: var(--tp-text-muted, #44546f); font-weight: 500; }
+.gantt-section-prog.is-blocked { color: var(--tp-danger-text, #ae2e24); opacity: 1; }
 button.gantt-section-pri.is-empty { cursor: pointer; }
 .gantt-section-pri:hover { background: var(--tp-surface-hover, rgba(9, 30, 66, 0.06)); opacity: 1; }
 .gantt-section-count {

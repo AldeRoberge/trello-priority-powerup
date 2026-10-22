@@ -521,6 +521,48 @@ describe('TodayModel', () => {
     });
   });
 
+  describe('week recap', () => {
+    const done = (id, due, o) => row(id, Object.assign({ statutKey: 'completed', due: due, start: due }, o || {}));
+
+    it('groups completed work from Monday to Sunday, and leaves the rest out', () => {
+      const recap = TM.weekRecap([
+        done('out', '2026-10-11', { estimate: 999 }),
+        done('next', '2026-10-19', { estimate: 999 }),
+        row('open', { due: '2026-10-12', start: '2026-10-12' }),
+        row('cancel', { statutKey: 'canceled', dueDone: true, due: '2026-10-12', start: '2026-10-12' }),
+        row('tri', { statutKey: 'triage', dueDone: true, due: '2026-10-12', start: '2026-10-12' }),
+        done('vague', '2026-10-12', { dueVague: 'bientot' }),
+        done('none', '', { estimate: 30, due: '', start: '' }),
+        done('mon-late', '2026-10-12', { startTime: '16:00', estimate: 0, pos: 1 }),
+        row('mon-early', { dueDone: true, due: '2026-10-12', start: '2026-10-12', startTime: '09:00', estimate: 45, pos: 9 }),
+        done('yest', '2026-10-13', { estimate: 90 }),
+        done('tod', TODAY, { estimate: 15 }),
+        done('sun', '2026-10-18', { estimate: 0 }),
+      ], TODAY);
+      assert.equal(recap.from, '2026-10-12');
+      assert.equal(recap.to, '2026-10-18');
+      assert.deepEqual(recap.days.map((d) => d.iso), ['2026-10-12', '2026-10-13', TODAY, '2026-10-18']);
+      assert.deepEqual(recap.days.map((d) => d.label), ['lundi 12', 'Hier', 'Aujourd’hui', 'dimanche 18']);
+      assert.deepEqual(recap.days[0].rows.map((r) => r.id), ['mon-early', 'mon-late']);
+      assert.equal(recap.days[0].minutes, 45);
+      assert.equal(recap.minutes, 150);
+      assert.equal(recap.count, 5);
+    });
+
+    it('keeps a Sunday inside the week that started on Monday', () => {
+      const recap = TM.weekRecap([
+        done('a', '2026-10-12'),
+        done('b', '2026-10-18'),
+        done('c', '2026-10-19'),
+      ], '2026-10-18');
+      assert.deepEqual(recap.days.map((d) => d.iso), ['2026-10-12', '2026-10-18']);
+      assert.equal(recap.days[0].label, 'lundi 12');
+      assert.equal(recap.days[1].label, 'Aujourd’hui');
+      assert.equal(TM.weekRecap([], 'nope').count, 0);
+      assert.equal(TM.weekRecap(null, TODAY).count, 0);
+    });
+  });
+
   describe('widget board', () => {
     const L = () => TM.layout;
     const ids = (layout) => layout.items.map((it) => it.id);
@@ -538,7 +580,12 @@ describe('TodayModel', () => {
 
     it('starts with every widget, the clock beside the list, and nothing on top of anything', () => {
       const board = L().defaults();
-      assert.deepEqual(ids(board).sort(), ['focus', 'hello', 'late', 'plan', 'review', 'sugg', 'tasks', 'weather']);
+      assert.deepEqual(ids(board).sort(), ['focus', 'hello', 'late', 'plan', 'review', 'sugg', 'tasks', 'weather', 'week']);
+      const week = item(board, 'week');
+      const tasks = item(board, 'tasks');
+      assert.equal(L().widgets().filter((w) => w.id === 'week')[0].label, 'Bilan de la semaine');
+      assert.equal(week.c, 0);
+      assert.equal(week.r, tasks.r + tasks.h);
       const hello = item(board, 'hello');
       const weather = item(board, 'weather');
       assert.equal(hello.r, 0);
@@ -549,6 +596,7 @@ describe('TodayModel', () => {
       const focus = item(board, 'focus');
       assert.equal(plan.c, weather.c);
       assert.equal(plan.r, focus.r);
+      assert.equal(plan.h, item(board, 'review').r + item(board, 'review').h - plan.r);
       assert.equal(overlaps(board.items), false);
       board.items.forEach((it) => {
         assert.ok(it.w >= L().MIN_W && it.c + it.w <= L().COLS);
@@ -558,6 +606,7 @@ describe('TodayModel', () => {
 
     it('keeps a saved board, drops what it does not know, and falls back when nothing was saved', () => {
       const saved = L().normalize({
+        v: 2,
         titles: { tasks: '  Mes tâches  ', nope: 'x', hello: '' },
         items: [
           { id: 'tasks', c: 0, r: 2, w: 20, h: 1 },
@@ -597,6 +646,23 @@ describe('TodayModel', () => {
       assert.equal(overlaps(opened.items), false);
       assert.equal(L().same(L().open(opened, 'review'), opened), true);
       assert.equal(L().open(opened, 'nope').items.length, opened.items.length);
+    });
+
+    it('adds the week recap once to a board saved before it, and keeps it closed', () => {
+      const legacy = {
+        titles: {},
+        items: L().defaults().items.filter((it) => it.id !== 'week'),
+      };
+      const migrated = L().normalize(legacy);
+      const week = item(migrated, 'week');
+      const review = item(migrated, 'review');
+      assert.ok(week);
+      assert.equal(week.c, 0);
+      assert.equal(week.r, review.r + review.h);
+      assert.equal(overlaps(migrated.items), false);
+      assert.deepEqual(L().normalize({ items: [] }).items, []);
+      const closed = L().close(migrated, 'week');
+      assert.equal(item(L().normalize(closed), 'week'), undefined);
     });
 
     it('gives the width it takes to the widget on its right', () => {

@@ -2350,6 +2350,7 @@
     function writeProgressTo(cardId, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));
+      if (typeof CT.saveProgressTree === 'function') return CT.saveProgressTree(t, [{ id: cardId }], pct);
       return CT.getCardCompletionById(t, cardId).then(function (data) {
         data = CT.normalizeCompletionData(data || { items: [] });
         var next = data.items && data.items.length

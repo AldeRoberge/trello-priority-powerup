@@ -55,15 +55,26 @@ describe('TableMenu', () => {
     };
     global.addEventListener = () => {};
     global.removeEventListener = () => {};
+    const docListeners = Object.create(null);
     global.document = {
       body: makeEl('body'),
       createElement: makeEl,
-      addEventListener() {},
-      removeEventListener() {},
+      activeElement: null,
+      addEventListener(type, fn) {
+        (docListeners[type] = docListeners[type] || []).push(fn);
+      },
+      removeEventListener(type, fn) {
+        const list = docListeners[type];
+        if (!list) return;
+        const i = list.indexOf(fn);
+        if (i !== -1) list.splice(i, 1);
+      },
     };
+    global._docListeners = docListeners;
     global.innerWidth = 1000;
     global.innerHeight = 800;
     clearComponentCache();
+    loadComponent('shared/context-menu.js');
     loadComponent('table/table-menu.js');
   });
 
@@ -93,5 +104,25 @@ describe('TableMenu', () => {
     global.TableMenu.show({ x: 10, y: 10 }, [{ label: 'Colonnes…', action() { panelOpen = true; } }, { label: 'Autre' }]);
     findRow(global.document.body.children[0], 'Colonnes…').click(documentClick);
     assert.equal(panelOpen, true);
+  });
+
+  it('A archives while the menu is open', () => {
+    let ran = '';
+    global.TableMenu.show({ x: 10, y: 10 }, [
+      { label: 'Ouvrir', action() { ran = 'open'; } },
+      { icon: 'archive', label: 'Archiver', danger: true, action() { ran = 'archive'; } },
+    ]);
+    const menu = global.document.body.children[0];
+    let letter = null;
+    (function walk(node) {
+      if (node.textContent === 'A' && String(node.className).indexOf('tbm-hint') !== -1) letter = node;
+      (node.children || []).forEach(walk);
+    })(menu);
+    assert.ok(letter, 'Archiver shows A');
+    const keys = global._docListeners.keydown || [];
+    assert.ok(keys.length);
+    keys[keys.length - 1]({ key: 'a', preventDefault() {}, stopPropagation() {} });
+    assert.equal(ran, 'archive');
+    assert.equal(global.document.body.children.length, 0);
   });
 });

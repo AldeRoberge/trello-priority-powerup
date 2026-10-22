@@ -1101,6 +1101,7 @@
               state.current.title = r.title;
               savedTitle = r.title;
               els.title.value = r.title === DM().UNTITLED ? '' : r.title;
+              fitTitle();
             }
             return r.title;
           })
@@ -1718,6 +1719,7 @@
         if (!res) return;
         if ((!els.title.value.trim() || cur.title === DM().UNTITLED) && title) {
           els.title.value = DM().cleanTitle(title);
+          fitTitle();
           scheduleSave(10);
         }
         loadFace();
@@ -4492,11 +4494,20 @@
       ].forEach(function (c) { bar.appendChild(c); });
     }
 
+    function fitTitle() {
+      var el = els.title;
+      if (!el || els.scroll.hidden) return;
+      el.style.height = 'auto';
+      var h = el.scrollHeight;
+      if (h > 0) el.style.height = h + 'px';
+    }
+
     function paintHead() {
       var title = state.current ? DM().cleanTitle(els.title.value) || DM().UNTITLED : '';
       els.headTitle.textContent = title;
       els.headTitle.title = title;
       els.head.classList.toggle('has-doc', !!state.current);
+      fitTitle();
     }
 
     /* ── 6. Suggestions (@ and /) ────────────────────────────────── */
@@ -6569,6 +6580,7 @@
             histBase(doc);
             savedTitle = doc.title;
             els.title.value = doc.title === DM().UNTITLED ? '' : doc.title;
+            fitTitle();
             els.conflict.hidden = true;
             state.conflict = null;
             showCurrent();
@@ -6791,6 +6803,7 @@
           histBase(doc);
           savedTitle = doc.title;
           els.title.value = doc.title === DM().UNTITLED ? '' : doc.title;
+          fitTitle();
           buildEditor(doc);
           els.scroll.scrollTop = top;
           toast('Document mis à jour par quelqu’un d’autre.', 'ok');
@@ -6964,6 +6977,12 @@
 
     els.title.addEventListener('input', function () {
       if (!state.current) return;
+      var flat = els.title.value.replace(/[\r\n]+/g, ' ');
+      if (flat !== els.title.value) {
+        var at = els.title.selectionStart;
+        els.title.value = flat;
+        try { els.title.setSelectionRange(at, at); } catch (e) { /* ignore */ }
+      }
       state.current.title = els.title.value;
       paintHead();
       touchListItem(state.current.id, { title: els.title.value || DM().UNTITLED });
@@ -7017,7 +7036,17 @@
       if (sugg) placeSuggest();
       if (selBar) placeSelBar();
       if (blockHover) showBlockUi(blockHover);
+      fitTitle();
     });
+    if (global.ResizeObserver) {
+      var titleWidth = 0;
+      new ResizeObserver(function () {
+        var w = els.page.clientWidth;
+        if (w === titleWidth) return;
+        titleWidth = w;
+        fitTitle();
+      }).observe(els.page);
+    }
     els.scroll.addEventListener('scroll', function () {
       if (sugg) placeSuggest(); // the caret moved on screen, the popup follows (layout shifts also scroll)
       closePop();

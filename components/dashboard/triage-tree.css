@@ -1,7 +1,5 @@
 /* Triage as a tree (see triage-tree.js): project lines, task rows (the usual Triage rows) and subtask lines. */
-.db-triage-list { --tt-indent: 18px; --tt-end: 12px; --tt-shade-1: rgba(0, 0, 0, 0.1); --tt-shade-2: rgba(0, 0, 0, 0.2); }
-/* In the tree every task ends with the "+" slot, so the columns stop that much before the edge. */
-.db-triage-list[role="tree"] { --tt-end: 40px; }
+.db-triage-list { --tt-indent: 18px; --tt-end: 12px; --tt-shade-1: rgba(0, 0, 0, 0.1); --tt-shade-2: rgba(0, 0, 0, 0.2); --tt-prog-w: 106px; --tt-prio-w: 64px; }
 
 .tt-chev {
   flex: none;
@@ -24,7 +22,8 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 /* Every line starts its fold arrow one step further in than its parent. */
 .tt-project,
 .tt-task.db-row,
-.tt-sub {
+.tt-sub,
+.tt-adding {
   padding-left: calc(12px + var(--tt-depth, 0) * var(--tt-indent));
 }
 
@@ -62,15 +61,18 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 
 /* Progress and priority columns, same width on every line (project, task) so they line up; empty slots stay. */
 .tt-prog {
-  flex: none;
+  flex: 0 0 var(--tt-prog-w);
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  box-sizing: content-box;
-  width: 90px;
+  box-sizing: border-box;
+  width: var(--tt-prog-w);
+  min-width: var(--tt-prog-w);
+  max-width: var(--tt-prog-w);
   align-self: stretch;
   margin-block: -4px;
   padding: 0 8px;
+  overflow: hidden;
   background: var(--tt-shade-1);
   font-size: 11px;
   font-weight: 600;
@@ -85,7 +87,13 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-prog-t { flex: 1; text-align: right; }
 .tt-prog.is-done { color: var(--tp-success); }
 .tt-prog.is-done .tt-prog-bar i { background: var(--tp-success); }
-.tt-prio-col { flex: none; box-sizing: content-box; display: inline-flex; align-items: center; justify-content: center; align-self: stretch; width: 38px; margin: -4px 0 -4px -8px; padding: 0 8px; background: var(--tt-shade-2); }
+.tt-prog.is-blocked { color: var(--tp-danger-text); }
+.tt-prog.is-blocked .tt-prog-bar i { background: var(--tp-danger-text); }
+.tt-prog:not(.is-live) .pg-ring.is-blocked,
+.tt-project .pg-ring.is-blocked { cursor: default; }
+.tt-prog:not(.is-live) .pg-ring.is-blocked:hover,
+.tt-project .pg-ring.is-blocked:hover { background: transparent; }
+.tt-prio-col { flex: 0 0 var(--tt-prio-w); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; align-self: stretch; width: var(--tt-prio-w); min-width: var(--tt-prio-w); max-width: var(--tt-prio-w); margin: -4px 0 -4px -8px; padding: 0 8px; overflow: hidden; background: var(--tt-shade-2); }
 
 /* Header above the two columns: names them, and shows they are one block (Avancement lighter, Priorité darker). */
 .tt-colhead {
@@ -99,9 +107,10 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   text-align: center;
   color: var(--tp-text-muted);
 }
-.tt-colhead > span { box-sizing: content-box; padding: 0 8px; }
-.tt-colhead-prog { width: 90px; background: var(--tt-shade-1); }
-.tt-colhead-prio { width: 38px; background: var(--tt-shade-2); }
+.tt-colhead > span { box-sizing: border-box; padding: 0 8px; flex: none; }
+.tt-colhead-prog { width: var(--tt-prog-w); min-width: var(--tt-prog-w); background: var(--tt-shade-1); }
+.tt-colhead-prio { width: var(--tt-prio-w); min-width: var(--tt-prio-w); background: var(--tt-shade-2); }
+.tt-project > .tt-prio-col { margin-left: -6px; }
 
 /* Subtask lines have no columns: the same two shades run behind them so the block stays continuous. */
 .tt-sub { position: relative; }
@@ -111,11 +120,11 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   top: 0;
   bottom: 0;
   right: var(--tt-end);
-  width: 160px;
-  background: linear-gradient(to right, var(--tt-shade-1) 106px, var(--tt-shade-2) 106px);
+  width: calc(var(--tt-prog-w) + var(--tt-prio-w));
+  background: linear-gradient(to right, var(--tt-shade-1) var(--tt-prog-w), var(--tt-shade-2) var(--tt-prog-w));
   pointer-events: none;
 }
-.db-triage-list .db-prio { min-width: 34px; padding: 2px 6px; font-size: 12px; }
+.db-triage-list .db-prio { box-sizing: border-box; min-width: 0; max-width: 100%; padding: 2px 6px; font-size: 12px; }
 .tt-project .tt-count { padding: 0; width: 20px; }
 
 /* Task rows keep the Triage look; the "2/5" column is always there so the score never moves. */
@@ -140,7 +149,7 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   padding-right: 12px;
   border-bottom: 1px solid var(--tp-border);
   font-size: 13px;
-  cursor: default;
+  cursor: pointer;
 }
 .tt-sub > .ti { flex: none; font-size: 14px; color: var(--tp-text-muted); }
 .tt-sub .tt-name { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--tp-text-subtle); }
@@ -148,10 +157,15 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-sub.is-done > .ti { color: var(--tp-success); }
 .tt-sub.is-blocked .tt-name,
 .tt-sub.is-blocked > .ti { color: var(--tp-danger-text); }
+.tt-sub.is-sel { box-shadow: inset 2px 0 0 var(--tp-primary); }
+.tt-sub.is-sel .tt-name { color: var(--tp-text); }
 
-/* "+" of a line: its slot is always there, the glyph shows on hover (or focus) only. */
+/* "+" under the line, out of the columns. The glyph shows when the line or the button is hovered. */
+.tt-under { position: relative; height: 0; z-index: 2; }
 .tt-add {
-  flex: none;
+  position: absolute;
+  left: calc(12px + var(--tt-depth, 0) * var(--tt-indent) + 26px);
+  top: -11px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -160,17 +174,28 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   padding: 0;
   border: 0;
   border-radius: 4px;
-  background: transparent;
+  background: var(--tp-bg);
   color: var(--tp-text-muted);
   font-size: 14px;
   cursor: pointer;
   opacity: 0;
 }
-.tt-add.is-empty { cursor: default; }
-.tt-task:hover > .tt-add,
-.tt-sub:hover > .tt-add,
+.tt-task:hover + .tt-under .tt-add,
+.tt-sub:hover + .tt-under .tt-add,
+.tt-add:hover,
 .tt-add:focus-visible { opacity: 1; }
 button.tt-add:hover { background: var(--tp-surface-active); color: var(--tp-text); }
+.tt-adding {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--tp-border);
+  font-size: 13px;
+}
 .tt-input {
   flex: 1;
   min-width: 0;
