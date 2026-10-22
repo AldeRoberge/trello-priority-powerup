@@ -7,8 +7,28 @@
   gap: 6px;
   padding: 8px 12px;
   border-top: 1px solid var(--tp-border-strong, var(--tp-border));
-  background: var(--tp-surface);
+  background: var(--tp-surface-subtle);
 }
+/* Top-edge grip: click opens or closes the history, drag reveals more or less. Quiet until hovered. */
+.ad-dock-grip {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 14px;
+  margin: -6px 0 -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  font-size: 14px;
+  opacity: 0.55;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.ad-dock-grip:hover { opacity: 1; background: var(--tp-surface-active); }
 .ad-dock.is-drop::after {
   content: '';
   position: absolute;

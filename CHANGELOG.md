@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Assistant en bas : fond plus foncé comme Triage, et une poignée en haut pour ouvrir l'historique (clic) ou en montrer plus ou moins (glisser).
 - Une fenêtre « Une nouvelle version est disponible, veuillez actualiser » apparaît en bas à droite dès qu'une nouvelle version est publiée (vérification en arrière-plan toutes les 30 secondes), au lieu de recharger la page sans prévenir.
 - Triage : glisser la séparation entre la liste et le détail pour l'élargir ou la rétrécir (double-clic pour revenir à la taille par défaut).
 - Tableau : les lignes de projet repliables ont le même fond plus foncé que dans Triage.

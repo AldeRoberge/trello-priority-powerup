@@ -19,6 +19,10 @@
   var SHOT_EDGE = 1600; // longest edge sent to the model, in px
   var LOG_KEEP = 4;
   var LOG_FADE_MS = 45000;
+  var LOG_KEEP_OPEN = 50; // lines kept while the history is open
+  var LOG_MIN_H = 48;
+  var LOG_MAX_H = 520;
+  var GRIP_KEY = 'tp.assistantDock.history';
   var MAX_CARDS = 4; // task panels kept open above the box; the oldest closes first
   var IMG_RE = /^image\/(png|jpe?g|gif|webp|bmp)$/;
 
@@ -153,21 +157,66 @@
     loadHost.hidden = true;
     var cardsEl = el('div', 'ad-dock-cards'); // task panels float above the box, so the view behind does not move
     cardsEl.hidden = true;
+    // Grip on the top edge: click to open or close the history, drag to reveal more or less of it.
+    var grip = el('button', 'ad-dock-grip');
+    grip.type = 'button';
+    grip.setAttribute('aria-label', 'Afficher plus ou moins de l\'historique');
+    grip.title = 'Historique : cliquer pour ouvrir ou fermer, glisser pour ajuster';
+    var gripIcon = icon('chevron-up');
+    grip.appendChild(gripIcon);
+    var open = false;
+    var logH = 220;
+    try {
+      var saved = JSON.parse(global.localStorage.getItem(GRIP_KEY) || 'null');
+      if (saved) { open = !!saved.open; logH = Math.max(LOG_MIN_H, Math.min(saved.h || logH, LOG_MAX_H)); }
+    } catch (e) { /* storage unavailable: defaults */ }
+    function applyOpen() {
+      root.classList.toggle('is-open', open);
+      gripIcon.className = 'ti ti-chevron-' + (open ? 'down' : 'up');
+      logEl.style.maxHeight = open ? logH + 'px' : '';
+      logEl.style.minHeight = open ? Math.min(logH, 80) + 'px' : '';
+      try { global.localStorage.setItem(GRIP_KEY, JSON.stringify({ open: open, h: logH })); } catch (e) { /* ignore */ }
+      renderLog();
+    }
+    grip.addEventListener('pointerdown', function (ev) {
+      if (ev.button) return;
+      var y0 = ev.clientY;
+      var h0 = open ? logEl.getBoundingClientRect().height : 0;
+      var moved = false;
+      function move(e) {
+        if (!moved && Math.abs(e.clientY - y0) < 4) return;
+        moved = true;
+        logH = Math.max(LOG_MIN_H, Math.min(h0 + (y0 - e.clientY), LOG_MAX_H));
+        open = h0 + (y0 - e.clientY) > 24;
+        applyOpen();
+      }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        if (!moved) { open = !open; applyOpen(); }
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      ev.preventDefault();
+    });
+    root.appendChild(grip);
     root.appendChild(cardsEl);
     root.appendChild(logEl);
     root.appendChild(loadHost);
     root.appendChild(attsEl);
     root.appendChild(composer);
+    applyOpen();
 
     function addLog(who, text, action) {
       log.push({ who: who, text: text, at: Date.now(), action: action || null });
-      if (log.length > LOG_KEEP) log.shift();
+      if (log.length > (open ? LOG_KEEP_OPEN : LOG_KEEP)) log.shift();
       renderLog();
     }
 
     function renderLog() {
       var now = Date.now();
-      log = log.filter(function (m) { return now - m.at < LOG_FADE_MS || m.who === 'error'; });
+      // Open history keeps everything; closed, lines fade away on their own.
+      if (!open) log = log.filter(function (m) { return now - m.at < LOG_FADE_MS || m.who === 'error'; });
       logEl.innerHTML = '';
       logEl.hidden = !log.length;
       log.forEach(function (m) {
