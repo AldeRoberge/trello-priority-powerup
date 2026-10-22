@@ -9,26 +9,60 @@
   border-top: 1px solid var(--tp-border-strong, var(--tp-border));
   background: var(--tp-surface-subtle);
 }
-/* Top-edge grip: click opens or closes the history, drag reveals more or less. Quiet until hovered. */
+/* Top edge, the whole width: drag reveals more or less, the chevron folds. Quiet until hovered.
+   Size stays put; only the line and the chevron change color. */
 .ad-dock-grip {
-  align-self: center;
-  display: inline-flex;
+  position: relative;
+  align-self: stretch;
+  flex: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 14px;
-  margin: -6px 0 -4px;
+  height: 18px;
+  margin: -8px -12px 0;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   color: var(--tp-text-muted);
   font-size: 14px;
-  opacity: 0.55;
   cursor: ns-resize;
   touch-action: none;
+  z-index: 2;
 }
-.ad-dock-grip:hover { opacity: 1; background: var(--tp-surface-active); }
+.ad-dock-grip::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: transparent;
+}
+.ad-dock-grip:hover::before,
+.ad-dock-grip:focus-visible::before,
+.ad-dock-grip.is-drag::before { background: var(--tp-primary); }
+.ad-dock-grip:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: -2px; }
+.ad-dock-grip .ti {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--tp-surface-subtle);
+  opacity: 0.55;
+  line-height: 1;
+}
+.ad-dock-grip:hover .ti,
+.ad-dock-grip:focus-visible .ti,
+.ad-dock-grip.is-drag .ti {
+  opacity: 1;
+  background: var(--tp-surface-active);
+}
+html.ad-resizing,
+html.ad-resizing * { cursor: ns-resize !important; user-select: none !important; }
 .ad-dock.is-drop::after {
   content: '';
   position: absolute;
@@ -38,15 +72,26 @@
   pointer-events: none;
 }
 
-/* Short log of what the AI did: lines fade away on their own */
+/* Conversation. Folded: the latest line only. Open: the height set by the top edge. */
 .ad-dock-log {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 96px;
-  overflow-y: auto;
+  overflow: hidden;
   font-size: 13px;
   line-height: 1.4;
+}
+.ad-dock.is-open .ad-dock-log { overflow-y: auto; }
+.ad-dock:not(.is-open) .ad-dock-log {
+  max-height: 32px;
+  cursor: pointer;
+}
+.ad-dock:not(.is-open) .ad-dock-msg { min-width: 0; }
+.ad-dock:not(.is-open) .ad-dock-msg-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ad-dock-log[hidden],
 .ad-dock-atts[hidden] {

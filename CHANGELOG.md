@@ -5,6 +5,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Assistant : pendant l’attente, préparation, envoi et lecture sont des icônes.
+- Assistant en bas : la conversation se replie sur une ligne et s’ouvre en glissant le bord du haut (clic pour replier, double-clic pour la taille d’origine), dans toutes les vues.
 - Documents : le titre d'un document n'est plus coupé, il passe à la ligne.
 - Triage : le cercle, la barre et le % forment un bloc légèrement plus foncé titré « Avancement », suivi d'un bloc « Priorité » encore plus foncé.
 - Assistant en bas : fond plus foncé comme Triage, et une poignée en haut pour ouvrir l'historique (clic) ou en montrer plus ou moins (glisser).

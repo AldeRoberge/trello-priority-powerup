@@ -1,14 +1,16 @@
 /*
  * Role: the Assistant box docked at the bottom of every view (Table, Gantt, Kanban, Mindmap, Dashboard,
- * Documents, Entités). Always open: one message box that takes text, pasted / dropped images and files.
- * The AI (KanbanAI.run, with the board's cards and lists) decides what to create or change; files are
- * attached to the cards it creates. This replaces the old Capture page.
+ * Documents, Entités). Folded, it is the message box plus the last reply on one line. The top edge
+ * opens it the way Triage opens a row or its split: drag anywhere on that edge to reveal more or less
+ * of the conversation, click to fold, double-click to come back to the usual height. The AI
+ * (KanbanAI.run, with the board's cards and lists) decides what to create or change; files are
+ * attached to the cards it creates.
  *
  *   AssistantDock.mount({ t, after: mountEl, onRefresh, isBusy })
  *     after     element the dock is inserted after (the view's mount node, inside a flex-column body)
  *     onRefresh () => any   called after the AI wrote something, to reload the view
  *     isBusy    () => bool  unused here (kept so the views' calls stay valid)
- *   → { root, focus, toggle }   toggle() just focuses the box (the dock has no collapsed state)
+ *   → { root, focus, toggle }   toggle() focuses the box
  */
 (function (global) {
   'use strict';
@@ -17,12 +19,28 @@
   var MAX_FILE_BYTES = 10 * 1048576; // Trello's attachment limit
   var MAX_SHOTS = 4; // images sent to the model
   var SHOT_EDGE = 1600; // longest edge sent to the model, in px
-  var LOG_KEEP = 4;
-  var LOG_FADE_MS = 45000;
-  var LOG_KEEP_OPEN = 50; // lines kept while the history is open
+  var LOG_KEEP = 50; // lines kept for the session; folded, only the last one is shown
   var LOG_MIN_H = 48;
-  var LOG_MAX_H = 520;
+  var LOG_DEFAULT_H = 220;
+  var LOG_MAX_H = 640;
+  var COLLAPSE_UNDER = 28; // a drag below this folds the conversation
   var GRIP_KEY = 'tp.assistantDock.history';
+
+  /** Open height of the conversation. Under COLLAPSE_UNDER it folds; the caller keeps the previous open height. */
+  function clampLog(h, max) {
+    var cap = typeof max === 'number' && max > 0 ? max : LOG_MAX_H;
+    if (cap < LOG_MIN_H) cap = LOG_MIN_H;
+    var n = Number(h);
+    if (!(n > COLLAPSE_UNDER)) return { open: false, h: LOG_DEFAULT_H };
+    if (n < LOG_MIN_H) n = LOG_MIN_H;
+    if (n > cap) n = cap;
+    return { open: true, h: Math.round(n) };
+  }
+
+  function logMax() {
+    var view = global.innerHeight || 800;
+    return Math.max(LOG_MIN_H, Math.min(LOG_MAX_H, Math.round(view * 0.5) - 80));
+  }
   var MAX_CARDS = 4; // task panels kept open above the box; the oldest closes first
   var IMG_RE = /^image\/(png|jpe?g|gif|webp|bmp)$/;
 
@@ -157,47 +175,104 @@
     loadHost.hidden = true;
     var cardsEl = el('div', 'ad-dock-cards'); // task panels float above the box, so the view behind does not move
     cardsEl.hidden = true;
-    // Grip on the top edge: click to open or close the history, drag to reveal more or less of it.
-    var grip = el('button', 'ad-dock-grip');
-    grip.type = 'button';
-    grip.setAttribute('aria-label', 'Afficher plus ou moins de l\'historique');
-    grip.title = 'Historique : cliquer pour ouvrir ou fermer, glisser pour ajuster';
+    // Top edge, like the Triage split: drag anywhere to reveal more or less, click to fold,
+    // double-click to come back to the usual height. A folded line also opens on click.
+    var grip = el('div', 'ad-dock-grip');
+    grip.setAttribute('role', 'separator');
+    grip.setAttribute('aria-orientation', 'horizontal');
+    grip.tabIndex = 0;
     var gripIcon = icon('chevron-up');
     grip.appendChild(gripIcon);
     var open = false;
-    var logH = 220;
+    var logH = LOG_DEFAULT_H;
     try {
       var saved = JSON.parse(global.localStorage.getItem(GRIP_KEY) || 'null');
-      if (saved) { open = !!saved.open; logH = Math.max(LOG_MIN_H, Math.min(saved.h || logH, LOG_MAX_H)); }
+      if (saved) {
+        open = !!saved.open;
+        var restored = clampLog(saved.h, LOG_MAX_H);
+        if (restored.open) logH = restored.h;
+      }
     } catch (e) { /* storage unavailable: defaults */ }
-    function applyOpen() {
+    function persist() {
+      try { global.localStorage.setItem(GRIP_KEY, JSON.stringify({ open: open, h: logH })); } catch (e2) { /* ignore */ }
+    }
+    function paintSize() {
       root.classList.toggle('is-open', open);
+      grip.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var label = open ? 'Replier' : 'Déplier';
+      grip.setAttribute('aria-label', label);
+      grip.title = label;
       gripIcon.className = 'ti ti-chevron-' + (open ? 'down' : 'up');
-      logEl.style.maxHeight = open ? logH + 'px' : '';
-      logEl.style.minHeight = open ? Math.min(logH, 80) + 'px' : '';
-      try { global.localStorage.setItem(GRIP_KEY, JSON.stringify({ open: open, h: logH })); } catch (e) { /* ignore */ }
+      if (open) {
+        logEl.hidden = false;
+        logEl.style.height = logH + 'px';
+        logEl.style.maxHeight = logH + 'px';
+      } else {
+        logEl.style.height = '';
+        logEl.style.maxHeight = '';
+        logEl.hidden = !log.length;
+      }
+    }
+    function applyOpen() {
       renderLog();
+      persist();
+    }
+    function setFromHeight(next) {
+      var was = open;
+      var c = clampLog(next, logMax());
+      open = c.open;
+      if (c.open) logH = c.h;
+      if (was !== open) renderLog();
+      else paintSize();
     }
     grip.addEventListener('pointerdown', function (ev) {
       if (ev.button) return;
       var y0 = ev.clientY;
-      var h0 = open ? logEl.getBoundingClientRect().height : 0;
+      var h0 = logEl.hidden ? 0 : logEl.getBoundingClientRect().height;
       var moved = false;
+      grip.classList.add('is-drag');
+      document.documentElement.classList.add('ad-resizing');
       function move(e) {
         if (!moved && Math.abs(e.clientY - y0) < 4) return;
         moved = true;
-        logH = Math.max(LOG_MIN_H, Math.min(h0 + (y0 - e.clientY), LOG_MAX_H));
-        open = h0 + (y0 - e.clientY) > 24;
-        applyOpen();
+        setFromHeight(h0 + (y0 - e.clientY));
       }
-      function up() {
+      function end() {
         document.removeEventListener('pointermove', move);
-        document.removeEventListener('pointerup', up);
-        if (!moved) { open = !open; applyOpen(); }
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        grip.classList.remove('is-drag');
+        document.documentElement.classList.remove('ad-resizing');
+        if (!moved) { open = !open; renderLog(); }
+        persist();
       }
       document.addEventListener('pointermove', move);
-      document.addEventListener('pointerup', up);
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
       ev.preventDefault();
+      ev.stopPropagation();
+    });
+    grip.addEventListener('dblclick', function () {
+      open = true;
+      logH = Math.min(LOG_DEFAULT_H, logMax());
+      applyOpen();
+    });
+    grip.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFromHeight((open ? logH : 0) + (e.key === 'ArrowUp' ? 32 : -32));
+        persist();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open = !open;
+        applyOpen();
+      }
+    });
+    logEl.addEventListener('click', function (e) {
+      if (open) return;
+      if (e.target.closest && e.target.closest('button')) return;
+      open = true;
+      applyOpen();
     });
     root.appendChild(grip);
     root.appendChild(cardsEl);
@@ -209,17 +284,17 @@
 
     function addLog(who, text, action) {
       log.push({ who: who, text: text, at: Date.now(), action: action || null });
-      if (log.length > (open ? LOG_KEEP_OPEN : LOG_KEEP)) log.shift();
+      if (log.length > LOG_KEEP) log.shift();
       renderLog();
     }
 
     function renderLog() {
-      var now = Date.now();
-      // Open history keeps everything; closed, lines fade away on their own.
-      if (!open) log = log.filter(function (m) { return now - m.at < LOG_FADE_MS || m.who === 'error'; });
+      paintSize();
       logEl.innerHTML = '';
-      logEl.hidden = !log.length;
-      log.forEach(function (m) {
+      // Folded: one line, the latest reply. Open: the whole conversation, at the height that was dragged.
+      var shown = open ? log : (log.length ? [log[log.length - 1]] : []);
+      if (!open) logEl.hidden = !shown.length;
+      shown.forEach(function (m) {
         var row = el('div', 'ad-dock-msg is-' + m.who);
         if (m.who !== 'me') row.appendChild(avatar());
         row.appendChild(el('span', 'ad-dock-msg-text', m.text));
@@ -235,9 +310,8 @@
         }
         logEl.appendChild(row);
       });
-      logEl.scrollTop = logEl.scrollHeight;
+      if (open) logEl.scrollTop = logEl.scrollHeight;
     }
-    setInterval(function () { if (root.isConnected && log.length) renderLog(); }, 5000);
 
     function refreshView() {
       if (typeof opts.onRefresh === 'function') try { opts.onRefresh(); } catch (e) { /* view gone */ }
@@ -487,5 +561,5 @@
   }
 
   // toDataUrl / named are shared with the Triage document (images pasted there are read the same way).
-  global.AssistantDock = { mount: mount, ask: ask, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE, outcome: outcome };
+  global.AssistantDock = { mount: mount, ask: ask, toDataUrl: toDataUrl, named: named, IMG_RE: IMG_RE, outcome: outcome, clampLog: clampLog };
 })(typeof window !== 'undefined' ? window : this);

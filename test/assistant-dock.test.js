@@ -4,6 +4,31 @@ const { describe, it, before } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadComponent } = require('./helpers/load');
 
+describe('AssistantDock.clampLog', () => {
+  let clampLog;
+  before(() => {
+    loadComponent('shared/assistant-dock.js');
+    clampLog = global.AssistantDock.clampLog;
+    assert.equal(typeof clampLog, 'function');
+  });
+
+  it('folds under the collapse line', () => {
+    assert.deepEqual(clampLog(0), { open: false, h: 220 });
+    assert.deepEqual(clampLog(20), { open: false, h: 220 });
+    assert.deepEqual(clampLog(NaN), { open: false, h: 220 });
+  });
+
+  it('opens at least the minimum and never past the cap', () => {
+    assert.deepEqual(clampLog(30), { open: true, h: 48 });
+    assert.deepEqual(clampLog(180), { open: true, h: 180 });
+    assert.deepEqual(clampLog(900, 400), { open: true, h: 400 });
+  });
+
+  it('does not let a tiny cap go under the minimum', () => {
+    assert.deepEqual(clampLog(100, 10), { open: true, h: 48 });
+  });
+});
+
 describe('AssistantDock.outcome', () => {
   let outcome;
   before(() => {
