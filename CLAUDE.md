@@ -54,7 +54,7 @@ The UI copy is French (Québec). The user writes short, informal requests and ex
 2. **Keep views consistent.** A feature asked for in one view (progress slider, complete circle, blocked "II", show/hide completed, right-click menu, assistant dock, drag and drop, undo/history) must be checked in Table, Gantt, Kanban, Mindmap and Documents and implemented through shared code, not copies. Say which views were covered and which were skipped, and why.
 3. "Keep going" or "finish started work" means continue without asking. Ask only for decisions that are truly the user's; otherwise pick a sensible default and say what was chosen.
 4. Fix root causes and check nearby code for the same problem. New items must show immediately. A fix must not make something else vanish (the Entités tab did once): put shared things in shared code.
-5. Verify before reporting: `npm run test:unit`, add tests for changed logic, check in the browser pane (narrow widths; empty, completed, blocked and long-text states). Say plainly what was not run.
+5. Verify before reporting: `npm run test:unit`, add tests for changed logic, check in the browser pane (narrow widths; empty, completed, blocked and long-text states). Say plainly what was not run. Do not test when it is unnecessary: do not re-run a suite that does not exercise the changed code (for example unit tests after a UI-only or CSS change), and do not repeat a check that already passed. Run only what can actually catch a problem in the change.
 6. Every user-visible change gets one short French line in `CHANGELOG.md` under today's `## AAAA-MM-JJ` section (create the section at the top if needed). The deploy stamps it into `build-info.json`, and the assistant reads it for "quelle version ?" and "quoi de neuf ?".
 
 ### UX rules
