@@ -74,6 +74,22 @@
     if (adding === key) out.push({ kind: 'add', key: 'a:' + key, taskId: row.id, parentId: '', depth: depth + 1 });
   }
 
+  /** A project line's score: its best task priority, and the mean progress of its tasks (null when none has one). */
+  function summary(rows) {
+    var best = null;
+    var total = 0;
+    var n = 0;
+    rows.forEach(function (r) {
+      if (typeof r.priority === 'number' && (!best || r.priority > best.priority)) best = r;
+      if (typeof r.progress === 'number') { total += Math.max(0, Math.min(100, r.progress)); n++; }
+    });
+    return {
+      priority: best ? best.priority : null,
+      tierI: best ? best.tierI : null,
+      progress: n ? Math.round(total / n) : null,
+    };
+  }
+
   function build(rows, opts) {
     opts = opts || {};
     var collapsed = opts.collapsed || {};
@@ -104,7 +120,11 @@
     groups.forEach(function (g) {
       var key = 'p:' + g.id;
       var open = !collapsed[key];
-      nodes.push({ kind: 'project', key: key, id: g.id, name: g.name, icon: g.icon || null, count: g.rows.length, open: open, free: !!g.free });
+      var sum = summary(g.rows);
+      nodes.push({
+        kind: 'project', key: key, id: g.id, name: g.name, icon: g.icon || null, count: g.rows.length, open: open, free: !!g.free,
+        priority: sum.priority, tierI: sum.tierI, progress: sum.progress,
+      });
       if (!open) return;
       g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks, adding); });
     });
@@ -158,6 +178,29 @@
     });
   }
 
+  /** Progress column: a small bar and the percentage. The slot stays (empty) when there is no value, so the priority never moves. */
+  function progressEl(pct) {
+    var has = typeof pct === 'number';
+    var c = el('span', 'tt-prog' + (has ? '' : ' is-empty') + (has && pct >= 100 ? ' is-done' : ''), has ? { title: 'Avancement ' + pct + ' %' } : {});
+    if (!has) return c;
+    var bar = el('span', 'tt-prog-bar');
+    var fill = el('i');
+    fill.style.width = pct + '%';
+    bar.appendChild(fill);
+    c.appendChild(bar);
+    c.appendChild(el('span', 'tt-prog-t', { text: pct + '%' }));
+    return c;
+  }
+
+  /** Priority column of a project line: same badge as the tasks, read-only (it is the best of its tasks). */
+  function prioCol(priority, tierI) {
+    var c = el('span', 'tt-prio-col');
+    if (typeof priority === 'number') {
+      c.appendChild(el('span', 'db-prio db-prio--' + (tierI == null ? 'n' : Math.min(tierI, 4)), { text: 'P' + String(priority), title: 'Meilleure priorité du projet' }));
+    }
+    return c;
+  }
+
   function projectEl(n, ctx) {
     var pickable = !n.free && n.id && typeof ctx.selectProject === 'function';
     var row = el('div', 'tt-project' + (n.free ? ' is-free' : '') + (pickable && ctx.selectedProject === n.id ? ' is-sel' : ''), {
@@ -180,6 +223,8 @@
       if (pickable) ctx.selectProject(n.id);
     });
     row.appendChild(name);
+    row.appendChild(progressEl(n.progress));
+    row.appendChild(prioCol(n.priority, n.tierI));
     row.appendChild(el('span', 'tt-count', { text: String(n.count) }));
     // The rest of the line opens the project in the pane (the free group has none: it folds).
     row.addEventListener('click', function () {
@@ -328,6 +373,7 @@
   };
 
   global.TriageTree = {
+    progressEl: progressEl,
     build: build,
     render: render,
     carryOver: carryOver,

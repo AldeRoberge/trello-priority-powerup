@@ -58,6 +58,27 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   text-align: center;
 }
 
+/* Progress and priority columns, same width on every line (project, task) so they line up; empty slots stay. */
+.tt-prog {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: 66px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-text-subtle);
+}
+.tt-prog-bar { flex: none; width: 34px; height: 6px; border-radius: 3px; background: var(--tp-surface-active); overflow: hidden; }
+.tt-prog-bar i { display: block; height: 100%; border-radius: 3px; background: var(--tp-primary); }
+.tt-prog-t { flex: 1; text-align: right; }
+.tt-prog.is-done { color: var(--tp-success); }
+.tt-prog.is-done .tt-prog-bar i { background: var(--tp-success); }
+.tt-prio-col { flex: none; display: inline-flex; justify-content: center; width: 38px; }
+.db-triage-list .db-prio { min-width: 34px; padding: 2px 6px; font-size: 12px; }
+.tt-project .tt-count { padding: 0; width: 20px; }
+
 /* Task rows keep the Triage look; the "2/5" column is always there so the score never moves. */
 .tt-task .tt-chev { margin-right: -2px; }
 .tt-sub-count {

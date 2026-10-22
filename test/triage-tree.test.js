@@ -202,3 +202,14 @@ test('adding: the new-subtask line comes after the task and its subtasks; only t
   assert.equal(onSub.nodes[3].parentId, 'i1');
   assert.equal(onSub.nodes[3].depth, 2);
 });
+
+test('a project line carries its best task priority and the mean progress of its tasks', () => {
+  const rows = [
+    { id: 'a', name: 'A', priority: 4.9, tierI: 3, progress: 50 },
+    { id: 'b', name: 'B', priority: 7.5, tierI: 1, progress: 100 },
+    { id: 'free', name: 'F' },
+  ];
+  const b = TT.build(rows, { projectOf });
+  const p = b.nodes.filter((n) => n.kind === 'project');
+  eq(p.map((n) => [n.priority, n.tierI, n.progress]), [[7.5, 1, 75], [null, null, null]]);
+});

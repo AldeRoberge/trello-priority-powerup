@@ -323,7 +323,7 @@
     var els = {
       side: h('nav', { class: 'sp db-side', 'aria-label': 'Dashboard' }),
       nav: h('div', { class: 'db-nav-list' }),
-      filter: h('input', { type: 'search', placeholder: 'Filtrer…', 'aria-label': 'Filtrer les cartes', autocomplete: 'off' }),
+      filter: h('input', { type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher les cartes', autocomplete: 'off' }),
       main: h('main', { class: 'db-main' }),
       status: h('div', { class: 'db-status' }),
     };
@@ -1417,7 +1417,8 @@
           h('span', { class: 'db-row-name', text: r.name }),
           sub ? h('span', { class: 'db-step', text: sub }) : null,
         ]),
-        prioBadge(r),
+        global.TriageTree ? global.TriageTree.progressEl(r.progress) : null,
+        h('span', { class: 'tt-prio-col' }, [prioBadge(r)]),
       ]);
     }
 

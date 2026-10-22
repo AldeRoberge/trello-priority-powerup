@@ -3,7 +3,19 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-10-22
+
+- Triage : l’avancement (barre et %) et la priorité sont plus visibles à droite de chaque ligne, et les projets affichent aussi leur priorité (la meilleure de leurs tâches) et leur avancement.
+
+- Triage : un « + » au survol d’une tâche ou d’une sous-tâche ajoute une sous-tâche, directement dans la liste.
+- Triage : un bouton « Bloquer » discret permet de marquer la tâche comme bloquée, et de la débloquer.
+
 ## 2026-10-21
+- Recherche : le champ dit « Rechercher… » dans le Tableau, le Kanban, le Gantt, la Mindmap, le Parcours, les Documents, les Entités et le Dashboard.
+- Documents : dans Personnes, un nom inconnu propose de créer la personne. Elle rejoint les contacts et, sur une tâche, la carte. `@` suivi du nom fait la même chose.
+- Aujourd’hui : bonjour, météo, prochaine action, en retard, à faire, à planifier, revue et planning sont des widgets. On les déplace, on change leur taille, on les ferme, on les rouvre et on les renomme.
+- Documents : un dossier vide n’a plus de flèche pour le replier. Elle revient dès qu’il contient un document ou un sous-dossier.
+- Onglets : l’onglet Assistant garde le même soulignement bleu que Gantt.
 - Triage, Document : le plan se lit comme un tableau. Une bande par projet (qu’on replie), ses tâches en retrait dessous, leurs sous-tâches encore plus en retrait. Les colonnes Jour, Urgence, Durée, Projet, Personnes, Lieux et Étiquettes tombent au même endroit sur chaque ligne ; sur un volet étroit, elles passent sous le titre.
 - Triage, Document : une boîte « Demander une modification… » sous le plan. On écrit « mets les achats dans un projet », « fusionne ces deux tâches » ou « retire la dernière », l’IA change le plan sur place (avec le document, les images lues et les échanges précédents) et « Défaire » annule.
 - Triage, Document : une étape qui échoue n’est plus résumée en une ligne. Chaque erreur affiche l’étape, la carte, le message complet, le type, le statut, le nombre de tentatives, ce qui a été envoyé et la trace, avec un bouton « Copier le détail ». Le panneau reste ouvert après la création pour qu’on puisse le lire.
@@ -11,8 +23,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Carte : la barre de titre « Trello Cerveau » indique depuis quand l’application a été mise à jour (« mis à jour il y a 2 heures »), comme l’en-tête de la section dans la carte.
 - Orchestrateur : sous ma rangée, une rangée par personne du tableau (membres Trello et contacts « Hors Trello »), sur les mêmes colonnes. Glisser une carte sur la rangée de quelqu’un la lui confie (sur la case d’un autre jour, elle change aussi de jour) ; la glisser vers ma rangée la reprend. La molette sur les personnes les fait défiler, ailleurs elle zoome toujours. « Défaire » ou Ctrl+Z remet comme avant.
 - Clic droit sur une carte : « Confier à » une personne, ou à moi.
-- Planning : la ligne de l’heure actuelle est blanche (plus rouge). Au survol, l’étiquette indique l’écart avec maintenant (« -3 h », « +1 h 15 ») et cache les heures et la météo derrière elle au lieu de les chevaucher.
 - Dashboard : ouvrir une tâche (Aujourd’hui, Triage, Orchestrateur) affichait « Tâche introuvable » ; elle s’ouvre maintenant. Si une carte manque vraiment, la console le dit au lieu de se taire.
+- Planning : la ligne de l’heure actuelle est blanche (plus rouge). Au survol, l’étiquette indique l’écart avec maintenant (« -3 h », « +1 h 15 ») et cache les heures et la météo derrière elle au lieu de les chevaucher.
 
 ## 2026-10-21
 - Assistant : une tâche créée s’ouvre en vrai panneau au-dessus de la boîte, au lieu d’une simple ligne. On y règle tout sur place : liste, titre, progrès, priorité, échéance, estimation, personnes, lieux, étiquettes et description. La croix le ferme.
