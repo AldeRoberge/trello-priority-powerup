@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-22
 
+- Tableau : les lignes de projet repliables ont le même fond plus foncé que dans Triage.
 - Triage : on peut glisser la barre d’avancement et cliquer le cercle pour terminer une tâche, dans la liste.
 - Triage : le panneau de droite a une ligne « Avancement » (0 à 100 %) et une ligne « Sous-tâches » (cocher, ajouter).
 
