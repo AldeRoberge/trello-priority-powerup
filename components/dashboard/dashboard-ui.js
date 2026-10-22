@@ -1409,7 +1409,11 @@
 
     function triageListEl(q, selId) {
       var built = triageBuilt(q);
-      if (!built) return h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === selId); }));
+      if (!built) {
+        var flat = h('div', { class: 'db-list db-triage-list' }, q.map(function (r) { return triageRow(r, r.id === selId); }));
+        if (global.TriageTree && q.length) flat.insertBefore(global.TriageTree.colHead(), flat.firstChild);
+        return flat;
+      }
       var list = h('div', { class: 'db-list db-triage-list', role: 'tree', 'aria-label': 'Triage' }, []);
       list.appendChild(global.TriageTree.render(built, treeCtx(selId)));
       return list;

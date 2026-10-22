@@ -1,5 +1,7 @@
 /* Triage as a tree (see triage-tree.js): project lines, task rows (the usual Triage rows) and subtask lines. */
-.db-triage-list { --tt-indent: 18px; }
+.db-triage-list { --tt-indent: 18px; --tt-end: 12px; --tt-shade-1: rgba(0, 0, 0, 0.1); --tt-shade-2: rgba(0, 0, 0, 0.2); }
+/* In the tree every task ends with the "+" slot, so the columns stop that much before the edge. */
+.db-triage-list[role="tree"] { --tt-end: 40px; }
 
 .tt-chev {
   flex: none;
@@ -33,7 +35,7 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   min-height: 32px;
   padding-top: 4px;
   padding-bottom: 4px;
-  padding-right: 12px;
+  padding-right: var(--tt-end);
   border-bottom: 1px solid var(--tp-border);
   background: var(--tp-surface-subtle);
   color: var(--tp-text);
@@ -64,7 +66,12 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  box-sizing: content-box;
   width: 90px;
+  align-self: stretch;
+  margin-block: -4px;
+  padding: 0 8px;
+  background: var(--tt-shade-1);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -78,7 +85,36 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-prog-t { flex: 1; text-align: right; }
 .tt-prog.is-done { color: var(--tp-success); }
 .tt-prog.is-done .tt-prog-bar i { background: var(--tp-success); }
-.tt-prio-col { flex: none; display: inline-flex; justify-content: center; width: 38px; }
+.tt-prio-col { flex: none; box-sizing: content-box; display: inline-flex; align-items: center; justify-content: center; align-self: stretch; width: 38px; margin: -4px 0 -4px -8px; padding: 0 8px; background: var(--tt-shade-2); }
+
+/* Header above the two columns: names them, and shows they are one block (Avancement lighter, Priorité darker). */
+.tt-colhead {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--tt-end) 0 12px;
+  border-bottom: 1px solid var(--tp-border);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  color: var(--tp-text-muted);
+}
+.tt-colhead > span { box-sizing: content-box; padding: 0 8px; }
+.tt-colhead-prog { width: 90px; background: var(--tt-shade-1); }
+.tt-colhead-prio { width: 38px; background: var(--tt-shade-2); }
+
+/* Subtask lines have no columns: the same two shades run behind them so the block stays continuous. */
+.tt-sub { position: relative; }
+.tt-sub::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: var(--tt-end);
+  width: 160px;
+  background: linear-gradient(to right, var(--tt-shade-1) 106px, var(--tt-shade-2) 106px);
+  pointer-events: none;
+}
 .db-triage-list .db-prio { min-width: 34px; padding: 2px 6px; font-size: 12px; }
 .tt-project .tt-count { padding: 0; width: 20px; }
 

@@ -381,8 +381,17 @@
     return row;
   }
 
+  /** Names the two right-hand columns; same widths as the cells under it. */
+  function colHead() {
+    var head = el('div', 'tt-colhead', { 'aria-hidden': 'true' });
+    head.appendChild(el('span', 'tt-colhead-prog', { text: 'Avancement' }));
+    head.appendChild(el('span', 'tt-colhead-prio', { text: 'Priorité' }));
+    return head;
+  }
+
   function render(built, ctx) {
     var frag = document.createDocumentFragment();
+    frag.appendChild(colHead());
     built.nodes.forEach(function (n) {
       if (n.kind === 'project') frag.appendChild(projectEl(n, ctx));
       else if (n.kind === 'task') frag.appendChild(decorateTask(ctx.taskEl(n.row), n, ctx));
@@ -423,6 +432,7 @@
 
   global.TriageTree = {
     progressEl: progressEl,
+    colHead: colHead,
     build: build,
     render: render,
     carryOver: carryOver,
