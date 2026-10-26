@@ -238,6 +238,8 @@ async function applyFormatting(env, columns, lists, meta, themeName) {
     const at = (key) => columns.indexOf(key) + 1; // 0-based sheet column index
     const range = (key) => ({ sheetId, startRowIndex: 1, endRowIndex: 5000, startColumnIndex: at(key), endColumnIndex: at(key) + 1 });
     req.push(...baseFmt(sheetId), freeze(sheetId), headerFmt(sheetId, pal.headers.tasks));
+    // Validation is rebuilt from scratch too: after a column move or insert, the old Statut list would stay on another column (e.g. Objet).
+    req.push({ setDataValidation: { range: { sheetId, startRowIndex: 1, endRowIndex: 5000, startColumnIndex: 0, endColumnIndex: 26 } } });
     req.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });
     for (const [key, px] of [['name', 420], ['desc', 420], ['category', 220], ['statut', 130]]) if (at(key) > 0) req.push(width(sheetId, at(key), px));
     for (const [key, max] of [['priority', 10], ['progress', 100]]) {
