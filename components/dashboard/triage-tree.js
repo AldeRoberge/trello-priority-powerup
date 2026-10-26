@@ -13,10 +13,14 @@
  *     ctx: { taskEl(row) -> element (the existing Triage row), toggle(key), select(taskId),
  *            selectSub(node), selectedKey,
  *            pickIcon(node, icon), selectProject(projectId), selectedProject, setProgress(node, pct) }
- *   TriageTree.addUnder(key, depth, ctx) / addField(node, ctx)  the "+" under a task, and its title field
+ *   TriageTree.pinAdd(row, info, ctx) / addField(node, ctx)  the left count, and the "+" that replaces it
  *     adding: 't:id' | 's:id:path' | { key, mode: 'task'|'sub' }  'task' inserts a sibling card
  *   TriageTree.carryOver(oldEl, newEl, ctx)  puts the tree decoration of a redrawn task row back
- *   TriageTree.prefs.{treeOn, setTreeOn, collapsed, setCollapsed}  remembered in localStorage
+ *   TriageTree.colHead(ctx) / colsEl(row, ctx)  the right-hand columns (Avancement and Priorité, plus any the user shows)
+ *   TriageTree.normalizeColumns / sortRows / cycleSort / moveColumn / shiftColumn / widthOf / catalog
+ *     ctx.columns, sorts, widths, onSorts(next), onColumns(next), onWidths(next), onWidth(key, w),
+ *     edit(row, key, anchor), priorityEl(row), taskProgress(row), label(row, key)
+ *   TriageTree.prefs.{treeOn, setTreeOn, collapsed, setCollapsed, columns, sorts, widths}  remembered in localStorage
  *
  * `build` is pure (unit tests: test/triage-tree.test.js). Keys: "p:<projectId>", "t:<cardId>", "s:<cardId>:<path>".
  * A sub node also carries id, parentId ('' at the first level) and linkedCardId. Clicking it calls selectSub.
@@ -63,6 +67,7 @@
         done: isDone(it),
         blocked: it.blocked === true && !isDone(it),
         linked: !!it.linkedCardId,
+        count: Array.isArray(it.items) ? it.items.length : 0,
         depth: depth,
         open: open,
         kids: !!kids,
@@ -180,8 +185,189 @@
       });
       if (!open) return;
       g.rows.forEach(function (row) { taskNodes(row, 1, collapsed, nodes, tasks, adding); });
+      if (adding && adding.key === key && adding.mode === 'task') {
+        nodes.push({ kind: 'add', key: 'a:' + key, taskId: '', projectId: g.id, parentId: '', depth: 1, mode: 'task' });
+      }
     });
     return { nodes: nodes, tasks: tasks };
+  }
+
+  /* ── Columns (pure): which ones, in which order, how they sort ─────────────── */
+
+  var COLLAPSED = 36;
+  var MAX_W = 320;
+  // edit: which existing editor a cell opens. Progress is the bar itself. Priority is the badge.
+  var COLUMNS = {
+    progress: { header: 'Avancement', icon: 'chart-donut', width: 106, kind: 'number' },
+    priority: { header: 'Priorité', icon: 'flag', width: 84, kind: 'number', edit: 'priority' },
+    statut: { header: 'Statut', icon: 'progress-check', width: 120, kind: 'text' },
+    urgency: { header: 'Urgence', icon: 'flame', width: 110, kind: 'text', edit: 'priority' },
+    due: { header: 'Échéance', icon: 'calendar-event', width: 112, kind: 'date', edit: 'due' },
+    estimate: { header: 'Durée', icon: 'clock', width: 88, kind: 'number', edit: 'estimate' },
+    tier: { header: 'Palier', icon: 'stack-2', width: 100, kind: 'text', edit: 'priority' },
+    desc: { header: 'Description', icon: 'align-left', width: 180, kind: 'text', edit: 'desc' },
+  };
+  var DEFAULT_COLUMNS = ['progress', 'priority'];
+
+  function normalizeColumns(input) {
+    var list = Array.isArray(input) ? input : [];
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var key = String(list[i] || '');
+      if (COLUMNS[key] && !seen[key]) { seen[key] = true; out.push(key); }
+    }
+    return out.length ? out : DEFAULT_COLUMNS.slice();
+  }
+
+  /** Visible columns first, then the ones that can be added, in catalog order. */
+  function catalog(columns) {
+    var cur = normalizeColumns(columns);
+    return cur.concat(Object.keys(COLUMNS).filter(function (k) { return cur.indexOf(k) === -1; }));
+  }
+
+  function widthOf(widths, key) {
+    var spec = COLUMNS[key];
+    var fallback = spec ? spec.width : 80;
+    var w = widths && widths[key];
+    if (typeof w !== 'number' || !isFinite(w)) return fallback;
+    return Math.max(COLLAPSED, Math.min(MAX_W, Math.round(w)));
+  }
+
+  function resetWidth(widths, key) {
+    var next = Object.assign({}, widths || {});
+    delete next[key];
+    return next;
+  }
+
+  function toggleCollapse(widths, key) {
+    var next = Object.assign({}, widths || {});
+    next[key] = widthOf(next, key) <= COLLAPSED + 2 ? (COLUMNS[key] ? COLUMNS[key].width : 80) : COLLAPSED;
+    return next;
+  }
+
+  function cleanSorts(list) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (s) {
+      if (!s || !COLUMNS[s.key] || (s.dir !== 'asc' && s.dir !== 'desc')) return;
+      if (out.some(function (x) { return x.key === s.key; })) return;
+      out.push({ key: s.key, dir: s.dir });
+    });
+    return out;
+  }
+
+  /** dir null removes the column. add=false replaces the whole sort; add=true keeps the other levels. */
+  function setSort(sorts, key, dir, add) {
+    sorts = cleanSorts(sorts);
+    if (!key || !COLUMNS[key]) return add ? sorts : [];
+    if (!add) return dir ? [{ key: key, dir: dir }] : [];
+    var at = -1;
+    sorts.forEach(function (s, i) { if (s.key === key) at = i; });
+    var rest = sorts.filter(function (s) { return s.key !== key; });
+    if (dir) rest.splice(at === -1 ? rest.length : at, 0, { key: key, dir: dir });
+    return rest;
+  }
+
+  /** Click: asc, then desc, then off. A multi-sort click collapses onto this column. */
+  function cycleSort(sorts, key, add) {
+    sorts = cleanSorts(sorts);
+    var cur = null;
+    sorts.forEach(function (s) { if (s.key === key) cur = s; });
+    var next = !cur ? 'asc' : cur.dir === 'asc' ? 'desc' : null;
+    if (!add && cur && sorts.length > 1) next = 'asc';
+    return setSort(sorts, key, next, !!add);
+  }
+
+  function sortPhrase(key) {
+    if (key === 'urgency') return { asc: 'du moins au plus urgent', desc: 'du plus au moins urgent' };
+    if (key === 'estimate') return { asc: 'de la plus courte à la plus longue', desc: 'de la plus longue à la plus courte' };
+    if (key === 'due') return { asc: 'de la plus proche à la plus lointaine', desc: 'de la plus lointaine à la plus proche' };
+    if (key === 'tier') return { asc: 'du plus au moins critique', desc: 'du moins au plus critique' };
+    if (COLUMNS[key] && COLUMNS[key].kind === 'number') return { asc: 'du plus petit au plus grand', desc: 'du plus grand au plus petit' };
+    return { asc: 'de A à Z', desc: 'de Z à A' };
+  }
+
+  function sortValue(row, key, sctx) {
+    var TM = global.TableModel;
+    if (TM && typeof TM.sortValue === 'function' && TM.COLUMNS && TM.COLUMNS[key]) return TM.sortValue(row, key, sctx);
+    if (!row) return null;
+    if (key === 'estimate') return row.estimate > 0 ? row.estimate : null;
+    if (key === 'due') return row.due || row.start || '';
+    if (key === 'progress') return typeof row.progress === 'number' ? row.progress : null;
+    if (key === 'priority') return typeof row.priority === 'number' ? row.priority : null;
+    var v = row[key];
+    return v == null || v === '' ? null : v;
+  }
+
+  /** Empties stay last in both directions. Order is otherwise kept when values tie. */
+  function sortRows(rows, sorts, ctx) {
+    var levels = cleanSorts(sorts);
+    var list = (rows || []).slice();
+    if (!levels.length) return list;
+    var listRank = {};
+    ((ctx && ctx.lists) || []).forEach(function (l, i) { if (l && l.id) listRank[l.id] = i; });
+    var sctx = { listRank: listRank };
+    return list.sort(function (a, b) {
+      for (var i = 0; i < levels.length; i++) {
+        var av = sortValue(a, levels[i].key, sctx);
+        var bv = sortValue(b, levels[i].key, sctx);
+        var emptyA = av == null || av === '';
+        var emptyB = bv == null || bv === '';
+        if (emptyA && emptyB) continue;
+        if (emptyA) return 1;
+        if (emptyB) return -1;
+        var cmp = typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av).localeCompare(String(bv), 'fr', { sensitivity: 'base', numeric: true });
+        if (cmp) return levels[i].dir === 'desc' ? -cmp : cmp;
+      }
+      return 0;
+    });
+  }
+
+  function moveColumn(columns, fromKey, toKey, before) {
+    var cur = normalizeColumns(columns);
+    if (!COLUMNS[fromKey] || !COLUMNS[toKey] || fromKey === toKey || cur.indexOf(fromKey) < 0) return cur;
+    var next = cur.filter(function (k) { return k !== fromKey; });
+    var at = next.indexOf(toKey);
+    if (at < 0) return cur;
+    next.splice(before ? at : at + 1, 0, fromKey);
+    return next;
+  }
+
+  function shiftColumn(columns, key, delta) {
+    var cur = normalizeColumns(columns);
+    var i = cur.indexOf(key);
+    var j = i + delta;
+    if (i < 0 || j < 0 || j >= cur.length) return cur;
+    var next = cur.slice();
+    next.splice(i, 1);
+    next.splice(j, 0, key);
+    return next;
+  }
+
+  function hideColumn(columns, key) {
+    var cur = normalizeColumns(columns);
+    if (cur.length <= 1) return cur;
+    var next = cur.filter(function (k) { return k !== key; });
+    return next.length ? next : cur;
+  }
+
+  function cellLabel(row, key) {
+    if (!row) return '';
+    if (key === 'progress') return typeof row.progress === 'number' ? row.progress + ' %' : '';
+    if (key === 'priority') {
+      if (typeof row.priority !== 'number') return '';
+      var txt = global.TableModel && global.TableModel.formatPriority ? global.TableModel.formatPriority(row.priority) : String(row.priority);
+      return txt ? 'P' + txt : '';
+    }
+    if (key === 'statut') return row.statut || '';
+    if (key === 'urgency') return row.urgency || '';
+    if (key === 'tier') return row.tier || '';
+    if (key === 'due') return row.dueVague || row.due || row.start || '';
+    if (key === 'estimate') return row.estimate > 0 ? String(row.estimate) : '';
+    if (key === 'desc') return String(row.desc || '').replace(/\s+/g, ' ').trim();
+    return row[key] == null ? '' : String(row[key]);
   }
 
   /* ── DOM ───────────────────────────────────────────────────────── */
@@ -298,7 +484,7 @@
   function prioCol(priority, tierI) {
     var c = el('span', 'tt-prio-col');
     if (typeof priority === 'number') {
-      c.appendChild(el('span', 'db-prio db-prio--' + (tierI == null ? 'n' : Math.min(tierI, 4)), { text: 'P' + String(priority), title: 'Meilleure priorité du projet' }));
+      c.appendChild(el('span', 'db-prio db-prio--' + (tierI == null ? 'n' : Math.min(tierI, 4)), { text: 'P' + (global.TableModel ? global.TableModel.formatPriority(priority) : Number(priority).toFixed(1)), title: 'Meilleure priorité du projet' }));
     }
     return c;
   }
@@ -315,7 +501,7 @@
       'data-iso-label': n.free ? null : (n.name || null),
     });
     indent(row, 0);
-    row.appendChild(el('span', 'tt-count', { text: String(n.count) }));
+    pinAdd(row, { key: n.key, count: n.count, depth: 0, choices: 'project' }, ctx);
     row.appendChild(chevron(n.open, true, function () { ctx.toggle(n.key); }));
     row.appendChild(projectGlyph(n, ctx));
     var name = el('span', 'tt-name', { text: n.name, title: n.name });
@@ -326,11 +512,12 @@
       if (pickable) ctx.selectProject(n.id);
     });
     row.appendChild(name);
-    row.appendChild(progressEl(n.progress, {
-      blocked: !!n.blocked,
-      onSet: function (pct) { if (typeof ctx.setProgress === 'function') ctx.setProgress(n, pct); },
-    }));
-    row.appendChild(prioCol(n.priority, n.tierI));
+    row.appendChild(colsEl({
+      progress: n.progress,
+      priority: n.priority,
+      tierI: n.tierI,
+      blocked: n.blocked,
+    }, ctx, { project: n }));
     // The rest of the line opens the project in the pane (the free group has none: it folds).
     row.addEventListener('click', function () {
       if (pickable) ctx.selectProject(n.id);
@@ -339,7 +526,7 @@
     return row;
   }
 
-  /** What a task row gets in the tree: depth, fold arrow, "2/5" subtasks; remembered in data-* for carryOver. */
+  /** What a task row gets in the tree: depth, fold arrow, left subtask count; remembered in data-* for carryOver. */
   function decorateTask(rowEl, info, ctx) {
     rowEl.classList.add('tt-task');
     rowEl.setAttribute('role', 'treeitem');
@@ -353,35 +540,46 @@
     rowEl.setAttribute('data-sub', info.total ? info.done + '/' + info.total : '');
     indent(rowEl, info.depth);
     rowEl.insertBefore(chevron(info.open, info.kids, function () { ctx.toggle(info.key); }), rowEl.firstChild);
-    var main = rowEl.querySelector('.db-row-main');
-    var count = el('span', 'tt-sub-count' + (info.total && info.done === info.total ? ' is-done' : ''), {
-      text: info.total ? info.done + '/' + info.total : '',
-      title: info.total ? info.done + ' sous-tâche' + (info.done > 1 ? 's' : '') + ' faite' + (info.done > 1 ? 's' : '') + ' sur ' + info.total : null,
-    });
-    if (main && main.nextSibling) rowEl.insertBefore(count, main.nextSibling);
-    else rowEl.appendChild(count);
+    pinAdd(rowEl, {
+      key: info.key,
+      count: info.total,
+      done: info.done,
+      total: info.total,
+      depth: info.depth,
+      choices: 'menu',
+    }, ctx);
     return rowEl;
   }
 
   /**
-   * The "+" under a line, out of the progress and priority columns. On a task it offers a sibling
-   * card or a subtask; on a subtask it adds a nested line. Hidden while that line's field is open.
+   * Left slot shared by every line: the child count, and the "+" that takes its place on hover.
+   * Depth 0 keeps the slot in the row. Deeper lines pin it to the same left edge as the project count.
+   * choices: 'menu' (sibling or subtask), 'project' (a task in the project), 'sub' (a nested line), '' (count only).
    */
-  function underEl(n, ctx, choices) {
-    if (ctx && ctx.addingKey && ctx.addingKey === n.key) return null;
-    var row = el('div', 'tt-under', { 'data-for': n.key });
-    indent(row, n.depth);
-    var label = choices ? 'Ajouter' : 'Nouvelle sous-tâche';
-    var b = el('button', 'tt-add', { type: 'button', 'aria-label': label, title: label });
-    b.appendChild(icon('plus'));
-    b.addEventListener('click', function (e) {
-      e.stopPropagation();
-      e.preventDefault();
-      if (choices && typeof ctx.chooseAdd === 'function') ctx.chooseAdd(n.key, b);
-      else if (typeof ctx.startAdd === 'function') ctx.startAdd(n.key, 'sub');
-    });
-    row.appendChild(b);
-    return row;
+  function pinAdd(row, info, ctx) {
+    if (!row || !info) return null;
+    var adding = ctx && ctx.addingKey === info.key;
+    var slot = el('span', 'tt-side' + (info.depth > 0 ? ' is-fixed' : ''));
+    var n = info.count > 0 ? String(info.count) : '';
+    var doneAll = info.total > 0 && info.done === info.total;
+    var title = info.total ? info.done + ' sur ' + info.total : null;
+    slot.appendChild(el('span', 'tt-count' + (doneAll ? ' is-done' : '') + (n ? '' : ' is-empty'), { text: n, title: title }));
+    if (!adding && info.choices) {
+      var label = info.choices === 'sub' ? 'Nouvelle sous-tâche' : 'Ajouter';
+      var b = el('button', 'tt-add', { type: 'button', 'aria-label': label, title: label });
+      b.appendChild(icon('plus'));
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (info.choices === 'menu' && ctx && typeof ctx.chooseAdd === 'function') ctx.chooseAdd(info.key, b);
+        else if (ctx && typeof ctx.startAdd === 'function') ctx.startAdd(info.key, info.choices === 'project' ? 'task' : 'sub');
+      });
+      // Under the line, on its seam with the next one: the count slot stays put.
+      row.appendChild(b);
+    }
+    if (info.depth > 0) row.appendChild(slot);
+    else row.insertBefore(slot, row.firstChild);
+    return slot;
   }
 
   /** The inline field: Enter adds and stays open for the next one, Escape or leaving closes it. */
@@ -407,7 +605,8 @@
         var text = input.value.replace(/\s+/g, ' ').trim();
         if (!text) { close(); return; }
         input.value = '';
-        if (taskMode) { if (typeof ctx.addTask === 'function') ctx.addTask(n.taskId, text); }
+        if (taskMode && !n.taskId) { if (typeof ctx.addInProject === 'function') ctx.addInProject(n.projectId || '', text); }
+        else if (taskMode) { if (typeof ctx.addTask === 'function') ctx.addTask(n.taskId, text); }
         else if (typeof ctx.addSub === 'function') ctx.addSub(n.taskId, n.parentId, text);
       }
     });
@@ -417,6 +616,7 @@
       setTimeout(function () { if (input.isConnected && !input.value.trim()) close(); }, 150);
     });
     row.appendChild(input);
+    row.appendChild(colsEl(null, ctx, { blank: true }));
     setTimeout(function () { if (input.isConnected) input.focus(); }, 0);
     return row;
   }
@@ -448,40 +648,353 @@
     row.appendChild(chevron(n.open, n.kids, function () { ctx.toggle(n.key); }));
     row.appendChild(icon(n.blocked ? 'player-pause' : n.done ? 'circle-check' : n.linked ? 'link' : 'circle'));
     row.appendChild(el('span', 'tt-name', { text: n.text, title: n.text }));
+    if (n.canAdd || n.count) {
+      pinAdd(row, { key: n.key, count: n.count || 0, depth: n.depth, choices: n.canAdd ? 'sub' : '' }, ctx);
+    }
     // The line itself is the selection: the pane then edits this subtask, not its parent card.
     row.addEventListener('click', function () {
       if (typeof ctx.selectSub === 'function') ctx.selectSub(n);
       else ctx.select(n.taskId);
     });
+    row.appendChild(colsEl(null, ctx, { blank: true }));
     return row;
   }
 
-  /** Names the two right-hand columns; same widths as the cells under it. */
-  function colHead() {
-    var head = el('div', 'tt-colhead', { 'aria-hidden': 'true' });
-    head.appendChild(el('span', 'tt-colhead-prog', { text: 'Avancement' }));
-    head.appendChild(el('span', 'tt-colhead-prio', { text: 'Priorité' }));
+  function sizeEl(node, w) {
+    node.style.width = w + 'px';
+    node.style.flex = '0 0 ' + w + 'px';
+  }
+
+  function paintWidth(key, w) {
+    if (!document || typeof document.querySelectorAll !== 'function') return;
+    var nodes = document.querySelectorAll('[data-col="' + key + '"]');
+    var collapsed = w <= COLLAPSED + 2;
+    for (var i = 0; i < nodes.length; i++) {
+      sizeEl(nodes[i], w);
+      if (nodes[i].classList) nodes[i].classList.toggle('is-collapsed', collapsed);
+    }
+  }
+
+  function labelOf(row, key, ctx) {
+    if (ctx && typeof ctx.label === 'function') return ctx.label(row, key) || '';
+    return cellLabel(row, key);
+  }
+
+  function editButton(key, row, ctx, text) {
+    var empty = !text;
+    var b = el('button', 'tt-cell' + (empty ? ' is-empty' : ''), {
+      type: 'button',
+      title: empty ? 'Cliquer pour ajouter…' : text,
+    });
+    b.textContent = empty ? 'Cliquer pour ajouter…' : text;
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (typeof ctx.edit === 'function') ctx.edit(row, key, b);
+    });
+    return b;
+  }
+
+  function emptyPriority(row, ctx) {
+    var b = el('button', 'tt-cell is-empty', { type: 'button', title: 'Cliquer pour ajouter…', 'aria-label': 'Cliquer pour ajouter…' });
+    b.appendChild(icon('flag'));
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (typeof ctx.edit === 'function') ctx.edit(row, 'priority', b);
+    });
+    return b;
+  }
+
+  /** One property cell. A blank line keeps the slot so the columns stay aligned. */
+  function colCell(key, index, row, ctx, opts) {
+    opts = opts || {};
+    var w = widthOf(ctx && ctx.widths, key);
+    var cell = el('span', 'tt-col' + (index % 2 ? ' is-alt' : '') + (w <= COLLAPSED + 2 ? ' is-collapsed' : ''), { 'data-col': key });
+    sizeEl(cell, w);
+    if (opts.blank || !row) return cell;
+    if (key === 'progress') {
+      var popts = opts.project
+        ? {
+          blocked: !!row.blocked,
+          onSet: function (pct) { if (typeof ctx.setProgress === 'function') ctx.setProgress(opts.project, pct); },
+        }
+        : (typeof ctx.taskProgress === 'function' ? ctx.taskProgress(row) : {});
+      cell.appendChild(progressEl(row.progress, popts || {}));
+      return cell;
+    }
+    if (key === 'priority') {
+      if (opts.project) { cell.appendChild(prioCol(row.priority, row.tierI)); return cell; }
+      var badge = typeof ctx.priorityEl === 'function' ? ctx.priorityEl(row) : null;
+      cell.appendChild(badge || emptyPriority(row, ctx));
+      return cell;
+    }
+    if (opts.project) return cell;
+    var text = labelOf(row, key, ctx);
+    var spec = COLUMNS[key];
+    cell.title = text || (spec && spec.header) || '';
+    if (spec && spec.edit) cell.appendChild(editButton(key, row, ctx, text));
+    else if (text) cell.appendChild(el('span', 'tt-cell', { text: text, title: text }));
+    return cell;
+  }
+
+  function colsEl(row, ctx, opts) {
+    ctx = ctx || {};
+    var keys = normalizeColumns(ctx.columns);
+    var wrap = el('span', 'tt-cols');
+    keys.forEach(function (key, i) { wrap.appendChild(colCell(key, i, row, ctx, opts)); });
+    return wrap;
+  }
+
+  var dragKey = null;
+
+  function headerItems(key, ctx) {
+    var spec = COLUMNS[key];
+    var sorts = cleanSorts(ctx.sorts);
+    var cur = null;
+    sorts.forEach(function (s) { if (s.key === key) cur = s; });
+    var others = sorts.some(function (s) { return s.key !== key; });
+    var phrase = sortPhrase(key);
+    var columns = normalizeColumns(ctx.columns);
+    var idx = columns.indexOf(key);
+    var collapsed = widthOf(ctx.widths, key) <= COLLAPSED + 2;
+    return [
+      { title: spec.header },
+      { icon: 'sort-ascending', label: 'Trier ' + phrase.asc, checked: cur && cur.dir === 'asc' && !others, action: function () { if (ctx.onSorts) ctx.onSorts(setSort(sorts, key, 'asc', false)); } },
+      { icon: 'sort-descending', label: 'Trier ' + phrase.desc, checked: cur && cur.dir === 'desc' && !others, action: function () { if (ctx.onSorts) ctx.onSorts(setSort(sorts, key, 'desc', false)); } },
+      { icon: 'arrows-sort', label: 'Retirer le tri', disabled: !cur, action: function () { if (ctx.onSorts) ctx.onSorts(setSort(sorts, key, null, true)); } },
+      { sep: true },
+      { icon: 'arrow-left', label: 'Déplacer à gauche', disabled: idx <= 0, action: function () { if (ctx.onColumns) ctx.onColumns(shiftColumn(columns, key, -1)); } },
+      { icon: 'arrow-right', label: 'Déplacer à droite', disabled: idx < 0 || idx >= columns.length - 1, action: function () { if (ctx.onColumns) ctx.onColumns(shiftColumn(columns, key, 1)); } },
+      { icon: collapsed ? 'arrows-maximize' : 'arrows-minimize', label: collapsed ? 'Élargir' : 'Réduire', action: function () { if (ctx.onWidths) ctx.onWidths(toggleCollapse(ctx.widths, key)); } },
+      { icon: 'eye-off', label: 'Masquer la colonne', disabled: columns.length <= 1, action: function () { if (ctx.onColumns) ctx.onColumns(hideColumn(columns, key)); } },
+      { icon: 'columns-3', label: 'Colonnes…', action: function () { openColumns(null, ctx); } },
+    ];
+  }
+
+  function bindResize(handle, key, ctx) {
+    handle.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var th = handle.parentNode;
+      if (th) th.draggable = false;
+      var startX = e.clientX;
+      var startW = widthOf(ctx.widths, key);
+      var cur = startW;
+      function move(ev) {
+        cur = Math.max(COLLAPSED, Math.min(MAX_W, Math.round(startW + (startX - ev.clientX))));
+        paintWidth(key, cur);
+      }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', up);
+        if (th) th.draggable = true;
+        if (typeof ctx.onWidth === 'function') ctx.onWidth(key, cur);
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('dblclick', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof ctx.onWidths === 'function') ctx.onWidths(resetWidth(ctx.widths, key));
+    });
+  }
+
+  /** Names the columns and lets them be sorted, moved, resized, hidden. */
+  function colHead(ctx) {
+    ctx = ctx || {};
+    var head = el('div', 'tt-colhead', { role: 'row' });
+    var keys = normalizeColumns(ctx.columns);
+    var sorts = cleanSorts(ctx.sorts);
+    var wrap = el('span', 'tt-cols');
+    keys.forEach(function (key, index) {
+      var spec = COLUMNS[key];
+      var w = widthOf(ctx.widths, key);
+      var cur = null;
+      sorts.forEach(function (s) { if (s.key === key) cur = s; });
+      var th = el('span', 'tt-th' + (index % 2 ? ' is-alt' : '') + (cur ? ' is-sorted' : '') + (w <= COLLAPSED + 2 ? ' is-collapsed' : ''), {
+        'data-col': key,
+        role: 'columnheader',
+        tabindex: '0',
+        draggable: 'true',
+        title: spec.header + ' · cliquer pour trier',
+        'aria-sort': cur ? (cur.dir === 'asc' ? 'ascending' : 'descending') : 'none',
+      });
+      sizeEl(th, w);
+      var grip = el('button', 'tt-th-resize', { type: 'button', 'aria-label': 'Largeur', tabindex: '-1' });
+      bindResize(grip, key, ctx);
+      grip.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
+      th.appendChild(grip);
+      var mark = icon(spec.icon);
+      mark.className += ' tt-th-icon';
+      th.appendChild(mark);
+      th.appendChild(el('span', 'tt-th-text', { text: spec.header }));
+      var slot = el('span', 'tt-th-sort');
+      slot.appendChild(icon(cur ? (cur.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'arrows-sort'));
+      if (cur && sorts.length > 1) slot.appendChild(el('span', 'tt-sort-n', { text: String(sorts.indexOf(cur) + 1) }));
+      th.appendChild(slot);
+      var skipClick = false;
+      th.addEventListener('click', function (e) {
+        if (skipClick) { skipClick = false; return; }
+        if (typeof ctx.onSorts !== 'function') return;
+        ctx.onSorts(cycleSort(ctx.sorts, key, !!(e.shiftKey || e.ctrlKey || e.metaKey)));
+      });
+      th.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        if (typeof ctx.onSorts === 'function') ctx.onSorts(cycleSort(ctx.sorts, key, !!(e.shiftKey || e.ctrlKey || e.metaKey)));
+      });
+      th.addEventListener('dragstart', function (e) {
+        dragKey = key;
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', key); } catch (err) { /* ignore */ }
+        }
+        if (th.classList) th.classList.add('is-col-dragging');
+      });
+      th.addEventListener('dragend', function () {
+        skipClick = true;
+        dragKey = null;
+        if (th.classList) th.classList.remove('is-col-dragging', 'is-col-drop-before', 'is-col-drop-after');
+      });
+      th.addEventListener('dragover', function (e) {
+        if (!dragKey || dragKey === key) return;
+        e.preventDefault();
+        var before = e.offsetX < (th.offsetWidth || w) / 2;
+        if (!th.classList) return;
+        th.classList.toggle('is-col-drop-before', before);
+        th.classList.toggle('is-col-drop-after', !before);
+      });
+      th.addEventListener('dragleave', function () {
+        if (th.classList) th.classList.remove('is-col-drop-before', 'is-col-drop-after');
+      });
+      th.addEventListener('drop', function (e) {
+        if (!dragKey || dragKey === key) return;
+        e.preventDefault();
+        var before = th.classList && th.classList.contains('is-col-drop-before');
+        var from = dragKey;
+        dragKey = null;
+        if (typeof ctx.onColumns === 'function') ctx.onColumns(moveColumn(ctx.columns, from, key, before));
+      });
+      th.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var CM = global.ContextMenu;
+        if (!CM || typeof CM.show !== 'function') return;
+        CM.show({ clientX: e.clientX, clientY: e.clientY }, headerItems(key, ctx));
+      });
+      wrap.appendChild(th);
+    });
+    head.appendChild(wrap);
     return head;
+  }
+
+  var colPop = null;
+  var colPopOff = null;
+
+  function closeColumns() {
+    if (colPop && colPop.parentNode) colPop.parentNode.removeChild(colPop);
+    colPop = null;
+    if (colPopOff) { colPopOff(); colPopOff = null; }
+  }
+
+  function placePop(pop, anchor) {
+    if (!anchor || anchor.isConnected === false || typeof anchor.getBoundingClientRect !== 'function') return;
+    var r = anchor.getBoundingClientRect();
+    var pw = pop.offsetWidth || 240;
+    var ph = pop.offsetHeight || 200;
+    var left = Math.max(8, Math.min(r.right - pw, (global.innerWidth || 800) - pw - 8));
+    var top = r.bottom + 4;
+    if (top + ph > (global.innerHeight || 600) - 8) top = Math.max(8, r.top - ph - 4);
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+  }
+
+  function fillPop(pop, ctx, anchor) {
+    pop.textContent = '';
+    var visible = normalizeColumns(ctx.columns);
+    catalog(ctx.columns).forEach(function (key) {
+      var spec = COLUMNS[key];
+      var on = visible.indexOf(key) !== -1;
+      var idx = visible.indexOf(key);
+      var row = el('div', 'tt-colpop-row');
+      var label = el('label');
+      var box = el('input', '', { type: 'checkbox' });
+      if (on) box.checked = true;
+      box.addEventListener('change', function () {
+        var cur = normalizeColumns(ctx.columns);
+        if (!box.checked && cur.length <= 1) { box.checked = true; return; }
+        var next = box.checked ? cur.concat([key]) : hideColumn(cur, key);
+        ctx.columns = next;
+        if (typeof ctx.onColumns === 'function') ctx.onColumns(next);
+        fillPop(pop, ctx, anchor);
+        placePop(pop, anchor);
+      });
+      label.appendChild(box);
+      label.appendChild(icon(spec.icon));
+      label.appendChild(el('span', '', { text: spec.header }));
+      row.appendChild(label);
+      if (on) {
+        var moves = el('span', 'tt-colpop-move');
+        [-1, 1].forEach(function (dir) {
+          var disabled = dir < 0 ? idx <= 0 : idx >= visible.length - 1;
+          var b = el('button', '', { type: 'button', title: dir < 0 ? 'Déplacer à gauche' : 'Déplacer à droite', disabled: disabled });
+          b.appendChild(icon(dir < 0 ? 'arrow-left' : 'arrow-right'));
+          b.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (disabled) return;
+            var next = shiftColumn(ctx.columns, key, dir);
+            ctx.columns = next;
+            if (typeof ctx.onColumns === 'function') ctx.onColumns(next);
+            fillPop(pop, ctx, anchor);
+            placePop(pop, anchor);
+          });
+          moves.appendChild(b);
+        });
+        row.appendChild(moves);
+      }
+      pop.appendChild(row);
+    });
+  }
+
+  /** The column list, anchored under a button. A second call on the same button closes it. */
+  function openColumns(anchor, ctx) {
+    ctx = ctx || {};
+    if (colPop && anchor && colPop._anchor === anchor) { closeColumns(); return; }
+    closeColumns();
+    if (!document || typeof document.createElement !== 'function') return;
+    var pop = el('div', 'tt-colpop');
+    pop._anchor = anchor;
+    fillPop(pop, ctx, anchor);
+    document.body.appendChild(pop);
+    placePop(pop, anchor);
+    colPop = pop;
+    function onDoc(e) {
+      if (!colPop) return;
+      if (colPop.contains(e.target)) return;
+      if (anchor && (e.target === anchor || (anchor.contains && anchor.contains(e.target)))) return;
+      closeColumns();
+    }
+    function onKey(e) { if (e.key === 'Escape') closeColumns(); }
+    document.addEventListener('pointerdown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    colPopOff = function () {
+      document.removeEventListener('pointerdown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    };
   }
 
   function render(built, ctx) {
     var frag = document.createDocumentFragment();
-    frag.appendChild(colHead());
+    frag.appendChild(colHead(ctx));
     built.nodes.forEach(function (n) {
-      var under;
       if (n.kind === 'project') frag.appendChild(projectEl(n, ctx));
-      else if (n.kind === 'task') {
-        frag.appendChild(decorateTask(ctx.taskEl(n.row), n, ctx));
-        under = underEl(n, ctx, true);
-        if (under) frag.appendChild(under);
-      } else if (n.kind === 'add') frag.appendChild(addEl(n, ctx));
-      else {
-        frag.appendChild(subEl(n, ctx));
-        if (n.canAdd) {
-          under = underEl(n, ctx, false);
-          if (under) frag.appendChild(under);
-        }
-      }
+      else if (n.kind === 'task') frag.appendChild(decorateTask(ctx.taskEl(n.row), n, ctx));
+      else if (n.kind === 'add') frag.appendChild(addEl(n, ctx));
+      else frag.appendChild(subEl(n, ctx));
     });
     return frag;
   }
@@ -490,6 +1003,9 @@
 
   var TREE_KEY = 'tp-triage-tree';
   var FOLD_KEY = 'tp-triage-collapsed';
+  var COLS_KEY = 'tp-triage-columns';
+  var SORT_KEY = 'tp-triage-sort';
+  var WIDTH_KEY = 'tp-triage-widths';
   function read(key) {
     try { return global.localStorage.getItem(key); } catch (e) { return null; }
   }
@@ -513,17 +1029,57 @@
       Object.keys(map || {}).forEach(function (k) { if (map[k]) keep[k] = true; });
       write(FOLD_KEY, JSON.stringify(keep));
     },
+    columns: function () {
+      try { return normalizeColumns(JSON.parse(read(COLS_KEY) || 'null')); } catch (e) { return normalizeColumns(null); }
+    },
+    setColumns: function (list) { write(COLS_KEY, JSON.stringify(normalizeColumns(list))); },
+    sorts: function () {
+      try { return cleanSorts(JSON.parse(read(SORT_KEY) || '[]')); } catch (e) { return []; }
+    },
+    setSorts: function (list) { write(SORT_KEY, JSON.stringify(cleanSorts(list))); },
+    widths: function () {
+      try {
+        var map = JSON.parse(read(WIDTH_KEY) || '{}');
+        var out = {};
+        if (!map || typeof map !== 'object') return out;
+        Object.keys(map).forEach(function (k) {
+          if (COLUMNS[k] && typeof map[k] === 'number' && isFinite(map[k])) out[k] = widthOf(map, k);
+        });
+        return out;
+      } catch (e) { return {}; }
+    },
+    setWidths: function (map) {
+      var clean = {};
+      Object.keys(map || {}).forEach(function (k) {
+        if (COLUMNS[k] && typeof map[k] === 'number' && isFinite(map[k])) clean[k] = widthOf(map, k);
+      });
+      write(WIDTH_KEY, JSON.stringify(clean));
+    },
   };
 
   global.TriageTree = {
     progressEl: progressEl,
     colHead: colHead,
+    colsEl: colsEl,
+    openColumns: openColumns,
     build: build,
     render: render,
-    addUnder: function (key, depth, ctx) { return underEl({ key: key, depth: depth || 0 }, ctx, true); },
+    pinAdd: pinAdd,
     addField: function (n, ctx) { return addEl(n, ctx); },
     carryOver: carryOver,
     prefs: prefs,
+    COLUMNS: COLUMNS,
+    DEFAULT_COLUMNS: DEFAULT_COLUMNS,
+    normalizeColumns: normalizeColumns,
+    catalog: catalog,
+    sortRows: sortRows,
+    cycleSort: cycleSort,
+    setSort: setSort,
+    moveColumn: moveColumn,
+    shiftColumn: shiftColumn,
+    hideColumn: hideColumn,
+    widthOf: widthOf,
+    cellLabel: cellLabel,
     FREE_NAME: FREE_NAME,
     FREE_KEY: FREE_KEY,
   };

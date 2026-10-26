@@ -24,6 +24,7 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-task.db-row,
 .tt-sub,
 .tt-adding {
+  position: relative;
   padding-left: calc(12px + var(--tt-depth, 0) * var(--tt-indent));
 }
 
@@ -46,34 +47,74 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-project > .ti { flex: none; font-size: 15px; color: var(--tp-text-muted); }
 .tt-project .tt-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .tt-project.is-free { font-weight: 500; color: var(--tp-text-muted); }
-.tt-project .tt-count {
+/* Count and "+" share one box on the left. Deeper lines pin it to the same edge as the project count. */
+.tt-side {
   flex: none;
-  min-width: 20px;
-  padding: 0 6px;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  z-index: 2;
+}
+.tt-side.is-fixed {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  margin-top: -9px;
+}
+.tt-side .tt-count {
+  display: block;
+  width: 18px;
+  height: 18px;
+  padding: 0;
   border-radius: 999px;
-  background: var(--tp-surface-active);
+  background: color-mix(in srgb, var(--tp-surface-active) 22%, transparent);
   color: var(--tp-text-muted);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
   text-align: center;
 }
+.tt-side .tt-count.is-empty { background: transparent; }
+.tt-side .tt-count.is-done { color: var(--tp-success); }
 
-/* Progress and priority columns, same width on every line (project, task) so they line up; empty slots stay. */
+/* Property columns, same width on every line (header, project, task, subtask) so they line up. */
+.tt-cols { flex: none; display: inline-flex; align-items: stretch; align-self: stretch; }
+.tt-project > .tt-cols, .tt-task > .tt-cols { margin-block: -4px; }
+.tt-sub > .tt-cols, .tt-adding > .tt-cols { margin-block: -2px; }
+.tt-col, .tt-th {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 0;
+  padding: 0 6px;
+  overflow: hidden;
+  background: var(--tt-shade-1);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-text-subtle);
+}
+.tt-col.is-alt, .tt-th.is-alt { background: var(--tt-shade-2); }
+.tt-col > .tt-prog, .tt-col > .tt-prio-col {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  align-self: center;
+}
 .tt-prog {
-  flex: 0 0 var(--tt-prog-w);
+  flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   box-sizing: border-box;
-  width: var(--tt-prog-w);
-  min-width: var(--tt-prog-w);
-  max-width: var(--tt-prog-w);
-  align-self: stretch;
-  margin-block: -4px;
-  padding: 0 8px;
+  min-width: 0;
   overflow: hidden;
-  background: var(--tt-shade-1);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -93,9 +134,31 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-project .pg-ring.is-blocked { cursor: default; }
 .tt-prog:not(.is-live) .pg-ring.is-blocked:hover,
 .tt-project .pg-ring.is-blocked:hover { background: transparent; }
-.tt-prio-col { flex: 0 0 var(--tt-prio-w); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; align-self: stretch; width: var(--tt-prio-w); min-width: var(--tt-prio-w); max-width: var(--tt-prio-w); margin: -4px 0 -4px -8px; padding: 0 8px; overflow: hidden; background: var(--tt-shade-2); }
+.tt-prio-col { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 0; max-width: 100%; overflow: hidden; }
+.tt-cell {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+span.tt-cell { cursor: default; }
+.tt-cell.is-empty { opacity: 0.55; color: var(--tp-text-muted); font-weight: 500; }
+button.tt-cell.is-empty:hover { opacity: 0.9; }
+.tt-col.is-collapsed .tt-prog-bar,
+.tt-col.is-collapsed .tt-prog-t,
+.tt-col.is-collapsed .tt-cell { display: none; }
 
-/* Header above the two columns: names them, and shows they are one block (Avancement lighter, Priorité darker). */
+/* Header: same widths as the cells. Click sorts, drag moves, the left edge resizes. */
 .tt-colhead {
   display: flex;
   justify-content: flex-end;
@@ -106,38 +169,65 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
   line-height: 22px;
   text-align: center;
   color: var(--tp-text-muted);
+  user-select: none;
 }
-.tt-colhead > span { box-sizing: border-box; padding: 0 8px; flex: none; }
-.tt-colhead-prog { width: var(--tt-prog-w); min-width: var(--tt-prog-w); background: var(--tt-shade-1); }
-.tt-colhead-prio { width: var(--tt-prio-w); min-width: var(--tt-prio-w); background: var(--tt-shade-2); }
-.tt-project > .tt-prio-col { margin-left: -6px; }
-
-/* Subtask lines have no columns: the same two shades run behind them so the block stays continuous. */
-.tt-sub { position: relative; }
-.tt-sub::before {
-  content: '';
+.tt-th { position: relative; gap: 4px; padding: 0 4px 0 8px; cursor: pointer; }
+.tt-th.is-sorted { color: var(--tp-text); }
+.tt-th.is-col-dragging { opacity: 0.45; }
+.tt-th.is-col-drop-before { box-shadow: inset 2px 0 0 var(--tp-primary); }
+.tt-th.is-col-drop-after { box-shadow: inset -2px 0 0 var(--tp-primary); }
+.tt-th-text { min-width: 0; overflow: hidden; white-space: nowrap; }
+.tt-th-icon { display: none; font-size: 14px; }
+.tt-th.is-collapsed .tt-th-icon { display: block; }
+.tt-th.is-collapsed .tt-th-text,
+.tt-th.is-collapsed .tt-th-sort { display: none; }
+.tt-th-sort { position: relative; flex: none; display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center; opacity: 0.4; }
+.tt-th.is-sorted .tt-th-sort { opacity: 1; }
+.tt-th-sort .ti { font-size: 14px; }
+.tt-sort-n { position: absolute; right: -4px; top: -5px; font-size: 8px; line-height: 1; }
+.tt-th-resize {
   position: absolute;
+  left: 0;
   top: 0;
   bottom: 0;
-  right: var(--tt-end);
-  width: calc(var(--tt-prog-w) + var(--tt-prio-w));
-  background: linear-gradient(to right, var(--tt-shade-1) var(--tt-prog-w), var(--tt-shade-2) var(--tt-prog-w));
-  pointer-events: none;
+  width: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
 }
-.db-triage-list .db-prio { box-sizing: border-box; min-width: 0; max-width: 100%; padding: 2px 6px; font-size: 12px; }
-.tt-project .tt-count { padding: 0; width: 20px; }
+.tt-sub { position: relative; }
 
-/* Task rows keep the Triage look; the "2/5" column is always there so the score never moves. */
-.tt-task .tt-chev { margin-right: -2px; }
-.tt-sub-count {
-  flex: none;
-  min-width: 30px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: var(--tp-text-muted);
+.tt-colpop {
+  position: fixed;
+  z-index: 40;
+  min-width: 220px;
+  max-height: min(360px, calc(100vh - 16px));
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  background: var(--tp-surface, var(--tp-bg));
+  color: var(--tp-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
-.tt-sub-count.is-done { color: var(--tp-success); }
+.tt-colpop-row { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 4px; }
+.tt-colpop-row label { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 500; }
+.tt-colpop-move { display: inline-flex; flex: none; }
+.tt-colpop-move button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+}
+.tt-colpop-move button:hover { background: var(--tp-surface-active); color: var(--tp-text); }
+.tt-colpop-move button:disabled { opacity: 0.35; cursor: default; }
+.db-triage-list .db-prio { box-sizing: border-box; min-width: 0; max-width: 100%; padding: 2px 6px; font-size: 12px; }
+.tt-task .tt-chev { margin-right: -2px; }
 
 .tt-sub {
   display: flex;
@@ -160,30 +250,31 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-sub.is-sel { box-shadow: inset 2px 0 0 var(--tp-primary); }
 .tt-sub.is-sel .tt-name { color: var(--tp-text); }
 
-/* "+" under the line, out of the columns. The glyph shows when the line or the button is hovered. */
-.tt-under { position: relative; height: 0; z-index: 2; }
+/* The "+" sits under its line, on the seam with the next one, in line with the title. Hover only changes opacity. */
 .tt-add {
   position: absolute;
-  left: calc(12px + var(--tt-depth, 0) * var(--tt-indent) + 26px);
-  top: -11px;
+  left: calc(12px + var(--tt-depth, 0) * var(--tt-indent) + 24px);
+  bottom: -9px;
+  z-index: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: var(--tp-bg);
+  border: 1px solid var(--tp-border);
+  border-radius: 999px;
+  background: var(--tp-surface, var(--tp-bg));
   color: var(--tp-text-muted);
-  font-size: 14px;
+  font-size: 12px;
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
 }
-.tt-task:hover + .tt-under .tt-add,
-.tt-sub:hover + .tt-under .tt-add,
-.tt-add:hover,
-.tt-add:focus-visible { opacity: 1; }
+.tt-project:hover > .tt-add,
+.tt-task:hover > .tt-add,
+.tt-sub:hover > .tt-add,
+.tt-add:focus-visible { opacity: 1; pointer-events: auto; }
 button.tt-add:hover { background: var(--tp-surface-active); color: var(--tp-text); }
 .tt-adding {
   display: flex;

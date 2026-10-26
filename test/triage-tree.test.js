@@ -262,7 +262,7 @@ test('a sibling task is inserted after the task block, at the task depth', () =>
   assert.equal(add.mode, 'task');
 });
 
-test('the + is under the task, not inside the row', () => {
+test('the + sits under its line, outside the left count', () => {
   function Node() {
     this.className = '';
     this.textContent = '';
@@ -310,8 +310,34 @@ test('the + is under the task, not inside the row', () => {
     select() {},
     chooseAdd(key) { chosen.push(key); },
   });
-  eq(frag.children.map((c) => c.className), ['tt-colhead', 'tt-task', 'tt-under', 'db-row tt-sub', 'tt-under']);
-  assert.equal(frag.children[1].children.some((c) => c.className === 'tt-add'), false);
-  frag.children[2].children.find((c) => c.className === 'tt-add').dispatch('click');
+  eq(frag.children.map((c) => c.className), ['tt-colhead', 'tt-task', 'db-row tt-sub']);
+  const slot = frag.children[1].children.find((c) => c.className === 'tt-side');
+  assert.equal(slot.children.find((c) => c.className.indexOf('tt-count') === 0).textContent, '1');
+  assert.equal(slot.children.some((c) => c.className === 'tt-add'), false);
+  frag.children[1].children.find((c) => c.className === 'tt-add').dispatch('click');
   eq(chosen, ['t:x']);
+  assert.equal(frag.children[2].children.some((c) => c.className === 'tt-side is-fixed'), true);
+});
+
+test('columns default to progress and priority, and a sort orders tasks with empties last', () => {
+  eq(TT.normalizeColumns(null), ['progress', 'priority']);
+  eq(TT.normalizeColumns(['nope', 'due', 'due', 'priority']), ['due', 'priority']);
+  eq(TT.catalog(['due']), ['due', 'progress', 'priority', 'statut', 'urgency', 'estimate', 'tier', 'desc']);
+  eq(TT.cycleSort([], 'priority', false), [{ key: 'priority', dir: 'asc' }]);
+  eq(TT.cycleSort([{ key: 'priority', dir: 'asc' }], 'priority', false), [{ key: 'priority', dir: 'desc' }]);
+  eq(TT.cycleSort([{ key: 'priority', dir: 'desc' }], 'priority', false), []);
+  const rows = [
+    { id: 'a', priority: 2, progress: 10 },
+    { id: 'b', priority: null, progress: 90 },
+    { id: 'c', priority: 8, progress: 0 },
+  ];
+  eq(TT.sortRows(rows, [{ key: 'priority', dir: 'desc' }]).map((r) => r.id), ['c', 'a', 'b']);
+  eq(TT.sortRows(rows, [{ key: 'progress', dir: 'asc' }]).map((r) => r.id), ['c', 'a', 'b']);
+  eq(TT.moveColumn(['progress', 'priority', 'due'], 'due', 'progress', true), ['due', 'progress', 'priority']);
+  eq(TT.shiftColumn(['progress', 'priority'], 'priority', -1), ['priority', 'progress']);
+  eq(TT.hideColumn(['progress', 'priority'], 'priority'), ['progress']);
+  eq(TT.hideColumn(['progress'], 'progress'), ['progress']);
+  assert.equal(TT.widthOf({}, 'progress'), 106);
+  assert.equal(TT.widthOf({ progress: 10 }, 'progress'), 36);
+  assert.equal(TT.widthOf({ progress: 999 }, 'progress'), 320);
 });

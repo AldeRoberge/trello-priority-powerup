@@ -4,9 +4,24 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-10-26
-- Assistant : chaque ouverture commence une nouvelle conversation. Les conversations précédentes sont à gauche, et on peut en archiver, en restaurer ou en créer une nouvelle.
+
+- Google Sheets : la liste de validation du Statut ne reste plus sur la colonne Objet après un changement de colonnes.
+- Triage : le + passe sous la tâche et propose une tâche ou une sous-tâche; le nombre à gauche ne bouge plus.
+- Documents : le dossier racine « Projets » range tous les documents de projet, avec leurs tâches dessous.
 
 ## 2026-10-22
+- Documents : le + est à la fin de Personnes, Mots-clés, Étiquettes et Documents. Un champ trop long se coupe, et « … » affiche la suite.
+- Triage : les colonnes (avancement, priorité, et d'autres) se trient, se déplacent, se masquent, se réduisent et s'élargissent. On peut y changer la priorité, l'échéance, la durée et la description.
+- Documents : ouvrir le dossier Projets ne crée plus de copies. Les copies vides déjà créées sont retirées.
+- Assistant : un Pomodoro de 15 min, avec un son et la notification « Start 15 min timer ». 25 min et 5 min sont aussi là.
+- Tableau : dans le clic droit, Modifier et Trier sont des sous-menus.
+- Documents : archiver un dossier se choisit sur deux images, le contenu qui reste ou tout qui part avec lui.
+- Assistant : la respiration montre un graphique qui monte, reste, descend, reste, au lieu de la barre.
+- Triage : le + est à gauche, à la place du nombre au survol. Les tâches affichent le nombre de sous-tâches comme les projets.
+- Clic droit : le menu de l'application s'ouvre, même là où le menu du navigateur sortait.
+- Triage : le fond du nombre de tâches d’un projet est beaucoup plus discret.
+- Assistant en bas : la respiration montre le cercle et les choix, pas seulement le texte.
+- Priorité : un score entier s’écrit P5.0, pour s’aligner sur P6.5.
 
 - Assistant en bas : « je veux méditer » ouvre la respiration tout de suite, au-dessus du message.
 - Assistant : respiration et étirements (petit personnage, au choix), un rappel plus tard, et une icône des rappels à côté du débogage.
