@@ -127,33 +127,70 @@
 
   var ROOT_NAME = 'Projets';
 
+  /** A folder page with no text of its own. Copies created by mistake are safe to drop. */
+  function emptyPage(d) {
+    return !!(d && !d.subject && !(d.size > 0) && !String(d.body || '').trim());
+  }
+
   /**
-   * Files project documents in the root folder "Projets" (mutates idx). The folder is created when missing;
-   * then every project document without a folder or parent is filed in it. When the folder already exists
-   * only `newIds` are filed, so a project the user moved elsewhere stays where they put it.
-   * Task documents follow their project through their parent link.
+   * Files project documents in the root folder "Projets" (mutates idx). The folder is created when missing.
+   * A folder that already has its own document still counts: opening it must not create another Projets.
+   * Extra root folders with the same name are folded into the first. Their empty pages are listed on
+   * `idx.spareFolderDocs` (not saved) so the caller can delete those cards.
+   * When the folder already exists only `newIds` are filed, so a project the user moved elsewhere stays
+   * where they put it. Task documents follow their project through their parent link.
    * @returns {boolean} whether idx changed
    */
   function fileProjects(idx, docs, newIds) {
     var DM = global.DocsModel;
     if (!idx || !DM) return false;
+    idx.folders = idx.folders || [];
     idx.docs = idx.docs || {};
+    idx.parents = idx.parents || {};
+    delete idx.spareFolderDocs;
     var projects = (docs || []).filter(function (d) { return d && d.id && d.subject && d.subject.k === 'project'; });
-    if (!projects.length) return false;
-    var folder = idx.folders.filter(function (f) { return !f.parent && !f.doc && f.name === ROOT_NAME; })[0];
-    var fresh = Object.create(null);
-    (newIds || []).forEach(function (id) { fresh[id] = true; });
+    var roots = idx.folders.filter(function (f) { return f && !f.parent && f.name === ROOT_NAME; });
+    if (!projects.length && roots.length < 2) return false;
+    var byId = Object.create(null);
+    (docs || []).forEach(function (d) { if (d && d.id) byId[d.id] = d; });
     var changed = false;
+    var existed = roots.length > 0;
+    var folder = roots[0];
+    var spare = [];
     if (!folder) {
       folder = { id: DM.newFolderId(), name: ROOT_NAME, parent: null };
       idx.folders.push(folder);
       changed = true;
-    } else {
+    } else if (roots.length > 1) {
+      var drop = Object.create(null);
+      roots.slice(1).forEach(function (extra) { drop[extra.id] = true; });
+      Object.keys(idx.docs).forEach(function (docId) {
+        if (drop[idx.docs[docId]]) idx.docs[docId] = folder.id;
+      });
+      idx.folders.forEach(function (f) {
+        if (f.parent && drop[f.parent]) f.parent = folder.id;
+      });
+      roots.slice(1).forEach(function (extra) {
+        if (!extra.doc || extra.doc === folder.doc) return;
+        if (emptyPage(byId[extra.doc])) spare.push(extra.doc);
+        else if (byId[extra.doc] && !idx.docs[extra.doc] && !idx.parents[extra.doc]) idx.docs[extra.doc] = folder.id;
+      });
+      spare.forEach(function (id) {
+        delete idx.docs[id];
+        delete idx.parents[id];
+      });
+      idx.folders = idx.folders.filter(function (f) { return !drop[f.id]; });
+      changed = true;
+    }
+    if (spare.length) idx.spareFolderDocs = spare;
+    if (existed) {
+      var fresh = Object.create(null);
+      (newIds || []).forEach(function (id) { fresh[id] = true; });
       projects = projects.filter(function (d) { return fresh[d.id]; });
     }
-    var parents = idx.parents || {};
     projects.forEach(function (d) {
-      if (idx.docs[d.id] || parents[d.id]) return;
+      if (d.id === folder.doc) return;
+      if (idx.docs[d.id] || idx.parents[d.id]) return;
       idx.docs[d.id] = folder.id;
       changed = true;
     });

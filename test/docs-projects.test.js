@@ -86,6 +86,45 @@ describe('project documents', () => {
     assert.equal(unnamed.createProjects.length, 1);
   });
 
+  it('reuses the Projets folder after that folder has its own document', () => {
+    const idx = DM.emptyIndex();
+    idx.folders = [{ id: 'f1', name: 'Projets', parent: null, doc: 'page1' }];
+    idx.docs = { p1: 'f1' };
+    const docs = [
+      { id: 'page1', title: 'Projets', size: 0, body: '' },
+      { id: 'p1', title: 'Refonte', subject: { k: 'project', id: 'g:pro1' }, size: 0, body: '' },
+    ];
+    assert.equal(DP.fileProjects(idx, docs, []), false);
+    assert.equal(idx.folders.length, 1);
+    assert.equal(idx.folders[0].id, 'f1');
+  });
+
+  it('folds extra Projets folders into the first and lists the empty copies', () => {
+    const idx = DM.emptyIndex();
+    idx.folders = [
+      { id: 'f1', name: 'Projets', parent: null, doc: 'page1' },
+      { id: 'f2', name: 'Projets', parent: null, doc: 'page2' },
+      { id: 'f3', name: 'Projets', parent: null, doc: 'page3' },
+      { id: 'nested', name: 'Projets', parent: 'f1', doc: 'page4' },
+    ];
+    idx.docs = { p1: 'f2' };
+    const docs = [
+      { id: 'page1', title: 'Projets', size: 0, body: '' },
+      { id: 'page2', title: 'Projets', size: 0, body: '' },
+      { id: 'page3', title: 'Projets', size: 4, body: 'note' },
+      { id: 'page4', title: 'Projets', size: 0, body: '' },
+      { id: 'p1', title: 'Refonte', subject: { k: 'project', id: 'g:pro1' }, size: 0, body: '' },
+    ];
+    assert.equal(DP.fileProjects(idx, docs, []), true);
+    assert.deepEqual(idx.folders.map((f) => f.id), ['f1', 'nested']);
+    assert.equal(idx.docs.p1, 'f1');
+    assert.equal(idx.docs.page3, 'f1');
+    assert.equal(idx.docs.page2, undefined);
+    assert.deepEqual(idx.spareFolderDocs, ['page2']);
+    assert.equal(DP.fileProjects(idx, docs, []), false);
+    assert.equal(idx.folders.length, 2);
+  });
+
   describe('DocsTrello.ensureProjectDocs', () => {
     let fake;
 
@@ -110,6 +149,22 @@ describe('project documents', () => {
       const again = await DT.ensureProjectDocs(fake.t, docs);
       assert.equal(again.created.length, 0);
       assert.equal((await DT.listDocs(fake.t)).length, docs.length);
+    });
+
+    it('does not create another Projets folder when the folder is already a document', async () => {
+      await GG.load(fake.t);
+      await GG.save(fake.t, goals);
+      await DT.ensureProjectDocs(fake.t, await DT.listDocs(fake.t));
+      const linked = await DT.ensureFolderDocs(fake.t, await DT.listDocs(fake.t));
+      assert.equal(linked.idx.folders.filter((f) => f.name === 'Projets').length, 1);
+      assert.ok(linked.idx.folders.find((f) => f.name === 'Projets').doc);
+      const before = (await DT.listDocs(fake.t)).length;
+      await DT.ensureProjectDocs(fake.t, linked.docs);
+      await DT.ensureFolderDocs(fake.t, await DT.listDocs(fake.t));
+      await DT.ensureProjectDocs(fake.t, await DT.listDocs(fake.t));
+      const idx = DT.getFolderIndex();
+      assert.equal(idx.folders.filter((f) => f.name === 'Projets').length, 1);
+      assert.equal((await DT.listDocs(fake.t)).length, before);
     });
   });
 });

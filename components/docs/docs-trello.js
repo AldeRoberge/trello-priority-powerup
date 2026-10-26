@@ -790,9 +790,22 @@
     }
     var newProjectIds = created.filter(function (d) { return d.subject && d.subject.k === 'project'; }).map(function (d) { return d.id; });
     var probe = DM().parseFolderIndex(DM().packFolderIndex(getFolderIndex()));
+    var spare = [];
     if (DP.fileProjects(probe, docs, newProjectIds)) {
-      await updateFolderIndex(t, function (idx) { DP.fileProjects(idx, docs, newProjectIds); });
+      await updateFolderIndex(t, function (idx) {
+        DP.fileProjects(idx, docs, newProjectIds);
+        spare = (idx.spareFolderDocs || []).slice();
+        delete idx.spareFolderDocs;
+      });
     }
+    var gone = Object.create(null);
+    for (var s = 0; s < spare.length; s++) {
+      try {
+        await deleteDoc(t, spare[s]);
+        gone[spare[s]] = true;
+      } catch (e) { /* the copy stays until the next pass */ }
+    }
+    if (spare.length) docs = docs.filter(function (d) { return d && !gone[d.id]; });
     return { docs: docs, created: created };
   }
 
