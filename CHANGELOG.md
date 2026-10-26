@@ -3,6 +3,9 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-10-26
+- Assistant : chaque ouverture commence une nouvelle conversation. Les conversations précédentes sont à gauche, et on peut en archiver, en restaurer ou en créer une nouvelle.
+
 ## 2026-10-22
 
 - Assistant en bas : « je veux méditer » ouvre la respiration tout de suite, au-dessus du message.
