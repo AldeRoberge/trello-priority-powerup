@@ -541,7 +541,7 @@
         }));
       }
       if (typeof row.priority === 'number') {
-        badges.push(chip('kb-chip--prio', 'flag', String(row.priority), 'Priorité' + (row.tier ? ' · ' + row.tier : ''), function (e) {
+        badges.push(chip('kb-chip--prio', 'flag', TM().formatPriority(row.priority), 'Priorité' + (row.tier ? ' · ' + row.tier : ''), function (e) {
           e.stopPropagation();
           openEditor(row, 'priority', e.currentTarget);
         }));
@@ -951,7 +951,7 @@
         class: 'kb-proj-pri' + (has ? '' : ' is-empty'),
         type: 'button',
         title: 'Priorité',
-        text: has && global.TableModel ? global.TableModel.formatPriority(project.priority) : (has ? String(project.priority) : '-'),
+        text: has && global.TableModel ? global.TableModel.formatPriority(project.priority) : (has ? Number(project.priority).toFixed(1) : '-'),
       });
       btn.addEventListener('mousedown', function (e) { e.stopPropagation(); });
       btn.addEventListener('click', function (e) {

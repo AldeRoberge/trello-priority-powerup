@@ -2241,7 +2241,7 @@
         var pri = el('button', 'gantt-section-pri' + (hasPri ? '' : ' is-empty'), {
           type: 'button',
           title: 'Priorité',
-          text: hasPri && global.TableModel ? global.TableModel.formatPriority(row.priority) : (hasPri ? String(row.priority) : '-'),
+          text: hasPri && global.TableModel ? global.TableModel.formatPriority(row.priority) : (hasPri ? Number(row.priority).toFixed(1) : '-'),
         });
         pri.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
         pri.addEventListener('click', function (e) {

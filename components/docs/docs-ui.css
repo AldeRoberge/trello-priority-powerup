@@ -932,9 +932,13 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 }
 .dc-chip.is-dim { opacity: 0.55; }
 .dc-chip.is-quiet {
+  max-width: 100%;
   padding: 2px 8px;
+  overflow: hidden;
   font-size: 13px;
   color: var(--tp-text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .dc-chip-main,
 .dc-chip-x {
@@ -957,8 +961,49 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   opacity: 0.55;
 }
 .dc-chip-x:hover { opacity: 1; }
+.dc-prop-bits > .is-clip-hide { display: none; }
+.dc-prop-bits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+.dc-prop-bits > .dc-prop-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dc-prop-value.is-open .dc-chip-main,
+.dc-prop-value.is-open .dc-subdoc span,
+.dc-prop-value.is-open .dc-chip.is-quiet,
+.dc-prop-value.is-open .dc-prop-bits > .dc-prop-text {
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: unset;
+}
+.dc-prop-more {
+  flex: 0 0 auto;
+  align-self: center;
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  margin: 0;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.dc-prop-more:hover { opacity: 1; color: var(--tp-text); }
 .dc-prop-add {
-  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -973,6 +1018,7 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
   max-width: 100%;
   padding: 2px 8px 2px 4px;
   border: 0;
@@ -982,6 +1028,12 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+}
+.dc-subdoc span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .dc-subdoc:hover { background: var(--tp-surface-hover); }
 .dc-picker-search {
@@ -1972,3 +2024,144 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
 }
 .dc-pin-pick { width: 260px; }
 .dc-pin-pick .dc-input { width: 100%; margin-bottom: 4px; }
+
+/* Archive a folder: two pictures, no explanation. */
+.dc-dialog--arch {
+  width: 460px;
+  padding: 16px 16px 12px;
+}
+.dc-dialog--arch .dc-dialog-title {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+.dc-arch-picks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.dc-arch-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--tp-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+.dc-arch-pick:hover {
+  background: var(--tp-surface-hover);
+}
+.dc-arch-pick:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+}
+.dc-arch-label {
+  display: block;
+}
+.dc-arch-scene {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 128px;
+  border-radius: 8px;
+  background: var(--tp-surface-subtle);
+}
+.dc-arch-pack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.dc-arch-pages {
+  display: flex;
+  gap: 10px;
+}
+.dc-arch-glyph {
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+}
+.dc-arch-glyph--folder {
+  width: 56px;
+  height: 38px;
+  margin-top: 8px;
+  background: #f5cd47;
+  border-radius: 3px 4px 4px 4px;
+}
+.dc-arch-glyph--folder::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 24px;
+  height: 10px;
+  background: #e6b800;
+  border-radius: 3px 3px 0 0;
+}
+.dc-arch-glyph--doc {
+  width: 30px;
+  height: 38px;
+  border-radius: 3px;
+  background-color: #fff;
+  background-image:
+    linear-gradient(135deg, transparent 50%, #dfe1e6 50%),
+    linear-gradient(#b6c2cf, #b6c2cf),
+    linear-gradient(#b6c2cf, #b6c2cf),
+    linear-gradient(#b6c2cf, #b6c2cf);
+  background-size: 11px 11px, 16px 2px, 16px 2px, 11px 2px;
+  background-position: top right, 5px 14px, 5px 20px, 5px 26px;
+  background-repeat: no-repeat;
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.12), inset 0 0 0 1px rgba(9, 30, 66, 0.16);
+}
+.dc-arch-glyph--folder.is-gone {
+  background: #8c9bab;
+}
+.dc-arch-glyph--folder.is-gone::before {
+  background: #7d8b99;
+}
+.dc-arch-glyph--doc.is-gone {
+  opacity: 1;
+  background-color: #9fadbc;
+  background-image:
+    linear-gradient(135deg, transparent 50%, #8c9bab 50%),
+    linear-gradient(#7d8b99, #7d8b99),
+    linear-gradient(#7d8b99, #7d8b99),
+    linear-gradient(#7d8b99, #7d8b99);
+  background-size: 11px 11px, 16px 2px, 16px 2px, 11px 2px;
+  background-position: top right, 5px 14px, 5px 20px, 5px 26px;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(9, 30, 66, 0.12);
+}
+.dc-arch-cancel {
+  display: block;
+  margin: 10px auto 0;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--tp-text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.dc-arch-cancel:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+.dc-arch-cancel:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--tp-primary);
+}

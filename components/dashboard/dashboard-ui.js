@@ -313,6 +313,9 @@
       docOpen: false, // the Document pane (paste text and images, get tasks) replaces the card pane of the Triage
       triageTree: !global.TriageTree || global.TriageTree.prefs.treeOn(), // projects > tasks > subtasks, or the flat list
       triageFold: global.TriageTree ? global.TriageTree.prefs.collapsed() : {}, // folded lines of the tree (keys of TriageTree)
+      triageCols: global.TriageTree && global.TriageTree.prefs.columns ? global.TriageTree.prefs.columns() : ['progress', 'priority'],
+      triageSorts: global.TriageTree && global.TriageTree.prefs.sorts ? global.TriageTree.prefs.sorts() : [],
+      triageWidths: global.TriageTree && global.TriageTree.prefs.widths ? global.TriageTree.prefs.widths() : {},
       subSel: null, // { taskId, itemId, parentId, key } when a subtask, not its card, is open in the pane
     };
     var docUI = null; // built on first use, kept so the draft survives opening a card
@@ -506,7 +509,7 @@
             onClose: function (changed) { if (changed) reload({ quiet: true }); },
           });
         },
-      }, has ? [document.createTextNode('P' + String(row.priority))] : [icon('flag'), document.createTextNode('Prioriser…')]);
+      }, has ? [document.createTextNode('P' + (global.TableModel ? global.TableModel.formatPriority(row.priority) : Number(row.priority).toFixed(1)))] : [icon('flag'), document.createTextNode('Prioriser…')]);
       return badge;
     }
 
@@ -1205,23 +1208,9 @@
       render();
     }
 
-    /** A new card just after this one, in the same list and the same project. The field stays open for the next. */
-    function addSiblingTask(taskId, text) {
-      var clean = String(text || '').replace(/\s+/g, ' ').trim();
-      if (!clean) return;
-      var row = (state.rows || []).filter(function (r) { return r.id === taskId; })[0];
+    function placeTriageCard(clean, list, pos, projectId, fallbackPos) {
       var TT = global.TableTrello;
-      if (!row || !TT || typeof TT.createRow !== 'function') return setStatus('Tâche non ajoutée', 'error');
-      var list = (state.lists || []).filter(function (l) { return l.id === row.listId; })[0];
-      if (!list && DT()) list = DT().listFor(state.lists, ['triage']);
-      if (!list) return setStatus('Ce tableau n’a pas de liste de triage.', 'error');
-      var siblings = (state.rows || []).filter(function (r) { return r.listId === list.id; }).slice().sort(function (a, b) {
-        return (a.pos || 0) - (b.pos || 0);
-      });
-      var index = siblings.length;
-      for (var i = 0; i < siblings.length; i++) if (siblings[i].id === row.id) { index = i + 1; break; }
-      var pos = global.TableModel && global.TableModel.dropPos ? global.TableModel.dropPos(siblings, index) : 'bottom';
-      var project = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
+      if (!TT || typeof TT.createRow !== 'function') return setStatus('Tâche non ajoutée', 'error');
       TT.createRow(t, clean, list.id, pos).then(function (res) {
         var cardId = res && res.cardId;
         if (!cardId) throw new Error('Tâche non ajoutée');
@@ -1231,13 +1220,13 @@
           listId: list.id,
           statut: list.name,
           statutKey: list.category || 'triage',
-          pos: typeof pos === 'number' ? pos : ((row.pos || 0) + 1024),
+          pos: typeof pos === 'number' ? pos : ((fallbackPos || 0) + 1024),
           items: [],
           desc: '',
           progress: 0,
         });
-        var placed = project && project.id && WO() && WO().withTaskProject
-          ? commitGoals(WO().withTaskProject(state.goals, cardId, project.id), 'Tâche ajoutée')
+        var placed = projectId && WO() && WO().withTaskProject
+          ? commitGoals(WO().withTaskProject(state.goals, cardId, projectId), 'Tâche ajoutée')
           : Promise.resolve().then(function () {
             render();
             setStatus('Tâche ajoutée', 'ok');
@@ -1249,6 +1238,43 @@
           });
         }, function () { /* commitGoals already reported the project save */ });
       }, function (err) { fail(err); });
+    }
+
+    /** A new card just after this one, in the same list and the same project. The field stays open for the next. */
+    function addSiblingTask(taskId, text) {
+      var clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return;
+      var row = (state.rows || []).filter(function (r) { return r.id === taskId; })[0];
+      if (!row) return setStatus('Tâche non ajoutée', 'error');
+      var list = (state.lists || []).filter(function (l) { return l.id === row.listId; })[0];
+      if (!list && DT()) list = DT().listFor(state.lists, ['triage']);
+      if (!list) return setStatus('Ce tableau n’a pas de liste de triage.', 'error');
+      var siblings = (state.rows || []).filter(function (r) { return r.listId === list.id; }).slice().sort(function (a, b) {
+        return (a.pos || 0) - (b.pos || 0);
+      });
+      var index = siblings.length;
+      for (var i = 0; i < siblings.length; i++) if (siblings[i].id === row.id) { index = i + 1; break; }
+      var pos = global.TableModel && global.TableModel.dropPos ? global.TableModel.dropPos(siblings, index) : 'bottom';
+      var project = WO() && WO().projectOf ? WO().projectOf(state.goals, row.id) : null;
+      placeTriageCard(clean, list, pos, project && project.id, row.pos);
+    }
+
+    /** A new triage card in this project (or with none, when projectId is empty), after the project's last card. */
+    function addInProject(projectId, text) {
+      var clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return;
+      if (!DT()) return setStatus('Ce tableau n’a pas de liste de triage.', 'error');
+      var list = DT().listFor(state.lists, ['triage']);
+      if (!list) return setStatus('Ce tableau n’a pas de liste de triage.', 'error');
+      var want = projectId || '';
+      var siblings = (state.rows || []).filter(function (r) {
+        if (r.listId !== list.id) return false;
+        var p = WO() && WO().projectOf ? WO().projectOf(state.goals, r.id) : null;
+        return (p && p.id ? p.id : '') === want;
+      }).slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); });
+      var pos = global.TableModel && global.TableModel.dropPos ? global.TableModel.dropPos(siblings, siblings.length) : 'bottom';
+      var last = siblings.length ? siblings[siblings.length - 1].pos : 0;
+      placeTriageCard(clean, list, pos, want, last);
     }
 
     /** The checklist item open in the pane, or null (a missing one drops the selection). */
@@ -1655,9 +1681,66 @@
       write(global.GoalsTrello.updateMetric(t, p.metricId, { currentValue: n }), 'Mesure enregistrée');
     }
 
+    /** What the column strip reads and writes. Kept apart from the tree so a flat list can use it too. */
+    function columnFields() {
+      var TT = global.TriageTree;
+      if (!TT) return {};
+      return {
+        columns: state.triageCols,
+        sorts: state.triageSorts,
+        widths: state.triageWidths,
+        onSorts: function (next) {
+          state.triageSorts = next || [];
+          TT.prefs.setSorts(state.triageSorts);
+          render();
+        },
+        onColumns: function (next) {
+          state.triageCols = TT.normalizeColumns(next);
+          TT.prefs.setColumns(state.triageCols);
+          render();
+        },
+        onWidths: function (next) {
+          state.triageWidths = next || {};
+          TT.prefs.setWidths(state.triageWidths);
+          render();
+        },
+        onWidth: function (key, w) {
+          state.triageWidths = Object.assign({}, state.triageWidths);
+          state.triageWidths[key] = w;
+          TT.prefs.setWidths(state.triageWidths);
+        },
+        taskProgress: function (row) {
+          return {
+            blocked: !!row.blocked,
+            onSet: function (pct) { setProgress(row, pct); },
+            onUnblock: function () { exitBlocked(row); },
+          };
+        },
+        priorityEl: function (row) { return prioBadge(row); },
+        label: function (row, key) {
+          if (!row) return '';
+          if (key === 'due') {
+            if (row.dueVague) return VAGUE_SHORT[row.dueVague] || row.dueVague;
+            var iso = DM().plannedDay ? DM().plannedDay(row) : (row.due || '');
+            return iso ? dayLabel(iso, today) : '';
+          }
+          if (key === 'estimate') return row.estimate ? DM().formatMinutes(row.estimate) : '';
+          if (key === 'desc') return String(row.desc || '').replace(/\s+/g, ' ').trim();
+          return TT.cellLabel(row, key);
+        },
+        edit: function (row, key, anchor) {
+          var spec = TT.COLUMNS[key];
+          var kind = spec && spec.edit;
+          if (!kind) return;
+          if (kind === 'estimate') return estimateMenu(row, anchor);
+          openEditor(row, kind, anchor);
+        },
+      };
+    }
+
     function treeCtx(selId) {
       var picked = pickedProject();
-      return {
+      return Object.assign(columnFields(), {
         selectedProject: picked ? picked.id : '',
         selectProject: function (id) {
           state.projectSel = { id: id, at: state.selected };
@@ -1686,6 +1769,7 @@
         },
         addSub: addSubtask,
         addTask: addSiblingTask,
+        addInProject: addInProject,
         taskEl: function (row) { return triageRow(row, !picked && !state.subSel && row.id === selId); },
         toggle: function (key) {
           if (state.triageFold[key]) delete state.triageFold[key];
@@ -1714,28 +1798,35 @@
           if (global.matchMedia && global.matchMedia('(max-width: 760px)').matches) els.main.scrollTop = 0;
         },
         selectedKey: state.subSel && state.subSel.taskId === selId ? state.subSel.key : '',
-      };
+      });
     }
 
     function triageListEl(q, selId) {
+      if (global.TriageTree && global.TriageTree.sortRows) q = global.TriageTree.sortRows(q, state.triageSorts, { lists: state.lists });
       var built = triageBuilt(q);
       if (!built) {
         var flat = h('div', { class: 'db-list db-triage-list' }, []);
-        if (global.TriageTree && q.length) flat.appendChild(global.TriageTree.colHead());
+        if (global.TriageTree && q.length) flat.appendChild(global.TriageTree.colHead(columnFields()));
         var flatCtx = global.TriageTree ? treeCtx(selId) : null;
         q.forEach(function (r) {
-          flat.appendChild(triageRow(r, r.id === selId));
-          if (!flatCtx || !global.TriageTree.addUnder) return;
+          var row = triageRow(r, r.id === selId);
+          flat.appendChild(row);
+          if (!flatCtx || !global.TriageTree.pinAdd) return;
+          var items = Array.isArray(r.items) ? r.items.filter(function (i) { return i && typeof i.text === 'string'; }) : [];
+          var done = 0;
+          items.forEach(function (i) { if (i.done === true || Number(i.progress) >= 100) done++; });
           var key = 't:' + r.id;
-          var extra = state.subAdding === key
-            ? global.TriageTree.addField({
-              key: 'a:' + key,
-              taskId: r.id,
-              parentId: '',
-              depth: state.addMode === 'task' ? 0 : 1,
-              mode: state.addMode === 'task' ? 'task' : 'sub',
-            }, flatCtx)
-            : global.TriageTree.addUnder(key, 0, flatCtx);
+          global.TriageTree.pinAdd(row, {
+            key: key, count: items.length, done: done, total: items.length, depth: 0, choices: 'menu',
+          }, flatCtx);
+          if (state.subAdding !== key) return;
+          var extra = global.TriageTree.addField({
+            key: 'a:' + key,
+            taskId: r.id,
+            parentId: '',
+            depth: state.addMode === 'task' ? 0 : 1,
+            mode: state.addMode === 'task' ? 'task' : 'sub',
+          }, flatCtx);
           if (extra) flat.appendChild(extra);
         });
         return flat;
@@ -1764,6 +1855,21 @@
       }, [icon('list-tree')]);
     }
 
+    function columnsButton() {
+      var TT = global.TriageTree;
+      if (!TT || typeof TT.openColumns !== 'function') return null;
+      return h('button', {
+        class: 'db-icon-btn',
+        type: 'button',
+        title: 'Colonnes',
+        'aria-label': 'Colonnes',
+        onclick: function (e) {
+          e.stopPropagation();
+          TT.openColumns(e.currentTarget, columnFields());
+        },
+      }, [icon('columns-3')]);
+    }
+
     /** One card of the list on the left: its title, the line under it (next step, else the note) and its score. */
     function triageRow(r, selected) {
       var sub = (WO() && WO().stepText(r)) || DM().snippet(r.desc, 90);
@@ -1785,12 +1891,7 @@
           h('span', { class: 'db-row-name', text: r.name }),
           sub ? h('span', { class: 'db-step', text: sub }) : null,
         ]),
-        global.TriageTree ? global.TriageTree.progressEl(r.progress, {
-          blocked: !!r.blocked,
-          onSet: function (pct) { setProgress(r, pct); },
-          onUnblock: function () { exitBlocked(r); },
-        }) : null,
-        h('span', { class: 'tt-prio-col' }, [prioBadge(r)]),
+        global.TriageTree && global.TriageTree.colsEl ? global.TriageTree.colsEl(r, columnFields()) : null,
       ]);
     }
 
@@ -2009,7 +2110,7 @@
       if (state.docOpen && global.TriageDocUI) {
         var open = triageListEl(q, null);
         els.main.appendChild(splitPage(
-          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
+          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [columnsButton(), treeToggle(), docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
           h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [docPane()])
         ));
         return;
@@ -2046,7 +2147,7 @@
             : global.TriageUI.detail(sel, triageHost());
       var list = triageListEl(q, sel.id);
       els.main.appendChild(splitPage(
-        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
+        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [columnsButton(), treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
         h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pane])
       ));
     }

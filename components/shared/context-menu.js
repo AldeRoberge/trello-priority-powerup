@@ -909,8 +909,13 @@
 
     function onScroll(e) {
       if (e && inMenus(e.target)) return;
+      // A right-click can scroll the row into view a moment later. Ignore that
+      // or the menu disappears as soon as it opens.
+      if (Date.now() - openedAt < 400) return;
       hide();
     }
+
+    var openedAt = Date.now();
 
     // Defer outside listeners so the opening contextmenu event does not close us.
     var bindTimer = global.setTimeout(function () {
@@ -962,7 +967,13 @@
 
     function onContextMenu(e) {
       if (isNativeEditableTarget(e && e.target)) return;
-      var items = getItems(e);
+      var items = [];
+      try {
+        items = getItems(e);
+      } catch (err) {
+        console.error('ContextMenu items failed', err);
+        return;
+      }
       items = normalizeItems(items);
       if (!items.length) return;
       if (e && typeof e.preventDefault === 'function') e.preventDefault();
@@ -2295,26 +2306,42 @@
   var globalInstalled = null;
 
   /**
-   * Suppress the native context menu document-wide. Specific menus (bind /
-   * table menu) run first and call preventDefault; anything left over falls
-   * through here and gets the generic menu.
+   * Suppress the browser menu on every right-click, then show ours.
+   * A specific menu calls preventDefault while the event is going down the tree;
+   * anything that does not gets the generic menu on the way back up.
    */
+  function armContextMenu(e) {
+    if (!e || e.__tpMenuArmed) return;
+    e.__tpMenuArmed = true;
+    if (e.defaultPrevented) e.__tpMenuHandled = true;
+    var orig = e.preventDefault;
+    e.preventDefault = function () {
+      e.__tpMenuHandled = true;
+      if (typeof orig === 'function') orig.call(e);
+    };
+    if (!e.defaultPrevented && typeof orig === 'function') orig.call(e);
+  }
+
   function installGlobal(d) {
     d = d || doc();
     if (!d || typeof d.addEventListener !== 'function') return function () {};
     if (globalInstalled && globalInstalled.doc === d) return globalInstalled.off;
     function onContextMenu(e) {
-      if (!e || e.defaultPrevented) return;
+      if (!e || e.__tpMenuHandled) return;
+      // Already cancelled by a menu that ran before this listener (and not by
+      // our own native-menu block, which marks the event armed).
+      if (e.defaultPrevented && !e.__tpMenuArmed) return;
       if (e.target && typeof e.target.closest === 'function' && e.target.closest('.' + MENU_CLASS)) {
-        e.preventDefault();
         return;
       }
       var items = buildGenericItems(e.target, d);
       if (typeof e.preventDefault === 'function') e.preventDefault();
       show(e, items);
     }
+    d.addEventListener('contextmenu', armContextMenu, true);
     d.addEventListener('contextmenu', onContextMenu, false);
     var off = function () {
+      d.removeEventListener('contextmenu', armContextMenu, true);
       d.removeEventListener('contextmenu', onContextMenu, false);
       globalInstalled = null;
     };

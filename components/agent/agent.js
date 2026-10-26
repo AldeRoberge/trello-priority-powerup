@@ -4707,9 +4707,9 @@
       '- Ex. nom\u00a0: user \u00ab\u00a0appelle-toi Nova\u00a0\u00bb \u2192 {"message":"Okay, je m\'appelle Nova maintenant.","suggestions":["Quelle est la priorit\u00e9?"],"followUps":[],"actions":[{"tool":"set_agent_name","args":{"name":"Nova"}}]}',
       '- Ex. couleur\u00a0: user \u00ab\u00a0change ta couleur pour rouge\u00a0\u00bb \u2192 {"message":"Okay, je passe au rouge\u00a0!","emotion":"happy","color":"red","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_color","args":{"color":"red"}}]}',
       '- Ex. personnalit\u00e9\u00a0: user \u00ab\u00a0sois un peu taquin\u00a0\u00bb \u2192 {"message":"Deal. Mode taquin activ\u00e9.","suggestions":[],"followUps":[],"actions":[{"tool":"set_agent_personality","args":{"personality":"Un peu taquin, volontiers espi\u00e8gle, reste utile."}}]}',
-      '- show_guide: { kind: "breathe"|"stretch", preset?: "30s"|"426"|"60s", id?: "cou"|"epaules"|"poitrine"|"dos"|"poignets"|"hanches" } (module visuel. M\u00e9ditation / respirer \u2192 breathe. \u00c9tirements \u2192 stretch, sans id pour laisser choisir. Le module montre le geste\u00a0: ne le d\u00e9cris pas en long.)',
+      '- show_guide: { kind: "breathe"|"stretch"|"timer", preset?: "30s"|"426"|"60s", id?: "cou"|"epaules"|"poitrine"|"dos"|"poignets"|"hanches", minutes?: number } (module visuel. M\u00e9ditation / respirer \u2192 breathe. \u00c9tirements \u2192 stretch. Pomodoro / minuteur \u2192 timer, minutes 15 par d\u00e9faut. Le module s\'affiche\u00a0: ne le d\u00e9cris pas en long.)',
       '- schedule_check: { seconds: number, message: string } (tu reparles plus tard. seconds entre 5 et 3600. INTERDIT de dire que tu ne peux pas revenir plus tard.)',
-      '- Ex. respiration\u00a0: user \u00ab\u00a0on m\u00e9dite\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":[],"followUps":[],"actions":[{"tool":"show_guide","args":{"kind":"breathe"}}]}',
+      '- Ex. minuteur\u00a0: user \u00ab\u00a0Start 15 min timer\u00a0\u00bb \u2192 {"message":"Okay.","suggestions":[],"followUps":[],"actions":[{"tool":"show_guide","args":{"kind":"timer","minutes":15}}]}',
       '- Ex. \u00e9tirement\u00a0: user \u00ab\u00a0\u00e9tirements\u00a0\u00bb \u2192 {"message":"Okay, choisis.","suggestions":[],"followUps":[],"actions":[{"tool":"show_guide","args":{"kind":"stretch"}}]}',
       '- Ex. rappel\u00a0: user \u00ab\u00a0dans 45 secondes demande-moi comment je vais\u00a0\u00bb \u2192 {"message":"Okay, je te demande \u00e7a dans 45 secondes.","suggestions":[],"followUps":[],"actions":[{"tool":"schedule_check","args":{"seconds":45,"message":"Comment tu te sens, maintenant?"}}]}',
       'Effets fun dynamiques (trigger_effect)\u00a0:',
@@ -8821,7 +8821,7 @@
     }
     if (action.tool === 'show_guide') {
       var guideKind = String(args.kind || args.guide || args.type || '').toLowerCase();
-      return /breath|respir|medit|stretch|etir|breathe/.test(guideKind);
+      return /breath|respir|medit|stretch|etir|breathe|timer|pomo|minuteur/.test(guideKind);
     }
     if (action.tool === 'schedule_check') {
       var checkSeconds = Number(

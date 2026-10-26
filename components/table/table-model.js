@@ -170,7 +170,7 @@
 
   function formatPriority(n) {
     var c = clampPriority(n);
-    return c == null ? '' : String(c);
+    return c == null ? '' : c.toFixed(1);
   }
 
   var PROJECT_TIERS = [

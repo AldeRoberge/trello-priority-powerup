@@ -17,6 +17,14 @@ describe('AgentGuides', () => {
   });
 
   it('opens breathe or stretch from a short request', () => {
+    assert.deepEqual(Guides.matchIntent('Start 15 min timer'), {
+      kind: 'timer',
+      minutes: 15
+    });
+    assert.deepEqual(Guides.matchIntent('pomodoro 25 min'), {
+      kind: 'timer',
+      minutes: 25
+    });
     assert.deepEqual(Guides.matchIntent('I want to meditate now'), {
       kind: 'breathe',
       preset: null
@@ -59,6 +67,18 @@ describe('AgentGuides', () => {
       Guides.normalizeCheck({ seconds: 45, message: 'Comment tu te sens?' }),
       { seconds: 45, message: 'Comment tu te sens?' }
     );
+    assert.equal(Guides.timerTitle(15, false), 'Start 15 min timer');
+    assert.equal(Guides.timerTitle(15, true), '15 min');
+    assert.equal(Guides.formatClock(15 * 60000), '15:00');
+    assert.equal(Guides.formatClock(61000), '1:01');
+    assert.deepEqual(Guides.normalizeGuide({ kind: 'pomodoro' }), {
+      kind: 'timer',
+      minutes: 15
+    });
+    assert.deepEqual(Guides.normalizeGuide({ kind: 'timer', minutes: 25 }), {
+      kind: 'timer',
+      minutes: 25
+    });
     assert.equal(Guides.normalizeCheck({ seconds: 2, message: 'Trop tôt' }), null);
     assert.equal(Guides.normalizeCheck({ seconds: 45, message: '   ' }), null);
   });
@@ -76,12 +96,24 @@ describe('AgentGuides', () => {
     assert.deepEqual(found.checks, [{ seconds: 45, message: 'Comment tu te sens?' }]);
   });
 
-  it('walks inspire, hold, expire', () => {
+  it('walks inspire, hold, expire, then stays empty', () => {
     assert.equal(Guides.breatheAt('426', 0).label, 'Inspire');
     assert.equal(Guides.breatheAt('426', 4000).label, 'Garde');
     assert.equal(Guides.breatheAt('426', 6000).label, 'Expire');
+    assert.equal(Guides.breatheAt('426', 12000).phase, 'rest');
+    assert.equal(Guides.breatheAt('426', 12000).height, 0);
     assert.equal(Guides.breatheAt('426', 0).scale < Guides.breatheAt('426', 2000).scale, true);
-    assert.equal(Guides.breatheAt('426', 36000).done, true);
+    assert.equal(Guides.breatheAt('426', 42000).done, true);
+    const pts = Guides.breathePoints('426');
+    assert.deepEqual(pts.slice(0, 5).map((p) => [p.t, p.y]), [
+      [0, 0],
+      [4000, 1],
+      [6000, 1],
+      [12000, 0],
+      [14000, 0]
+    ]);
+    const mid = Guides.breatheTrace(pts, 2000);
+    assert.equal(mid[mid.length - 1].y, 0.5);
   });
 
   it('splits due reminders from the ones still waiting', () => {

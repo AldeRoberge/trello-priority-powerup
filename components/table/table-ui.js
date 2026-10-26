@@ -901,7 +901,7 @@
         return h('span', { class: 'tb-chip tb-chip--u' + (tone == null ? 0 : tone) }, [icon('flame'), h('span', { text: row.urgency })]);
       }
       if (key === 'priority' && typeof row.priority === 'number') {
-        return h('span', { class: 'tb-num-strong', text: String(row.priority) });
+        return h('span', { class: 'tb-num-strong', text: TM().formatPriority(row.priority) });
       }
       if (key === 'due' && row.due) {
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < todayIso() && row.statutKey !== 'completed' && row.statutKey !== 'canceled';

@@ -4,7 +4,7 @@
   display: none !important;
 }
 
-.tp-page--priority .ag-guide {
+.ag-guide {
   position: relative;
   margin: 0 0 8px 40px;
   padding: 14px 12px 10px;
@@ -14,7 +14,7 @@
   color: var(--tp-text);
 }
 
-.tp-page--priority .ag-guide-x {
+.ag-guide-x {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -31,25 +31,25 @@
   cursor: pointer;
 }
 
-.tp-page--priority .ag-guide-x:hover {
+.ag-guide-x:hover {
   background: var(--tp-surface-hover);
   color: var(--tp-text);
 }
 
-.tp-page--priority .ag-stage {
+.ag-stage {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 168px;
 }
 
-.tp-page--priority .ag-orb-wrap {
+.ag-orb-wrap {
   position: relative;
   width: 148px;
   height: 148px;
 }
 
-.tp-page--priority .ag-orb {
+.ag-orb {
   width: 100%;
   height: 100%;
   border-radius: 50%;
@@ -60,7 +60,7 @@
   transform-origin: center;
 }
 
-.tp-page--priority .ag-phase {
+.ag-phase {
   position: absolute;
   inset: 0;
   display: flex;
@@ -72,35 +72,35 @@
   pointer-events: none;
 }
 
-.tp-page--priority .ag-fig {
+.ag-fig {
   width: 96px;
   height: 120px;
   color: #1f8a70;
 }
 
-html[data-color-mode='dark'] .tp-page--priority .ag-fig {
+html[data-color-mode='dark'] .ag-fig {
   color: #b7ebc9;
 }
 
-.tp-page--priority .ag-fig rect,
-.tp-page--priority .ag-fig circle {
+.ag-fig rect,
+.ag-fig circle {
   fill: currentColor;
 }
 
-.tp-page--priority .ag-head { transform-origin: 60px 28px; }
-.tp-page--priority .ag-torso { transform-origin: 60px 78px; }
-.tp-page--priority .ag-arm-l { transform-origin: 40px 58px; }
-.tp-page--priority .ag-arm-r { transform-origin: 80px 58px; }
-.tp-page--priority .ag-fore-l { transform-origin: 40px 80px; }
-.tp-page--priority .ag-fore-r { transform-origin: 80px 80px; }
-.tp-page--priority .ag-leg-l { transform-origin: 52px 104px; }
-.tp-page--priority .ag-leg-r { transform-origin: 68px 104px; }
+.ag-head { transform-origin: 60px 28px; }
+.ag-torso { transform-origin: 60px 78px; }
+.ag-arm-l { transform-origin: 40px 58px; }
+.ag-arm-r { transform-origin: 80px 58px; }
+.ag-fore-l { transform-origin: 40px 80px; }
+.ag-fore-r { transform-origin: 80px 80px; }
+.ag-leg-l { transform-origin: 52px 104px; }
+.ag-leg-r { transform-origin: 68px 104px; }
 
-.tp-page--priority .ag-fig g {
+.ag-fig g {
   transition: transform 0.7s ease;
 }
 
-.tp-page--priority .ag-bar {
+.ag-bar {
   height: 3px;
   margin: 2px 4px 8px;
   border-radius: 999px;
@@ -108,25 +108,80 @@ html[data-color-mode='dark'] .tp-page--priority .ag-fig {
   overflow: hidden;
 }
 
-.tp-page--priority .ag-bar[hidden] {
+.ag-bar[hidden] {
   display: none;
 }
 
-.tp-page--priority .ag-bar-fill {
+.ag-bar-fill {
   height: 100%;
   width: 0;
   border-radius: inherit;
   background: #4bce97;
 }
 
-.tp-page--priority .ag-picks {
+.ag-graph {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin: 0 0 8px;
+}
+
+.ag-graph-track,
+.ag-graph-line {
+  fill: none;
+  stroke-linejoin: miter;
+  stroke-linecap: butt;
+  vector-effect: non-scaling-stroke;
+}
+
+.ag-graph-track {
+  stroke: color-mix(in srgb, var(--tp-text) 22%, transparent);
+  stroke-width: 1.5;
+}
+
+.ag-graph-line {
+  stroke: #7dd69a;
+  stroke-width: 2;
+}
+
+.ag-graph-dot {
+  fill: #7dd69a;
+}
+
+.ag-clock-ring {
+  --p: 100;
+  width: 112px;
+  height: 112px;
+  margin: 4px auto 10px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(#4bce97 calc(var(--p) * 1%), color-mix(in srgb, var(--tp-text) 16%, transparent) 0);
+}
+
+.ag-clock {
+  width: 94px;
+  height: 94px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--agent-surface, var(--tp-elev-2, #282e33));
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.ag-picks {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   justify-content: center;
 }
 
-.tp-page--priority .ag-pick {
+.ag-pick {
   margin: 0;
   padding: 4px 10px;
   border: 1px solid var(--agent-edge, var(--tp-border));
@@ -140,26 +195,26 @@ html[data-color-mode='dark'] .tp-page--priority .ag-fig {
   cursor: pointer;
 }
 
-.tp-page--priority .ag-pick:hover {
+.ag-pick:hover {
   background: var(--tp-surface-hover);
 }
 
-.tp-page--priority .ag-pick.is-on {
+.ag-pick.is-on {
   background: color-mix(in srgb, #4bce97 22%, transparent);
   border-color: color-mix(in srgb, #4bce97 55%, var(--agent-edge, transparent));
 }
 
 /* Scheduled checks, beside the debug icon. */
-.tp-page--priority .agent-sched {
+.agent-sched {
   position: relative;
   flex: 0 0 auto;
 }
 
-.tp-page--priority .agent-sched[hidden] {
+.agent-sched[hidden] {
   display: none !important;
 }
 
-.tp-page--priority .agent-sched-count {
+.agent-sched-count {
   position: absolute;
   top: 1px;
   right: 1px;
@@ -176,7 +231,7 @@ html[data-color-mode='dark'] .tp-page--priority .ag-fig {
   pointer-events: none;
 }
 
-.tp-page--priority .agent-sched-pop {
+.agent-sched-pop {
   position: fixed;
   z-index: 40;
   width: 240px;
@@ -187,18 +242,18 @@ html[data-color-mode='dark'] .tp-page--priority .ag-fig {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
-.tp-page--priority .agent-sched-pop[hidden] {
+.agent-sched-pop[hidden] {
   display: none !important;
 }
 
-.tp-page--priority .agent-sched-row {
+.agent-sched-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 4px 4px 4px 8px;
 }
 
-.tp-page--priority .agent-sched-text {
+.agent-sched-text {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
@@ -206,14 +261,14 @@ html[data-color-mode='dark'] .tp-page--priority .ag-fig {
   overflow-wrap: anywhere;
 }
 
-.tp-page--priority .agent-sched-time {
+.agent-sched-time {
   flex: 0 0 auto;
   color: var(--tp-text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
-.tp-page--priority .agent-sched-x {
+.agent-sched-x {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
@@ -226,13 +281,17 @@ html[data-color-mode='dark'] .tp-page--priority .ag-fig {
   cursor: pointer;
 }
 
-.tp-page--priority .agent-sched-x:hover {
+.agent-sched-x:hover {
   background: var(--tp-surface-hover);
   color: var(--tp-text);
 }
 
+.ag-guide { box-sizing: border-box; max-width: 100%; }
+.ad-dock .ag-guide { margin: 0; }
+.ad-dock .ag-stage { height: 128px; }
+.ad-dock .ag-orb-wrap { width: 112px; height: 112px; }
+.ad-dock .ag-fig { width: 72px; height: 90px; }
+
 @media (prefers-reduced-motion: reduce) {
-  .tp-page--priority .ag-fig g {
-    transition: none;
-  }
+  .ag-fig g { transition: none; }
 }

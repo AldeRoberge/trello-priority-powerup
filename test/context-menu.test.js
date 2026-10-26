@@ -733,6 +733,25 @@ describe('ContextMenu', () => {
     assert.equal(global.document.body.querySelectorAll('button').length, 0);
   });
 
+  it('a menu that already handled the click is not opened twice', () => {
+    const div = global.document.createElement('div');
+    const listeners = global._docListeners.contextmenu.slice();
+    const evt = {
+      type: 'contextmenu',
+      target: div,
+      clientX: 4,
+      clientY: 4,
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+    };
+    listeners[0](evt);
+    evt.preventDefault();
+    listeners.slice(1).forEach((fn) => fn(evt));
+    assert.equal(global.document.body.querySelector('.tp-context-menu'), null);
+  });
+
   it('buildGenericItems offers clipboard actions on inputs', () => {
     const input = global.document.createElement('input');
     input.tagName = 'INPUT';

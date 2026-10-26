@@ -2417,10 +2417,10 @@
       function fieldBtn(kind, ic, text, extra) {
         return h('button', { class: 'mm-btn mm-btn--small' + (extra || ''), onclick: function (ev) { openFieldEditor(rec, kind, ev.currentTarget); } }, [icon(ic), text]);
       }
-      var urgency = rec.priorityEnabled !== false && rec.priorityLabel
-        ? rec.priorityLabel + (typeof rec.priorityScore === 'number' ? ' · ' + (Math.round(rec.priorityScore * 10) / 10) : '')
-        : 'Priorité…';
       var TMod = global.TableModel;
+      var urgency = rec.priorityEnabled !== false && rec.priorityLabel
+        ? rec.priorityLabel + (typeof rec.priorityScore === 'number' ? ' · ' + (TMod && TMod.formatPriority ? TMod.formatPriority(rec.priorityScore) : Number(rec.priorityScore).toFixed(1)) : '')
+        : 'Priorité…';
       var due = rec.dueDate ? 'Échéance ' + (TMod && TMod.formatDay ? TMod.formatDay(rec.dueDate) : rec.dueDate) : 'Échéance…';
 
       var CF = global.CardFields;

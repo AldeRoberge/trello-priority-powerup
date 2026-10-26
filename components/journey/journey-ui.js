@@ -1743,7 +1743,7 @@
         if (blurGuard || finished || !input.isConnected) return;
         submit(false);
       });
-      ['pointerdown', 'dblclick', 'wheel', 'click', 'contextmenu'].forEach(function (type) {
+      ['pointerdown', 'dblclick', 'wheel', 'click'].forEach(function (type) {
         input.addEventListener(type, function (ev) { ev.stopPropagation(); });
       });
       node.appendChild(input);

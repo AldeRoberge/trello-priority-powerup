@@ -186,6 +186,8 @@
       face: null,
       labelCatalog: null,
       driveUrl: '',
+      propFor: null,
+      propOpen: {},
     };
     var editor = null;
     var saving = false;
@@ -613,13 +615,16 @@
     }
 
     /** Opens the document the folder is. Creates that document the first time, for an old folder. */
+    var creatingFolder = {};
+
     function openFolder(id) {
       var f = DM().folderById(state.idx, id);
-      if (!f) return;
-      if (f.doc && state.docs.some(function (d) { return d.id === f.doc; })) {
+      if (!f || creatingFolder[id]) return;
+      if (f.doc) {
         openDoc(f.doc);
         return;
       }
+      creatingFolder[id] = true;
       setBusy('Création du document…');
       DT().createDoc(t, f.name, '').then(function (doc) {
         setBusy('');
@@ -629,9 +634,18 @@
           var x = DM().folderById(idx, id);
           if (x && !x.doc) x.doc = doc.id;
         }).then(function () {
+          creatingFolder[id] = false;
+          var linked = DM().folderById(state.idx, id);
+          if (linked && linked.doc && linked.doc !== doc.id) {
+            state.docs = state.docs.filter(function (d) { return d.id !== doc.id; });
+            paintList();
+            DT().deleteDoc(t, doc.id).catch(function () {});
+            return openDoc(linked.doc, { skipSave: true });
+          }
           return openDoc(doc.id, { skipSave: true });
         });
       }, function (err) {
+        creatingFolder[id] = false;
         setBusy('');
         failure(err);
       });
@@ -1115,15 +1129,34 @@
       });
     }
 
-    /** Archiving a folder asks whether its content goes along; nothing is deleted either way. */
+    /** One picture: the folder always fades. The pages stay bright, or fade with it. */
+    function archiveGlyph(kind, gone) {
+      return h('span', { class: 'dc-arch-glyph dc-arch-glyph--' + kind + (gone ? ' is-gone' : ''), 'aria-hidden': 'true' });
+    }
+
+    function archiveScene(after) {
+      var gone = after === 'all';
+      return h('span', { class: 'dc-arch-scene', 'aria-hidden': 'true' }, [
+        h('span', { class: 'dc-arch-pack' }, [
+          archiveGlyph('folder', true),
+          h('span', { class: 'dc-arch-pages' }, [
+            archiveGlyph('doc', gone),
+            archiveGlyph('doc', gone),
+          ]),
+        ]),
+      ]);
+    }
+
+    /** Archiving a folder asks, with two pictures, whether its content goes along. Nothing is deleted either way. */
     function deleteFolder(id) {
       var f = DM().folderById(state.idx, id);
       if (!f) return;
       dialog({
-        title: 'Archiver le dossier « ' + folderLabel(f) + ' » ?',
-        text: 'Voulez-vous aussi archiver son contenu (documents et sous-dossiers) ? Sinon, le contenu reste visible et remonte d’un niveau. Les archives se retrouvent avec « Afficher les archives ».',
-        ok: 'Avec son contenu',
-        alt: 'Dossier seulement',
+        title: 'Archiver « ' + folderLabel(f) + ' »',
+        picks: [
+          { value: 'alt', label: 'Le contenu reste', scene: archiveScene('keep') },
+          { value: true, label: 'Tout est archivé', scene: archiveScene('all') },
+        ],
       }).then(function (answer) {
         if (!answer) return;
         editFolders(function (idx) { DM().archiveFolderIn(idx, id, answer === true); }, 'Dossier archivé.').then(function () {
@@ -1645,6 +1678,83 @@
       return h('button', { class: 'dc-prop-empty', type: 'button', onclick: run }, [text]);
     }
 
+    function plusBtn(label, run) {
+      return h('button', {
+        class: 'dc-prop-add', type: 'button', title: label, 'aria-label': label,
+        onclick: function (e) { e.stopPropagation(); run(e.currentTarget); },
+      }, [icon('plus')]);
+    }
+
+    // Items stay together; the + (and « … » when the row is too long) follow them.
+    function endList(value, key, add) {
+      var bits = h('div', { class: 'dc-prop-bits' });
+      while (value.firstChild) bits.appendChild(value.firstChild);
+      if (add) bits.appendChild(add);
+      value.appendChild(bits);
+      value.setAttribute('data-clip', key);
+    }
+
+    function textOverflows(root) {
+      var nodes = root.querySelectorAll('.dc-subdoc span, .dc-chip-main, .dc-prop-text, .dc-chip.is-quiet');
+      var i;
+      for (i = 0; i < nodes.length; i++) {
+        if (nodes[i].scrollWidth > nodes[i].clientWidth + 1) return true;
+      }
+      return false;
+    }
+
+    function settleClips() {
+      var open = state.propOpen;
+      Array.prototype.forEach.call(els.props.querySelectorAll('.dc-prop-value[data-clip]'), function (value) {
+        if (!value.isConnected) return;
+        var key = value.getAttribute('data-clip');
+        var bits = value.querySelector('.dc-prop-bits');
+        if (!bits) return;
+        var prev = bits.querySelector('.dc-prop-more');
+        if (prev) prev.remove();
+        value.classList.remove('is-open');
+        var add = bits.querySelector('.dc-prop-add');
+        var kids = Array.prototype.filter.call(bits.children, function (el) { return el !== add; });
+        kids.forEach(function (el) { el.classList.remove('is-clip-hide'); });
+        if (open[key]) {
+          value.classList.add('is-open');
+          return;
+        }
+        var tooWide = textOverflows(bits);
+        var top = bits.getBoundingClientRect().top;
+        var overflow = kids.filter(function (el) { return el.getBoundingClientRect().top > top + 86; });
+        if (!overflow.length && !tooWide) return;
+        overflow.forEach(function (el) { el.classList.add('is-clip-hide'); });
+        var more = h('button', {
+          class: 'dc-prop-more', type: 'button', title: 'Afficher la suite', 'aria-label': 'Afficher la suite',
+          onclick: function (e) {
+            e.stopPropagation();
+            open[key] = true;
+            kids.forEach(function (el) { el.classList.remove('is-clip-hide'); });
+            value.classList.add('is-open');
+            more.remove();
+          },
+        }, ['…']);
+        if (add) bits.insertBefore(more, add);
+        else bits.appendChild(more);
+        var guard = 0;
+        while (guard < 8 && more.getBoundingClientRect().top > top + 90) {
+          var visible = kids.filter(function (el) { return !el.classList.contains('is-clip-hide'); });
+          if (!visible.length) break;
+          visible[visible.length - 1].classList.add('is-clip-hide');
+          guard += 1;
+        }
+      });
+    }
+
+    function scheduleClips() {
+      if (scheduleClips.frame) return;
+      scheduleClips.frame = requestAnimationFrame(function () {
+        scheduleClips.frame = 0;
+        settleClips();
+      });
+    }
+
     function chip(label, opts) {
       opts = opts || {};
       var box = h('span', { class: 'dc-chip' + (opts.dim ? ' is-dim' : '') });
@@ -2120,6 +2230,7 @@
             },
           }));
         });
+        endList(v, 'labels', plusBtn('Ajouter une étiquette', function (btn) { openLabelPicker(btn); }));
       }));
     }
 
@@ -2137,12 +2248,13 @@
           var fromLabel = !nativeText(field) && fc.valueOn(field, state.face.labels || []);
           if (!text) {
             v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { openField(field, e.currentTarget); }));
-            return;
+          } else {
+            v.appendChild(chip(text, {
+              onClick: function (e) { openField(field, e.currentTarget); },
+              onRemove: field.kind === 'priority' && !fromLabel ? null : function () { commitField(field, ''); },
+            }));
           }
-          v.appendChild(chip(text, {
-            onClick: function (e) { openField(field, e.currentTarget); },
-            onRemove: field.kind === 'priority' && !fromLabel ? null : function () { commitField(field, ''); },
-          }));
+          endList(v, 'field:' + field.id, plusBtn('Ajouter', function (btn) { openField(field, btn); }));
         }));
       });
       var loose = fc.loose(state.face.labels || []);
@@ -2280,6 +2392,10 @@
       paintParent();
       var cur = state.current;
       if (!cur) return;
+      if (state.propFor !== cur.id) {
+        state.propFor = cur.id;
+        state.propOpen = {};
+      }
       var sub = cur.subject;
       if (!sub) {
         els.props.appendChild(propRow('link', 'Lié à', function (v) {
@@ -2299,6 +2415,7 @@
             },
             onRemove: function () { patchPage({ subject: null }).then(function () { loadFace(); }); },
           }));
+          endList(v, 'subject', null);
         }));
       }
       if (isTaskPage()) {
@@ -2313,6 +2430,7 @@
               onRemove: function () { togglePerson(m.id, m.name); },
             }));
           });
+          endList(v, 'people', plusBtn('Ajouter une personne', function (btn) { openPeoplePicker(btn); }));
         }));
         paintTaskFields();
         els.props.appendChild(propRow('calendar-event', 'Échéance', function (v) {
@@ -2323,15 +2441,18 @@
         }));
         els.props.appendChild(propRow('align-left', 'Description', function (v) {
           var shown = String(state.face.desc || '').replace(/\s+/g, ' ').trim();
-          if (shown.length > 90) shown = shown.slice(0, 90) + '…';
-          v.appendChild(shown
-            ? h('button', { class: 'dc-prop-text', type: 'button', onclick: function (e) { editDesc(e.currentTarget); } }, [shown])
-            : emptyBtn('Cliquer pour ajouter…', function (e) { editDesc(e.currentTarget); }));
+          if (!shown) {
+            v.appendChild(emptyBtn('Cliquer pour ajouter…', function (e) { editDesc(e.currentTarget); }));
+            return;
+          }
+          v.appendChild(h('button', { class: 'dc-prop-text', type: 'button', title: shown, onclick: function (e) { editDesc(e.currentTarget); } }, [shown]));
+          endList(v, 'desc', null);
         }));
       } else if (!sub || sub.k === 'entity') {
         if (sub && state.face && state.face.aliases && state.face.aliases.length) {
           els.props.appendChild(propRow('quote', 'Alias', function (v) {
-            state.face.aliases.forEach(function (a) { v.appendChild(h('span', { class: 'dc-chip is-quiet', text: a })); });
+            state.face.aliases.forEach(function (a) { v.appendChild(h('span', { class: 'dc-chip is-quiet', title: a, text: a })); });
+            endList(v, 'alias', null);
           }));
         }
         els.props.appendChild(propRow('users', 'Personnes', function (v) {
@@ -2343,6 +2464,7 @@
               onRemove: function () { togglePerson(id); },
             }));
           });
+          endList(v, 'people', plusBtn('Ajouter une personne', function (btn) { openPeoplePicker(btn); }));
         }));
       }
       var tags = pageProps().tags;
@@ -2356,7 +2478,7 @@
             },
           }));
         });
-        v.appendChild(h('input', {
+        var input = h('input', {
           class: 'dc-tag-input' + (tags.length ? '' : ' is-empty'),
           type: 'text',
           placeholder: tags.length ? '' : 'Cliquer pour ajouter…',
@@ -2369,27 +2491,38 @@
               e.target.blur();
             } else if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
           },
-          onblur: function (e) { commitTag(e.target); },
+          onblur: function (e) {
+            commitTag(e.target);
+            if (!String(e.target.value || '').trim() && tags.length && e.target.parentNode) e.target.parentNode.removeChild(e.target);
+          },
+        });
+        if (!tags.length) v.appendChild(input);
+        endList(v, 'tags', plusBtn('Ajouter un mot-clé', function () {
+          var bits = v.querySelector('.dc-prop-bits');
+          var plus = bits && bits.querySelector('.dc-prop-add');
+          if (bits && input.parentNode !== bits) {
+            if (plus) bits.insertBefore(input, plus);
+            else bits.appendChild(input);
+          }
+          input.focus();
         }));
       }));
-      var addDoc = h('button', {
-        class: 'dc-prop-add', type: 'button', title: 'Nouveau sous-document', 'aria-label': 'Nouveau sous-document',
-        onclick: function (e) { e.stopPropagation(); newDoc(null, null, null, cur.id); },
-      }, [icon('plus')]);
       els.props.appendChild(propRow('files', 'Documents', function (v) {
         childFolders().forEach(function (f) {
-          v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', onclick: function () { openFolder(f.id); } }, [
+          v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', title: folderLabel(f), onclick: function () { openFolder(f.id); } }, [
             icon('folder'),
             h('span', { text: folderLabel(f) }),
           ]));
         });
         childDocs().forEach(function (d) {
-          v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', onclick: function () { openDoc(d.id); } }, [
+          v.appendChild(h('button', { class: 'dc-subdoc', type: 'button', title: d.title, onclick: function () { openDoc(d.id); } }, [
             icon(subjectGlyph(d.subject)),
             h('span', { text: d.title }),
           ]));
         });
-      }, addDoc));
+        endList(v, 'docs', plusBtn('Nouveau sous-document', function () { newDoc(null, null, null, cur.id); }));
+      }));
+      scheduleClips();
     }
 
     function lastDomMd() {
@@ -6414,6 +6547,25 @@
         function done(v) {
           if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
           resolve(v);
+        }
+        if (opts.picks) {
+          overlay.appendChild(h('div', { class: 'dc-dialog dc-dialog--arch' }, [
+            h('h2', { class: 'dc-dialog-title', text: opts.title }),
+            h('div', { class: 'dc-arch-picks' }, opts.picks.map(function (p) {
+              return h('button', {
+                class: 'dc-arch-pick',
+                type: 'button',
+                onclick: function () { done(p.value); },
+              }, [p.scene, h('span', { class: 'dc-arch-label', text: p.label })]);
+            })),
+            h('button', { class: 'dc-arch-cancel', type: 'button', onclick: function () { done(false); } }, [opts.cancel || 'Annuler']),
+          ]));
+          overlay.addEventListener('keydown', function (e) { if (e.key === 'Escape') done(false); });
+          overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) done(false); });
+          shell.appendChild(overlay);
+          var firstPick = overlay.querySelector('.dc-arch-pick');
+          if (firstPick) firstPick.focus();
+          return;
         }
         var alt = opts.alt ? h('button', { class: 'dc-btn', type: 'button', onclick: function () { done('alt'); } }, [opts.alt]) : null;
         var cancel = h('button', { class: 'dc-btn', type: 'button', onclick: function () { done(false); } }, [opts.cancel || 'Annuler']);

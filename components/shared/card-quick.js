@@ -534,7 +534,7 @@
       chips.push(chip(
         'cq-chip--prio' + (tone != null ? ' cq-chip--u' + tone : '') + (row.urgency || row.priority != null ? '' : ' is-empty'),
         'flame',
-        [row.urgency, row.priority != null ? String(row.priority) : ''].filter(Boolean).join(' · '),
+        [row.urgency, row.priority != null ? (global.TableModel ? global.TableModel.formatPriority(row.priority) : Number(row.priority).toFixed(1)) : ''].filter(Boolean).join(' · '),
         row.tier ? 'Priorité · ' + row.tier : 'Définir la priorité',
         function (b) { openField('priority', b); }
       ));

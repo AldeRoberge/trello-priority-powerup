@@ -292,6 +292,10 @@ describe('TableModel.subtaskRows', () => {
     assert.equal(TM.clampPriority(11), 10);
     assert.equal(TM.clampPriority(6.55), 6.6);
     assert.equal(TM.clampPriority('haute'), null);
+    assert.equal(TM.formatPriority(5), '5.0');
+    assert.equal(TM.formatPriority(6.5), '6.5');
+    assert.equal(TM.formatPriority(10), '10.0');
+    assert.equal(TM.formatPriority(null), '');
     const items = TM.projectPriorityItems(5, function () {});
     assert.equal(items[0].label, 'Critique');
     assert.equal(items.find((it) => it.checked).label, 'Importante');
