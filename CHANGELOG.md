@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Kanban : tri des cartes par priorité, avancement ou lieu (menu dans la barre).
 - Kanban : les cartes terminées ou annulées sont grisées (la couleur revient au survol).
 
 ## 2026-10-26

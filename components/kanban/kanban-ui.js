@@ -50,6 +50,8 @@
   }
 
   var LANES_KEY = 'tp-kanban-lanes';
+  var SORT_KEY = 'tp-kanban-sort';
+  var SORTS = [['manual', 'Ordre manuel'], ['priority', 'Priorité'], ['progress', 'Avancement'], ['place', 'Lieu']];
   var LANES_FOLDED_KEY = 'tp-kanban-lanes-folded';
   var PROJECTS_KEY = 'tp-kanban-projects';
   var PROJ_FOLDED_KEY = 'tp-kanban-projects-folded';
@@ -85,6 +87,7 @@
       projects: readStored(PROJECTS_KEY, false) === true, // project shells in the columns, tasks and subtasks inside
       projFolded: readStored(PROJ_FOLDED_KEY, {}) || {},
       goals: { nodes: [], links: [] },
+      sort: readStored(SORT_KEY, 'manual'),
       hideDone: HD.get(),
       authOk: true,
       detailId: null,
@@ -224,6 +227,8 @@
         overdue: state.facets.overdue,
         today: todayIso(),
         tiers: tierDefs(),
+        sort: state.sort,
+        placeOf: function (r) { return state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[r.id]) : ''; },
       };
     }
     function columns() {
@@ -362,6 +367,17 @@
         AI() ? boardAsk() : null,
         h('span', { class: 'kb-spacer' }),
         h('span', { class: 'kb-count', 'aria-live': 'polite' }),
+        h('label', { class: 'kb-sort', title: 'Trier les cartes' }, [
+          icon('arrows-sort'),
+          h('select', {
+            'aria-label': 'Trier les cartes',
+            onchange: function (e) {
+              state.sort = e.target.value;
+              writeStored(SORT_KEY, state.sort);
+              renderBoard();
+            },
+          }, SORTS.map(function (o) { return h('option', { value: o[0], text: o[1], selected: state.sort === o[0] }); })),
+        ]),
         btn('layout-rows', 'Par priorité', {
           cls: 'kb-btn--lanes',
           active: state.lanes,

@@ -229,4 +229,21 @@ describe('KanbanModel projects', () => {
     const cleared = global.MindmapModel.normalizeGoals(global.WorkOS.withProjectList(clean, 'p1', ''));
     assert.equal(cleared.nodes[0].listId, undefined);
   });
+
+  describe('card sort', () => {
+    const l = [{ id: 'l1', name: 'A', category: 'unstarted' }];
+    const r = [
+      { id: 'a', listId: 'l1', pos: 1, name: 'a', priority: 3, progress: 10 },
+      { id: 'b', listId: 'l1', pos: 2, name: 'b', priority: 8, progress: 90 },
+      { id: 'c', listId: 'l1', pos: 3, name: 'c', progress: 50 },
+    ];
+    const ids = (o) => KM.buildColumns(r, l, o)[0].cards.map((x) => x.id).join('');
+    it('keeps manual order by default', () => assert.equal(ids({}), 'abc'));
+    it('sorts by priority, highest first, none last', () => assert.equal(ids({ sort: 'priority' }), 'bac'));
+    it('sorts by progress, most complete first', () => assert.equal(ids({ sort: 'progress' }), 'bca'));
+    it('sorts by place name, empty last', () => {
+      const p = { a: 'Zoo', b: 'Alpha' };
+      assert.equal(ids({ sort: 'place', placeOf: (x) => p[x.id] }), 'bac');
+    });
+  });
 });

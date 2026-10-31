@@ -57,6 +57,35 @@
    * lists (the column itself stays so cards can still be dropped into it). blocked and overdue are
    * AND facets on top of the text filter.
    */
+  /** Card order inside a column. 'manual' keeps the Trello position; the others put cards without a value last. */
+  function cardComparator(opts) {
+    var by = opts && opts.sort;
+    var placeOf = (opts && opts.placeOf) || function () { return ''; };
+    function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+    function byPos(a, b) { return a.pos - b.pos; }
+    function desc(get) {
+      return function (a, b) {
+        var x = num(get(a)), y = num(get(b));
+        if (x === y) return byPos(a, b);
+        if (x === null) return 1;
+        if (y === null) return -1;
+        return y - x || byPos(a, b);
+      };
+    }
+    if (by === 'priority') return desc(function (r) { return r.priority; });
+    if (by === 'progress') return desc(function (r) { return r.progress; });
+    if (by === 'place') {
+      return function (a, b) {
+        var x = String(placeOf(a) || ''), y = String(placeOf(b) || '');
+        if (x === y) return byPos(a, b);
+        if (!x) return 1;
+        if (!y) return -1;
+        return x.localeCompare(y, 'fr', { sensitivity: 'base' }) || byPos(a, b);
+      };
+    }
+    return byPos;
+  }
+
   function buildColumns(rows, lists, opts) {
     opts = opts || {};
     var visible = rowsInView(rows, lists, opts);
@@ -71,9 +100,7 @@
         return r.listId === l.id;
       }).length;
       var closed = isClosedKey(l.category);
-      var cards = opts.hideDone && closed ? [] : (byList[l.id] || []).slice().sort(function (a, b) {
-        return a.pos - b.pos;
-      });
+      var cards = opts.hideDone && closed ? [] : (byList[l.id] || []).slice().sort(cardComparator(opts));
       return { list: l, cards: cards, total: all, hidden: !!(opts.hideDone && closed && all) };
     });
   }

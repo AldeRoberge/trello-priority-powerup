@@ -775,3 +775,9 @@ html[data-color-mode] .tp-page--kanban {
 .kb-sub > span { min-width: 0; }
 .kb-sub.is-done { opacity: 0.55; }
 .kb-sub.is-blocked { color: var(--tp-danger-text); }
+
+/* Sort picker in the bar: icon + native select, same height as the other bar buttons */
+.kb-sort { display: inline-flex; align-items: center; gap: 4px; color: var(--tp-text-subtle, #8c9bab); font-size: 12px; }
+.kb-sort select { background: transparent; color: inherit; border: 0; font: inherit; cursor: pointer; padding: 4px 2px; }
+.kb-sort:hover { color: var(--tp-text, #b6c2cf); }
+.kb-sort option { color: #000; }
