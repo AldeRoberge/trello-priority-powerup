@@ -320,23 +320,23 @@ describe('KanbanAI', () => {
   });
 
   describe('smart filters', () => {
-    it('keeps filters with a label and two known ids, drops the rest', () => {
+    it('keeps filters with usable criteria and enough matching cards', () => {
       const raw = { filters: [
-        { label: 'À faire au chalet', ids: ['a', 'b', 'zzz', 'a'] },
-        { label: 'Trop petit', ids: ['a'] },
-        { label: '', ids: ['a', 'b'] },
-        { label: 'à faire au chalet', ids: ['a', 'b'] },
-        { label: 'À apporter à Kate — vite', ids: ['b', 'c'] },
+        { label: 'À faire au chalet', match: { terms: ['chalet', ' '], states: ['started', 'bogus'] } },
+        { label: 'Trop petit', match: { terms: ['rare'] } },
+        { label: 'Sans critère', match: {} },
+        { label: 'à faire au chalet', match: { terms: ['chalet'] } },
+        { label: 'Cette semaine — vite', match: { dueWithinDays: 7 } },
       ] };
-      const out = AI.normalizeSmartFilters(raw, ['a', 'b', 'c']);
+      const out = AI.normalizeSmartFilters(raw, (m) => (m.terms && m.terms[0] === 'rare' ? 1 : 3));
       assert.deepEqual(out, [
-        { label: 'À faire au chalet', ids: ['a', 'b'] },
-        { label: 'À apporter à Kate vite', ids: ['b', 'c'] },
+        { label: 'À faire au chalet', match: { terms: ['chalet'], states: ['started'] } },
+        { label: 'Cette semaine vite', match: { dueWithinDays: 7 } },
       ]);
     });
     it('returns nothing for a malformed reply', () => {
-      assert.deepEqual(AI.normalizeSmartFilters(null, ['a']), []);
-      assert.deepEqual(AI.normalizeSmartFilters({ filters: 'x' }, ['a']), []);
+      assert.deepEqual(AI.normalizeSmartFilters(null), []);
+      assert.deepEqual(AI.normalizeSmartFilters({ filters: 'x' }), []);
     });
     it('only sends open cards to the model', () => {
       const rows = [{ id: '1', name: 'A', statutKey: 'started' }, { id: '2', name: 'B', statutKey: 'completed' }];

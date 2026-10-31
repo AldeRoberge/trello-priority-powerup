@@ -247,10 +247,24 @@ describe('KanbanModel projects', () => {
     });
   });
 
-  it('restricts the view to given card ids', () => {
-    const ls = [{ id: 'l1', name: 'A', category: 'unstarted' }];
-    const rs = [1, 2, 3].map((n) => ({ id: 'r' + n, listId: 'l1', pos: n, name: 'n' + n }));
-    const cols = KM.buildColumns(rs, ls, { ids: ['r1', 'r3'] });
-    assert.deepEqual(cols[0].cards.map((x) => x.id), ['r1', 'r3']);
+  describe('matchesSmart', () => {
+    const row = { id: 'r', name: 'Appeler le garage', desc: 'Pneus à Val-d’Or', statutKey: 'started', due: '2026-11-03', items: [{ text: 'Apporter chèque à Kate' }] };
+    const ctx = { today: '2026-10-31', placeOf: () => 'Chalet' };
+    it('matches terms regardless of accents, case and punctuation', () => {
+      assert.equal(KM.matchesSmart(row, { terms: ["val d'or"] }, ctx), true);
+      assert.equal(KM.matchesSmart(row, { terms: ['VAL-D-OR'] }, ctx), true);
+      assert.equal(KM.matchesSmart(row, { terms: ['kate'] }, ctx), true);
+      assert.equal(KM.matchesSmart(row, { terms: ['chalet'] }, ctx), true);
+      assert.equal(KM.matchesSmart(row, { terms: ['montreal'] }, ctx), false);
+    });
+    it('applies states and due window together', () => {
+      assert.equal(KM.matchesSmart(row, { terms: ['kate'], states: ['unstarted'] }, ctx), false);
+      assert.equal(KM.matchesSmart(row, { dueWithinDays: 3 }, ctx), true);
+      assert.equal(KM.matchesSmart(row, { dueWithinDays: 2 }, ctx), false);
+      assert.equal(KM.matchesSmart({ name: 'x' }, { dueWithinDays: 9 }, ctx), false);
+    });
+    it('never matches finished cards unless asked', () => {
+      assert.equal(KM.matchesSmart({ name: 'kate', statutKey: 'completed' }, { terms: ['kate'] }, ctx), false);
+    });
   });
 });

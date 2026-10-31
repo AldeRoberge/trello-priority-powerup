@@ -103,7 +103,7 @@
       projFolded: readStored(PROJ_FOLDED_KEY, {}) || {},
       goals: { nodes: [], links: [] },
       sort: readStored(SORT_KEY, 'manual'),
-      smart: null, // active smart filter { label, ids }
+      smart: null, // active smart filter { label, match }: matching cards are highlighted, the others dimmed
       smartList: readSmart(), // last AI suggestions { sig, filters }
       smartBusy: false,
       smartError: '',
@@ -247,7 +247,6 @@
         today: todayIso(),
         tiers: tierDefs(),
         sort: state.sort,
-        ids: state.smart ? state.smart.ids : null,
         placeOf: function (r) { return state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[r.id]) : ''; },
       };
     }
@@ -357,8 +356,15 @@
     function onSmartOutside(e) { if (smartMenu && !smartMenu.contains(e.target) && !e.target.closest('.kb-btn--smart')) closeSmartMenu(); }
     function onSmartKey(e) { if (e.key === 'Escape') closeSmartMenu(); }
 
-    function smartPlace(id) {
-      return state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[id]) : '';
+    /** Ids of the cards that satisfy a smart filter's metadata criteria right now. */
+    function smartIds(f) {
+      var ctx = {
+        today: todayIso(),
+        placeOf: function (r) { return state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[r.id]) : ''; },
+      };
+      var ids = new Set();
+      state.rows.forEach(function (r) { if (KM().matchesSmart(r, f.match, ctx)) ids.add(r.id); });
+      return ids;
     }
 
     function generateSmart() {
@@ -366,7 +372,7 @@
       state.smartBusy = true;
       state.smartError = '';
       paintSmartMenu();
-      AI().smartFilters(t, { rows: state.rows, places: state.places, placeLabel: global.WorkOS && global.WorkOS.placeLabel }).then(function (filters) {
+      AI().smartFilters(t, { rows: state.rows, places: state.places, placeLabel: global.WorkOS && global.WorkOS.placeLabel, count: function (m) { return smartIds({ match: m }).size; } }).then(function (filters) {
         state.smartList = { sig: boardSig(state.rows), filters: filters };
         writeStored(SMART_KEY, state.smartList);
         if (!filters.length) state.smartError = 'Aucune suggestion pour le moment';
@@ -381,21 +387,20 @@
     function paintSmartMenu() {
       if (!smartMenu) return;
       smartMenu.textContent = '';
-      var live = new Set(state.rows.map(function (r) { return r.id; }));
       var shown = state.smartList.filters.map(function (f) {
-        return { label: f.label, ids: f.ids.filter(function (id) { return live.has(id); }) };
-      }).filter(function (f) { return f.ids.length; });
+        return { label: f.label, match: f.match, n: smartIds(f).size };
+      }).filter(function (f) { return f.n; });
       shown.forEach(function (f) {
         smartMenu.appendChild(h('button', {
           class: 'kb-smart-item' + (state.smart && state.smart.label === f.label ? ' is-active' : ''),
           type: 'button',
           onclick: function () {
-            state.smart = state.smart && state.smart.label === f.label ? null : f;
+            state.smart = state.smart && state.smart.label === f.label ? null : { label: f.label, match: f.match };
             closeSmartMenu();
             renderBar();
             renderBoard();
           },
-        }, [h('span', { text: f.label }), h('span', { class: 'kb-facet-n', text: String(f.ids.length) })]));
+        }, [h('span', { text: f.label }), h('span', { class: 'kb-facet-n', text: String(f.n) })]));
       });
       if (state.smartBusy) smartMenu.appendChild(h('div', { class: 'kb-smart-note', text: 'Analyse des cartes…' }));
       else if (state.smartError) smartMenu.appendChild(h('div', { class: 'kb-smart-note', text: state.smartError }));
@@ -470,7 +475,7 @@
           type: 'button',
           title: 'Retirer le filtre',
           onclick: function () { state.smart = null; renderBar(); renderBoard(); },
-        }, [icon('sparkles'), h('span', { text: state.smart.label }), icon('x')]) : null,
+        }, [icon('sparkles'), h('span', { text: state.smart.label }), h('span', { class: 'kb-facet-n', text: String(smartIds(state.smart).size) }), icon('x')]) : null,
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
         h('span', { class: 'kb-status' }),
         AI() ? boardAsk() : null,
@@ -749,7 +754,7 @@
       // Completed / canceled (status, list or 100 %): the tile is grayed out, color returns on hover.
       var closedCard = !blockedDone && (KM().isClosedKey(row.statutKey) || KM().isClosedKey(list && list.category) || (typeof row.progress === 'number' && row.progress >= 100));
       var el = h('div', {
-        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : '') + (closedCard ? ' is-complete' : '') + (state.detailId === row.id ? ' is-selected' : ''),
+        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : '') + (closedCard ? ' is-complete' : '') + (state.smartIds ? (state.smartIds.has(row.id) ? ' is-match' : ' is-dim') : '') + (state.detailId === row.id ? ' is-selected' : ''),
         draggable: 'true',
         tabindex: '0',
         'data-id': row.id,
@@ -1402,6 +1407,7 @@
     }
 
     function renderBoard() {
+      state.smartIds = state.smart ? smartIds(state.smart) : null;
       if (global.Isolation) global.Isolation.adopt(t, state.rows);
       var scrollX = els.board.scrollLeft;
       var scrollY = els.board.scrollTop;

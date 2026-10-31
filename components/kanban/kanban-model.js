@@ -30,11 +30,6 @@
     var TM = global.TableModel;
     var q = String(opts.filter || '').trim();
     var visible = q && TM ? TM.filterRows(rows, q) : (rows || []).slice();
-    if (opts.ids) {
-      var keep = Object.create(null);
-      opts.ids.forEach(function (id) { keep[id] = true; });
-      visible = visible.filter(function (r) { return keep[r.id]; });
-    }
     if (opts.hideDone) {
       var closed = Object.create(null);
       (lists || []).forEach(function (l) {
@@ -304,7 +299,49 @@
     });
   }
 
+  /** Lowercase, accent-free text where every non-alphanumeric run is one space ("Val-d'Or" -> "val d or"). */
+  function fold(v) {
+    return ' ' + String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  }
+
+  /** All the text a smart filter can match on: title, description, category, list, place and subtasks. */
+  function smartHaystack(row, place) {
+    var parts = [row.name, row.desc, row.category, row.statut, place];
+    (function walk(items) {
+      (items || []).forEach(function (it) {
+        if (it && typeof it.text === 'string') parts.push(it.text);
+        if (it && Array.isArray(it.items)) walk(it.items);
+      });
+    })(row.items);
+    return fold(parts.filter(Boolean).join(' '));
+  }
+
+  /**
+   * Does `row` satisfy a smart filter's metadata criteria? All given criteria must hold:
+   * terms (any word or phrase found in the card text or place), states (status keys), dueWithinDays (due
+   * date at most N days from `today`, overdue included). Without `states`, finished cards never match.
+   */
+  function matchesSmart(row, match, ctx) {
+    match = match || {};
+    ctx = ctx || {};
+    var states = Array.isArray(match.states) ? match.states : [];
+    if (states.length ? states.indexOf(row.statutKey) < 0 : isClosedKey(row.statutKey)) return false;
+    var terms = (Array.isArray(match.terms) ? match.terms : []).map(fold).filter(function (x) { return x.trim(); });
+    if (terms.length) {
+      var hay = smartHaystack(row, ctx.placeOf ? ctx.placeOf(row) : '');
+      if (!terms.some(function (x) { return hay.indexOf(x) >= 0; })) return false;
+    }
+    if (typeof match.dueWithinDays === 'number') {
+      var due = String(row.due || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || !ctx.today) return false;
+      var limit = new Date(ctx.today + 'T00:00:00Z').getTime() + match.dueWithinDays * 86400000;
+      if (new Date(due + 'T00:00:00Z').getTime() > limit) return false;
+    }
+    return true;
+  }
+
   global.KanbanModel = {
+    matchesSmart: matchesSmart,
     columnInsertIndex: columnInsertIndex,
     reorderLists: reorderLists,
     buildColumns: buildColumns,
