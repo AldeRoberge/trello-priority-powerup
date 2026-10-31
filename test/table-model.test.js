@@ -144,6 +144,12 @@ describe('TableModel', () => {
     assert.equal(TM.formatDay('2026-13-01', now), '2026-13-01');
   });
 
+  it('labels due dates: overdue, today, else the day', () => {
+    assert.equal(TM.dueLabel('2026-10-20', true, '2026-10-31'), 'En retard');
+    assert.equal(TM.dueLabel('2026-10-31', false, '2026-10-31'), 'Aujourd’hui');
+    assert.equal(TM.dueLabel('2026-11-03', false, '2026-10-31', new Date(2026, 9, 31)), '3 nov.');
+  });
+
   it('filters on text columns', () => {
     const rows = [{ name: 'Facture', desc: '', statut: 'À faire' }, { name: 'Logo', desc: 'facture jointe', statut: 'En cours' }];
     assert.equal(TM.filterRows(rows, 'facture').length, 2);

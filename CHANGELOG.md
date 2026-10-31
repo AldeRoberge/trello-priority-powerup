@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Kanban et Tableau : l’échéance affiche « En retard » (en rouge) ou « Aujourd’hui » au lieu de la date.
 - Kanban : filtres intelligents, l’IA propose des vues comme « À faire au chalet » ou « À apporter à Kate » (bouton Filtres dans la barre) ; un clic met en évidence les cartes liées et estompe les autres.
 - Kanban : tri des cartes par priorité, avancement ou lieu (menu dans la barre).
 - Kanban : les cartes terminées ou annulées sont grisées (la couleur revient au survol).

@@ -665,7 +665,7 @@
         var closed = KM().isClosedKey(row.statutKey);
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < todayIso() && !closed;
         var hard = global.WorkOS && global.WorkOS.dateKind(row) === 'hard';
-        badges.push(chip('kb-chip--due' + (overdue ? ' is-overdue' : '') + (hard ? ' is-hard' : ''), overdue ? 'calendar-exclamation' : 'calendar-event', TM().formatDay(row.due), (overdue ? 'En retard · ' : (hard ? 'Échéance · ' : '')) + row.due, function (e) {
+        badges.push(chip('kb-chip--due' + (overdue ? ' is-overdue' : '') + (hard ? ' is-hard' : ''), overdue ? 'calendar-exclamation' : 'calendar-event', TM().dueLabel(row.due, overdue, todayIso()), (overdue ? 'En retard · ' : (hard ? 'Échéance · ' : '')) + row.due, function (e) {
           e.stopPropagation();
           openEditor(row, 'due', e.currentTarget);
         }));

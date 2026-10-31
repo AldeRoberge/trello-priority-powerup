@@ -385,6 +385,13 @@
     return +m[3] + ' ' + MONTHS_FR[+m[2] - 1] + (+m[1] === year ? '' : ' ' + m[1]);
   }
 
+  /** Chip text for a due date: « En retard » when overdue, « Aujourd’hui » on the day, else "31 oct". */
+  function dueLabel(iso, overdue, today) {
+    if (overdue) return 'En retard';
+    if (today && String(iso || '').slice(0, 10) === today) return 'Aujourd’hui';
+    return formatDay(iso);
+  }
+
   function cellText(row, key) {
     var v = row[key];
     if (v == null) return '';
@@ -593,6 +600,7 @@
     rowFromRecord: rowFromRecord,
     cellText: cellText,
     formatDay: formatDay,
+    dueLabel: dueLabel,
     sortRows: sortRows,
     sortRowsMulti: sortRowsMulti,
     sortLabels: sortLabels,

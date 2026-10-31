@@ -905,7 +905,7 @@
       }
       if (key === 'due' && row.due) {
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < todayIso() && row.statutKey !== 'completed' && row.statutKey !== 'canceled';
-        return h('span', { class: 'tb-chip tb-chip--due' + (overdue ? ' is-overdue' : ''), title: overdue ? 'En retard · ' + row.due : row.due }, [icon(overdue ? 'calendar-exclamation' : 'calendar-event'), h('span', { text: TM().formatDay(row.due) })]);
+        return h('span', { class: 'tb-chip tb-chip--due' + (overdue ? ' is-overdue' : ''), title: overdue ? 'En retard · ' + row.due : row.due }, [icon(overdue ? 'calendar-exclamation' : 'calendar-event'), h('span', { text: TM().dueLabel(row.due, overdue, todayIso()) })]);
       }
       return null;
     }
