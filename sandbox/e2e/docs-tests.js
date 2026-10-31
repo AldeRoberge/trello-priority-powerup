@@ -133,7 +133,8 @@
     eq($('.dc-title').value, 'Compte rendu de lancement');
     assert(ed().querySelector('h1'), 'heading');
     eq(ed().querySelectorAll('.dc-mention').length, 4, 'four chips');
-    eq($$('.dc-item').length, 2, 'two documents in the sidebar');
+    eq($$('.dc-item').length, 3, 'two documents and the generated Aujourd’hui page in the sidebar');
+    assert($$('.dc-item').some(function (n) { return /Aujourd’hui/.test(n.textContent); }), 'Aujourd’hui page listed');
     assert($('.dc-item.is-on'), 'active item');
     eq($$('.dc-outline-item').length, 2, 'outline lists the headings');
   });
@@ -1053,7 +1054,7 @@
   test.unauth('authorizing loads the documents and opens the latest one', async function () {
     $('.dc-empty .dc-btn--primary').click();
     await waitFor(function () { return ed() && $('.dc-title').value === 'Compte rendu de lancement'; }, 'documents after authorization', 5000);
-    eq($$('.dc-item').length, 2);
+    eq($$('.dc-item').length, 3);
     assert($('.dc-empty').hidden, 'empty state gone');
     assert(!$('.dc-toolbar').classList.contains('is-disabled'), 'toolbar enabled');
   });

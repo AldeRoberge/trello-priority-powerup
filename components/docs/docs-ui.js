@@ -484,6 +484,7 @@
       if (subject && subject.k === 'entity') return 'stack-2';
       if (subject && subject.k === 'task') return 'checkbox';
       if (subject && subject.k === 'project') return 'briefcase';
+      if (subject && subject.k === 'day') return 'calendar-event';
       return 'file-text';
     }
 
@@ -2362,7 +2363,7 @@
       state.face = null;
       state.taskFields = null;
       paintProps();
-      if (!sub || sub.k === 'project') return;
+      if (!sub || sub.k === 'project' || sub.k === 'day') return;
       var req = sub.k === 'task' ? DT().loadCardFace(t, sub.id) : DT().loadEntityFace(t, sub.id);
       req.then(function (face) {
         if (token !== faceToken || !state.current || !state.current.subject || state.current.subject.id !== sub.id) return;
@@ -2401,7 +2402,7 @@
         els.props.appendChild(propRow('link', 'Lié à', function (v) {
           v.appendChild(emptyBtn('Cliquer pour lier…', function (e) { openLinkPicker(e.currentTarget); }));
         }));
-      } else if (sub.k !== 'project') {
+      } else if (sub.k !== 'project' && sub.k !== 'day') {
         var face = state.face;
         var missing = !!(face && face.missing);
         var name = (face && face.name) || (sub.k === 'entity' ? 'Entité' : 'Tâche');
@@ -2613,9 +2614,11 @@
           e.preventDefault();
           li.setAttribute('data-checked', li.getAttribute('data-checked') === 'true' ? 'false' : 'true');
           onEdit();
+          followCheckbox(li);
         }
       });
       ed.addEventListener('click', onEditorClick);
+      ed.addEventListener('focusout', function () { syncDayPage(); });
       ed.addEventListener('contextmenu', onEditorContextMenu, true);
       ed.addEventListener('mouseover', function (e) {
         var chip = e.target.closest && e.target.closest('.dc-mention--task');
@@ -6698,6 +6701,43 @@
       e.appendChild(h('button', { class: 'dc-btn dc-btn--primary', onclick: function () { newDoc(); } }, [icon('plus'), 'Nouveau document']));
     }
 
+    /** On the day page a checkbox in front of a task chip completes or reopens that card. */
+    function isDayPage() {
+      return !!(state.current && state.current.subject && state.current.subject.k === 'day');
+    }
+
+    function followCheckbox(li) {
+      if (!isDayPage() || !DT().setTaskDone) return;
+      var chip = li.querySelector('.dc-mention--task');
+      var id = chip && chip.getAttribute('data-id');
+      if (!id) return;
+      var on = li.getAttribute('data-checked') === 'true';
+      DT().setTaskDone(t, id, on).then(function () {
+        loadSources().catch(function () {});
+      }, function () {
+        li.setAttribute('data-checked', on ? 'false' : 'true');
+        onEdit();
+        toast('La tâche n’a pas pu être mise à jour.', 'error');
+      });
+    }
+
+    var daySyncTimer = null;
+
+    /** Leaving the editor on the day page turns lines typed by hand into tasks, then redraws the page. */
+    function syncDayPage() {
+      clearTimeout(daySyncTimer);
+      daySyncTimer = setTimeout(function () {
+        if (!isDayPage() || !editor || !global.DocsDaily || editor.contains(document.activeElement)) return;
+        var cur = state.current;
+        var md = DM().domToMd(editor);
+        if (!global.DocsDaily.reconcile(md).create.length) return;
+        saveNow().then(function (ok) {
+          if (!ok || state.current !== cur) return;
+          return openDoc(cur.id, { reload: true, skipSave: true });
+        });
+      }, 700);
+    }
+
     function openDoc(id, opts) {
       opts = opts || {};
       if (state.current && state.current.id === id && !opts.reload) return Promise.resolve();
@@ -6724,7 +6764,11 @@
       function load() {
         els.page.classList.add('is-loading');
         histFlush();
-        return DT().loadDoc(t, id).then(
+        var target = state.docs.filter(function (x) { return x.id === id; })[0];
+        var prep = target && target.subject && target.subject.k === 'day' && DT().refreshDaily
+          ? DT().refreshDaily(t).catch(function () {})
+          : Promise.resolve();
+        return prep.then(function () { return DT().loadDoc(t, id); }).then(
           function (doc) {
             if (token !== loadToken) return;
             els.page.classList.remove('is-loading');
@@ -7570,6 +7614,9 @@
           return DT().ensureProjectDocs
             ? DT().ensureProjectDocs(t, docs).then(function (r) { return r.docs; }, function () { return docs; })
             : docs;
+        }).then(function (docs) {
+          if (!DT().refreshDaily || DM().docForSubject(docs, 'day', 'today')) return docs;
+          return DT().refreshDaily(t).then(function (r) { return r.docs; }, function () { return docs; });
         }).then(
           function (docs) {
             state.docs = docs;
@@ -7592,7 +7639,9 @@
               });
             }
             var last = recall(LAST_KEY);
-            var pick = docs.filter(function (d) { return d.id === last; })[0] || docs[0];
+            var pick = docs.filter(function (d) { return d.id === last; })[0]
+              || docs.filter(function (d) { return !(d.subject && d.subject.k === 'day'); })[0]
+              || docs[0];
             if (pick) return openDoc(pick.id, { skipSave: true });
             showCurrent();
           },
