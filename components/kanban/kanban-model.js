@@ -30,6 +30,11 @@
     var TM = global.TableModel;
     var q = String(opts.filter || '').trim();
     var visible = q && TM ? TM.filterRows(rows, q) : (rows || []).slice();
+    if (opts.ids) {
+      var keep = Object.create(null);
+      opts.ids.forEach(function (id) { keep[id] = true; });
+      visible = visible.filter(function (r) { return keep[r.id]; });
+    }
     if (opts.hideDone) {
       var closed = Object.create(null);
       (lists || []).forEach(function (l) {

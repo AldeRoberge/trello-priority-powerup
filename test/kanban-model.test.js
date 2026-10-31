@@ -246,4 +246,11 @@ describe('KanbanModel projects', () => {
       assert.equal(ids({ sort: 'place', placeOf: (x) => p[x.id] }), 'bac');
     });
   });
+
+  it('restricts the view to given card ids', () => {
+    const ls = [{ id: 'l1', name: 'A', category: 'unstarted' }];
+    const rs = [1, 2, 3].map((n) => ({ id: 'r' + n, listId: 'l1', pos: n, name: 'n' + n }));
+    const cols = KM.buildColumns(rs, ls, { ids: ['r1', 'r3'] });
+    assert.deepEqual(cols[0].cards.map((x) => x.id), ['r1', 'r3']);
+  });
 });

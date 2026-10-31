@@ -50,6 +50,7 @@
   }
 
   var LANES_KEY = 'tp-kanban-lanes';
+  var SMART_KEY = 'tp-kanban-smart';
   var SORT_KEY = 'tp-kanban-sort';
   var SORTS = [['manual', 'Ordre manuel'], ['priority', 'Priorité'], ['progress', 'Avancement'], ['place', 'Lieu']];
   var LANES_FOLDED_KEY = 'tp-kanban-lanes-folded';
@@ -73,6 +74,20 @@
     return tiers.map(function (x) { return { i: x.i, label: x.label, color: x.seg }; });
   }
 
+  function readSmart() {
+    var v = readStored(SMART_KEY, null);
+    return v && Array.isArray(v.filters) ? v : { sig: '', filters: [] };
+  }
+
+  /** Cheap fingerprint of the open cards so suggestions are only regenerated when the board changed. */
+  function boardSig(rows) {
+    var s = (rows || []).filter(function (r) { return r.statutKey !== 'completed' && r.statutKey !== 'canceled'; })
+      .map(function (r) { return r.id + ':' + (r.name || '') + ':' + (r.desc || '').length; }).join('|');
+    var n = 0;
+    for (var i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) | 0;
+    return String(n);
+  }
+
   function mount(root, t) {
     var HD = global.HideDone;
     var state = {
@@ -88,6 +103,10 @@
       projFolded: readStored(PROJ_FOLDED_KEY, {}) || {},
       goals: { nodes: [], links: [] },
       sort: readStored(SORT_KEY, 'manual'),
+      smart: null, // active smart filter { label, ids }
+      smartList: readSmart(), // last AI suggestions { sig, filters }
+      smartBusy: false,
+      smartError: '',
       hideDone: HD.get(),
       authOk: true,
       detailId: null,
@@ -228,6 +247,7 @@
         today: todayIso(),
         tiers: tierDefs(),
         sort: state.sort,
+        ids: state.smart ? state.smart.ids : null,
         placeOf: function (r) { return state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[r.id]) : ''; },
       };
     }
@@ -325,6 +345,88 @@
       }, [icon(iconName), label ? h('span', { text: label }) : null]);
     }
 
+    /* ── Smart filters (AI suggestions) ─────────────────────────────── */
+    var smartMenu = null;
+    function closeSmartMenu() {
+      if (!smartMenu) return;
+      smartMenu.remove();
+      smartMenu = null;
+      document.removeEventListener('mousedown', onSmartOutside, true);
+      document.removeEventListener('keydown', onSmartKey, true);
+    }
+    function onSmartOutside(e) { if (smartMenu && !smartMenu.contains(e.target) && !e.target.closest('.kb-btn--smart')) closeSmartMenu(); }
+    function onSmartKey(e) { if (e.key === 'Escape') closeSmartMenu(); }
+
+    function smartPlace(id) {
+      return state.places && global.WorkOS ? global.WorkOS.placeLabel(state.places[id]) : '';
+    }
+
+    function generateSmart() {
+      if (state.smartBusy) return;
+      state.smartBusy = true;
+      state.smartError = '';
+      paintSmartMenu();
+      AI().smartFilters(t, { rows: state.rows, places: state.places, placeLabel: global.WorkOS && global.WorkOS.placeLabel }).then(function (filters) {
+        state.smartList = { sig: boardSig(state.rows), filters: filters };
+        writeStored(SMART_KEY, state.smartList);
+        if (!filters.length) state.smartError = 'Aucune suggestion pour le moment';
+      }).catch(function (err) {
+        state.smartError = (err && err.reason === 'no-provider') ? 'Configurez l’IA dans l’assistant' : 'Suggestions indisponibles';
+      }).then(function () {
+        state.smartBusy = false;
+        paintSmartMenu();
+      });
+    }
+
+    function paintSmartMenu() {
+      if (!smartMenu) return;
+      smartMenu.textContent = '';
+      var live = new Set(state.rows.map(function (r) { return r.id; }));
+      var shown = state.smartList.filters.map(function (f) {
+        return { label: f.label, ids: f.ids.filter(function (id) { return live.has(id); }) };
+      }).filter(function (f) { return f.ids.length; });
+      shown.forEach(function (f) {
+        smartMenu.appendChild(h('button', {
+          class: 'kb-smart-item' + (state.smart && state.smart.label === f.label ? ' is-active' : ''),
+          type: 'button',
+          onclick: function () {
+            state.smart = state.smart && state.smart.label === f.label ? null : f;
+            closeSmartMenu();
+            renderBar();
+            renderBoard();
+          },
+        }, [h('span', { text: f.label }), h('span', { class: 'kb-facet-n', text: String(f.ids.length) })]));
+      });
+      if (state.smartBusy) smartMenu.appendChild(h('div', { class: 'kb-smart-note', text: 'Analyse des cartes…' }));
+      else if (state.smartError) smartMenu.appendChild(h('div', { class: 'kb-smart-note', text: state.smartError }));
+      smartMenu.appendChild(h('button', {
+        class: 'kb-smart-item kb-smart-refresh',
+        type: 'button',
+        disabled: state.smartBusy ? 'disabled' : null,
+        onclick: generateSmart,
+      }, [icon('refresh'), h('span', { text: shown.length ? 'Nouvelles suggestions' : 'Suggérer des filtres' })]));
+    }
+
+    function smartButton() {
+      return h('button', {
+        class: 'kb-btn kb-btn--smart' + (state.smart ? ' is-active' : ''),
+        type: 'button',
+        title: 'Filtres intelligents',
+        onclick: function (e) {
+          if (smartMenu) { closeSmartMenu(); return; }
+          var r = e.currentTarget.getBoundingClientRect();
+          smartMenu = h('div', { class: 'kb-smart-menu', role: 'menu' });
+          smartMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 268)) + 'px';
+          smartMenu.style.top = (r.bottom + 4) + 'px';
+          document.body.appendChild(smartMenu);
+          document.addEventListener('mousedown', onSmartOutside, true);
+          document.addEventListener('keydown', onSmartKey, true);
+          paintSmartMenu();
+          if (!state.smartList.filters.length || state.smartList.sig !== boardSig(state.rows)) generateSmart();
+        },
+      }, [icon('sparkles'), h('span', { text: 'Filtres' })]);
+    }
+
     function renderBar() {
       els.bar.textContent = '';
       var filter = h('input', {
@@ -362,6 +464,13 @@
         h('label', { class: 'kb-search tp-search' }, [icon('search'), filter]),
         facetButton('overdue', 'calendar-exclamation', 'En retard', counts.overdue),
         facetButton('blocked', 'player-pause', 'Bloquées', counts.blocked),
+        AI() ? smartButton() : null,
+        state.smart ? h('button', {
+          class: 'kb-facet is-smart',
+          type: 'button',
+          title: 'Retirer le filtre',
+          onclick: function () { state.smart = null; renderBar(); renderBoard(); },
+        }, [icon('sparkles'), h('span', { text: state.smart.label }), icon('x')]) : null,
         btn('refresh', null, { title: 'Actualiser', onclick: function () { reload(); } }),
         h('span', { class: 'kb-status' }),
         AI() ? boardAsk() : null,

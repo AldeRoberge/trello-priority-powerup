@@ -781,3 +781,36 @@ html[data-color-mode] .tp-page--kanban {
 .kb-sort select { background: transparent; color: inherit; border: 0; font: inherit; cursor: pointer; padding: 4px 2px; }
 .kb-sort:hover { color: var(--tp-text, #b6c2cf); }
 .kb-sort option { color: #000; }
+
+/* Smart (AI) filters: menu under the bar button, active filter shown as a removable chip */
+.kb-facet.is-smart { color: var(--tp-primary); box-shadow: inset 0 0 0 1px var(--tp-primary); }
+.kb-smart-menu {
+  position: fixed;
+  z-index: 1000;
+  width: 260px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--tp-surface, #22272b);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--tp-border);
+}
+.kb-smart-item {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text);
+  text-align: left;
+  cursor: pointer;
+}
+.kb-smart-item > span:first-of-type { flex: 1; }
+.kb-smart-item:hover { background: var(--tp-surface-hover); }
+.kb-smart-item.is-active { color: var(--tp-primary); }
+.kb-smart-refresh { color: var(--tp-text-muted); }
+.kb-smart-note { padding: 6px 8px; color: var(--tp-text-muted); opacity: 0.7; }

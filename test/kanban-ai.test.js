@@ -318,4 +318,29 @@ describe('KanbanAI', () => {
       assert.equal(typeof AI.buildMessages({ text: 'x', rows: [], lists }) [1].content, 'string');
     });
   });
+
+  describe('smart filters', () => {
+    it('keeps filters with a label and two known ids, drops the rest', () => {
+      const raw = { filters: [
+        { label: 'À faire au chalet', ids: ['a', 'b', 'zzz', 'a'] },
+        { label: 'Trop petit', ids: ['a'] },
+        { label: '', ids: ['a', 'b'] },
+        { label: 'à faire au chalet', ids: ['a', 'b'] },
+        { label: 'À apporter à Kate — vite', ids: ['b', 'c'] },
+      ] };
+      const out = AI.normalizeSmartFilters(raw, ['a', 'b', 'c']);
+      assert.deepEqual(out, [
+        { label: 'À faire au chalet', ids: ['a', 'b'] },
+        { label: 'À apporter à Kate vite', ids: ['b', 'c'] },
+      ]);
+    });
+    it('returns nothing for a malformed reply', () => {
+      assert.deepEqual(AI.normalizeSmartFilters(null, ['a']), []);
+      assert.deepEqual(AI.normalizeSmartFilters({ filters: 'x' }, ['a']), []);
+    });
+    it('only sends open cards to the model', () => {
+      const rows = [{ id: '1', name: 'A', statutKey: 'started' }, { id: '2', name: 'B', statutKey: 'completed' }];
+      assert.deepEqual(AI.openCardsForSmart(rows, {}, null).map((c) => c.id), ['1']);
+    });
+  });
 });
