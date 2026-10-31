@@ -64,9 +64,9 @@
   var SCHEMA = [
     '{"message":"confirmation courte de ce que tu as fait ou de ce qu\'il manque",',
     ' "actions":[',
-    '  {"op":"create","title":"…","desc":"…","list":"<id de liste>","progress":0,"files":["nom d’une pièce jointe"]},',
+    '  {"op":"create","title":"…","desc":"…","list":"<id de liste>","progress":0,"files":["nom d’une pièce jointe"],"people":["Kate"],"places":{"at":"Val-d’Or","from":"Chalet","to":"Maison"}},',
     '  {"op":"delete","cardId":"<id>"},',
-    '  {"op":"update","cardId":"<id>","desc":"description complète","progress":57,"waiting":true,"waitingReason":"…","list":"<id de liste>"}',
+    '  {"op":"update","cardId":"<id>","desc":"description complète","progress":57,"waiting":true,"waitingReason":"…","list":"<id de liste>","people":["Kate"],"places":{"at":"…"}}',
     ' ]}',
   ].join('\n');
 
@@ -87,6 +87,9 @@
       '- desc (update) = la description COMPLÈTE qui remplace l’ancienne, en Markdown. Conserve ce qui est encore vrai et utile, intègre la nouvelle information (ex. : une ligne « ' + (o.today || '') + ' : en attente de la réponse de … »). Pour « définir la tâche », écris objectif, étapes concrètes et critère de réussite, brièvement. N’inclus desc que si elle change.',
       '- progress = entier 0–100, seulement si le message dit ou implique clairement un changement d’avancement. Ne mets 100 que si la tâche est clairement terminée. Une mise en attente ne change pas le progrès par elle-même.',
       '- waiting = true quand l’utilisateur attend quelqu’un ou quelque chose (réponse, livraison, décision) ou met la tâche en pause ; waitingReason = motif court (qui / quoi on attend), UNIQUEMENT si l’utilisateur le dit ; sinon omets waitingReason (n’invente jamais de motif, pas de « en attente de rien »). waiting = false quand l’attente est levée.',
+      '- people (create ou update) = les personnes concernées par la tâche : à qui apporter ou donner quelque chose, avec qui, qui on attend (« Bring to Kate » donne ["Kate"]). Prénoms ou noms tels que l’utilisateur les écrit ; reprends l’écriture exacte d’une personne de « people » si c’est la même. Jamais l’utilisateur lui-même.',
+      '- places (create ou update) = objet avec at (où la tâche se fait), from (d’où on rapporte quelque chose, « Bring back from cottage » donne from "Cottage") et to (où on apporte, livre ou va). Noms courts (ville, chalet, maison, magasin), reprends l’écriture d’un lieu de « places » si c’est le même. N’inclus que les clés dites ou clairement impliquées.',
+      '- Ne mets people et places que si le message les mentionne ou les implique clairement : n’invente rien, omets-les sinon.',
       '- list = id de liste seulement si l’utilisateur demande clairement de déplacer / démarrer / terminer la carte (pas pour une mise en attente, c’est géré par waiting).',
       '- Pas d’invention : s’il veut clairement changer le tableau mais qu’il manque un détail indispensable (quelle carte, quel titre), renvoie actions [] et pose UNE question précise sur ce détail. INTERDIT : « Que souhaitez-vous faire », « Comment puis-je vous aider », « sur le tableau », « je n’ai pas compris l’instruction ».',
       '- Un calcul, une question, une blague ou un fait qui ne change rien au tableau : réponds directement et brièvement. N’exige pas une carte ni une action.',
@@ -101,6 +104,8 @@
     ].join('\n');
 
     var ctx = { lists: listsForPrompt(o.lists) };
+    if (o.known && o.known.people && o.known.people.length) ctx.people = o.known.people.slice(0, 60);
+    if (o.known && o.known.places && o.known.places.length) ctx.places = o.known.places.slice(0, 60);
     var atts = (o.attachments || []).filter(function (a) { return a && a.name; });
     if (atts.length) ctx.attachments = atts.map(function (a) { return { name: a.name, type: a.type || '' }; });
     if (target) {
@@ -156,6 +161,20 @@
    * Validates the model's actions against the real board: unknown cards / lists are dropped,
    * numbers are clamped, and an `update` without cardId falls back to the target card.
    */
+  /** Copies the people / places a model asked for onto a normalized action (names only, trimmed, capped). */
+  function addEntities(out, a) {
+    var people = (Array.isArray(a.people) ? a.people : []).map(function (x) { return str(x, 60).trim(); }).filter(Boolean);
+    var seen = Object.create(null);
+    people = people.filter(function (n) { var k = foldName(n); if (seen[k]) return false; seen[k] = true; return true; }).slice(0, 6);
+    if (people.length) out.people = people;
+    var pl = {};
+    ['at', 'from', 'to'].forEach(function (k) {
+      var v = a.places && typeof a.places === 'object' ? str(a.places[k], 60).trim() : '';
+      if (v) pl[k] = v;
+    });
+    if (Object.keys(pl).length) out.places = pl;
+  }
+
   function normalizeActions(raw, ctx) {
     ctx = ctx || {};
     var rows = ctx.rows || [];
@@ -173,6 +192,7 @@
         if (fl.length) c.files = fl;
         var p = a.progress == null ? null : clampPct(a.progress);
         if (p) c.progress = p;
+        addEntities(c, a);
         out.push(c);
       } else if (op === 'delete') {
         var did = ctx.target ? targetId : str(typeof a.cardId === 'string' ? a.cardId : '', 64);
@@ -195,6 +215,7 @@
         }
         var lid = resolveListId(a.list, lists);
         if (lid && lid !== row.listId && u.waiting !== true) u.listId = lid;
+        addEntities(u, a);
         if (Object.keys(u).length > 2) out.push(u);
       }
     });
@@ -571,6 +592,118 @@
     });
   }
 
+  /* ── People and places written into the card's metadata ───────────── */
+
+  function foldName(v) {
+    return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function sameName(name, candidate) {
+    var n = foldName(name);
+    var c = foldName(candidate);
+    return !!n && (n === c || n === c.split(' ')[0]);
+  }
+
+  /**
+   * Pure: decides what to write for the people / places an action asked for.
+   * known: { members: [{id, fullName, username}], catalog: [{id, name}], places: [{id, name}] }
+   * current: { memberIds: [], customs: [], places: {} } what the card already has.
+   * make: { person(name), place(name) } build a new catalog entry (null when the name is invalid).
+   * Returns { memberIds, customs, places, newCustoms, newPlaces, labels } (labels = what to tell the user).
+   */
+  function planEntities(a, known, current, make) {
+    known = known || {};
+    current = current || {};
+    var memberIds = (current.memberIds || []).slice();
+    var customs = (current.customs || []).slice();
+    var places = Object.assign({}, current.places || {});
+    var newCustoms = [];
+    var newPlaces = [];
+    var labels = [];
+    (a.people || []).forEach(function (name) {
+      var m = (known.members || []).filter(function (x) { return sameName(name, x.fullName) || sameName(name, x.username); })[0];
+      if (m) {
+        if (memberIds.indexOf(String(m.id)) < 0) { memberIds.push(String(m.id)); labels.push(m.fullName || m.username || name); }
+        return;
+      }
+      var entry = (known.catalog || []).concat(newCustoms).filter(function (x) { return sameName(name, x.name); })[0];
+      if (!entry) {
+        entry = make && make.person ? make.person(name) : null;
+        if (!entry) return;
+        newCustoms.push(entry);
+      }
+      if (!customs.some(function (x) { return String(x.id) === String(entry.id); })) { customs.push(entry); labels.push(entry.name); }
+    });
+    ['at', 'from', 'to'].forEach(function (slot) {
+      var name = a.places && a.places[slot];
+      if (!name) return;
+      var ref = (known.places || []).concat(newPlaces).filter(function (x) { return foldName(x.name) === foldName(name); })[0];
+      if (!ref) {
+        ref = make && make.place ? make.place(name) : null;
+        if (!ref) return;
+        newPlaces.push(ref);
+      }
+      places[slot] = { id: ref.id, name: ref.name };
+      labels.push(ref.name);
+    });
+    return { memberIds: memberIds, customs: customs, places: places, newCustoms: newCustoms, newPlaces: newPlaces, labels: labels };
+  }
+
+  /** Names of people and places already on the board, so the model reuses them instead of inventing variants. */
+  function loadKnown(t) {
+    var pt = PT();
+    function safe(fn, fallback) { try { return Promise.resolve(fn()).then(function (v) { return v || fallback; }, function () { return fallback; }); } catch (e) { return Promise.resolve(fallback); } }
+    return Promise.all([
+      safe(function () { return pt.getBoardMembers(t); }, []),
+      safe(function () { return pt.getCustomAssigneeCatalog(t); }, []),
+      safe(function () { return pt.getPlaceCatalog(t); }, []),
+    ]).then(function (r) {
+      return {
+        members: r[0], catalog: r[1], places: r[2],
+        people: r[0].map(function (m) { return m.fullName || m.username; }).concat(r[1].map(function (c) { return c.name; })).filter(Boolean),
+        placeNames: r[2].map(function (p) { return p.name; }).filter(Boolean),
+      };
+    });
+  }
+
+  /** Writes the people / places of an action onto a card (members through Trello, the rest in the card's inputs). */
+  function applyEntities(t, cardId, a, o, res, isNew) {
+    if (!(a.people && a.people.length) && !a.places) return Promise.resolve();
+    var pt = PT();
+    var pu = global.PriorityUI;
+    var st = global.SheetsTrello;
+    var make = {
+      person: function (n) { return pu && pu.createCustomAssignee ? pu.createCustomAssignee({ name: n }) : null; },
+      place: function (n) { return pu && pu.createPlaceRef ? pu.createPlaceRef(n) : null; },
+    };
+    return Promise.all([
+      o.known ? Promise.resolve(o.known) : loadKnown(t),
+      isNew ? Promise.resolve(null) : pt.getCardInputsById(t, cardId).catch(function () { return null; }),
+      isNew || !st ? Promise.resolve(null) : st.trelloRest(t, '/cards/' + encodeURIComponent(cardId) + '?fields=idMembers', 'GET').catch(function () { return null; }),
+    ]).then(function (r) {
+      var inputs = r[1] || {};
+      var memberIds = r[2] && r[2].ok && r[2].data && Array.isArray(r[2].data.idMembers) ? r[2].data.idMembers.map(String) : [];
+      var plan = planEntities(a, r[0], { memberIds: memberIds, customs: inputs.customAssignees || [], places: inputs.places || {} }, make);
+      var steps = Promise.resolve();
+      if (plan.newCustoms.length) steps = steps.then(function () { return pt.saveCustomAssigneeCatalog(t, (r[0].catalog || []).concat(plan.newCustoms)); });
+      if (plan.newPlaces.length) steps = steps.then(function () { return pt.savePlaceCatalog(t, (r[0].places || []).concat(plan.newPlaces)); });
+      if (plan.memberIds.length > memberIds.length && st) {
+        steps = steps.then(function () { return st.trelloRest(t, '/cards/' + encodeURIComponent(cardId), 'PUT', { idMembers: plan.memberIds.join(',') }); });
+      }
+      var patch = {};
+      if (a.people && plan.customs.length > (inputs.customAssignees || []).length) patch.customAssignees = plan.customs;
+      if (a.places) patch.places = plan.places;
+      if (Object.keys(patch).length) steps = steps.then(function () { return pt.saveCardInputsById(t, cardId, patch, { skipStatutAutoMove: true, syncDue: false, autoSort: false }); });
+      return steps.then(function () {
+        if (plan.newCustoms.length || plan.newPlaces.length) o.known = null; // catalogs changed: reload next time
+        if (plan.labels.length) {
+          res.applied.push('liée à ' + plan.labels.join(', '));
+          if (typeof o.record === 'function') o.record({ type: 'field', label: 'Personnes et lieux', targetId: cardId, title: a.title || '' });
+        }
+      });
+    }).catch(function () { res.failed.push('personnes ou lieux'); });
+  }
+
   function applyCreate(t, a, o, res) {
     var listId = a.listId || defaultListId(o.lists, o.target);
     var list = (o.lists || []).filter(function (l) { return l.id === listId; })[0];
@@ -580,6 +713,7 @@
       var steps = Promise.resolve();
       if (cardId && a.desc) steps = steps.then(function () { return PT().restPutCard(t, cardId, { desc: a.desc }); });
       if (cardId && a.progress) steps = steps.then(function () { return writeProgress(t, cardId, a.progress); }).catch(function () { /* card not readable yet: progress stays 0 */ });
+      if (cardId) steps = steps.then(function () { return applyEntities(t, cardId, a, o, res, true); });
       var picked = (o.files || []).filter(function (f) { return (a.files || []).indexOf(f.name) >= 0; });
       if (!a.files && o.files && o.files.length && o.soleCreate) picked = o.files;
       if (cardId && picked.length) {
@@ -632,6 +766,9 @@
           res.applied.push('description mise à jour');
         });
       });
+    }
+    if (a.people || a.places) {
+      chain = chain.then(function () { return applyEntities(t, row.id, Object.assign({ title: row.name }, a), o, res, false); });
     }
     if (a.progress != null) {
       chain = chain.then(function () {
@@ -702,8 +839,10 @@
             return { waiting: !!(inp && inp.enAttente), waitingReasons: (inp && inp.blockedReasons) || [] };
           }, function () { return null; })
         : Promise.resolve(null);
-      return extraP.then(function (extra) {
-        var base = { text: text, target: target, targetExtra: extra, rows: o.rows, lists: o.lists, today: todayIso() };
+      return Promise.all([extraP, loadKnown(t)]).then(function (pair) {
+        var extra = pair[0];
+        o.known = pair[1];
+        var base = { text: text, target: target, targetExtra: extra, rows: o.rows, lists: o.lists, today: todayIso(), known: { people: pair[1].people, places: pair[1].placeNames } };
         var asked = pa.chatCompletions(provider, buildMessages(Object.assign({ attachments: o.attachments }, base)), { temperature: 0.2, max_tokens: 1500 });
         // A model without vision rejects images: retry with the file names only.
         if (!(o.attachments || []).some(function (a) { return a.dataUrl; })) return asked;
@@ -829,6 +968,7 @@
   }
 
   global.KanbanAI = {
+    planEntities: planEntities,
     smartFilters: smartFilters,
     buildSmartMessages: buildSmartMessages,
     normalizeSmartFilters: normalizeSmartFilters,

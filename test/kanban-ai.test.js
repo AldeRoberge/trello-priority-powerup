@@ -343,4 +343,38 @@ describe('KanbanAI', () => {
       assert.deepEqual(AI.openCardsForSmart(rows, {}, null).map((c) => c.id), ['1']);
     });
   });
+
+  describe('people and places', () => {
+    const known = {
+      members: [{ id: 'm1', fullName: 'Kate Tremblay', username: 'kate_t' }],
+      catalog: [{ id: 'c1', name: 'Marc-André' }],
+      places: [{ id: 'p1', name: 'Chalet' }],
+    };
+    const make = { person: (n) => ({ id: 'new-' + n, name: n }), place: (n) => ({ id: 'newp-' + n, name: n }) };
+    it('keeps people and places on create and update actions', () => {
+      const out = AI.normalizeActions([
+        { op: 'create', title: 'Bring to Kate: pumpkins', people: ['Kate', ' kate ', ''], places: { from: 'Chalet', to: '', bogus: 'x' } },
+      ], { rows: [], lists: [] });
+      assert.deepEqual(out[0].people, ['Kate']);
+      assert.deepEqual(out[0].places, { from: 'Chalet' });
+    });
+    it('links a first name to a board member and a place to the catalog', () => {
+      const plan = AI.planEntities({ people: ['kate'], places: { from: 'chalet' } }, known, {}, make);
+      assert.deepEqual(plan.memberIds, ['m1']);
+      assert.deepEqual(plan.places, { from: { id: 'p1', name: 'Chalet' } });
+      assert.equal(plan.newCustoms.length + plan.newPlaces.length, 0);
+    });
+    it('matches accents and punctuation, and creates unknown names', () => {
+      const plan = AI.planEntities({ people: ['Marc Andre', 'Julie'], places: { at: 'Val-d’Or' } }, known, {}, make);
+      assert.deepEqual(plan.customs.map((c) => c.name), ['Marc-André', 'Julie']);
+      assert.deepEqual(plan.newCustoms.map((c) => c.name), ['Julie']);
+      assert.deepEqual(plan.newPlaces.map((c) => c.name), ['Val-d’Or']);
+    });
+    it('keeps what the card already has', () => {
+      const plan = AI.planEntities({ people: ['Kate'], places: { to: 'Chalet' } }, known, { memberIds: ['m1', 'm9'], places: { at: { id: 'x', name: 'Maison' } } }, make);
+      assert.deepEqual(plan.memberIds, ['m1', 'm9']);
+      assert.deepEqual(Object.keys(plan.places).sort(), ['at', 'to']);
+      assert.equal(plan.labels.indexOf('Kate Tremblay'), -1);
+    });
+  });
 });
