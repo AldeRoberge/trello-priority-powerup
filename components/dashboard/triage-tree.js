@@ -206,6 +206,7 @@
     estimate: { header: 'Durée', icon: 'clock', width: 88, kind: 'number', edit: 'estimate' },
     tier: { header: 'Palier', icon: 'stack-2', width: 100, kind: 'text', edit: 'priority' },
     desc: { header: 'Description', icon: 'align-left', width: 180, kind: 'text', edit: 'desc' },
+    lieu: { header: 'Lieu', icon: 'map-pin', width: 130, kind: 'text', edit: 'places' },
   };
   var DEFAULT_COLUMNS = ['progress', 'priority'];
 
@@ -1001,6 +1002,7 @@
 
   /* ── Preferences (remembered in this browser; the page works without) ─────────────── */
 
+  var ALL_KEY = 'tp-triage-all';
   var TREE_KEY = 'tp-triage-tree';
   var FOLD_KEY = 'tp-triage-collapsed';
   var COLS_KEY = 'tp-triage-columns';
@@ -1016,6 +1018,8 @@
     /** The tree is the default view; "0" means the flat list. */
     treeOn: function () { return read(TREE_KEY) !== '0'; },
     setTreeOn: function (on) { write(TREE_KEY, on ? '1' : '0'); },
+    allOn: function () { return read('tp-triage-all') === '1'; },
+    setAllOn: function (on) { write('tp-triage-all', on ? '1' : '0'); },
     collapsed: function () {
       try {
         var o = JSON.parse(read(FOLD_KEY) || '{}');

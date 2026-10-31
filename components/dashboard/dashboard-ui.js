@@ -314,6 +314,7 @@
       triageTree: !global.TriageTree || global.TriageTree.prefs.treeOn(), // projects > tasks > subtasks, or the flat list
       triageFold: global.TriageTree ? global.TriageTree.prefs.collapsed() : {}, // folded lines of the tree (keys of TriageTree)
       triageCols: global.TriageTree && global.TriageTree.prefs.columns ? global.TriageTree.prefs.columns() : ['progress', 'priority'],
+      triageAll: !!(global.TriageTree && global.TriageTree.prefs.allOn && global.TriageTree.prefs.allOn()), // every open task of the projects, not only the untriaged
       triageSorts: global.TriageTree && global.TriageTree.prefs.sorts ? global.TriageTree.prefs.sorts() : [],
       triageWidths: global.TriageTree && global.TriageTree.prefs.widths ? global.TriageTree.prefs.widths() : {},
       subSel: null, // { taskId, itemId, parentId, key } when a subtask, not its card, is open in the pane
@@ -341,6 +342,16 @@
       }, 120);
     });
     /** The cards the sections show: everything, or only what the side-panel search matches. */
+    /** The Triage list: the untriaged cards, or (button on) every open task that belongs to a project as well. */
+    function triageRows() {
+      var rows = viewRows();
+      if (!state.triageAll || !WO() || typeof WO().projectOf !== 'function') return DM().triageQueue(rows);
+      return rows.filter(function (r) {
+        if (r.statutKey === 'triage') return true;
+        return DM().isOpen(r) && !!WO().projectOf(state.goals, r.id);
+      }).sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); });
+    }
+
     function viewRows() {
       return state.filter && TM() ? TM().filterRows(state.rows, state.filter) : state.rows;
     }
@@ -681,7 +692,7 @@
 
     function advanceSelection(row) {
       if (!row || state.selected !== row.id) return;
-      var q = DM().triageQueue(viewRows());
+      var q = triageRows();
       var i = -1;
       for (var n = 0; n < q.length; n++) if (q[n].id === row.id) i = n;
       var nxt = i >= 0 ? (q[i + 1] || q[i - 1]) : null;
@@ -849,7 +860,7 @@
 
     /** Tasks shown under this project line (the free group is the tasks with no project). */
     function rowsForProject(node) {
-      var q = DM().triageQueue(viewRows());
+      var q = triageRows();
       var want = node && node.id ? String(node.id) : '';
       return (q || []).filter(function (r) {
         if (!r || !r.id) return false;
@@ -1732,6 +1743,7 @@
           var spec = TT.COLUMNS[key];
           var kind = spec && spec.edit;
           if (!kind) return;
+          if (kind === 'places') return openEntities(row, 'places', anchor);
           if (kind === 'estimate') return estimateMenu(row, anchor);
           openEditor(row, kind, anchor);
         },
@@ -1853,6 +1865,24 @@
           render();
         },
       }, [icon('list-tree')]);
+    }
+
+    function allToggle() {
+      if (!global.TriageTree) return null;
+      var label = state.triageAll ? 'Afficher seulement les cartes à trier' : 'Afficher toutes les tâches des projets';
+      return h('button', {
+        class: 'db-icon-btn' + (state.triageAll ? ' is-on' : ''),
+        type: 'button',
+        title: label,
+        'aria-label': label,
+        'aria-pressed': String(!!state.triageAll),
+        'data-fk': 'triage-all',
+        onclick: function () {
+          state.triageAll = !state.triageAll;
+          if (global.TriageTree.prefs.setAllOn) global.TriageTree.prefs.setAllOn(state.triageAll);
+          render();
+        },
+      }, [icon('list-check')]);
     }
 
     function columnsButton() {
@@ -2106,11 +2136,11 @@
     }
 
     function renderTriage() {
-      var q = DM().triageQueue(viewRows());
+      var q = triageRows();
       if (state.docOpen && global.TriageDocUI) {
         var open = triageListEl(q, null);
         els.main.appendChild(splitPage(
-          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [columnsButton(), treeToggle(), docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
+          h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [columnsButton(), treeToggle(), allToggle(), docButton(), h('span', { class: 'db-badge', text: String(q.length) })])), open]),
           h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [docPane()])
         ));
         return;
@@ -2118,7 +2148,7 @@
       if (!q.length) {
         var none = !hasTriage() ? 'Aucune liste de triage sur ce tableau.' : state.filter ? 'Aucune carte ne correspond.' : 'Boîte de triage vide. Bien joué.';
         els.main.appendChild(h('div', { class: 'db-page' }, [
-          pageHead('Triage', '', hasTriage() && global.TriageDocUI ? h('div', { class: 'db-head-tools' }, [docButton()]) : null),
+          pageHead('Triage', '', hasTriage() ? h('div', { class: 'db-head-tools' }, [allToggle(), global.TriageDocUI ? docButton() : null]) : null),
           hasTriage() ? null : inboxBanner(),
           h('div', { class: 'db-empty' }, [icon('inbox'), h('p', { text: none })]),
         ]));
@@ -2147,7 +2177,7 @@
             : global.TriageUI.detail(sel, triageHost());
       var list = triageListEl(q, sel.id);
       els.main.appendChild(splitPage(
-        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [columnsButton(), treeToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
+        h('div', { class: 'db-split-l', 'data-keep': 'list' }, [pageHead('Triage', '', h('div', { class: 'db-head-tools' }, [columnsButton(), treeToggle(), allToggle(), global.TriageDocUI ? docButton() : null, h('span', { class: 'db-badge', text: String(q.length) })])), list]),
         h('div', { class: 'db-split-r', 'data-keep': 'pane' }, [pane])
       ));
     }
@@ -3194,8 +3224,8 @@
       var idx = '123'.indexOf(k);
       if (idx >= 0 && k.length === 1) { e.preventDefault(); return go(SECTIONS[idx].key); }
       if (state.section !== 'triage') return;
-      var q = triageOrder(DM().triageQueue(viewRows()));
-      var focus = focusEntries(DM().triageQueue(viewRows()));
+      var q = triageOrder(triageRows());
+      var focus = focusEntries(triageRows());
       var i = focusAt(focus);
       // The Document pane shows no card: J / K go back to the list, the decision keys wait.
       if (state.docOpen) {
