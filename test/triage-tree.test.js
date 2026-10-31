@@ -322,7 +322,7 @@ test('the + sits under its line, outside the left count', () => {
 test('columns default to progress and priority, and a sort orders tasks with empties last', () => {
   eq(TT.normalizeColumns(null), ['progress', 'priority']);
   eq(TT.normalizeColumns(['nope', 'due', 'due', 'priority']), ['due', 'priority']);
-  eq(TT.catalog(['due']), ['due', 'progress', 'priority', 'statut', 'urgency', 'estimate', 'tier', 'desc']);
+  eq(TT.catalog(['due']), ['due', 'progress', 'priority', 'statut', 'urgency', 'estimate', 'tier', 'desc', 'lieu']);
   eq(TT.cycleSort([], 'priority', false), [{ key: 'priority', dir: 'asc' }]);
   eq(TT.cycleSort([{ key: 'priority', dir: 'asc' }], 'priority', false), [{ key: 'priority', dir: 'desc' }]);
   eq(TT.cycleSort([{ key: 'priority', dir: 'desc' }], 'priority', false), []);
