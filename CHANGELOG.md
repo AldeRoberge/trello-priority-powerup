@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Tableau : nouvelle colonne « Lieu » et bouton « Grouper par » (projet, lieu ou aucun groupe).
 - Mobile : glisser le doigt sur une barre de progrès (Kanban, Tableau, Parcours) ou une barre du Gantt fait défiler la page au lieu de changer le progrès ou d’ouvrir l’éditeur de dates.
 - Mobile : les champs de saisie ne font plus zoomer la page sur iPhone (texte 16 px).
 - Mobile : zones de toucher agrandies (progrès, puces, boutons), menu « … » des documents et poignées des barres du Gantt visibles sans survol.

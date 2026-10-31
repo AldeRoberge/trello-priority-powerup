@@ -293,6 +293,16 @@
           },
         }),
       ];
+      var gm = groupMode();
+      kids.push(btn(gm === 'lieu' ? 'map-pin' : gm === 'none' ? 'list' : 'stack-2', gm === 'none' ? 'Groupes' : 'Par ' + (gm === 'lieu' ? 'lieu' : 'projet'), {
+        active: gm !== 'project',
+        title: 'Grouper par…',
+        onclick: function (e) {
+          e.stopPropagation();
+          var rect = e.currentTarget.getBoundingClientRect();
+          MENU().show({ x: rect.left, y: rect.bottom + 4 }, groupItems());
+        },
+      }));
       if (state.sorts.length) {
         kids.push(btn(state.sorts[0].dir === 'asc' ? 'sort-ascending' : 'sort-descending', 'Tri : ' + state.sorts.map(function (s) {
           return TM().COLUMNS[s.key].header + (s.dir === 'asc' ? ' ↑' : ' ↓');
@@ -632,7 +642,7 @@
           if (!state.dragId) return;
           var moved = findRow(state.dragId);
           if (!moved || moved.id === row.id) return;
-          var otherProject = (moved.projectId || '') !== (row.projectId || '');
+          var otherProject = groupMode() === 'project' && (moved.projectId || '') !== (row.projectId || '');
           if (!canReorder() && !otherProject) return;
           e.preventDefault();
           if (canReorder()) {
@@ -687,7 +697,7 @@
         body.appendChild(tr);
         if (state.expanded[row.id]) renderSubRows(row, body);
       }
-      var sections = TM().groupByProject(rows, foldedSections(), state.filter ? null : projectCatalog());
+      var sections = TM().groupRows(rows, groupMode(), foldedSections(), state.filter ? null : projectCatalog());
       if (!sections) rows.forEach(renderRowTr);
       else sections.forEach(function (g) {
         body.appendChild(sectionRow(g));
@@ -1443,7 +1453,7 @@
       var moved = findRow(dragId);
       if (!moved || !targetRow || moved.id === targetRow.id) return renderGrid();
       var nextProject = targetRow.projectId || '';
-      var projectChanged = (moved.projectId || '') !== nextProject;
+      var projectChanged = groupMode() === 'project' && (moved.projectId || '') !== nextProject;
       var from = { listId: moved.listId, pos: moved.pos, statut: moved.statut };
       var pos = moved.pos;
       var listChanged = false;
@@ -1571,11 +1581,15 @@
         { icon: 'sort-descending', label: 'Ajouter au tri ' + TM().sortLabels(key).desc, checked: sorted === 'desc' && others, disabled: !state.sorts.length, action: function () { setSort(key, 'desc', true); } },
         { icon: 'arrows-sort', label: others ? 'Retirer ce niveau de tri' : 'Retirer le tri', disabled: !sorted, action: function () { setSort(key, null, true); } },
         { sep: true },
+      ].concat(key === 'project' || key === 'lieu' ? [
+        { icon: key === 'lieu' ? 'map-pin' : 'folder', label: 'Grouper par ' + (key === 'lieu' ? 'lieu' : 'projet'), checked: groupMode() === key, action: function () { setGroupMode(key === 'lieu' ? 'lieu' : 'project'); } },
+        { sep: true },
+      ] : []).concat([
         { icon: 'arrow-left', label: 'Déplacer à gauche', disabled: idx <= 0, action: function () { moveColumn(idx, -1); } },
         { icon: 'arrow-right', label: 'Déplacer à droite', disabled: idx >= state.columns.length - 1, action: function () { moveColumn(idx, 1); } },
         { icon: 'eye-off', label: 'Masquer la colonne', disabled: state.columns.length <= 1, action: function () { hideColumn(key); } },
         { icon: 'columns-3', label: 'Colonnes…', action: function () { state.menuOpen = true; renderMenu(); } },
-      ];
+      ]);
     }
 
     function rowItems(row, key) {
@@ -1984,6 +1998,28 @@
       }).catch(function () { return {}; });
     }
 
+    /* ── Grouping: by Projet (default), by Lieu, or a flat list; remembered in this browser ── */
+    function groupMode() {
+      try {
+        var m = localStorage.getItem('tp-table-groupby');
+        return m === 'lieu' || m === 'none' ? m : 'project';
+      } catch (e) { return 'project'; }
+    }
+    function setGroupMode(mode) {
+      try { localStorage.setItem('tp-table-groupby', mode); } catch (e) { /* lasts until reload */ }
+      renderBar();
+      renderGrid();
+    }
+    function groupItems() {
+      var cur = groupMode();
+      return [
+        { title: 'Grouper par' },
+        { icon: 'folder', label: 'Projet', checked: cur === 'project', action: function () { setGroupMode('project'); } },
+        { icon: 'map-pin', label: 'Lieu', checked: cur === 'lieu', action: function () { setGroupMode('lieu'); } },
+        { icon: 'list', label: 'Aucun groupe', checked: cur === 'none', action: function () { setGroupMode('none'); } },
+      ];
+    }
+
     /* ── Project sections (same look as the Triage tree), folded state remembered in this browser ── */
     function foldedSections() {
       try {
@@ -2074,8 +2110,9 @@
     }
 
     function sectionRow(g) {
-      var sectionGlyph = icon(g.free ? 'inbox' : ((g.icon && g.icon.i) || 'stack-2'), 'tb-section-icon');
-      if (!g.free && g.id && global.ProjectIcon) {
+      var isLieu = g.kind === 'lieu';
+      var sectionGlyph = icon(g.free ? 'inbox' : isLieu ? 'map-pin' : ((g.icon && g.icon.i) || 'stack-2'), 'tb-section-icon');
+      if (!g.free && !isLieu && g.id && global.ProjectIcon) {
         var picked = global.ProjectIcon.button({
           t: t,
           id: g.id,
@@ -2108,14 +2145,14 @@
             h('span', { class: 'tb-section-name', text: g.name }),
           ]),
           h('span', { class: 'tb-section-meta' }, [
-            sectionPriority(g),
+            isLieu ? null : sectionPriority(g),
             sectionProgress(g),
             h('span', { class: 'tb-section-count', text: String(g.rows.length) }),
           ]),
         ]),
       ]));
       tr.addEventListener('dragover', function (e) {
-        if (!state.dragId) return;
+        if (!state.dragId || isLieu) return;
         var moved = findRow(state.dragId);
         if (!moved) return;
         var nextId = g.free ? '' : (g.id || '');
@@ -2128,7 +2165,7 @@
         tr.classList.remove('is-drop-on');
       });
       tr.addEventListener('drop', function (e) {
-        if (!state.dragId) return;
+        if (!state.dragId || isLieu) return;
         e.preventDefault();
         dropOnSection(state.dragId, g);
       });

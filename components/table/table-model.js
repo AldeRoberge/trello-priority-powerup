@@ -12,6 +12,7 @@
     category: { header: 'Catégorie', icon: 'tag', kind: 'text', editable: true, width: 200 },
     name: { header: 'Objet', icon: 'file-text', kind: 'text', editable: true, width: 380 },
     project: { header: 'Projet', icon: 'folder', kind: 'text', editable: false, width: 180 },
+    lieu: { header: 'Lieu', icon: 'map-pin', kind: 'text', editable: false, width: 180 },
     parent: { header: 'Tâche parente', icon: 'corner-left-up', kind: 'text', editable: false, width: 200 },
     statut: { header: 'Statut', icon: 'progress-check', kind: 'list', editable: true, width: 140 },
     urgency: { header: 'Urgence', icon: 'flame', kind: 'text', editable: false, width: 110 },
@@ -93,6 +94,15 @@
     return dm.getMeta(desc, key) || '';
   }
 
+  /** "Chez moi" for a task done in one place, "Maison → Bureau" for a trip (via stops included). */
+  function placeText(places) {
+    var p = places && typeof places === 'object' ? places : {};
+    function nm(r) { return r && r.name ? String(r.name) : ''; }
+    if (nm(p.at)) return nm(p.at);
+    var stops = [nm(p.from)].concat((p.via || []).map(nm), [nm(p.to)]).filter(Boolean);
+    return stops.join(' \u2192 ');
+  }
+
   /** One grid row from a GanttTrello.loadBoard record (+ optional Catégorie value). */
   function rowFromRecord(rec, category) {
     var inputs = rec.inputs || {};
@@ -121,6 +131,7 @@
       items: Array.isArray(rec.items) ? rec.items : [],
       assignees: Array.isArray(rec.assignees) ? rec.assignees : [],
       labels: Array.isArray(rec.labels) ? rec.labels : [],
+      lieu: placeText(inputs.places),
       inputs: { places: inputs.places || null, customAssignees: inputs.customAssignees || [] },
       start: rec.startDate || '',
       dueTime: rec.dueTime || '',
@@ -353,6 +364,37 @@
     return list;
   }
 
+  /**
+   * Sections by Lieu (where the task is done, or its trip), in order of first appearance, "Sans lieu" last.
+   * Null when no card has a place. Same shape as groupByProject, with kind 'lieu' and no id.
+   */
+  function groupByLieu(rows, folded) {
+    var by = {};
+    var list = [];
+    var free = [];
+    (rows || []).forEach(function (r) {
+      if (!r) return;
+      if (!r.lieu) { free.push(r); return; }
+      var g = by[r.lieu];
+      if (!g) {
+        g = by[r.lieu] = { key: 'l:' + r.lieu, id: '', icon: null, name: r.lieu, rows: [], free: false, priority: null, kind: 'lieu' };
+        list.push(g);
+      }
+      g.rows.push(r);
+    });
+    if (!list.length) return null;
+    if (free.length) list.push({ key: 'l:', id: '', icon: null, name: 'Sans lieu', rows: free, free: true, priority: null, kind: 'lieu' });
+    list.forEach(function (g) { g.open = !(folded && folded[g.key]); });
+    return list;
+  }
+
+  /** mode: 'project' (default) | 'lieu' | 'none'. */
+  function groupRows(rows, mode, folded, projects) {
+    if (mode === 'none') return null;
+    if (mode === 'lieu') return groupByLieu(rows, folded);
+    return groupByProject(rows, folded, projects);
+  }
+
   /** Adds { category, color, icon } to each board list from the board's Statut settings. */
   function enrichLists(lists, settings, statutMatch) {
     var cats = (settings && settings.listCategories) || {};
@@ -583,6 +625,9 @@
     subtaskRows: subtaskRows,
     withHierarchy: withHierarchy,
     groupByProject: groupByProject,
+    groupByLieu: groupByLieu,
+    groupRows: groupRows,
+    placeText: placeText,
     clampPriority: clampPriority,
     formatPriority: formatPriority,
     projectTiers: projectTiers,

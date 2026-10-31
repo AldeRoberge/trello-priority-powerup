@@ -307,4 +307,16 @@ describe('TableModel.subtaskRows', () => {
     assert.equal(items.find((it) => it.checked).label, 'Importante');
     assert.equal(items[items.length - 1].label, 'Retirer');
   });
+
+  it('Lieu column and groupByLieu: place or trip, free cards last, null without places', () => {
+    assert.equal(TM.placeText({ at: { name: 'Chez moi' } }), 'Chez moi');
+    assert.equal(TM.placeText({ from: { name: 'Maison' }, via: [{ name: 'Épicerie' }], to: { name: 'Bureau' } }), 'Maison \u2192 Épicerie \u2192 Bureau');
+    assert.equal(TM.placeText(null), '');
+    assert.ok(TM.COLUMNS.lieu);
+    const r = (id, lieu) => ({ id, lieu });
+    const g = TM.groupRows([r('a', 'B'), r('b', ''), r('c', 'A'), r('d', 'B')], 'lieu', { 'l:A': true });
+    assert.deepEqual(g.map((x) => [x.name, x.rows.length, x.open]), [['B', 2, true], ['A', 1, false], ['Sans lieu', 1, true]]);
+    assert.equal(TM.groupRows([r('a', '')], 'lieu'), null);
+    assert.equal(TM.groupRows([{ id: 'a', project: 'P' }], 'none'), null);
+  });
 });
