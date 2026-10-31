@@ -621,8 +621,10 @@
       var accent = row.statutColor || (list && list.color) || '#626f86';
       // Blocked (flag or "Bloqué" status) yet complete: striped red/green accent instead of the plain status colour.
       var blockedDone = !!(row.blocked || row.statutKey === 'blocked') && typeof row.progress === 'number' && row.progress >= 100;
+      // Completed / canceled (status, list or 100 %): the tile is grayed out, color returns on hover.
+      var closedCard = !blockedDone && (KM().isClosedKey(row.statutKey) || KM().isClosedKey(list && list.category) || (typeof row.progress === 'number' && row.progress >= 100));
       var el = h('div', {
-        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : '') + (state.detailId === row.id ? ' is-selected' : ''),
+        class: 'kb-card' + (blockedDone ? ' is-blocked-done' : '') + (closedCard ? ' is-complete' : '') + (state.detailId === row.id ? ' is-selected' : ''),
         draggable: 'true',
         tabindex: '0',
         'data-id': row.id,

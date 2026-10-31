@@ -3,6 +3,10 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-10-31
+
+- Kanban : les cartes terminées ou annulées sont grisées (la couleur revient au survol).
+
 ## 2026-10-26
 
 - Google Sheets : la liste de validation du Statut ne reste plus sur la colonne Objet après un changement de colonnes.
