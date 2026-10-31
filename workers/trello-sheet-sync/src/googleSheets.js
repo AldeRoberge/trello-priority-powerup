@@ -59,15 +59,36 @@ async function userAccessToken(env) {
 
 async function accessToken(env) {
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.value;
+  cached = await serviceToken(env, SCOPE, '');
+  return cached.value;
+}
+
+const KEEP_SCOPE = 'https://www.googleapis.com/auth/keep';
+const KEEP_API = 'https://keep.googleapis.com/v1';
+let keepCached = null;
+
+/** Keep only works for Workspace: the service account acts as the user (domain-wide delegation). */
+async function keepToken(env) {
+  if (keepCached && keepCached.expiresAt > Date.now() + 30_000) return keepCached.value;
+  keepCached = await serviceToken(env, KEEP_SCOPE, env.KEEP_USER_EMAIL);
+  return keepCached.value;
+}
+
+/** Keep API call as the Workspace user. `path` is relative to /v1 (e.g. "/notes?pageSize=100"). */
+export async function keepFetch(env, path, init = {}) {
+  const token = await keepToken(env);
+  return fetch(`${KEEP_API}${path}`, {
+    ...init,
+    headers: { ...(init.headers || {}), authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+  });
+}
+
+async function serviceToken(env, scope, sub) {
   const now = Math.floor(Date.now() / 1000);
   const enc = (o) => b64url(new TextEncoder().encode(JSON.stringify(o)));
-  const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
-    iss: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    scope: SCOPE,
-    aud: TOKEN_URL,
-    iat: now,
-    exp: now + 3600,
-  })}`;
+  const claims = { iss: env.GOOGLE_SERVICE_ACCOUNT_EMAIL, scope, aud: TOKEN_URL, iat: now, exp: now + 3600 };
+  if (sub) claims.sub = sub;
+  const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc(claims)}`;
   const key = await crypto.subtle.importKey('pkcs8', pemToBuffer(env.GOOGLE_SERVICE_ACCOUNT_KEY), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
   const res = await fetch(TOKEN_URL, {
@@ -77,8 +98,7 @@ async function accessToken(env) {
   });
   if (!res.ok) throw new Error(`Google token exchange failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
-  cached = { value: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
-  return cached.value;
+  return { value: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
 }
 
 /** Drive calls. Uses the user's Drive token when configured, otherwise the service account. */

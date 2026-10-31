@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Documents : synchro avec Google Keep dans les deux sens (comptes Workspace), avec des listes « To bring to Kate in Kirkland Lake » créées automatiquement à partir des tâches à apporter (`npm run setup:keep`).
 - Triage : double-clic sur le titre d’une tâche dans la liste pour le renommer sur place.
 - Une carte dans la liste Terminé passe automatiquement à 100 % (Tableau et Kanban), y compris celles qui y étaient déjà.
 - Triage : nouvelle colonne « Lieu » et bouton pour afficher toutes les tâches ouvertes des projets, pas seulement celles à trier.

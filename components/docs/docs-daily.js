@@ -121,6 +121,32 @@
     return sections;
   }
 
+  /**
+   * One list per recipient, for Google Keep: "To bring to Kate in Kirkland Lake". Open tasks that go to
+   * a person (and/or a place) and do not come back from a place. Same rows as the "À apporter" groups.
+   * @returns {{title:string, items:{id:string,name:string,done:boolean}[]}[]}
+   */
+  function bringLists(rows) {
+    var groups = Object.create(null);
+    var order = [];
+    (rows || []).forEach(function (row) {
+      if (!row || !row.id || isDone(row) || place(row, 'from')) return;
+      var who = names(row.inputs && row.inputs.customAssignees)[0] || '';
+      var to = place(row, 'to');
+      if (!who && !to) return;
+      var title = 'To bring to ' + (who || to) + (who && to ? ' in ' + to : '');
+      var key = fold(title);
+      if (!groups[key]) {
+        groups[key] = { title: title, rows: [] };
+        order.push(key);
+      }
+      groups[key].rows.push(row);
+    });
+    return order.map(function (key) {
+      return { title: groups[key].title, items: groups[key].rows.sort(byOrder).map(item) };
+    });
+  }
+
   function label(name) {
     return String(name).replace(/[\\\[\]]/g, '\\$&');
   }
@@ -208,6 +234,7 @@
     TITLE: TITLE,
     WARNING: WARNING,
     build: build,
+    bringLists: bringLists,
     markdown: markdown,
     parse: parse,
     reconcile: reconcile,
