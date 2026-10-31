@@ -135,6 +135,83 @@
     doc.addEventListener('touchcancel', clear, { passive: true });
   }
 
+
+  /**
+   * Drag bars (progress bars, Gantt bars) must not eat a scroll. On touch, their pointerdown is held back until the
+   * finger shows its intent: a mostly horizontal move replays the pointerdown at the touch point (the bar's own drag
+   * takes over), a tap replays it as a quick press, a vertical move drops it and the page scrolls. Without this, a
+   * thumb that lands on a bar while scrolling changes the progress or opens the date editor.
+   */
+  var GUARDED_BARS = '.kb-prog-bar, .tb-prog-bar, .jy-prog-bar, .gantt-bar';
+  var INTENT_PX = 6;
+
+  function installTouchDragGuard(doc) {
+    if (!doc || typeof doc.addEventListener !== 'function' || typeof global.PointerEvent !== 'function') return;
+    var held = null;
+
+    function replay() {
+      var h = held;
+      if (!h || h.replayed) return;
+      h.replayed = true;
+      var init = {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: h.id,
+        pointerType: 'touch',
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: h.x,
+        clientY: h.y,
+        screenX: h.sx,
+        screenY: h.sy,
+        view: global,
+      };
+      var target = h.target.isConnected ? h.target : null;
+      if (target) target.dispatchEvent(new global.PointerEvent('pointerdown', init));
+    }
+
+    doc.addEventListener(
+      'pointerdown',
+      function (e) {
+        if (!e.isTrusted || e.pointerType !== 'touch' || !e.target || !e.target.closest) return;
+        if (!e.target.closest(GUARDED_BARS)) return;
+        e.stopImmediatePropagation();
+        held = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.screenX, sy: e.screenY, target: e.target, replayed: false };
+      },
+      true
+    );
+    doc.addEventListener(
+      'pointermove',
+      function (e) {
+        if (!held || held.replayed || e.pointerId !== held.id) return;
+        var dx = e.clientX - held.x;
+        var dy = e.clientY - held.y;
+        if (Math.abs(dx) < INTENT_PX && Math.abs(dy) < INTENT_PX) return;
+        if (Math.abs(dx) > Math.abs(dy)) replay();
+        else held = null;
+      },
+      true
+    );
+    doc.addEventListener(
+      'pointerup',
+      function (e) {
+        if (!held || e.pointerId !== held.id) return;
+        replay(); // a tap: the bar sees a press and the matching release
+        held = null;
+      },
+      true
+    );
+    doc.addEventListener(
+      'pointercancel',
+      function (e) {
+        if (held && e.pointerId === held.id) held = null;
+      },
+      true
+    );
+  }
+
   function collapseDocsOnce() {
     if (!isNarrow()) return;
     var doc = global.document;
@@ -190,6 +267,7 @@
     syncViewport();
     var doc = global.document;
     if (doc) installLongPress(doc);
+    if (doc) installTouchDragGuard(doc);
     bindDocsScrim();
     collapseDocsOnce();
     if (global.visualViewport && typeof global.visualViewport.addEventListener === 'function') {

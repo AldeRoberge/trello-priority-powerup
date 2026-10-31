@@ -157,6 +157,60 @@
     return { k: k, x: w / 2 - wx * k, y: h / 2 - wy * k };
   }
 
+  /**
+   * Two-finger pinch zoom (and pan with the pinch midpoint) for a canvas element.
+   * opts: { get() -> view {x,y,k}, set(view), minK, maxK }. While two touches are down, move events are kept from the
+   * canvas's own one-finger pan / node drag so they do not fight the pinch; releases still reach them.
+   */
+  function attachPinch(el, opts) {
+    var touches = {};
+    var pinch = null;
+    function count() { return Object.keys(touches).length; }
+    function local(pt) {
+      var r = el.getBoundingClientRect();
+      return { x: pt.x - r.left, y: pt.y - r.top };
+    }
+    function pair() {
+      var ids = Object.keys(touches);
+      return [touches[ids[0]], touches[ids[1]]];
+    }
+    function begin() {
+      var p = pair();
+      var mid = local({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 });
+      var v = opts.get();
+      pinch = { d: Math.max(10, Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)), mid: mid, view: { x: v.x, y: v.y, k: v.k } };
+    }
+    el.addEventListener('pointerdown', function (ev) {
+      if (ev.pointerType !== 'touch') return;
+      touches[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+      if (count() === 2) begin();
+    }, true);
+    el.addEventListener('pointermove', function (ev) {
+      if (ev.pointerType !== 'touch' || !touches[ev.pointerId]) return;
+      touches[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+      if (!pinch && count() < 2) return;
+      ev.stopImmediatePropagation(); // the pinch owns the gesture until every finger is up
+      if (!pinch || count() < 2) return;
+      var p = pair();
+      var d = Math.max(10, Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y));
+      var mid = local({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 });
+      var minK = opts.minK == null ? MIN_K : opts.minK;
+      var maxK = opts.maxK == null ? MAX_K : opts.maxK;
+      var k = clamp(pinch.view.k * (d / pinch.d), minK, maxK);
+      var wx = (pinch.mid.x - pinch.view.x) / pinch.view.k;
+      var wy = (pinch.mid.y - pinch.view.y) / pinch.view.k;
+      opts.set({ k: k, x: mid.x - wx * k, y: mid.y - wy * k });
+    }, true);
+    function release(ev) {
+      if (!touches[ev.pointerId]) return;
+      delete touches[ev.pointerId];
+      if (count() === 0) pinch = null;
+      else if (count() === 1) pinch = pinch ? { stale: true } : null; // one finger left: no pan jump, wait for lift
+    }
+    el.addEventListener('pointerup', release, true);
+    el.addEventListener('pointercancel', release, true);
+  }
+
   function el(tag, cls) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -218,6 +272,8 @@
       var r = root.getBoundingClientRect();
       zoomAtPoint(ev.clientX - r.left, ev.clientY - r.top, ev.deltaY < 0 ? 1.12 : 1 / 1.12);
     }, { passive: false });
+
+    attachPinch(root, { get: function () { return view; }, set: function (v) { setView(v); }, minK: minK, maxK: maxK });
 
     // the middle button pans from anywhere (even over a node), like Miro; also stop the browser autoscroll
     root.addEventListener('mousedown', function (ev) { if (ev.button === 1) ev.preventDefault(); });
@@ -372,6 +428,7 @@
     treeWire: treeWire,
     arrowJoin: arrowJoin,
     zoomAt: zoomAt,
+    attachPinch: attachPinch,
     fitView: fitView,
     centerOn: centerOn,
   };

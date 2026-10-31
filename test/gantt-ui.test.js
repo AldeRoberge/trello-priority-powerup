@@ -39,12 +39,12 @@ describe('GanttUI helpers', () => {
     );
   });
 
-  it('clampLabelsWidth leaves a timeline sliver on a phone-sized chart', () => {
+  it('clampLabelsWidth keeps over half of a phone-sized chart for the timeline', () => {
     const prev = global.ViewShell;
     global.ViewShell = { labelsMin: (w) => (w < 640 ? Math.max(132, Math.round(w * 0.42)) : 280) };
     try {
       assert.equal(GanttUI.clampLabelsWidth(100, 375), 158);
-      assert.equal(GanttUI.clampLabelsWidth(560, 375), 255);
+      assert.equal(GanttUI.clampLabelsWidth(560, 375), 173);
     } finally {
       global.ViewShell = prev;
     }

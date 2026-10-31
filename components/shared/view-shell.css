@@ -756,3 +756,176 @@ html:has(body.tp-page--journey) body {
     scroll-snap-type: none;
   }
 }
+
+/* ── Phone pass 2: scroll traps, iOS zoom, hit areas, density ──────── */
+@media (pointer: coarse) {
+  /* A thumb that lands on a drag bar must still be able to scroll the page (see ViewShell touch guard). */
+  .kb-prog-bar,
+  .tb-prog-bar,
+  .jy-prog-bar,
+  .gantt-bar,
+  .gantt-bar-edge {
+    touch-action: pan-y !important;
+  }
+
+  /* Reveal-on-hover controls have no hover on a phone: keep them there, quiet. */
+  .dc-item-more {
+    opacity: 0.6;
+    padding: 8px;
+  }
+  .gantt-bar.is-editable .gantt-bar-edge {
+    opacity: 0.75;
+    width: 14px;
+  }
+  .tb-th .tb-sort {
+    opacity: 0.4;
+  }
+
+  /* iOS zooms the whole page when a field under 16px takes focus, and never zooms back out. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  textarea,
+  select,
+  .dc-editor,
+  .memory-ui-input,
+  [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+
+  /* The long-press opens our menu: no native callout or text selection fighting it. */
+  .kb-card,
+  .tb-grid td,
+  .gantt-bar,
+  .gantt-label-cell,
+  .db-row,
+  .jy-node,
+  .mm-node {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Hit areas: the visible size stays, the tappable zone grows to about 36px. */
+  .kb-prog-ring,
+  .kb-prog-num,
+  .kb-chip,
+  .kb-iconbtn,
+  .kb-add,
+  .tb-linkcell,
+  .tb-subtoggle,
+  .gantt-task-name,
+  .gantt-twist {
+    position: relative;
+  }
+  .kb-prog-ring::after,
+  .kb-prog-num::after,
+  .kb-iconbtn::after,
+  .gantt-twist::after {
+    content: '';
+    position: absolute;
+    inset: -9px;
+  }
+  .kb-chip::after,
+  .tb-linkcell::after,
+  .tb-subtoggle::after,
+  .gantt-task-name::after,
+  .kb-add::after {
+    content: '';
+    position: absolute;
+    inset: -9px -3px;
+  }
+  .kb-ai-toggle::after,
+  .gantt-bar-clear::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .gantt-select-box {
+    width: 22px;
+    height: 22px;
+  }
+  /* The splitter between the task list and the timeline is a 5px line: give it a thumb-sized grip. */
+  .gantt-splitter::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -14px;
+    right: -14px;
+  }
+  .tb-btn,
+  .kb-btn,
+  .gantt-btn,
+  .mm-tool,
+  .dc-tb {
+    min-height: 34px;
+  }
+  .vt-util {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .dc-prop-add {
+    position: relative;
+  }
+  .dc-prop-add::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Kanban sort: the icon is the button, the native picker opens under it */
+  .kb-sort {
+    position: relative;
+    flex: none;
+    width: 34px;
+    height: 32px;
+    justify-content: center;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--tp-border);
+  }
+  .kb-sort select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+  }
+
+  /* Table: no empty indent in front of the title on rows without sub-tasks */
+  .tb-subtoggle.is-empty {
+    width: 4px;
+    padding: 0;
+    margin-right: 0;
+  }
+
+  /* Gantt: summary chips on one swipeable line instead of three */
+  .gantt-summary {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding: 4px 10px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .gantt-summary::-webkit-scrollbar {
+    display: none;
+  }
+  .gantt-summary > * {
+    flex: none;
+  }
+
+  /* Dashboard "Aujourd'hui": shorter widgets, a plan that does not swallow the page scroll */
+  .td-page.is-narrow {
+    padding: 6px 6px 8px;
+  }
+  .td-page.is-narrow .td-widget {
+    margin: 4px 2px;
+  }
+  .td-page.is-narrow .td-hero-in {
+    padding: 14px 14px 12px;
+    gap: 10px;
+  }
+  .td-page.is-narrow .td-plan-scroll {
+    height: min(56vh, 460px);
+  }
+}

@@ -5,6 +5,11 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Mobile : glisser le doigt sur une barre de progrès (Kanban, Tableau, Parcours) ou une barre du Gantt fait défiler la page au lieu de changer le progrès ou d’ouvrir l’éditeur de dates.
+- Mobile : les champs de saisie ne font plus zoomer la page sur iPhone (texte 16 px).
+- Mobile : zones de toucher agrandies (progrès, puces, boutons), menu « … » des documents et poignées des barres du Gantt visibles sans survol.
+- Mobile : Gantt avec plus de place pour la ligne du temps, Tableau avec titre plus large puis statut, progrès, priorité et échéance, tri du Kanban en simple icône.
+- Mobile : pincer pour zoomer sur la carte mentale et le Parcours.
 - Assistant : l’IA lie automatiquement les personnes et les lieux d’une demande à la carte (« Bring to Kate » ajoute Kate, « rapporter du chalet » met Chalet dans De).
 - Kanban et Tableau : l’échéance affiche « En retard » (en rouge) ou « Aujourd’hui » au lieu de la date.
 - Kanban : filtres intelligents, l’IA propose des vues comme « À faire au chalet » ou « À apporter à Kate » (bouton Filtres dans la barre) ; un clic met en évidence les cartes liées et estompe les autres.

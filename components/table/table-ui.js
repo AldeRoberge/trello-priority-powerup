@@ -480,7 +480,7 @@
     function colWidth(key) {
       var w = state.widths[key];
       var base = typeof w === 'number' && w >= MIN_COL ? w : TM().COLUMNS[key].width;
-      return isPhone() && key === 'name' ? Math.min(base, 200) : base;
+      return isPhone() && key === 'name' ? Math.min(base, Math.max(150, (window.innerWidth || 390) - 44 - 96)) : base;
     }
     function saveWidths() {
       TT().saveWidths(t, state.widths).catch(fail);
@@ -535,8 +535,10 @@
     }
     function shownColumns() {
       var cols = state.columns;
-      if (!isPhone() || cols.indexOf('name') < 1) return cols;
-      return ['name'].concat(cols.filter(function (k) { return k !== 'name'; }));
+      if (!isPhone()) return cols;
+      // Phone: the title, then what a glance needs (status, progress, priority, due), then the rest in the user's order.
+      var first = ['name', 'statut', 'progress', 'priority', 'due'].filter(function (k) { return cols.indexOf(k) >= 0; });
+      return first.concat(cols.filter(function (k) { return first.indexOf(k) < 0; }));
     }
 
     function renderGrid(opts) {

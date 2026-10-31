@@ -1,0 +1,11 @@
+/* Touch basics for pages that do not load view-shell.css (Assistant, Réglages, Profil, popups). */
+@media (pointer: coarse) {
+  /* iOS zooms the whole page when a field under 16px takes focus, and never zooms back out. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  textarea,
+  select,
+  [contenteditable='true'],
+  .memory-ui-input {
+    font-size: 16px !important;
+  }
+}

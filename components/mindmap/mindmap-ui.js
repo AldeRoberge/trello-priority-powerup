@@ -3261,6 +3261,7 @@
       applyView();
     }
 
+    global.GraphCanvas.attachPinch(svg, { get: function () { return state.view; }, set: function (v) { state.view = v; applyView(); }, minK: 0.15, maxK: 3 });
     // middle mouse button pans from anywhere (even over a card), like Miro; also stop the browser autoscroll
     svg.addEventListener('mousedown', function (ev) { if (ev.button === 1) ev.preventDefault(); });
     svg.addEventListener('pointerdown', function (ev) {

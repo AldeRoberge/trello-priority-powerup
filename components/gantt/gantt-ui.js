@@ -282,6 +282,7 @@
         : LABELS_W_MIN;
     var room = chartW < 640 ? 120 : 220;
     var max = Math.max(min, chartW - room);
+    if (chartW < 640) max = Math.max(min, Math.min(max, Math.round(chartW * 0.46))); // phone: the timeline keeps more than half
     var w = Math.round(Number(width) || LABELS_W_DEFAULT);
     return Math.max(min, Math.min(max, w));
   }
