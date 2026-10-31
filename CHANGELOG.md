@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Triage : double-clic sur le titre d’une tâche dans la liste pour le renommer sur place.
 - Une carte dans la liste Terminé passe automatiquement à 100 % (Tableau et Kanban), y compris celles qui y étaient déjà.
 - Tableau : nouvelle colonne « Lieu » et bouton « Grouper par » (projet, lieu ou aucun groupe).
 - Mobile : glisser le doigt sur une barre de progrès (Kanban, Tableau, Parcours) ou une barre du Gantt fait défiler la page au lieu de changer le progrès ou d’ouvrir l’éditeur de dates.

@@ -1870,6 +1870,36 @@
       }, [icon('columns-3')]);
     }
 
+    /** Double-click on a title in the list: edit it in place (Enter or blur saves, Escape cancels). */
+    function editRowTitle(r, nameEl) {
+      if (nameEl.querySelector('input')) return;
+      var input = h('input', { class: 'db-row-name tri-row-edit', type: 'text', maxlength: '300', spellcheck: 'true', 'aria-label': 'Titre' });
+      input.value = r.name || '';
+      var done = false;
+      function finish(save_) {
+        if (done) return;
+        done = true;
+        var v = input.value.replace(/\s+/g, ' ').trim();
+        if (save_ && v && v !== r.name) {
+          r.name = v;
+          save(r, function () { return global.TableTrello.saveName(t, r.id, v); });
+        }
+        refreshRow(r);
+      }
+      ['click', 'dblclick', 'mousedown', 'keyup'].forEach(function (ev) {
+        input.addEventListener(ev, function (e) { e.stopPropagation(); });
+      });
+      input.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', function () { finish(true); });
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
     /** One card of the list on the left: its title, the line under it (next step, else the note) and its score. */
     function triageRow(r, selected) {
       var sub = (WO() && WO().stepText(r)) || DM().snippet(r.desc, 90);
@@ -1877,6 +1907,10 @@
         class: 'db-row tri-row' + (selected ? ' is-sel' : ''),
         'data-id': r.id,
         'data-card': r.id,
+        ondblclick: function (e) {
+          var nameEl = e.target && e.target.closest ? e.target.closest('.db-row-name') : null;
+          if (nameEl) editRowTitle(r, nameEl);
+        },
         onclick: function () {
           state.selected = r.id;
           state.projectSel = null;

@@ -128,6 +128,7 @@ html[data-color-mode] .tp-page--dashboard {
 .db-row:hover { background: var(--tp-surface-hover); }
 .db-row.is-sel { background: var(--tp-surface-active); }
 .db-row-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tri-row-edit { font: inherit; color: inherit; background: transparent; border: 0; border-bottom: 1px solid var(--tp-primary); padding: 0; margin: 0; outline: none; width: 100%; }
 .db-st { font-size: 16px; }
 .db-check { font: inherit; border: 0; background: transparent; padding: 0; cursor: pointer; color: var(--tp-text-muted); font-size: 16px; }
 .db-check:hover { color: var(--tp-success); }
