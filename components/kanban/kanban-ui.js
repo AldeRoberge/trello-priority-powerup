@@ -1519,6 +1519,7 @@
         moved.statut = list.name;
         moved.statutKey = list.category;
         moved.statutColor = list.color;
+        if (listChanged) TT().syncCompleted(t, [moved]);
       }
       // Dropped into a hidden (completed) column: dissolve the tile instead of making it vanish.
       var tile = state.hideDone && !filtering() ? els.board.querySelector('.kb-card[data-id="' + id + '"]') : null;

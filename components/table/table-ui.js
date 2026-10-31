@@ -1363,7 +1363,7 @@
         row.statut = list.name;
         row.statutKey = list.category;
         row.statutColor = list.color;
-        write = TT().moveCard(t, row.id, list.id, 'bottom').then(function () { return reload({ quiet: true }); });
+        write = TT().moveCard(t, row.id, list.id, 'bottom').then(function () { return TT().syncCompleted(t, [row]); }).then(function () { return reload({ quiet: true }); });
       }
       renderGrid();
       if (!write) return;
@@ -1471,6 +1471,7 @@
           moved.statut = list.name;
           moved.statutKey = list.category;
           moved.statutColor = list.color;
+          if (listChanged) TT().syncCompleted(t, [moved]);
         }
         state.rows = TM().orderByLists(state.rows, state.lists);
       }

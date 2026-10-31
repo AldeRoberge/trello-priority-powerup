@@ -76,6 +76,29 @@
     return out;
   }
 
+  var syncing = Object.create(null);
+
+  /**
+   * A card in a Completed list is a finished card: shows 100 % right away and saves it in the background
+   * (subtasks included). Canceled lists are left alone. Shared by Table and Kanban through load().
+   */
+  function syncCompleted(t, rows) {
+    var todo = (rows || []).filter(function (r) {
+      return r && r.statutKey === 'completed' && !(typeof r.progress === 'number' && r.progress >= 100) && !syncing[r.id];
+    });
+    var CT = global.CompletionTrello;
+    todo.forEach(function (r) { r.progress = 100; });
+    if (!todo.length || !CT || typeof CT.saveProgressTree !== 'function') return Promise.resolve([]);
+    var chain = Promise.resolve();
+    todo.forEach(function (r) {
+      syncing[r.id] = true;
+      chain = chain.then(function () {
+        return CT.saveProgressTree(t, [{ id: r.id }], 100).catch(function () { /* retried at the next load */ });
+      }).then(function () { delete syncing[r.id]; });
+    });
+    return chain.then(function () { return todo.map(function (r) { return r.id; }); });
+  }
+
   /** Everything the grid needs: rows (board order), lists, category field info. */
   async function load(t) {
     var board = await GT().loadBoard(t);
@@ -85,9 +108,12 @@
     var rows = board.cards.map(function (rec) {
       return TM().rowFromRecord(rec, cats.map[rec.id]);
     });
+    var ordered = TM().orderByLists(rows, board.lists);
+    var enriched = TM().enrichLists(board.lists, board.settings, global.StatutMatch);
+    syncCompleted(t, ordered);
     return {
-      lists: TM().enrichLists(board.lists, board.settings, global.StatutMatch),
-      rows: TM().orderByLists(rows, board.lists),
+      lists: enriched,
+      rows: ordered,
       categoryFieldId: cats.fieldId,
       categoryAvailable: cats.available,
     };
@@ -197,6 +223,7 @@
   }
 
   global.TableTrello = {
+    syncCompleted: syncCompleted,
     getTableSettings: getTableSettings,
     saveColumns: saveColumns,
     load: load,
