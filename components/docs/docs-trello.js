@@ -834,6 +834,80 @@
     await GG.save(t, WO.withNodeEdit(goals, projectId, { name: title }));
   }
 
+  /* ── The generated "Aujourd'hui" page ───────────────────────────── */
+
+  function localToday() {
+    var d = new Date();
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  /**
+   * Completes or reopens a card from the page. Same writes as the progress ring everywhere else:
+   * 100 % moves it to the completed list, reopening puts it back in an open list.
+   */
+  async function setTaskDone(t, cardId, done) {
+    var table = global.TableTrello;
+    var quick = global.CardQuick;
+    if (!table || !quick) throw fail('no-table');
+    var data = await table.load(t);
+    var row = data.rows.filter(function (r) { return r.id === cardId; })[0];
+    if (!row) throw fail('no-card');
+    if (done) {
+      if (row.statutKey === 'completed') return;
+      await quick.setProgress(t, row, data.lists, 100);
+      return;
+    }
+    if (row.statutKey !== 'completed' && row.statutKey !== 'canceled') return;
+    var open = DM().defaultTaskListId(data.lists);
+    if (open) await table.moveCard(t, cardId, open, 'bottom');
+    await quick.setProgress(t, row, data.lists, 0);
+  }
+
+  /**
+   * Rebuilds the day page from the board. Lines typed by hand become cards first (due today under
+   * "À faire aujourd'hui"), then the page is rewritten from the cards and saved when it changed.
+   * @returns {Promise<{doc:object, docs:object[], created:number, changed:boolean}>}
+   */
+  async function refreshDaily(t) {
+    var DD = global.DocsDaily;
+    var table = global.TableTrello;
+    if (!DD || !table) throw fail('no-table');
+    var docs = await listDocs(t);
+    var found = DM().docForSubject(docs, 'day', 'today');
+    var doc;
+    if (found) doc = await loadDoc(t, found.id);
+    else {
+      doc = await createDoc(t, DD.TITLE, '', { subject: { k: 'day', id: 'today' }, icon: { i: 'calendar-event' } });
+      docs.unshift(listed(doc));
+    }
+    var today = localToday();
+    var data = await table.load(t);
+    var wanted = DD.reconcile(doc.body);
+    var listId = DM().defaultTaskListId(data.lists);
+    var done = [];
+    var i;
+    for (i = 0; i < wanted.create.length; i++) {
+      var w = wanted.create[i];
+      var card = await createTask(t, w.text, listId, '');
+      if (w.kind === 'today' && global.GanttTrello && typeof global.GanttTrello.saveCardDates === 'function') {
+        await global.GanttTrello.saveCardDates(t, card.id, { dueDate: today });
+      }
+      if (w.done) done.push(card.id);
+    }
+    for (i = 0; i < done.length; i++) await setTaskDone(t, done[i], true);
+    if (wanted.create.length) data = await table.load(t);
+    var next = DD.markdown(DD.build(data.rows, today), DD.notesOf(doc.body));
+    var changed = next !== String(doc.body || '').replace(/\s+$/, '');
+    if (changed) {
+      doc.body = next;
+      var saved = await saveDoc(t, doc, { force: true });
+      doc.rev = saved.rev;
+      doc.updatedAt = saved.updatedAt;
+    }
+    return { doc: doc, docs: docs, created: wanted.create.length, changed: changed };
+  }
+
   global.DocsTrello = {
     isAuthorized: isAuthorized,
     authorize: authorize,
@@ -867,6 +941,8 @@
     loadEntityFace: loadEntityFace,
     listEntityChoices: listEntityChoices,
     ensureSubjectDoc: ensureSubjectDoc,
+    refreshDaily: refreshDaily,
+    setTaskDone: setTaskDone,
     patchMeta: patchMeta,
   };
 })(typeof window !== 'undefined' ? window : this);

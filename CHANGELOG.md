@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Documents : la page « Aujourd’hui » se génère toute seule depuis les tâches (à faire aujourd’hui, à apporter, à rapporter, éventuellement) avec des cases à cocher liées aux cartes; cocher ou écrire une ligne met la tâche à jour.
 - Assistant : l’IA lie automatiquement les personnes et les lieux d’une demande à la carte (« Bring to Kate » ajoute Kate, « rapporter du chalet » met Chalet dans De).
 - Kanban et Tableau : l’échéance affiche « En retard » (en rouge) ou « Aujourd’hui » au lieu de la date.
 - Kanban : filtres intelligents, l’IA propose des vues comme « À faire au chalet » ou « À apporter à Kate » (bouton Filtres dans la barre) ; un clic met en évidence les cartes liées et estompe les autres.
