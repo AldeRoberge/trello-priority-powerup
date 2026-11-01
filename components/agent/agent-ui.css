@@ -4843,6 +4843,48 @@ html[data-color-mode='dark'] .tp-page--priority .agent-chat-stats-value.is-bad {
   flex-shrink: 0;
 }
 
+/* Footer row only exists while it has something visible (setup-skip bar). */
+.tp-page--priority .agent-composer-foot:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+/* Mode picker lives in the collapsible details panel at the bottom. */
+.tp-page--priority .agent-chat-info-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tp-page--priority .agent-chat-info-body[hidden] {
+  display: none;
+}
+
+.tp-page--priority .agent-chat-info-body .agent-model-mode-wrap {
+  flex: 0 0 auto;
+  height: 26px;
+  border-radius: 999px;
+  border-color: var(--agent-edge);
+  background: transparent;
+}
+
+.tp-page--priority .agent-chat-info-body .agent-model-mode-wrap:hover,
+.tp-page--priority .agent-chat-info-body .agent-model-mode-wrap:focus-within {
+  background: var(--agent-surface);
+}
+
+.tp-page--priority .agent-chat-info-body .agent-model-mode-icon {
+  left: 8px;
+  font-size: 14px;
+}
+
+.tp-page--priority .agent-chat-info-body .agent-model-mode-select {
+  width: auto;
+  padding: 0 8px 0 27px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--tp-text-muted);
+}
+
 /* Number shortcut badge on answer chips */
 .tp-page--priority .agent-suggestion-num {
   flex: 0 0 auto;

@@ -55,18 +55,24 @@
     assert($('.agent-send-btn'), 'send button');
   });
 
-  test('layout: mode picker sits in a compact footer below the composer', async function () {
+  test('layout: mode picker is in the collapsible details panel below the composer', async function () {
     var composer = $('.agent-composer');
-    var foot = $('.agent-composer-foot');
-    assert(foot && composer, 'foot + composer exist');
+    var info = $('.agent-chat-info');
+    var body = $('.agent-chat-info-body');
+    assert(info && composer && body, 'info panel + composer exist');
     assert(!composer.contains($('.agent-model-mode-select')), 'select is not inside the composer row');
-    assert(foot.contains($('.agent-model-mode-select')), 'select is in the footer');
+    assert(body.contains($('.agent-model-mode-select')), 'select is in the details panel');
+    assert(body.hidden, 'details panel collapsed by default');
     assert(
-      composer.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING,
-      'footer follows composer'
+      composer.compareDocumentPosition(info) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'details panel follows composer'
     );
+    $('.agent-info-toggle').click();
+    assert(!body.hidden, 'toggle reveals the mode picker');
     var h = $('.agent-model-mode-wrap').getBoundingClientRect().height;
     assert(h > 0 && h <= 30, 'mode pill is small (height ' + h + ')');
+    $('.agent-info-toggle').click();
+    assert(body.hidden, 'toggle collapses it again');
     assert($('.agent-send-btn-icon'), 'send button has an icon');
     assert($('.agent-model-mode-icon'), 'mode picker has an icon');
   });
