@@ -70,6 +70,21 @@ describe('AgentBlocks', () => {
     assert.equal(blocks[0].cardIndex, 1);
   });
 
+  it('keeps card_ref blocks that only carry a name (no boardCards in chat context)', () => {
+    const blocks = AgentBlocks.normalizeBlocks(
+      [
+        { type: 'card_ref', name: 'Acheter DaVinci', list: 'À faire', due: '2026-11-01' },
+        { type: 'card_ref', title: 'Appeler le comptable' }
+      ],
+      {}
+    );
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].name, 'Acheter DaVinci');
+    assert.equal(blocks[0].list, 'À faire');
+    assert.equal(blocks[0].due, '2026-11-01');
+    assert.equal(blocks[1].name, 'Appeler le comptable');
+  });
+
   it('normalizes statut, project, diff, members, labels', () => {
     const blocks = AgentBlocks.normalizeBlocks(
       [

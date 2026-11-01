@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-01
 
+- Assistant : les listes de cartes (« quoi faire aujourd'hui ») s'affichent enfin au lieu de laisser une phrase d'intro sans rien dessous.
 - Mobile : l'onglet Tâche utilise toute la largeur au lieu d'être serré au centre.
 
 ## 2026-10-31
