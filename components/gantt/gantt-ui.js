@@ -4432,16 +4432,18 @@
           if (iv) placeGhost(ghost, iv);
         }
 
-        function onUp() {
-          timeRow.releasePointerCapture(ev.pointerId);
+        // commit=false is a pointercancel: the browser took the gesture for a scroll (a thumb swiping over the
+        // timeline), so nothing is planned. Only a real release (pointerup) writes dates.
+        function finish(commit) {
+          try { timeRow.releasePointerCapture(ev.pointerId); } catch (err) { /* the pointer is already gone */ }
           timeRow.removeEventListener('pointermove', onMove);
           timeRow.removeEventListener('pointerup', onUp);
-          timeRow.removeEventListener('pointercancel', onUp);
+          timeRow.removeEventListener('pointercancel', onCancel);
           timeRow.classList.remove('is-painting');
           var paint = state.paint;
           state.paint = null;
           ghost.hidden = true;
-          if (!paint) return;
+          if (!paint || !commit) return;
           var iv = model.orderedInterval(paint.origin, paint.current, {
             keepTime: usesTimedTimeline(),
           });
@@ -4467,9 +4469,12 @@
           persistRow(row);
         }
 
+        function onUp() { finish(true); }
+        function onCancel() { finish(false); }
+
         timeRow.addEventListener('pointermove', onMove);
         timeRow.addEventListener('pointerup', onUp);
-        timeRow.addEventListener('pointercancel', onUp);
+        timeRow.addEventListener('pointercancel', onCancel);
       });
     }
 
@@ -4641,7 +4646,7 @@
           showDragTip(e.clientX, e.clientY, formatIntervalTitle(next));
         }
 
-        function onUp() {
+        function onUp(upEv) {
           barEl.releasePointerCapture(ev.pointerId);
           barEl.removeEventListener('pointermove', onMove);
           barEl.removeEventListener('pointerup', onUp);
@@ -4656,8 +4661,9 @@
           state.drag = null;
           if (!drag) return;
           if (!moved && drag.mode === 'move') {
-            // A plain click (no drag) opens the date/time editor.
-            openScheduleEditor(row, barEl);
+            // A plain click (no drag) opens the date/time editor. A pointercancel (the page took the gesture
+            // for a scroll) is not a click.
+            if (!(upEv && upEv.type === 'pointercancel')) openScheduleEditor(row, barEl);
             return;
           }
           var finalInterval = model.resolveBarInterval(row, intervalOptions());

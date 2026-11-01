@@ -142,7 +142,7 @@
    * takes over), a tap replays it as a quick press, a vertical move drops it and the page scrolls. Without this, a
    * thumb that lands on a bar while scrolling changes the progress or opens the date editor.
    */
-  var GUARDED_BARS = '.kb-prog-bar, .tb-prog-bar, .jy-prog-bar, .gantt-bar';
+  var GUARDED_BARS = '.kb-prog-bar, .tb-prog-bar, .jy-prog-bar, .tt-prog-bar, .cq-bar, .gantt-bar';
   var INTENT_PX = 6;
 
   function installTouchDragGuard(doc) {
@@ -294,6 +294,7 @@
     labelsMin: labelsMin,
     syncViewport: syncViewport,
     boot: boot,
+    GUARDED_BARS: GUARDED_BARS,
   };
 
   if (global.document) {

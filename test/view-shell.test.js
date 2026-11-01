@@ -51,6 +51,22 @@ describe('ViewShell', () => {
     assert.equal(VS.NARROW_MAX, 640);
     assert.equal(VS.NARROW_MQ, '(max-width: 640px)');
   });
+
+  it('guards every drag bar, Triage and quick-card bars included, so a scroll never changes a progress', () => {
+    const bars = VS.GUARDED_BARS.split(',').map((s) => s.trim());
+    for (const sel of ['.kb-prog-bar', '.tb-prog-bar', '.jy-prog-bar', '.tt-prog-bar', '.cq-bar', '.gantt-bar']) {
+      assert.ok(bars.includes(sel), sel + ' is held back until the finger shows its intent');
+    }
+  });
+
+  it('gives every guarded bar touch-action: pan-y on coarse pointers (JS guard and CSS stay in step)', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'components', 'shared', 'view-shell.css'), 'utf8');
+    const m = css.match(/@media \(pointer: coarse\) \{[^@]*?touch-action: pan-y !important;/);
+    assert.ok(m, 'the coarse touch-action rule exists');
+    for (const sel of VS.GUARDED_BARS.split(',').map((s) => s.trim())) {
+      assert.ok(m[0].includes(sel), sel + ' is in the touch-action rule');
+    }
+  });
 });
 
 describe('ViewShell on every view page', () => {

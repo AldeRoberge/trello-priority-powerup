@@ -14,13 +14,13 @@ const VIEWS = [{ key: 'gantt', label: 'Gantt', icon: 'timeline' }, { key: 'kanba
 
 test('buildItems lists the other views, then actions, then cards', () => {
   const items = CP.buildItems(VIEWS, [{ label: 'Nouvelle carte', icon: 'plus' }], [{ id: 'c1', name: 'Écrire', hint: 'À faire' }], 'kanban');
-  assert.deepEqual(items.map((i) => i.id), ['view:gantt', 'act:0', 'card:c1']);
+  assert.deepEqual(Array.from(items.map((i) => i.id)), ['view:gantt', 'act:0', 'card:c1']);
   assert.equal(items[2].hint, 'À faire');
 });
 
 test('buildItems tolerates untitled and invalid cards', () => {
   const items = CP.buildItems([], [], [{ id: 'c2', name: '' }, null, {}], '');
-  assert.deepEqual(items.map((i) => i.label), ['Sans titre']);
+  assert.deepEqual(Array.from(items.map((i) => i.label)), ['Sans titre']);
 });
 
 test('activeViewKey reads the page name', () => {
@@ -31,6 +31,6 @@ test('activeViewKey reads the page name', () => {
 test('buildItems offers the Assistant and settings pages like any view, and none for the page you are on', () => {
   const utils = [{ key: 'assistant', label: 'Assistant', icon: 'message-chatbot' }, { key: 'settings', label: 'Paramètres du Cerveau', icon: 'settings' }];
   const items = CP.buildItems(VIEWS.concat(utils), [], [], 'assistant');
-  assert.deepEqual(items.map((i) => i.id), ['view:gantt', 'view:kanban', 'view:settings']);
+  assert.deepEqual(Array.from(items.map((i) => i.id)), ['view:gantt', 'view:kanban', 'view:settings']);
 });
 

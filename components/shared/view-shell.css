@@ -763,6 +763,8 @@ html:has(body.tp-page--journey) body {
   .kb-prog-bar,
   .tb-prog-bar,
   .jy-prog-bar,
+  .tt-prog-bar,
+  .cq-bar,
   .gantt-bar,
   .gantt-bar-edge {
     touch-action: pan-y !important;

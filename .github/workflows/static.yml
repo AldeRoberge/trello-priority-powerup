@@ -22,7 +22,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate: a push that breaks the unit tests never reaches GitHub Pages. The tests use only
+  # Node built-ins, so there is no npm install step (about 20 s).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: npm run test:unit
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
