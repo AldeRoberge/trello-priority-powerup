@@ -189,7 +189,8 @@
         var dx = e.clientX - held.x;
         var dy = e.clientY - held.y;
         if (Math.abs(dx) < INTENT_PX && Math.abs(dy) < INTENT_PX) return;
-        if (Math.abs(dx) > Math.abs(dy)) replay();
+        // Kanban lists snap sideways, so a horizontal swipe on its bar must scroll the board, not set the %.
+        if (Math.abs(dx) > Math.abs(dy) && !held.target.closest('.kb-prog-bar')) replay();
         else held = null;
       },
       true
