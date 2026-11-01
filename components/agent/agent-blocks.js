@@ -24,7 +24,7 @@
     task_types: true
   };
 
-  var MAX_BLOCKS = 6;
+  var MAX_BLOCKS = 10;
   var PLACEHOLDER_RE = /\{\{(\d+)\}\}/g;
   var DUE_BANDS = {
     overdue: true,
@@ -167,7 +167,7 @@
       }
     }
     var name =
-      trimStr(raw.name, 120) ||
+      trimStr(raw.name || raw.title || raw.cardName, 120) ||
       (card && trimStr(card.name, 120)) ||
       '';
     if (!name && !card) return null;

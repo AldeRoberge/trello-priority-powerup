@@ -229,6 +229,20 @@ body {
   align-items: start;
 }
 
+/* Phone: the stacked side paddings (page + card + fields) squeezed content into the middle. */
+@media (max-width: 560px) {
+  .compare-page {
+    padding: 0.5rem 0.25rem 1.5rem;
+  }
+  .variant-card {
+    padding: 0.75rem 0.5rem 1rem;
+  }
+  .variant-fields {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
 /* ── Variant card ── */
 .variant-card {
   --card-tier-tint: transparent;

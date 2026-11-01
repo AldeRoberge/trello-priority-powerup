@@ -6,6 +6,9 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 ## 2026-11-01
 
 - Notes : nouvelle app installable (keep.html), un clone de Google Keep avec listes à cocher, épingles, couleurs et archives, qui marche hors ligne et se synchronise avec les documents Trello.
+- Assistant : le choix Auto / Économe / Équilibré / Puissant est maintenant dans le panneau repliable du bas (flèche à côté des stats).
+- Assistant : les listes de cartes (« quoi faire aujourd'hui ») s'affichent enfin au lieu de laisser une phrase d'intro sans rien dessous.
+- Mobile : l'onglet Tâche utilise toute la largeur au lieu d'être serré au centre.
 
 ## 2026-10-31
 

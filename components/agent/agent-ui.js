@@ -1243,9 +1243,8 @@
     modelModeWrap.appendChild(modelModeIcon);
     modelModeWrap.appendChild(modelModeSelect);
     composer.appendChild(sendBtn);
-    // Rarely changed: lives in a small footer row under the composer.
+    // Rarely changed: lives in the collapsible details panel at the bottom (infoEl).
     var composerFoot = el('div', 'agent-composer-foot');
-    composerFoot.appendChild(modelModeWrap);
     if (
       global.ContextMenu &&
       typeof global.ContextMenu.bind === 'function' &&
@@ -1356,6 +1355,7 @@
       infoToggleBtn.setAttribute('aria-expanded', infoExpanded ? 'true' : 'false');
       infoToggleBtn.classList.toggle('is-open', infoExpanded);
       infoToggleIcon.className = 'ti ' + (infoExpanded ? 'ti-chevron-up' : 'ti-chevron-down');
+      infoBody.hidden = !infoExpanded;
       statsEl.classList.toggle('is-expanded', infoExpanded);
       renderChatStats();
     });
@@ -1426,6 +1426,12 @@
     schedWrap.appendChild(schedPop);
     infoHead.appendChild(schedWrap);
     infoEl.appendChild(infoHead);
+
+    // Collapsed with the details: cost / finesse mode.
+    var infoBody = el('div', 'agent-chat-info-body');
+    infoBody.hidden = true;
+    infoBody.appendChild(modelModeWrap);
+    infoEl.appendChild(infoBody);
 
     chatPanel.appendChild(infoEl);
 
@@ -1763,7 +1769,8 @@
     function syncStatusControls() {
       var showInfo = statusLevel !== 'none';
       var showDebug = statusLevel === 'full';
-      infoEl.hidden = !showInfo;
+      // Panel stays (it holds the mode picker); only the stats line follows statusLevel.
+      infoEl.hidden = false;
       statsEl.hidden = !showInfo;
       debugBtn.hidden = !showDebug;
       if (!showDebug && debugOpen) {
