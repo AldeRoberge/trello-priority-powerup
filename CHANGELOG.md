@@ -3,6 +3,10 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-01
+
+- Notes : nouvelle app installable (keep.html), un clone de Google Keep avec listes à cocher, épingles, couleurs et archives, qui marche hors ligne et se synchronise avec les documents Trello.
+
 ## 2026-10-31
 
 - Documents : synchro avec Google Keep dans les deux sens (comptes Workspace), avec des listes « To bring to Kate in Kirkland Lake » créées automatiquement à partir des tâches à apporter (`npm run setup:keep`).

@@ -190,6 +190,7 @@
           updatedAt: c.dateLastActivity || '',
           size: u.body.length,
           body: u.body,
+          rev: u.rev,
           subject: u.subject,
           props: u.props,
           icon: u.icon,

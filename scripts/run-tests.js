@@ -17,6 +17,8 @@ const unitOnly = args.includes('--unit');
 
 const UNIT_FILES = [
   'ai-complete.test.js',
+  'keep-model.test.js',
+  'keep-sync-notes.test.js',
   'keep-sync.test.js',
   'version.test.js',
   'version-assets.test.js',

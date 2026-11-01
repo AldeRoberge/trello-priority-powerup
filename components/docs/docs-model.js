@@ -109,7 +109,7 @@
       cover: parseCover(meta.cover),
       icon: normalizeIcon(meta.icon),
       subject: normalizeSubject(meta.subject),
-      props: normalizeProps({ tags: meta.tags, people: meta.people }),
+      props: normalizeProps({ tags: meta.tags, people: meta.people, keep: meta.keep }),
     };
   }
 
@@ -191,8 +191,22 @@
       if (!c || c.length > 32 || people.indexOf(c) >= 0) return;
       if (people.length < MAX_PAGE_PEOPLE) people.push(c);
     });
-    if (!tags.length && !people.length) return null;
-    return { tags: tags, people: people };
+    var keep = cleanKeep(src.keep);
+    if (!tags.length && !people.length && !keep) return null;
+    var out = { tags: tags, people: people };
+    if (keep) out.keep = keep;
+    return out;
+  }
+
+  /** Notes app flags (`pin`, `arch`, `color=yellow`), kept as one short line: `keep: pin,color=yellow`. */
+  function cleanKeep(raw) {
+    var seen = [];
+    String(raw == null ? '' : raw).split(',').forEach(function (part) {
+      var m = /^\s*(pin|arch|color=[a-z]{3,12})\s*$/i.exec(part);
+      var v = m && m[1].toLowerCase();
+      if (v && seen.indexOf(v) < 0) seen.push(v);
+    });
+    return seen.join(',');
   }
 
   function propLines(props) {
@@ -201,6 +215,7 @@
     var lines = [];
     if (p.tags.length) lines.push('tags: ' + p.tags.join('|'));
     if (p.people.length) lines.push('people: ' + p.people.join(','));
+    if (p.keep) lines.push('keep: ' + p.keep);
     return lines;
   }
 
