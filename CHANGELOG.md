@@ -3,6 +3,10 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-01
+
+- Mobile : l'onglet Tâche utilise toute la largeur au lieu d'être serré au centre.
+
 ## 2026-10-31
 
 - Triage : double-clic sur le titre d’une tâche dans la liste pour le renommer sur place.
