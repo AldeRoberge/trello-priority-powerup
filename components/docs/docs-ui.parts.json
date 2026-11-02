@@ -1,0 +1,14 @@
+{
+  "name": "docs-ui",
+  "namespace": "DocsUiParts",
+  "note": "Load order of the parts of docs-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "docs-ui-folder.js",
+    "docs-ui-paint.js",
+    "docs-ui-block.js",
+    "docs-ui-block-2.js",
+    "docs-ui-cover.js",
+    "docs-ui-hist.js",
+    "docs-ui.js"
+  ]
+}

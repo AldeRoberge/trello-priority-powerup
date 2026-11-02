@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const read = (rel) => require('./helpers/load').readSource(rel);
 
 const VIEWS = [
   { name: 'kanban', page: 'kanban.html', js: 'components/kanban/kanban-ui.js' },

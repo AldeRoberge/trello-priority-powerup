@@ -1,0 +1,9 @@
+{
+  "name": "today-ui",
+  "namespace": "TodayUiParts",
+  "note": "Load order of the parts of today-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "today-ui-start.js",
+    "today-ui.js"
+  ]
+}

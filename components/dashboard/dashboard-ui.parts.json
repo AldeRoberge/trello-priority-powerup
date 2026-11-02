@@ -1,0 +1,11 @@
+{
+  "name": "dashboard-ui",
+  "namespace": "DashboardUiParts",
+  "note": "Load order of the parts of dashboard-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "dashboard-ui-project.js",
+    "dashboard-ui-zoom.js",
+    "dashboard-ui-today.js",
+    "dashboard-ui.js"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "agent-ui",
+  "namespace": "AgentUiParts",
+  "note": "Load order of the parts of agent-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "agent-ui-btn.js",
+    "agent-ui-agent.js",
+    "agent-ui-play.js",
+    "agent-ui-face.js",
+    "agent-ui-listen.js",
+    "agent-ui-suggestion.js",
+    "agent-ui-chat.js",
+    "agent-ui-lane.js",
+    "agent-ui.js"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "entities-ui",
+  "namespace": "EntitiesUiParts",
+  "note": "Load order of the parts of entities-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "entities-ui-paint.js",
+    "entities-ui-section.js",
+    "entities-ui-relations.js",
+    "entities-ui.js"
+  ]
+}

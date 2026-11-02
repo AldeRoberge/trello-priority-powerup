@@ -1,0 +1,9 @@
+{
+  "name": "entities-composer-ui",
+  "namespace": "EntitiesComposerUiParts",
+  "note": "Load order of the parts of entities-composer-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "entities-composer-ui-block.js",
+    "entities-composer-ui.js"
+  ]
+}

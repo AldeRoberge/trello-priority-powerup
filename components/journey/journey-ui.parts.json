@@ -1,0 +1,10 @@
+{
+  "name": "journey-ui",
+  "namespace": "JourneyUiParts",
+  "note": "Load order of the parts of journey-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "journey-ui-sub.js",
+    "journey-ui-edit.js",
+    "journey-ui.js"
+  ]
+}
