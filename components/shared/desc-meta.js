@@ -84,16 +84,28 @@
     return split.meta[k] || '';
   }
 
+  /**
+   * Sets or clears one metadata key. Only the metadata moves: the user's own text comes back byte for byte (trailing
+   * spaces that make a Markdown line break, blank lines, CRLF), apart from the separator before the block that this
+   * function itself writes. The old round trip through splitDesc / joinDesc rewrote the text on every metadata write
+   * (Outlook, "waiting", Documents, Keep). A write that changes nothing returns the string it was given.
+   */
   function setMeta(full, key, value) {
-    var split = splitDesc(full);
+    var text = String(full == null ? '' : full);
     var k = String(key || '').toLowerCase().trim();
-    if (!k) return joinDesc(split.visible, split.meta);
+    if (!k) return text;
+    var meta = splitDesc(text).meta;
+    var before = serializeMeta(meta);
     if (value == null || String(value).trim() === '') {
-      delete split.meta[k];
+      delete meta[k];
     } else {
-      split.meta[k] = String(value).trim();
+      meta[k] = String(value).trim();
     }
-    return joinDesc(split.visible, split.meta);
+    var block = serializeMeta(meta);
+    if (block === before && !text.match(OUTLOOK_LINE_RE)) return text;
+    var body = text.replace(META_BLOCK_RE, '').replace(OUTLOOK_LINE_RE, '').replace(/\s+$/, '');
+    if (!block) return body;
+    return body ? body + '\n\n' + block : block;
   }
 
   function stripVisibleOnly(full) {

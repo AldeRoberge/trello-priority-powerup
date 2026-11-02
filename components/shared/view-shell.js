@@ -38,7 +38,9 @@
 
   function viewportHeight() {
     var vv = global.visualViewport;
-    if (vv && vv.height > 0) return Math.round(vv.height);
+    // vv.height is the visible height divided by the pinch-zoom scale: put the scale back, so zooming does not squash the
+    // layout (the on-screen keyboard still shrinks it, which is what --vvh is for).
+    if (vv && vv.height > 0) return Math.round(vv.height * (vv.scale > 0 ? vv.scale : 1));
     return Math.round(global.innerHeight || 800);
   }
 
@@ -75,6 +77,13 @@
       html.classList.toggle('tp-narrow', isNarrow());
       html.classList.toggle('tp-coarse', isCoarse());
     }
+  }
+
+  /** A text field (input, textarea, select, contenteditable): the phone's own long-press menu (caret, selection, paste) belongs to it. */
+  function isEditable(el) {
+    var CM = global.ContextMenu;
+    if (CM && typeof CM.isNativeEditableTarget === 'function') return !!CM.isNativeEditableTarget(el);
+    return !!(el && typeof el.closest === 'function' && el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
   }
 
   function installLongPress(doc) {
@@ -116,6 +125,7 @@
       'touchstart',
       function (e) {
         if (!e || !e.touches || e.touches.length !== 1) return;
+        if (isEditable(e.target)) return; // no app menu over the OS caret / selection / paste bubble
         var t = e.touches[0];
         start = { x: t.clientX, y: t.clientY, target: e.target };
         timer = global.setTimeout(fire, LONG_PRESS_MS);

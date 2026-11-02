@@ -9,3 +9,19 @@
     font-size: 16px !important;
   }
 }
+
+/* No hover (touch): the assistant's copy / edit / thumbs controls only showed on hover. Keep them on screen, quiet. */
+@media (hover: none) {
+  .tp-page--priority .agent-msg-copy,
+  .tp-page--priority .agent-msg-edit,
+  .tp-page--priority .agent-msg-feedback {
+    opacity: 0.6 !important;
+    pointer-events: auto !important;
+  }
+  /* On user messages they sat collapsed (max-width 0) until hover. */
+  .tp-page--priority .agent-msg--user > .agent-msg-copy,
+  .tp-page--priority .agent-msg-edit {
+    max-width: 26px !important;
+    overflow: visible !important;
+  }
+}

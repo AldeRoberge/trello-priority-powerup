@@ -14,6 +14,18 @@ describe('SetupI18n', () => {
     I = loadComponent('shared/setup-i18n.js').SetupI18n;
   });
 
+  it('every docs link in the setup guide points at a file that exists (docs/google-sheets-sync.md did not)', () => {
+    const root = path.join(__dirname, '..');
+    const paths = new Set();
+    for (const lang of ['fr', 'en']) {
+      for (const text of Object.values(I[lang])) {
+        for (const m of String(text).matchAll(/data-href-path="([^"]+)"/g)) paths.add(m[1]);
+      }
+    }
+    assert.ok(paths.size >= 4, 'the guide links to the docs');
+    for (const p of paths) assert.ok(fs.existsSync(path.join(root, p)), p + ' exists');
+  });
+
   it('fr and en define exactly the same keys', () => {
     assert.deepEqual(Object.keys(I.en).sort(), Object.keys(I.fr).sort());
   });

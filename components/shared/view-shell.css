@@ -969,3 +969,18 @@ html:has(body.tp-page--journey) body {
 html:has(.tf-panel) .lk-new,
 html:has(.kb-detail:not([hidden])) .lk-new,
 html:has(.gantt-card-overlay) .lk-new { display: none !important; }
+
+/* ── No hover (touch): controls that only appear on hover stay on screen, quiet ───────────────────── */
+@media (hover: none) {
+  .tt-add,
+  .kb-ai-toggle,
+  .gantt-bar-clear,
+  .td-pin {
+    opacity: 0.55 !important;
+    pointer-events: auto !important;
+  }
+  .tt-add:active,
+  .kb-ai-toggle:active,
+  .gantt-bar-clear:active,
+  .td-pin:active { opacity: 1 !important; }
+}

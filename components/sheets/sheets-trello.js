@@ -11,6 +11,9 @@
 
   var SETTINGS_KEY = 'googleSheetsSettings';
   var SECRET_KEY = 'googleSheetsSecret';
+  // The Worker URL the member's secret was issued for (board/private, next to the secret). The shared URL can be changed
+  // by any board member, so the secret is only ever sent to this one.
+  var SECRET_URL_KEY = 'googleSheetsSecretUrl';
 
   function TM() {
     return global.TableModel || null;
@@ -67,33 +70,70 @@
    * lives in board/private: Trello refuses secrets in shared pluginData ("Detected
    * potential secret"), so each member pastes the connection code once. */
 
+  function trimUrl(u) {
+    return typeof u === 'string' ? u.trim().replace(/\/+$/, '') : '';
+  }
+
+  /** Host of a URL, for messages ("autre.example.com"). */
+  function hostOf(u) {
+    try {
+      return new URL(u).host;
+    } catch (e) {
+      return String(u || '');
+    }
+  }
+
   function normalizeSettings(raw) {
     var s = raw && typeof raw === 'object' ? raw : {};
     var model = TM();
-    return {
-      workerUrl: typeof s.workerUrl === 'string' ? s.workerUrl.trim().replace(/\/+$/, '') : '',
+    var out = {
+      workerUrl: trimUrl(s.workerUrl),
       secret: typeof s.secret === 'string' ? s.secret.trim() : '',
+      secretUrl: trimUrl(s.secretUrl),
       sheetUrl: typeof s.sheetUrl === 'string' ? s.sheetUrl.trim() : '',
       columns: model ? model.normalizeColumns(s.columns) : Array.isArray(s.columns) ? s.columns : [],
       connectedAt: s.connectedAt || null,
     };
+    // The shared Worker URL is not the one this member's secret was issued for: the secret must not go there.
+    out.urlChanged = !!(out.secret && out.secretUrl && out.secretUrl !== out.workerUrl);
+    return out;
   }
 
   function isConnected(settings) {
-    return !!(settings && settings.workerUrl && settings.secret);
+    return !!(settings && settings.workerUrl && settings.secret && !settings.urlChanged);
   }
 
   async function getSettings(t) {
     var shared = (await t.get('board', 'shared', SETTINGS_KEY)) || {};
     var secret = await t.get('board', 'private', SECRET_KEY);
-    return normalizeSettings(Object.assign({}, shared, { secret: secret }));
+    var secretUrl = await t.get('board', 'private', SECRET_URL_KEY);
+    if (secret && !secretUrl && shared.workerUrl) {
+      // Connected before secrets were tied to a URL: tie it to the one shared today, so nobody is disconnected by the update.
+      secretUrl = trimUrl(shared.workerUrl);
+      try {
+        await t.set('board', 'private', SECRET_URL_KEY, secretUrl);
+      } catch (e) {
+        /* tied for this call only; tried again next time */
+      }
+    }
+    return normalizeSettings(Object.assign({}, shared, { secret: secret, secretUrl: secretUrl }));
   }
 
-  async function saveSettings(t, settings) {
+  /**
+   * opts.bind: the member just connected with their own code, so the secret is tied to this URL. Any other save (columns,
+   * Sheet link) leaves the tie alone: a changed shared URL must not drag the secret along. No secret, no tie.
+   */
+  async function saveSettings(t, settings, opts) {
     var normalized = normalizeSettings(settings);
     var shared = Object.assign({}, normalized);
     delete shared.secret;
+    delete shared.secretUrl;
+    delete shared.urlChanged;
     await t.set('board', 'private', SECRET_KEY, normalized.secret);
+    if (!normalized.secret) normalized.secretUrl = '';
+    else if (opts && opts.bind) normalized.secretUrl = normalized.workerUrl;
+    if (!normalized.secret || (opts && opts.bind)) await t.set('board', 'private', SECRET_URL_KEY, normalized.secretUrl);
+    normalized.urlChanged = !!(normalized.secret && normalized.secretUrl && normalized.secretUrl !== normalized.workerUrl);
     await t.set('board', 'shared', SETTINGS_KEY, shared);
     return normalized;
   }
@@ -110,14 +150,14 @@
       sheetUrl: parsed.sheetUrl,
       columns: current.columns,
       connectedAt: new Date().toISOString(),
-    });
+    }, { bind: true });
     return { ok: true, settings: saved };
   }
 
   /* ── Worker client ─────────────────────────────────────────────────── */
 
   async function workerCall(settings, method, path, body) {
-    if (!isConnected(settings)) return { ok: false, reason: 'not-connected' };
+    if (!isConnected(settings)) return { ok: false, reason: settings && settings.urlChanged ? 'url-changed' : 'not-connected' };
     try {
       var response = await fetch(settings.workerUrl + path, {
         method: method,
@@ -218,6 +258,7 @@
     saveSettings: saveSettings,
     normalizeSettings: normalizeSettings,
     isConnected: isConnected,
+    hostOf: hostOf,
     connectWithCode: connectWithCode,
     workerCall: workerCall,
     info: info,

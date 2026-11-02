@@ -5,6 +5,12 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Mobile : un appui long dans un champ de texte ouvre de nouveau le menu du téléphone (curseur, sélection, coller) au lieu du menu de l’application.
+- Mobile : les boutons qui n’apparaissaient qu’au survol (+ du Triage, IA du Kanban, épingle d’Aujourd’hui, retirer une date du Gantt, copier / modifier / pouces des messages) restent visibles, discrets, sur écran tactile.
+- Mobile : pincer pour zoomer ne rétrécit plus la mise en page.
+- Google Sheets : le jeton de synchro n’est envoyé qu’à l’adresse du Worker pour laquelle il a été enregistré; si un autre membre change l’adresse partagée, un message demande de recoller le code de connexion.
+- Les écritures de métadonnées (Outlook, « en attente », documents, notes) ne retouchent plus le texte de la description.
+- Installation : le lien « Google Sheets » du guide ouvre enfin la bonne page d’aide.
 - Notes : contenu riche comme Documents (titres, gras, couleurs, listes à cocher, tableaux, encadrés, liens) dans l'éditeur et sur les cartes.
 - Mobile : une loupe dans la barre d’onglets ouvre la recherche (cartes, projets, documents).
 - Mobile : un bouton + rond crée une nouvelle carte (Tableau, Kanban, Gantt, Mindmap, Dashboard); il se range quand une carte est ouverte ou que le clavier est affiché.

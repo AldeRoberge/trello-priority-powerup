@@ -117,6 +117,8 @@
         var connected = SheetsTrello.isConnected(settings);
         $('connected').hidden = !connected;
         $('setup').hidden = connected;
+        // Another member changed the shared Worker URL: the secret stays where it was issued, so reconnect on purpose.
+        if (settings.urlChanged) setStatus('L’adresse du Worker partagée a changé (' + SheetsTrello.hostOf(settings.workerUrl) + ', au lieu de ' + SheetsTrello.hostOf(settings.secretUrl) + '). Recollez votre code de connexion pour continuer.', 'error');
         if (connected) {
           $('workerUrl').textContent = settings.workerUrl;
           var link = $('sheetLink');
