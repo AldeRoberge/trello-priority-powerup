@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Notes : plus de défilement latéral ni de cartes qui se chevauchent (tableaux, code et longs mots passent à la ligne); taper « / » dans une note ouvre les mêmes blocs que les Documents (tableau, encadré, titres, listes, citation, code, séparateur, alignement).
 - Hors ligne : un lien brisé avec une roue qui tourne remplace le message (Documents, Notes). Les modifications sont gardées sur l’appareil, renvoyées dès le retour du réseau, et une note modifiée pendant une synchronisation n’est plus écrasée.
 - Notes : l’écran ressemble à Google Keep : une seule barre de recherche arrondie avec menu (Notes, Archives), un bouton + rond pour créer une note, une barre du bas pour une nouvelle liste; les cartes sont épurées et l’épingle, l’archivage et la suppression sont dans la note ouverte.
 - Mobile : un appui long dans un champ de texte ouvre de nouveau le menu du téléphone (curseur, sélection, coller) au lieu du menu de l’application.

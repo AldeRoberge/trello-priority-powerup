@@ -220,6 +220,8 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
   background: var(--k-surface);
   break-inside: avoid;
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .k-card:hover, .k-card:focus-visible { box-shadow: var(--k-shadow); outline: 0; }
@@ -228,8 +230,8 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .k-line { margin: 0; white-space: pre-wrap; min-height: 1.4em; }
 
 /* dialog */
-.k-shade { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 12px 12px; background: rgba(0, 0, 0, 0.5); overflow-y: auto; }
-.k-dialog { width: 100%; max-width: 600px; border-radius: 8px; background: var(--k-surface); box-shadow: var(--k-shadow); }
+.k-shade { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 12px 12px; background: rgba(0, 0, 0, 0.5); overflow-x: hidden; overflow-y: auto; }
+.k-dialog { width: 100%; max-width: 600px; min-width: 0; overflow-x: hidden; border-radius: 8px; background: var(--k-surface); box-shadow: var(--k-shadow); }
 .k-dialog .k-editor { padding-top: 12px; }
 .k-dialog .k-text { min-height: 120px; }
 
@@ -266,6 +268,15 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .k-rich-view > :last-child, .k-rich > :last-child { margin-bottom: 0; }
 .k-rich-view .dc-todo > li { cursor: default; }
 .k-rich-wrap { display: flex; flex-direction: column; }
-.k-rtools { display: flex; flex-wrap: wrap; gap: 0; margin: 4px -8px 0; }
+.k-rtools { display: flex; flex-wrap: wrap; gap: 0; margin: 4px 0 0; max-width: 100%; }
 .k-rtool { width: 32px; height: 32px; font-size: 17px; }
 .k-composer .k-rich.dc-editor { min-height: 60px; }
+
+/* nothing may push sideways: long words wrap, tables fit, code wraps, pictures shrink (editor and cards) */
+.k-editor, .k-rich-wrap, .k-rich, .k-rich-view { min-width: 0; max-width: 100%; }
+.k-rich, .k-rich-view { overflow-x: hidden; overflow-wrap: anywhere; word-break: break-word; }
+.k-rich table.dc-table, .k-rich-view table.dc-table { width: 100%; max-width: 100%; table-layout: fixed; }
+.k-rich table.dc-table th, .k-rich table.dc-table td, .k-rich-view table.dc-table th, .k-rich-view table.dc-table td { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.k-rich pre, .k-rich-view pre { max-width: 100%; white-space: pre-wrap; overflow-x: hidden; overflow-wrap: anywhere; }
+.k-rich img, .k-rich-view img { max-width: 100%; height: auto; }
+.k-suggest { z-index: 1100; }

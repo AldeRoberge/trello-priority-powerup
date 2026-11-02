@@ -341,6 +341,142 @@
       on('quote', n && closestIn(n, 'BLOCKQUOTE'));
     }
 
+    /* ── slash menu (same blocks as Documents: type "/" for a table, a callout, a title...) ── */
+
+    var SLASH = [
+      { id: 'p', label: 'Texte', icon: 'text-size', kw: 'paragraphe normal texte' },
+      { id: 'h1', label: 'Titre 1', icon: 'h-1', kw: 'heading titre grand' },
+      { id: 'h2', label: 'Titre 2', icon: 'h-2', kw: 'heading titre moyen' },
+      { id: 'h3', label: 'Titre 3', icon: 'h-3', kw: 'heading titre petit' },
+      { id: 'ul', label: 'Liste à puces', icon: 'list', kw: 'liste puces bullet' },
+      { id: 'ol', label: 'Liste numérotée', icon: 'list-numbers', kw: 'liste numerotee numero' },
+      { id: 'todo', label: 'Liste de tâches', icon: 'list-check', kw: 'checklist cases cocher todo' },
+      { id: 'quote', label: 'Citation', icon: 'quote', kw: 'citation quote' },
+      { id: 'codeblock', label: 'Bloc de code', icon: 'file-code', kw: 'code' },
+      { id: 'hr', label: 'Séparateur', icon: 'separator-horizontal', kw: 'ligne separateur' },
+      { id: 'table', label: 'Tableau', icon: 'table', kw: 'tableau table grille colonnes' },
+      { id: 'callout-note', label: 'Note', icon: 'info-circle', kw: 'encadre note info appel' },
+      { id: 'callout-tip', label: 'Conseil', icon: 'bulb', kw: 'encadre conseil astuce tip' },
+      { id: 'callout-warning', label: 'Attention', icon: 'alert-triangle', kw: 'encadre attention avertissement warning' },
+      { id: 'align-left', label: 'Aligner à gauche', icon: 'align-left', kw: 'aligner gauche left' },
+      { id: 'align-center', label: 'Aligner au centre', icon: 'align-center', kw: 'aligner centre center milieu' },
+      { id: 'align-right', label: 'Aligner à droite', icon: 'align-right', kw: 'aligner droite right' },
+    ];
+    var sugg = null;
+    var suggEl = null;
+
+    function closeSugg() {
+      sugg = null;
+      if (suggEl && suggEl.parentNode) suggEl.parentNode.removeChild(suggEl);
+      suggEl = null;
+    }
+    function textBeforeCaret() {
+      var sel = global.getSelection();
+      if (!sel || !sel.rangeCount || !sel.isCollapsed || !ed.contains(sel.anchorNode)) return null;
+      var n = sel.anchorNode;
+      if (n.nodeType !== 3) return null;
+      return { node: n, offset: sel.anchorOffset, text: n.nodeValue.slice(0, sel.anchorOffset) };
+    }
+    function paintSugg() {
+      if (!sugg) return closeSugg();
+      if (!suggEl) suggEl = h('div', { class: 'dc-suggest k-suggest', role: 'listbox' });
+      suggEl.textContent = '';
+      suggEl.appendChild(h('div', { class: 'dc-sg-head' }, [h('span', { text: 'Commandes' })]));
+      sugg.entries.forEach(function (c, i) {
+        var row = h('div', { class: 'dc-sg-row' + (i === sugg.active ? ' is-active' : ''), role: 'option' }, [
+          icon(c.icon).cloneNode(true),
+          h('span', { class: 'dc-sg-label', text: c.label }),
+        ]);
+        row.firstChild.className = 'ti ti-' + c.icon + ' dc-sg-icon';
+        row.addEventListener('mousedown', function (e) { e.preventDefault(); applySlash(c); });
+        row.addEventListener('mousemove', function () {
+          if (sugg && sugg.active !== i) { sugg.active = i; paintSugg(); }
+        });
+        suggEl.appendChild(row);
+      });
+      var sel = global.getSelection();
+      var rect = null;
+      if (sel && sel.rangeCount) {
+        var r = sel.getRangeAt(0).cloneRange();
+        r.collapse(true);
+        rect = r.getClientRects()[0];
+      }
+      if (!rect || !(rect.width || rect.height)) rect = ed.getBoundingClientRect();
+      placePop(suggEl, rect);
+      var on = suggEl.querySelector('.is-active');
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+    }
+    function updateSlash() {
+      var before = textBeforeCaret();
+      var sl = before && DM().detectSlash(before.text);
+      if (!sl) return closeSugg();
+      var q = DM().fold(sl.query);
+      var entries = SLASH.filter(function (c) { return !q || DM().fold(c.label + ' ' + c.kw).indexOf(q) >= 0; });
+      if (!entries.length) return closeSugg();
+      var keep = sugg ? sugg.active : 0;
+      sugg = { length: sl.length, entries: entries, active: Math.min(keep, entries.length - 1) };
+      paintSugg();
+    }
+    function runSlash(id) {
+      var r = docsRich();
+      if (r && r.run(id)) return;
+      if (id === 'p' || id === 'h1' || id === 'h2' || id === 'h3') document.execCommand('formatBlock', false, '<' + id + '>');
+      else if (id === 'ul') { if (!listOf()) toggleList('ul'); }
+      else if (id === 'ol') { if (!listOf()) toggleList('ol'); }
+      else if (id === 'todo') { toggleTodo(); }
+      else if (id === 'codeblock') document.execCommand('formatBlock', false, '<pre>');
+      else if (id === 'hr') {
+        document.execCommand('insertHorizontalRule');
+        var hr = ed.querySelector('hr:not([data-k])');
+        if (hr) {
+          hr.setAttribute('data-k', '1');
+          if (!hr.nextElementSibling) {
+            var p = document.createElement('p');
+            p.appendChild(document.createElement('br'));
+            hr.parentNode.insertBefore(p, hr.nextSibling);
+          }
+          focusInside(hr.nextElementSibling);
+        }
+      }
+    }
+    function applySlash(c) {
+      var s = sugg;
+      closeSugg();
+      if (!s) return;
+      ed.focus({ preventScroll: true });
+      var before = textBeforeCaret();
+      if (before && before.offset >= s.length) {
+        var range = document.createRange();
+        range.setStart(before.node, before.offset - s.length);
+        range.setEnd(before.node, before.offset);
+        var sel = global.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('delete');
+      }
+      saveSel();
+      runSlash(c.id);
+      Array.prototype.forEach.call(ed.querySelectorAll('hr[data-k]'), function (x) { x.removeAttribute('data-k'); });
+      changed();
+    }
+    function slashKey(e) {
+      if (!sugg) return false;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSugg(); return true; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var n = sugg.entries.length;
+        sugg.active = (sugg.active + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+        paintSugg();
+        return true;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applySlash(sugg.entries[sugg.active]);
+        return true;
+      }
+      return false;
+    }
+
     /* ── editing behaviour ───────────────────────────────────────── */
 
     ed.addEventListener('input', function (e) {
@@ -350,9 +486,11 @@
         if (li && li.parentNode.classList.contains('dc-todo') && !/\S/.test(li.textContent || '')) li.setAttribute('data-checked', 'false');
       }
       changed();
+      updateSlash();
     });
 
     ed.addEventListener('keydown', function (e) {
+      if (slashKey(e)) return;
       if (e.key === 'Tab') {
         var cell = closestIn(selNode(), 'TD,TH');
         var r = docsRich();
@@ -416,7 +554,7 @@
 
     ed.addEventListener('keyup', function () { saveSel(); paintTools(); });
     ed.addEventListener('mouseup', function () { saveSel(); paintTools(); });
-    ed.addEventListener('blur', saveSel);
+    ed.addEventListener('blur', function () { saveSel(); global.setTimeout(closeSugg, 120); });
     document.addEventListener('mousedown', function (e) {
       if (pop && !pop.contains(e.target) && !bar.contains(e.target)) closePop();
     });
@@ -435,7 +573,7 @@
       setMd: function (md) { setMd(md); changed(); },
       focus: function () { ed.focus(); },
       toggleTodo: function () { ed.focus(); keepCaret(toggleTodo)(); changed(); },
-      destroy: closePop,
+      destroy: function () { closePop(); closeSugg(); },
     };
   }
 
