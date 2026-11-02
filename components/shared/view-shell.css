@@ -861,8 +861,7 @@ html:has(body.tp-page--journey) body {
     position: absolute;
     inset: -9px -3px;
   }
-  .kb-ai-toggle::after,
-  .gantt-bar-clear::after {
+  .kb-ai-toggle::after {
     content: '';
     position: absolute;
     inset: -8px;
@@ -997,15 +996,15 @@ html:has(.gantt-card-overlay) .lk-new { display: none !important; }
 @media (hover: none) {
   .tt-add,
   .kb-ai-toggle,
-  .gantt-bar-clear,
   .td-pin {
     opacity: 0.55 !important;
     pointer-events: auto !important;
   }
   .tt-add:active,
   .kb-ai-toggle:active,
-  .gantt-bar-clear:active,
   .td-pin:active { opacity: 1 !important; }
+  /* A bar is small: the little × would sit under the thumb and a tap would erase the dates. The long-press menu has it. */
+  .gantt-bar-clear { display: none !important; }
 }
 
 /* ── Touch baseline ─────────────────────────────────────────────────────────────────────────────────
