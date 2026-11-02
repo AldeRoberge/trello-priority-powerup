@@ -537,6 +537,21 @@ html:has(body.tp-page--journey) body {
   .gantt-row-actions {
     display: none;
   }
+  /* Task names wrap on two lines instead of being cut at 100px. */
+  .gantt-task-title-wrap {
+    overflow: visible;
+  }
+  .gantt-task-name {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-size: 13px;
+    line-height: 1.2;
+    word-break: break-word;
+  }
 
   /* Dashboard: rows wrap their meta under the title instead of running off screen */
   .db-main {
