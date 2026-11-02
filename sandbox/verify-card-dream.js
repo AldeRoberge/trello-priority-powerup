@@ -59,10 +59,7 @@ check(
   dreamed.lastDreamAt && dreamed.dreamSignature === sig
 );
 
-var agentSrc = fs.readFileSync(
-  path.join(__dirname, '..', 'components', 'agent', 'agent.js'),
-  'utf8'
-);
+var agentSrc = require('./component-source').read('agent/agent.js');
 check('agent exports cardDreamTurn', /cardDreamTurn:\s*cardDreamTurn/.test(agentSrc));
 check('agent defines cardDreamTurn', /async function cardDreamTurn\(/.test(agentSrc));
 check(
