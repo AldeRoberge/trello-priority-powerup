@@ -3,6 +3,14 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-02
+
+- Mobile : une loupe dans la barre d’onglets ouvre la recherche (cartes, projets, documents).
+- Mobile : un bouton + rond crée une nouvelle carte (Tableau, Kanban, Gantt, Mindmap, Dashboard); il se range quand une carte est ouverte ou que le clavier est affiché.
+- Archiver une carte affiche un message flottant avec Annuler (Tableau, Kanban, Gantt), aussi sur téléphone.
+- Mobile : dans le Tableau, toucher le titre d’une carte l’ouvre au lieu de lancer la saisie (renommer : menu Modifier).
+- Dashboard : le bouton + et la touche C créent une carte même sans liste Triage (dans la première liste À faire).
+
 ## 2026-11-01
 
 - Mobile : faire défiler la page avec le doigt sur le Gantt, sur la liste Triage ou sur la fiche rapide d’une carte ne planifie plus une date et ne change plus un avancement par accident.

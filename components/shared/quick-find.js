@@ -420,6 +420,14 @@
     open();
   }
 
+  /** Opens the search from a button (the phone's search icon), with the same guards as Ctrl+F. Returns whether it opened. */
+  function request() {
+    if (ui || !global.document || !document.body) return false;
+    if (bound && typeof bound.isBusy === 'function' && bound.isBusy()) return false;
+    open();
+    return !!ui;
+  }
+
   function hookPalette() {
     var CP = global.CommandPalette;
     if (!CP || !CP.attach || CP.attach.__qf) return;
@@ -447,5 +455,6 @@
     search: search,
     loose: loose,
     install: install,
+    request: request,
   };
 })(typeof window !== 'undefined' ? window : global);

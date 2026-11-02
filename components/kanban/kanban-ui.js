@@ -886,12 +886,15 @@
 
     function archiveRow(row) {
       TT().archiveCard(t, row.id).then(function () {
-        record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
+        var entry = record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
         state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
         if (state.detailId === row.id) closeDetail();
         renderBoard();
         paintCount();
-        setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok');
+        var msg = '« ' + (row.name || 'Carte') + ' » archivée';
+        // With "Annuler", on every width (the toolbar status is hidden on a phone, and there is no Ctrl+Z there).
+        if (HP && typeof HP.toast === 'function') HP.toast(entry, msg);
+        else setStatus(msg, 'ok');
       }, fail);
     }
 

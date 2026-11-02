@@ -957,7 +957,9 @@
     function recordRemoval(row, res) {
       if (!res) return;
       if (res.archived) {
-        record({ type: 'archive', targetId: row.cardId, title: row.name });
+        var entry = record({ type: 'archive', targetId: row.cardId, title: row.name });
+        // An archived card can be restored: offer it right away, also on a phone (no Ctrl+Z there).
+        if (HP && typeof HP.toast === 'function') HP.toast(entry, '\u00ab ' + (row.name || 'Carte') + ' \u00bb archiv\u00e9e');
       } else {
         record({
           type: 'delete',

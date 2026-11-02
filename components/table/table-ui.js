@@ -1159,6 +1159,9 @@
         }
         td.addEventListener('click', function () {
           state.selected = { rowId: row.id, key: key };
+          // On a touch screen a tap on the title opens the task (like Linear, Todoist, Things): an inline edit would
+          // only raise the keyboard. Rename stays in the menu (Modifier > Nom) and in the task panel.
+          if (global.ViewShell && global.ViewShell.isCoarse() && global.TaskFocus) return openCard(row);
           beginEdit(row.id, key);
         });
         return td;
@@ -1391,10 +1394,10 @@
         state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
         renderGrid();
         var entry = record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
-        setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok', 8000, {
-          label: 'Annuler',
-          run: function () { toggleEntry(entry); },
-        });
+        var msg = '« ' + (row.name || 'Carte') + ' » archivée';
+        // The floating toast shows on every width (the toolbar status is hidden on a phone).
+        if (HP && typeof HP.toast === 'function') HP.toast(entry, msg);
+        else setStatus(msg, 'ok', 8000, { label: 'Annuler', run: function () { toggleEntry(entry); } });
       }, fail);
     }
 

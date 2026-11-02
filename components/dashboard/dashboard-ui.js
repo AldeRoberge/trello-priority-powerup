@@ -1056,8 +1056,9 @@
     }
 
     function createCard() {
-      var target = DT().listFor(state.lists, ['triage']);
-      if (!target || !global.NewCard) return;
+      var target = DT().newCardList(state.lists);
+      if (!global.NewCard) return;
+      if (!target) return setStatus('Aucune liste pour la nouvelle carte', 'error');
       global.NewCard.open({
         t: t,
         lists: state.lists,

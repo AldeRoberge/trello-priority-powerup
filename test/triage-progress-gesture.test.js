@@ -8,25 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-
-function node(tag) {
-  return {
-    tag,
-    children: [],
-    style: {},
-    attrs: {},
-    listeners: {},
-    className: '',
-    textContent: '',
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    setAttribute(k, v) { this.attrs[k] = v; },
-    appendChild(c) { this.children.push(c); return c; },
-    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
-    removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn); },
-    getBoundingClientRect: () => ({ left: 0, width: 100 }),
-    fire(type, evt) { (this.listeners[type] || []).slice().forEach((fn) => fn(Object.assign({ type, preventDefault() {}, stopPropagation() {} }, evt))); },
-  };
-}
+const { node } = require('./helpers/fake-dom');
 
 function load() {
   const doc = node('document');

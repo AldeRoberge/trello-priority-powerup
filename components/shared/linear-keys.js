@@ -4,7 +4,7 @@
  * Statut and urgence open the searchable LinearPick; the échéance opens the shared CardFields editor.
  * The view only supplies how to find a card and how to apply a change, so both views behave the same.
  *
- *   LinearKeys.attach({
+ *   LinearKeys.attach({   // a newCard() also mounts the phone's round "+" button (see mountNewButton)
  *     t,
  *     hoverSelector,                   // card element, e.g. '.kb-card' or 'tr[data-id]'
  *     idOf(el) -> cardId,
@@ -53,11 +53,16 @@
       return { row: row, anchor: anchor };
     }
 
+    /** An inline editor, picker or composer is open: a shortcut or the "+" button must not stack another one. */
+    function blocked() {
+      if (typeof o.isBusy === 'function' && o.isBusy()) return true;
+      return !!((global.LinearPick && global.LinearPick.isOpen()) || (global.NewCard && global.NewCard.isOpen()) || (global.CardFields && global.CardFields.isOpen()));
+    }
+
     function onKey(e) {
       var action = actionFor(e);
       if (!action || e.defaultPrevented || typing()) return;
-      if (typeof o.isBusy === 'function' && o.isBusy()) return;
-      if ((global.LinearPick && global.LinearPick.isOpen()) || (global.NewCard && global.NewCard.isOpen()) || (global.CardFields && global.CardFields.isOpen())) return;
+      if (blocked()) return;
       if (action === 'new') {
         if (typeof o.newCard !== 'function') return;
         e.preventDefault();
@@ -100,10 +105,75 @@
     document.addEventListener('mouseover', onOver);
     document.addEventListener('mouseleave', onLeave);
     document.addEventListener('keydown', onKey);
+    var unmountNew = typeof o.newCard === 'function' ? mountNewButton(function () { if (!blocked()) o.newCard(); }) : null;
     return function detach() {
       document.removeEventListener('mouseover', onOver);
       document.removeEventListener('mouseleave', onLeave);
       document.removeEventListener('keydown', onKey);
+      if (unmountNew) unmountNew();
+    };
+  }
+
+  /**
+   * The C key has no touch equivalent, so a round "+" button (shown on phones and touch screens by view-shell.css)
+   * starts a new card through the same newCard(). It sits just above the assistant dock, and steps aside while a
+   * text field has focus (the keyboard is up). Returns the function that removes it.
+   */
+  function mountNewButton(onClick) {
+    var doc = global.document;
+    if (!doc || !doc.body || typeof doc.createElement !== 'function') return null;
+    var b = doc.createElement('button');
+    b.type = 'button';
+    b.className = 'lk-new';
+    b.title = 'Nouvelle carte (C)';
+    b.setAttribute('aria-label', 'Nouvelle carte');
+    var i = doc.createElement('i');
+    i.className = 'ti ti-plus';
+    b.appendChild(i);
+    b.addEventListener('click', onClick);
+    doc.body.appendChild(b);
+
+    /** The button hangs 12 px above the assistant dock (ViewShell.dockBottom); with no dock, 16 px + the safe area. */
+    function place() {
+      var VS = global.ViewShell;
+      var px = VS && typeof VS.dockBottom === 'function' ? VS.dockBottom(12) : null;
+      b.style.bottom = px == null ? 'calc(16px + env(safe-area-inset-bottom, 0px))' : px + 'px';
+      return doc.querySelector ? doc.querySelector('.ad-dock') : null;
+    }
+    function isField(el) {
+      return !!(el && (/^(input|textarea|select)$/i.test(el.tagName) || el.isContentEditable));
+    }
+    function onFocusIn(e) { if (isField(e.target)) b.classList.add('is-hidden'); }
+    function onFocusOut() { b.classList.remove('is-hidden'); }
+
+    var observed = null;
+    var ro = null;
+    function settle() {
+      var dock = place();
+      if (dock && dock !== observed && typeof global.ResizeObserver === 'function') {
+        if (ro) ro.disconnect();
+        ro = new global.ResizeObserver(place);
+        ro.observe(dock);
+        observed = dock;
+      }
+    }
+    // The dock mounts after the view; look for it a few times, then ResizeObserver follows its drag-resize.
+    var timers = [0, 300, 1000, 2500].map(function (ms) { return global.setTimeout(settle, ms); });
+    var vv = global.visualViewport;
+    global.addEventListener('resize', settle);
+    if (vv && typeof vv.addEventListener === 'function') vv.addEventListener('resize', settle);
+    doc.addEventListener('focusin', onFocusIn);
+    doc.addEventListener('focusout', onFocusOut);
+    place();
+
+    return function unmount() {
+      timers.forEach(function (id) { global.clearTimeout(id); });
+      if (ro) ro.disconnect();
+      global.removeEventListener('resize', settle);
+      if (vv && typeof vv.removeEventListener === 'function') vv.removeEventListener('resize', settle);
+      doc.removeEventListener('focusin', onFocusIn);
+      doc.removeEventListener('focusout', onFocusOut);
+      if (b.parentNode) b.parentNode.removeChild(b);
     };
   }
 

@@ -57,6 +57,15 @@
   }
 
   /**
+   * Where a new card lands: the triage list; on a board without one, the first "to do" (or backlog) list; else the
+   * first list. Null only when the board has no list at all. (Without this fallback "+" and the C key did nothing.)
+   */
+  function newCardList(lists) {
+    lists = lists || [];
+    return listFor(lists, ['triage']) || listFor(lists, ['unstarted', 'backlog']) || lists[0] || null;
+  }
+
+  /**
    * Makes sure the board has a triage list: an existing list whose name reads like one ("Inbox", "À trier"...)
    * is assigned the triage Statut, otherwise an "Inbox" list is created at the left of the board.
    */
@@ -477,6 +486,7 @@
   global.DashboardTrello = {
     load: load,
     listFor: listFor,
+    newCardList: newCardList,
     ingest: ingest,
     ensureInbox: ensureInbox,
     attachFile: attachFile,
