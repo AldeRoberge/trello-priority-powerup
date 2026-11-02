@@ -661,7 +661,7 @@
       return true;
     }
     return (
-      /\b(\u00e9ch[eé]ance|deadline|date\s+limite)\b/i.test(t) && /\?/.test(t)
+      /(?:^|[^a-z\u00e0-\u00ff])(?:\u00e9ch[e\u00e9]ance|deadline|date\s+limite)(?![a-z\u00e0-\u00ff])/i.test(t) && /\?/.test(t)
     );
   }
 
@@ -1239,7 +1239,8 @@
           : s && typeof s === 'object'
             ? String(s.text || s.label || '')
             : '';
-      return !/\b(\u00e9ch[eé]ance|deadline|date\s+limite)\b/i.test(text);
+      // Not \b: JS treats é as a non-word character, so \b never matches before « échéance ».
+      return !/(?:^|[^a-z\u00e0-\u00ff])(?:\u00e9ch[e\u00e9]ance|deadline|date\s+limite)(?![a-z\u00e0-\u00ff])/i.test(text);
     });
   }
 

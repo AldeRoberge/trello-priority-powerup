@@ -82,15 +82,15 @@ check(
     agentSrc.indexOf('version courte') !== -1
 );
 
+var uiSrc = fs.readFileSync(
+  path.join(__dirname, '..', 'components', 'agent', 'agent-ui.js'),
+  'utf8'
+);
 check(
   'ui rewrites verbose desc once',
   /verboseDescRewriteTried/.test(uiSrc) && /cardDescNeedsDreamRewrite/.test(uiSrc)
 );
 
-var uiSrc = fs.readFileSync(
-  path.join(__dirname, '..', 'components', 'agent', 'agent-ui.js'),
-  'utf8'
-);
 check('ui schedules dream', /function scheduleCardDream\(/.test(uiSrc));
 check('ui runs dream', /function tryRunCardDream\(/.test(uiSrc));
 check('ui marks dreamed', /markCardDreamed/.test(uiSrc));
