@@ -249,17 +249,59 @@
       changed();
     }
 
+    /* Chrome can drop the caret at the start of the block after a list or block command: put it back. */
+    var BLOCKS = 'LI,H1,H2,H3,BLOCKQUOTE,PRE,P';
+    function caretIn() {
+      var sel = global.getSelection();
+      var n = selNode();
+      var block = n && closestIn(n, BLOCKS);
+      if (!block || !sel.isCollapsed) return null;
+      var r = document.createRange();
+      r.selectNodeContents(block);
+      r.setEnd(sel.anchorNode, sel.anchorOffset);
+      return r.toString().length;
+    }
+    function putCaret(offset) {
+      var n = selNode();
+      var block = n && closestIn(n, BLOCKS);
+      if (!block || offset == null) return;
+      var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      var left = offset;
+      var node = walker.nextNode();
+      var last = null;
+      while (node) {
+        last = node;
+        if (left <= node.nodeValue.length) break;
+        left -= node.nodeValue.length;
+        node = walker.nextNode();
+      }
+      var sel = global.getSelection();
+      var r = document.createRange();
+      if (last) r.setStart(last, Math.min(left, last.nodeValue.length));
+      else r.setStart(block, 0);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    function keepCaret(fn) {
+      return function (b) {
+        var at = caretIn();
+        fn(b);
+        putCaret(at);
+      };
+    }
+
     var TOOLS = [
       { id: 'bold', i: 'bold', t: 'Gras', run: function () { document.execCommand('bold'); } },
       { id: 'italic', i: 'italic', t: 'Italique', run: function () { document.execCommand('italic'); } },
       { id: 'underline', i: 'underline', t: 'Souligné', run: function () { document.execCommand('underline'); } },
       { id: 'strike', i: 'strikethrough', t: 'Barré', run: function () { document.execCommand('strikeThrough'); } },
-      { id: 'h2', i: 'heading', t: 'Titre', run: function () { toggleBlock('h2'); } },
-      { id: 'ul', i: 'list', t: 'Puces', run: function () { toggleList('ul'); } },
-      { id: 'ol', i: 'list-numbers', t: 'Numérotée', run: function () { toggleList('ol'); } },
-      { id: 'todo', i: 'checkbox', t: 'Liste à cocher', run: toggleTodo },
-      { id: 'quote', i: 'quote', t: 'Citation', run: toggleQuote },
-      { id: 'pre', i: 'code', t: 'Code', run: function () { toggleBlock('pre'); } },
+      { id: 'h2', i: 'heading', t: 'Titre', run: keepCaret(function () { toggleBlock('h2'); }) },
+      { id: 'ul', i: 'list', t: 'Puces', run: keepCaret(function () { toggleList('ul'); }) },
+      { id: 'ol', i: 'list-numbers', t: 'Numérotée', run: keepCaret(function () { toggleList('ol'); }) },
+      { id: 'todo', i: 'checkbox', t: 'Liste à cocher', run: keepCaret(toggleTodo) },
+      { id: 'quote', i: 'quote', t: 'Citation', run: keepCaret(toggleQuote) },
+      { id: 'pre', i: 'code', t: 'Code', run: keepCaret(function () { toggleBlock('pre'); }) },
       { id: 'link', i: 'link', t: 'Lien', run: openLink },
       { id: 'color', i: 'palette', t: 'Couleur', run: function (b) { var r = docsRich(); if (r) r.openColorPop(b); } },
       { id: 'table', i: 'table', t: 'Tableau', run: function () { var r = docsRich(); if (r) r.insertTable(); } },
@@ -321,6 +363,24 @@
         }
         return;
       }
+      var rr = docsRich();
+      var sel0 = global.getSelection();
+      if (rr && e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        var cellEnter = closestIn(selNode(), 'TD,TH');
+        if (cellEnter) {
+          e.preventDefault();
+          var below = rr.cellBelow(cellEnter);
+          if (below) rr.focusCell(below);
+          changed();
+          return;
+        }
+        if (rr.leaveEmptyQuote()) { e.preventDefault(); changed(); return; }
+      }
+      if (rr && e.key === 'Backspace' && sel0 && sel0.isCollapsed && rr.exitQuote()) {
+        e.preventDefault();
+        changed();
+        return;
+      }
       var mod = e.ctrlKey || e.metaKey;
       if (mod && !e.altKey && String(e.key).toLowerCase() === 'b') { e.preventDefault(); document.execCommand('bold'); changed(); }
       else if (mod && !e.altKey && String(e.key).toLowerCase() === 'i') { e.preventDefault(); document.execCommand('italic'); changed(); }
@@ -374,7 +434,7 @@
       getMd: getMd,
       setMd: function (md) { setMd(md); changed(); },
       focus: function () { ed.focus(); },
-      toggleTodo: function () { ed.focus(); toggleTodo(); changed(); },
+      toggleTodo: function () { ed.focus(); keepCaret(toggleTodo)(); changed(); },
       destroy: closePop,
     };
   }
