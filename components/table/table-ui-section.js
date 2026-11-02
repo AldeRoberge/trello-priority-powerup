@@ -63,11 +63,7 @@
       S.TT().archiveCard(M.t, row.id).then(function () {
         M.state.rows = M.state.rows.filter(function (r) { return r.id !== row.id; });
         M.renderGrid();
-        var entry = M.record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
-        M.setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok', 8000, {
-          label: 'Annuler',
-          run: function () { M.toggleEntry(entry); },
-        });
+        M.record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' }); // offers its own Annuler toast
       }, M.fail);
     };
     M.stageGoals = function stageGoals(next) {

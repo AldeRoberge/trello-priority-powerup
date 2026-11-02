@@ -20,6 +20,9 @@
     delete: { icon: 'trash', tone: 'danger', group: 'archive' },
   };
 
+  /** How long the floating undo message stays (ms). */
+  var TOAST_MS = 8000;
+
   var FILTERS = [
     { id: 'all', label: 'Tout', icon: 'list' },
     { id: 'archive', label: 'Archivages', icon: 'archive' },
@@ -138,6 +141,8 @@
       if (state.items.length > max) state.items.length = max;
       persist();
       changed();
+      // An archive offers its undo at once ("« X » archivée · Annuler"), the same in every view that records one.
+      if (e.type === 'archive' && cfg.toast !== false) toast(e, '\u00ab ' + (e.title || 'Carte') + ' \u00bb archiv\u00e9e');
       return e;
     }
 
@@ -353,6 +358,41 @@
     /** Opens the panel from a status message ("Action annulée" is clickable in every view). */
     function openPanel() { setOpen(true); }
 
+    /**
+     * A floating "« X » archivée · Annuler" message, for the actions a phone user must be able to take back at once
+     * (the toolbar status is hidden on a narrow screen, and Ctrl+Z does not exist there). One at a time; it fades
+     * after TOAST_MS. Annuler runs the same toggle() as the list, so apply() / after() behave as usual.
+     */
+    var toastEl = null;
+    var toastTimer = null;
+    function hideToast() {
+      global.clearTimeout(toastTimer);
+      toastTimer = null;
+      if (toastEl && toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
+      toastEl = null;
+    }
+    function toast(entry, message) {
+      hideToast();
+      if (!global.document || !global.document.body) return;
+      var kids = [h('span', { class: 'hp-toast-msg', text: message || '' })];
+      if (entry && canToggle(entry)) {
+        kids.push(h('button', {
+          class: 'hp-toast-btn', type: 'button',
+          onclick: function () { hideToast(); toggle(entry); },
+        }, [icon('arrow-back-up'), h('span', { text: 'Annuler' })]));
+      }
+      kids.push(h('button', {
+        class: 'hp-toast-btn hp-toast-btn--quiet', type: 'button', title: 'Historique des modifications', 'aria-label': 'Historique',
+        onclick: function () { hideToast(); openPanel(); },
+      }, [icon('history')]));
+      toastEl = h('div', { class: 'hp-toast', role: 'status' }, kids);
+      var VS = global.ViewShell;
+      var px = VS && typeof VS.dockBottom === 'function' ? VS.dockBottom(12) : null;
+      if (px != null) toastEl.style.bottom = px + 'px';
+      global.document.body.appendChild(toastEl);
+      toastTimer = global.setTimeout(hideToast, TOAST_MS);
+    }
+
     function setOpen(open, parent) {
       state.open = !!open;
       if (open && !drawer) {
@@ -375,6 +415,8 @@
       renderInto: renderInto,
       open: function (parent) { setOpen(true, parent); },
       close: function () { setOpen(false); },
+      toast: toast,
+      hideToast: hideToast,
       toggleDrawer: function (parent) { setOpen(!state.open, parent); },
       isOpen: function () { return state.open; },
       count: function () { return state.items.length; },

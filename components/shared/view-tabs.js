@@ -18,6 +18,7 @@
     { key: 'mindmap', label: 'Mindmap', icon: 'hierarchy-2', page: './mindmap.html' },
     { key: 'journey', label: 'Parcours', icon: 'route', page: './journey.html' },
     { key: 'docs', label: 'Documents', icon: 'file-text', page: './docs.html' },
+    { key: 'keep', label: 'Notes', icon: 'notes', page: './keep.html' },
     { key: 'entities', label: 'Entités', icon: 'stack-2', page: './entities.html' },
   ];
 
@@ -36,6 +37,24 @@
     u.search = loc.search || '';
     u.hash = loc.hash || '';
     return u.href;
+  }
+
+  /** The search icon of the tab strip. QuickFind (projects, tasks, documents, entities, "ask the assistant") when loaded, else the palette. */
+  function searchButton() {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vt-util vt-search';
+    b.title = 'Chercher';
+    b.setAttribute('aria-label', 'Chercher');
+    var i = document.createElement('i');
+    i.className = 'ti ti-search';
+    b.appendChild(i);
+    b.addEventListener('click', function () {
+      var QF = global.QuickFind;
+      if (QF && typeof QF.request === 'function') return QF.request();
+      if (global.CommandPalette) global.CommandPalette.open();
+    });
+    return b;
   }
 
   function mount(container, opts) {
@@ -105,6 +124,9 @@
       // The Assistant is a labelled tab right after the Dashboard (it is not a view of the cards).
       if (v.key === 'dashboard') nav.appendChild(link(UTILS[0], 'vt-tab', true));
     });
+    // Touch has no Ctrl+F: a search button (shown on phones by view-tabs.css) opens the same search. Pages
+    // without a palette (Assistant, Réglages) have nothing to search, so they get no button.
+    if (global.CommandPalette && typeof global.CommandPalette.open === 'function') utils.appendChild(searchButton());
     UTILS.slice(1).forEach(function (v) {
       utils.appendChild(link(v, 'vt-util', false));
     });

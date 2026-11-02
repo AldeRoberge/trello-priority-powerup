@@ -762,6 +762,8 @@ html:has(body.tp-page--journey) body {
   /* A thumb that lands on a drag bar must still be able to scroll the page (see ViewShell touch guard). */
   .tb-prog-bar,
   .jy-prog-bar,
+  .tt-prog-bar,
+  .cq-bar,
   .gantt-bar,
   .gantt-bar-edge {
     touch-action: pan-y !important;
@@ -932,3 +934,38 @@ html:has(body.tp-page--journey) body {
     height: min(56vh, 460px);
   }
 }
+
+/* ── "+" new-card button (components/shared/linear-keys.js): the C key has no touch equivalent ─────── */
+.lk-new {
+  display: none;
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 20; /* above bars and sticky headers (up to 6), under the panels (task panel 30, Gantt overlay 40) */
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tp-primary);
+  color: var(--tp-primary-text, #fff);
+  font-size: 24px;
+  box-shadow: 0 2px 8px rgba(9, 30, 66, 0.3);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.lk-new:hover { filter: brightness(1.08); }
+.lk-new:active { filter: brightness(0.94); }
+.lk-new:focus-visible { outline: 3px solid var(--tp-primary); outline-offset: 3px; }
+@media (max-width: 640px), (pointer: coarse) {
+  .lk-new { display: inline-flex; }
+}
+/* A text field has focus (the keyboard is up): step aside. */
+.lk-new.is-hidden { display: none !important; }
+/* A full-height panel is open (task panel, Kanban detail, Gantt card): the button would float over it. Its own rule, so a
+   browser without :has() only drops this one and keeps the plain overlap. */
+html:has(.tf-panel) .lk-new,
+html:has(.kb-detail:not([hidden])) .lk-new,
+html:has(.gantt-card-overlay) .lk-new { display: none !important; }

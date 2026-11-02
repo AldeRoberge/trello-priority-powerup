@@ -297,3 +297,8 @@
   .sk-glabels-row { grid-template-columns: 34px minmax(0, 1fr) 70px; }
   .sk-glabels-row > :nth-child(4) { display: none; }
 }
+
+/* Notes */
+.sk-krow { padding: 12px 16px; }
+.sk-kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 0 16px 16px; }
+.sk-kcard { border: 1px solid var(--sk-line, rgba(128, 128, 128, 0.25)); border-radius: 8px; padding: 12px; }

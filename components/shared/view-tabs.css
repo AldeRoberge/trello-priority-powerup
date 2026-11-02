@@ -145,6 +145,18 @@ html body.tp-page--has-tabs {
 .vt-util .ti {
   font-size: 18px;
 }
+/* Search icon: touch has no Ctrl+F, so it shows on phones and touch screens only (a button, so reset the look). */
+.vt-util.vt-search {
+  display: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .vt-util.vt-search { display: inline-flex; }
+}
 /* Narrow modal: inactive tabs collapse to their icon so every view stays reachable. */
 @media (max-width: 640px) {
   .vt-tab:not(.is-on) { padding-left: 10px; padding-right: 10px; font-size: 0; gap: 0; }

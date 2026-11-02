@@ -634,7 +634,7 @@
       });
     };
     M.createCard = function createCard() {
-      var target = S.DT().listFor(M.state.lists, ['triage']);
+      var target = S.DT().newCardList(M.state.lists);
       if (!target || !global.NewCard) return;
       global.NewCard.open({
         t: M.t,

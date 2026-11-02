@@ -999,6 +999,9 @@
         }
         td.addEventListener('click', function () {
           M.state.selected = { rowId: row.id, key: key };
+          // On a touch screen a tap on the title opens the task (like Linear, Todoist, Things): an inline edit would
+          // only raise the keyboard. Rename stays in the menu (Modifier > Nom) and in the task panel.
+          if (global.ViewShell && global.ViewShell.isCoarse() && global.TaskFocus) return M.openCard(row);
           M.beginEdit(row.id, key);
         });
         return td;

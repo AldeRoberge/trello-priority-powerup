@@ -687,12 +687,11 @@
     };
     M.archiveRow = function archiveRow(row) {
       S.TT().archiveCard(M.t, row.id).then(function () {
-        M.record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
+        M.record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' }); // offers its own Annuler toast
         M.state.rows = M.state.rows.filter(function (r) { return r.id !== row.id; });
         if (M.state.detailId === row.id) M.closeDetail();
         M.renderBoard();
         M.paintCount();
-        M.setStatus('« ' + (row.name || 'Carte') + ' » archivée', 'ok');
       }, M.fail);
     };
     M.clearDropMarks = function clearDropMarks() {

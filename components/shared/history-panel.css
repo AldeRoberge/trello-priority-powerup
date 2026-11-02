@@ -101,3 +101,22 @@
 }
 .hp-empty .ti { font-size: 26px; opacity: 0.6; }
 .hp-empty small { max-width: 380px; }
+
+/* Floating undo message (HistoryPanel#toast): bottom left above the assistant dock, leaving room for the "+" button on the right. */
+.hp-toast {
+  position: fixed; left: 12px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 960;
+  display: flex; align-items: center; gap: 6px; max-width: min(520px, calc(100vw - 88px));
+  padding: 6px 6px 6px 12px; border-radius: 8px;
+  background: var(--tp-surface); color: var(--tp-text);
+  box-shadow: 0 0 0 1px var(--tp-border-strong, var(--tp-border)), 0 6px 18px rgba(9, 30, 66, 0.25);
+}
+.hp-toast-msg { min-width: 0; overflow-wrap: anywhere; }
+.hp-toast-btn {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; min-height: 36px; padding: 0 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--tp-primary); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.hp-toast-btn:hover { background: var(--tp-surface-hover); }
+.hp-toast-btn:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: -2px; }
+.hp-toast-btn--quiet { color: var(--tp-text-muted); padding: 0 8px; }
+.hp-toast-btn .ti { font-size: 16px; }
+@media (pointer: coarse) { .hp-toast-btn { min-height: 44px; min-width: 44px; justify-content: center; } }

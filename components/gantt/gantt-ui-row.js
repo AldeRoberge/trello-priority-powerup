@@ -330,7 +330,7 @@
           if (iv) M.placeGhost(ghost, iv);
         }
 
-        function onUp() {
+        function onUp(upEv) {
           timeRow.releasePointerCapture(ev.pointerId);
           timeRow.removeEventListener('pointermove', onMove);
           timeRow.removeEventListener('pointerup', onUp);
@@ -339,7 +339,7 @@
           var paint = M.state.paint;
           M.state.paint = null;
           ghost.hidden = true;
-          if (!paint) return;
+          if (!paint || (upEv && upEv.type === 'pointercancel')) return; // a cancel is a scroll taking the swipe: plan nothing
           var iv = M.model.orderedInterval(paint.origin, paint.current, {
             keepTime: M.usesTimedTimeline(),
           });
@@ -538,7 +538,7 @@
           M.showDragTip(e.clientX, e.clientY, M.formatIntervalTitle(next));
         }
 
-        function onUp() {
+        function onUp(upEv) {
           barEl.releasePointerCapture(ev.pointerId);
           barEl.removeEventListener('pointermove', onMove);
           barEl.removeEventListener('pointerup', onUp);
@@ -553,8 +553,8 @@
           M.state.drag = null;
           if (!drag) return;
           if (!moved && drag.mode === 'move') {
-            // A plain click (no drag) opens the date/time editor.
-            M.openScheduleEditor(row, barEl);
+            // A plain click (no drag) opens the date/time editor; a pointercancel (a scroll) is not a click.
+            if (!(upEv && upEv.type === 'pointercancel')) M.openScheduleEditor(row, barEl);
             return;
           }
           var finalInterval = M.model.resolveBarInterval(row, M.intervalOptions());
