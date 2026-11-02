@@ -1,5 +1,5 @@
 /*
- * Role: screen of the Notes app (Google Keep clone). Grid of notes, quick composer, editor, search,
+ * Role: screen of the Notes app (Google Keep clone, rich content like Documents). Grid of notes, quick composer, editor, search,
  * archive, sync status. Everything is written to the device first (KeepSync.save) and sent to Trello
  * in the background, so it works offline. DOM only, no Trello calls except through KeepSync.
  * Exposes window.KeepUI.mount(root).
@@ -34,14 +34,12 @@
 
   /* ── Editor (shared by the composer and the note dialog) ─────────── */
 
-  /** Title + body of one note, as a list of rows or a text area. getNote() returns the edited note. */
+  /** Title + rich body (Markdown, same editor model as Documents). getNote() returns the edited note. */
   function buildEditor(note, onChange) {
     var state = { note: Object.assign({}, note) };
     var root = el('div', 'k-editor');
     var title = el('input', 'k-title', { type: 'text', placeholder: 'Titre', value: note.title || '' });
-    var body = el('div', 'k-body');
     root.appendChild(title);
-    root.appendChild(body);
 
     function changed() {
       state.note.title = title.value;
@@ -49,99 +47,21 @@
     }
     title.addEventListener('input', changed);
 
-    function renderBody() {
-      body.textContent = '';
-      body.classList.toggle('is-list', KM().isList(state.note.body));
-      if (KM().isList(state.note.body)) renderList();
-      else renderText();
-    }
+    var rich = global.KeepRich.create({
+      md: note.body || '',
+      onChange: function (md) { state.note.body = md; changed(); },
+    });
+    root.appendChild(rich.el);
 
-    function renderText() {
-      var ta = el('textarea', 'k-text', { placeholder: 'Créer une note…', rows: '3' });
-      ta.value = state.note.body || '';
-      function fit() { ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 60) + 'px'; }
-      ta.addEventListener('input', function () { state.note.body = ta.value; fit(); changed(); });
-      body.appendChild(ta);
-      global.setTimeout(fit, 0);
-    }
-
-    function renderList(focusIndex) {
-      var lines = KM().parseLines(state.note.body);
-      function commit() { state.note.body = KM().serializeLines(lines); changed(); }
-      lines.forEach(function (l, i) {
-        var row = el('div', 'k-row' + (l.t === 'item' && l.checked ? ' is-done' : ''));
-        if (l.t === 'item') {
-          var cb = el('input', 'k-check', { type: 'checkbox', 'aria-label': 'Terminé' });
-          cb.checked = l.checked;
-          cb.addEventListener('change', function () {
-            l.checked = cb.checked;
-            commit();
-            state.note.body = KM().sinkDone(state.note.body);
-            renderBody();
-            changed();
-          });
-          row.appendChild(cb);
-        } else row.appendChild(el('span', 'k-check-gap'));
-        var inp = el('input', 'k-item', { type: 'text', placeholder: 'Élément' });
-        inp.value = l.text;
-        inp.addEventListener('input', function () { l.text = inp.value; commit(); });
-        inp.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            lines.splice(i + 1, 0, { t: 'item', text: '', checked: false });
-            commit();
-            renderList(i + 1);
-          } else if (e.key === 'Backspace' && !inp.value && lines.length > 1) {
-            e.preventDefault();
-            lines.splice(i, 1);
-            commit();
-            renderList(Math.max(0, i - 1));
-          }
-        });
-        row.appendChild(inp);
-        row.appendChild(btn('x', 'Supprimer', function () { lines.splice(i, 1); commit(); renderList(); }, 'k-row-x'));
-        body.appendChild(row);
-        if (focusIndex === i) global.setTimeout(function () { inp.focus(); }, 0);
-      });
-      var add = el('button', 'k-add', { type: 'button' });
-      add.appendChild(icon('plus'));
-      add.appendChild(el('span', '', { text: 'Élément' }));
-      add.addEventListener('click', function () {
-        lines.push({ t: 'item', text: '', checked: false });
-        commit();
-        renderList(lines.length - 1);
-      });
-      body.appendChild(add);
-    }
-
-    renderBody();
     return {
       el: root,
       focusTitle: function () { title.focus(); },
+      focusBody: function () { rich.focus(); },
       getNote: function () { state.note.title = title.value; return state.note; },
-      setBody: function (b) { state.note.body = b; renderBody(); changed(); },
+      setBody: function (b) { state.note.body = b; rich.setMd(b); },
       patch: function (p) { Object.assign(state.note, p); changed(); },
-      isList: function () { return KM().isList(state.note.body); },
+      destroy: function () { rich.destroy(); },
     };
-  }
-
-  /** Switches a note between text and checklist; the icon always shows what a click will do. */
-  function modeButton(ed) {
-    var b = btn('checkbox', 'Liste', function () {
-      var cur = ed.getNote();
-      if (ed.isList()) ed.setBody(KM().toText(cur.body));
-      else ed.setBody(KM().toList(cur.body) || '- [ ] ');
-      paint();
-    });
-    function paint() {
-      var next = ed.isList() ? 'Texte' : 'Liste';
-      b.title = next;
-      b.setAttribute('aria-label', next);
-      b.textContent = '';
-      b.appendChild(icon(ed.isList() ? 'align-left' : 'checkbox'));
-    }
-    paint();
-    return b;
   }
 
   /* ── App ──────────────────────────────────────────────────────────── */
@@ -228,7 +148,6 @@
       var ed = ui.composing;
       box.appendChild(ed.el);
       var bar = el('div', 'k-bar');
-      bar.appendChild(modeButton(ed));
       bar.appendChild(colorPicker(function (c) { ed.patch({ color: c }); box.setAttribute('data-color', c || ''); }));
       var close = el('button', 'k-close', { type: 'button', text: 'Fermer' });
       close.addEventListener('click', closeComposer);
@@ -245,8 +164,7 @@
       if (asList) ui.composing.setBody('- [ ] ');
       drawComposer();
       global.setTimeout(function () {
-        var f = composerHost.querySelector(asList ? '.k-item' : '.k-text');
-        if (f) f.focus();
+        if (ui.composing) ui.composing.focusBody();
       }, 0);
     }
 
@@ -284,24 +202,16 @@
     function card(n) {
       var c = el('article', 'k-card', { 'data-color': n.color || '', tabindex: '0' });
       if (n.title) c.appendChild(el('h3', 'k-card-title', { text: n.title }));
-      var lines = KM().parseLines(n.body);
-      var body = el('div', 'k-card-body');
-      var index = -1;
-      lines.forEach(function (l) {
-        if (l.t === 'item') {
-          index++;
-          var at = index;
-          var row = el('label', 'k-row' + (l.checked ? ' is-done' : ''));
-          var cb = el('input', 'k-check', { type: 'checkbox' });
-          cb.checked = l.checked;
-          cb.addEventListener('click', function (e) { e.stopPropagation(); });
-          cb.addEventListener('change', function () {
-            saveNote(Object.assign({}, n, { body: KM().sinkDone(KM().toggleItem(n.body, at)) }));
-          });
-          row.appendChild(cb);
-          row.appendChild(el('span', 'k-item-text', { text: l.text }));
-          body.appendChild(row);
-        } else if (l.text.trim()) body.appendChild(el('p', 'k-line', { text: l.text }));
+      var body = el('div', 'k-card-body dc-editor k-rich-view');
+      if (String(n.body || '').trim()) global.KeepRich.renderInto(body, n.body);
+      body.addEventListener('click', function (e) {
+        var li = e.target && e.target.tagName === 'LI' ? e.target : null;
+        if (!li || !li.parentNode.classList.contains('dc-todo')) return;
+        if (e.clientX - li.getBoundingClientRect().left > 26) return;
+        e.stopPropagation();
+        var at = Array.prototype.indexOf.call(body.querySelectorAll('ul.dc-todo > li'), li);
+        var next = global.KeepRich.toggleTodoAt(n.body, at);
+        saveNote(Object.assign({}, n, { body: KM().isFlatList(next) ? KM().sinkDone(next) : next }));
       });
       c.appendChild(body);
       var actions = el('div', 'k-actions');
@@ -331,7 +241,6 @@
       var box = el('div', 'k-dialog', { role: 'dialog', 'aria-modal': 'true', 'data-color': n.color || '' });
       box.appendChild(ed.el);
       var bar = el('div', 'k-bar');
-      bar.appendChild(modeButton(ed));
       bar.appendChild(colorPicker(function (c) { ed.patch({ color: c }); box.setAttribute('data-color', c || ''); }));
       bar.appendChild(btn('trash', 'Supprimer', function () {
         if (!global.confirm('Supprimer cette note ?')) return;

@@ -74,6 +74,11 @@
     return serializeLines(open.concat(done, tail));
   }
 
+  /** No indented list line: moving done items below the open ones cannot break a nested list. */
+  function isFlatList(body) {
+    return !/^\s+(?:[-*+]|\d+\.)\s/m.test(String(body || ''));
+  }
+
   function toggleItem(body, index) {
     var lines = parseLines(body);
     var n = -1;
@@ -179,6 +184,7 @@
     toText: toText,
     sinkDone: sinkDone,
     toggleItem: toggleItem,
+    isFlatList: isFlatList,
     parseFlags: parseFlags,
     flagString: flagString,
     fromDoc: fromDoc,

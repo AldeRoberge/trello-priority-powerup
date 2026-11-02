@@ -216,3 +216,24 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
   .k-grid { column-count: 2; column-width: auto; column-gap: 8px; }
   .k-card { margin-bottom: 8px; padding: 8px 10px 2px; }
 }
+
+/* rich content (same look as Documents, colors follow the note) */
+.k-rich, .k-rich-view {
+  --tp-text: var(--k-text);
+  --tp-text-muted: var(--k-muted);
+  --tp-border-strong: var(--k-border);
+  --tp-surface: var(--k-surface);
+  --tp-surface-subtle: var(--k-hover);
+  --tp-input-bg: var(--k-surface);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--k-text);
+}
+.k-rich.dc-editor { min-height: 120px; padding: 4px 0; }
+.k-rich-view.dc-editor { min-height: 0; }
+.k-rich-view > :last-child, .k-rich > :last-child { margin-bottom: 0; }
+.k-rich-view .dc-todo > li { cursor: default; }
+.k-rich-wrap { display: flex; flex-direction: column; }
+.k-rtools { display: flex; flex-wrap: wrap; gap: 0; margin: 4px -8px 0; }
+.k-rtool { width: 32px; height: 32px; font-size: 17px; }
+.k-composer .k-rich.dc-editor { min-height: 60px; }

@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Notes : contenu riche comme Documents (titres, gras, couleurs, listes à cocher, tableaux, encadrés, liens) dans l'éditeur et sur les cartes.
 - Notes : Notes devient une vue du Power-Up (onglet « Notes » à côté de Documents), avec la connexion Trello du Power-Up. L'app installable à part est retirée.
 
 ## 2026-11-01

@@ -15,6 +15,12 @@ describe('Notes model (Keep clone)', () => {
     DM = global.DocsModel;
   });
 
+  it('only reorders done items in flat lists (nested lists keep their shape)', () => {
+    assert.equal(KM.isFlatList('- [ ] a\n- [x] b'), true);
+    assert.equal(KM.isFlatList('- [ ] a\n  - [x] b'), false);
+    assert.equal(KM.isFlatList('1. a\n   1. b'), false);
+  });
+
   it('parses checklist items and text lines and writes them back identically', () => {
     const body = 'eBay\n- [ ] Vendre consoles\n- [x] Vendre lentilles';
     const lines = KM.parseLines(body);
