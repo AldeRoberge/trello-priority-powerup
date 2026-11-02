@@ -207,12 +207,14 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 
 /* grid */
 .k-section { margin: 16px 4px 6px; color: var(--k-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.k-grid { column-width: 240px; column-gap: 12px; }
+.k-grid { display: flex; align-items: flex-start; gap: 12px; }
+.k-col { flex: 1 1 0; min-width: 0; }
 .k-empty { margin: 48px 0; color: var(--k-muted); text-align: center; opacity: 0.7; }
 
 .k-card {
-  display: inline-block;
+  display: block;
   width: 100%;
+  min-width: 0;
   margin: 0 0 12px;
   padding: 10px 12px 4px;
   border: 1px solid var(--k-border);
@@ -245,7 +247,7 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .k-boards button:hover { background: var(--k-hover); }
 
 @media (max-width: 520px) {
-  .k-grid { column-count: 2; column-width: auto; column-gap: 8px; }
+  .k-grid { gap: 8px; }
   .k-card { margin-bottom: 8px; padding: 8px 10px 2px; }
 }
 
@@ -263,6 +265,11 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 }
 .k-rich.dc-editor { min-height: 120px; padding: 4px 0; }
 .k-rich-view.dc-editor { min-height: 0; }
+/* Card headings stay close to body size: a narrow phone card broke them mid-word. */
+.k-rich-view h1 { font-size: 1.3em; margin-top: 0.6em; }
+.k-rich-view h2 { font-size: 1.15em; margin-top: 0.6em; }
+.k-rich-view h3 { font-size: 1.05em; margin-top: 0.6em; }
+.k-rich-view > :first-child { margin-top: 0; }
 .k-rich-view > :last-child, .k-rich > :last-child { margin-bottom: 0; }
 .k-rich-view .dc-todo > li { cursor: default; }
 .k-rich-wrap { display: flex; flex-direction: column; }

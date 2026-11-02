@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Notes : sur téléphone, les cartes ne se chevauchent plus (vraies colonnes) et les titres des cartes sont moins gros.
 - Mobile : dans le Gantt, les noms de tâches passent sur deux lignes au lieu d’être coupés.
 - Mobile : toucher une barre du Gantt n’efface plus ses dates (le petit × est retiré sur écran tactile, « Effacer les dates » reste dans le menu d’appui long).
 - Mobile : les raccourcis clavier (⇧1, Tab, lettres) ne s’affichent plus sur un appareil tactile.
