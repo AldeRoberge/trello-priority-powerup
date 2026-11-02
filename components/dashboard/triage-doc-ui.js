@@ -983,6 +983,8 @@
     function paint() {
       ed.setAttribute('contenteditable', s.phase === 'write' ? 'true' : 'false');
       ed.classList.toggle('is-busy', s.phase === 'busy');
+      // The AI waits for the user's yes: the rest of the page goes dark (CSS, so it leaves with the pane).
+      root.classList.toggle('is-reviewing', s.phase === 'review' && !s.done && !!s.plan);
       if (s.phase === 'review' || s.phase === 'creating') {
         paintReview();
         return;

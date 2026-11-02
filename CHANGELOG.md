@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Triage : quand l’IA attend ta revue du document, le reste de la page s’assombrit et seul le plan reste éclairé.
 - Mobile : les menus du Tableau et du Kanban s’ouvrent en bas de l’écran comme ceux du Gantt, et leurs sous-menus se déplient sous la ligne touchée.
 - Mobile : relever le doigt après un appui long n’ouvre plus la carte qui se trouve derrière le menu.
 - Minuteur sur les cartes : clic droit > Minuteur… (Tableau, Kanban, Gantt, Mindmap, Documents), ou demande à l’assistant. Notification à la fin, et courriel si aucun onglet n’est ouvert (une fois le Worker configuré).

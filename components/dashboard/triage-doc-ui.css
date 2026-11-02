@@ -485,3 +485,16 @@ button.tdoc-chip.is-inert { cursor: default; pointer-events: none; }
   .tdoc-foot { margin: 12px -16px 0; padding: 10px 16px 12px; }
   .tdoc-ed { min-height: 220px; }
 }
+
+/* ── The AI waits for a review: the rest of the page goes dark, the pane stays lit ── */
+body:has(.tdoc.is-reviewing)::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  animation: tdoc-dim 0.18s ease-out;
+}
+.db-split-r:has(.tdoc.is-reviewing) { position: relative; z-index: 41; background: var(--tp-surface, var(--tp-bg)); }
+@keyframes tdoc-dim { from { opacity: 0; } to { opacity: 1; } }
