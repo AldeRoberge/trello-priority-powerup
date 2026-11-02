@@ -16,6 +16,7 @@
   // Optional: UNSPLASH_ACCESS_KEY = Unsplash search for document covers (npm run secret:unsplash)
   // Optional (scripts/setup-documents-drive.ps1): GOOGLE_DRIVE_FOLDER_ID = Drive folder that receives the Documents view as .md files
   // Optional, personal Gmail (no Shared Drive): GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET, GOOGLE_DRIVE_REFRESH_TOKEN
+  // Optional (npm run secret:timer-email + a KV namespace TIMER_STATE): RESEND_API_KEY, TIMER_EMAIL_TO, TIMER_EMAIL_FROM = email when a card timer ends and no tab announced it
   // Optional (scripts/setup-keep.ps1, Google Workspace only): KEEP_USER_EMAIL = Workspace user whose Keep notes are synced
   //   (domain-wide delegation, scope keep), KEEP_LISTS = tracked note titles separated by | (default in src/keep.js)
   //   so files are created as the user (a service account has no storage quota)

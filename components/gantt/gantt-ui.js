@@ -418,6 +418,7 @@
     var M = Object.create(null);
     M.mount = mount;
     M.t = t;
+    if (global.Timers) global.Timers.ensure(t);
     M.options = options;
     var __parts = (global.GanttUiPartsMountMountGantt || { list: [] }).list;
     for (var __i = 0; __i < __parts.length; __i++) __parts[__i].define(M);

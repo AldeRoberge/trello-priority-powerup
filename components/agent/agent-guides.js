@@ -731,6 +731,7 @@
     formatRemain: formatRemain,
     formatClock: formatClock,
     timerTitle: timerTitle,
+    chime: chime,
     mount: mount,
     close: close
   };

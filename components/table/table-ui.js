@@ -61,6 +61,7 @@
     var M = Object.create(null);
     M.root = root;
     M.t = t;
+    if (global.Timers) global.Timers.ensure(t);
     var __parts = (global.TableUiPartsMountMount || { list: [] }).list;
     for (var __i = 0; __i < __parts.length; __i++) __parts[__i].define(M);
     for (var __j = 0; __j < __parts.length; __j++) {

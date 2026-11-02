@@ -202,6 +202,19 @@
       getScope: M.options.getScope || function () { return M.assistantScope; },
       getCardName: M.options.getCardName || function () { return ''; },
       getCardDesc: M.options.getCardDesc || function () { return ''; },
+      setTimer: function (minutes, label) {
+        var tt = M.options.t;
+        if (!tt || !global.Timers) return Promise.reject(new Error('Minuteur indisponible'));
+        return Promise.resolve(tt.card('id', 'name')).then(function (c) {
+          global.Timers.askPermission();
+          return global.Timers.set(tt, c, minutes, label);
+        });
+      },
+      cancelTimer: function () {
+        var tt = M.options.t;
+        if (!tt || !global.Timers) return Promise.reject(new Error('Minuteur indisponible'));
+        return Promise.resolve(tt.card('id')).then(function (c) { return global.Timers.cancel(tt, c.id); });
+      },
       getFormulaKey: M.options.getFormulaKey || function () { return 'baseline'; },
       getPriorityState: M.options.getPriorityState || function () { return {}; },
       getCompletion: M.options.getCompletion || function () { return { items: [] }; },

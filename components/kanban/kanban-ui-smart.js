@@ -670,6 +670,7 @@
           }),
         },
         { sep: true },
+        { icon: 'alarm', label: 'Minuteur…', action: function () { M.openEditor(row, 'timer', { getBoundingClientRect: function () { return { left: x, right: x, top: y, bottom: y }; } }); } },
         {
           icon: (current && current.icon) || 'progress-check',
           color: current && current.color,

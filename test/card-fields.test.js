@@ -19,7 +19,7 @@ const CF = load('card-fields.js').CardFields;
 const VT = load('view-tabs.js').ViewTabs;
 
 test('CardFields exposes the field kinds shared by Table and Gantt', () => {
-  assert.deepEqual([...CF.KINDS].sort(), ['blocked', 'desc', 'due', 'estimate', 'priority', 'progress']);
+  assert.deepEqual([...CF.KINDS].sort(), ['blocked', 'desc', 'due', 'estimate', 'priority', 'progress', 'timer']);
   assert.equal(CF.open('nope', { anchor: {} }), false);
   assert.equal(CF.open('desc', { anchor: {} }), false, 'desc needs a save callback');
   assert.equal(CF.open('progress', { anchor: {} }), false, 'card fields need t + cardId');

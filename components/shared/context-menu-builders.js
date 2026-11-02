@@ -142,6 +142,14 @@
         },
       });
       items.push({
+        id: 'mini-timer',
+        label: 'Minuteur…',
+        icon: 'alarm',
+        action: function () {
+          if (typeof opts.onMiniTimer === 'function') opts.onMiniTimer();
+        },
+      });
+      items.push({
         id: 'mini-due',
         label: '\u00c9ch\u00e9ance\u2026',
         action: function () {

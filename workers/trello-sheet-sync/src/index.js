@@ -16,6 +16,7 @@
 
 import { COLUMNS, DEFAULT_COLUMNS } from './columns.js';
 import { LEVEL_NAMES } from './journal.js';
+import { notifyDueTimers } from './timers.js';
 import {
   runSync,
   loadConfig,
@@ -169,6 +170,8 @@ export default {
         await syncAllDocuments(env).catch((e) => console.error('documents sync failed', e));
         await syncAllKeep(env).catch((e) => console.error('keep sync failed', e));
         await watchSheet(env).catch((e) => console.error('scheduled sync failed', e));
+        // Card timers: the open tab announces them first; this emails the ones nobody announced
+        await notifyDueTimers(env).catch((e) => console.error('timers failed', e));
       })(),
     );
   },

@@ -655,7 +655,64 @@
     CM.show({ clientX: r.left, clientY: r.bottom + 4 }, items);
   }
 
-  var OPENERS = { progress: openProgress, priority: openPriority, due: openDue, blocked: openBlocked, desc: openDesc, estimate: openEstimate };
+  function openTimer(o) {
+    var TM = global.Timers;
+    if (!TM) return o.onError && o.onError('Minuteur indisponible');
+    var c = shell('Minuteur', o);
+    var running = null;
+    var input = el('input', 'cf-timer-input', { type: 'text', placeholder: '2 h 30', 'aria-label': 'Durée' });
+    var row = el('div', 'cf-timer-presets');
+    var status = el('div', 'cf-timer-status');
+    var cancelBtn = el('button', 'cf-timer-cancel', { type: 'button', text: 'Annuler le minuteur' });
+
+    function paint() {
+      status.textContent = running ? 'Sonne dans ' + TM.formatRemaining(Date.parse(running.endsAt) - Date.now()) : '';
+      status.hidden = !running;
+      cancelBtn.hidden = !running;
+    }
+    function start(minutes) {
+      if (!minutes) {
+        input.classList.add('is-invalid');
+        return;
+      }
+      TM.askPermission();
+      TM.set(o.t, { id: o.cardId, name: o.cardName }, minutes).then(function () {
+        c.saved('timer');
+        close();
+      }, c.fail);
+    }
+    TM.PRESETS.forEach(function (p) {
+      var b = el('button', 'cf-timer-chip', { type: 'button', text: p[0] });
+      b.addEventListener('click', function () { start(p[1]); });
+      row.appendChild(b);
+    });
+    input.addEventListener('input', function () { input.classList.remove('is-invalid'); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        start(TM.parseDuration(input.value));
+      }
+    });
+    cancelBtn.addEventListener('click', function () {
+      TM.cancel(o.t, o.cardId).then(function () {
+        c.saved('timer');
+        close();
+      }, c.fail);
+    });
+    c.body.appendChild(row);
+    c.body.appendChild(input);
+    c.body.appendChild(status);
+    c.body.appendChild(cancelBtn);
+    paint();
+    position(c.pop, o.anchor);
+    input.focus();
+    TM.list(o.t).then(function (all) {
+      running = all.filter(function (x) { return x.cardId === o.cardId && !x.firedAt; })[0] || null;
+      paint();
+    });
+  }
+
+  var OPENERS = { progress: openProgress, priority: openPriority, due: openDue, blocked: openBlocked, desc: openDesc, estimate: openEstimate, timer: openTimer };
 
   function open(kind, opts) {
     opts = opts || {};

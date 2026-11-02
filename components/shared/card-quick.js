@@ -569,6 +569,7 @@
           else openField('blocked', b);
         }
       ));
+      chips.push(chip('cq-chip--timer is-empty', 'alarm', '', 'Minuteur', function (btn) { openField('timer', btn); }));
       return el('div', 'cq-chips', null, chips);
     }
 

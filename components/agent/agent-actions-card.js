@@ -973,6 +973,20 @@
     };
   });
 
+  // set_timer, cancel_timer
+  registerAction(['set_timer', 'cancel_timer'], async function (bridge, action, tool, args) {
+    if (tool === 'cancel_timer') {
+      if (typeof bridge.cancelTimer !== 'function') return { ok: false, tool: tool, error: 'Minuteur indisponible' };
+      await bridge.cancelTimer();
+      return { ok: true, tool: tool, args: args, summary: TOOL_LABELS.cancel_timer };
+    }
+    if (typeof bridge.setTimer !== 'function') return { ok: false, tool: tool, error: 'Minuteur indisponible' };
+    var minutes = typeof Timers !== 'undefined' ? Timers.parseDuration(args.minutes != null ? args.minutes : args.duration) : null;
+    if (!minutes) return { ok: false, tool: tool, error: 'Durée du minuteur invalide' };
+    await bridge.setTimer(minutes, typeof args.label === 'string' ? args.label.trim() : '');
+    return { ok: true, tool: tool, args: args, summary: TOOL_LABELS.set_timer };
+  });
+
   // set_progress_estimate
   registerAction(['set_progress_estimate'], async function (bridge, action, tool, args) {
     if (typeof bridge.applyCompletion !== 'function') {

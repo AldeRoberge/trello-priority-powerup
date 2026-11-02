@@ -263,6 +263,7 @@
         ['priority', 'flag', 'Priorité…'],
         ['due', 'calendar-event', 'Échéance…'],
         ['desc', 'align-left', 'Description…'],
+        ['timer', 'alarm', 'Minuteur…'],
       ].map(function (f) {
         return { icon: f[1], label: f[2], action: function () { M.openFieldFor(row, f[0]); } };
       });

@@ -417,7 +417,9 @@ function dbg() {
     upsert_place: 'Lieu mis \u00e0 jour.',
     remove_place: 'Lieu retir\u00e9.',
     show_guide: 'Module ouvert.',
-    schedule_check: 'Rappel planifi\u00e9.'
+    schedule_check: 'Rappel planifi\u00e9.',
+    set_timer: 'Minuteur d\u00e9marr\u00e9.',
+    cancel_timer: 'Minuteur annul\u00e9.'
   };
 
   var TASK_TYPE_IDS = [

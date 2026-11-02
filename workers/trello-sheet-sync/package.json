@@ -6,7 +6,10 @@
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy",
     "secret:search": "wrangler secret put SEARCH_API_KEY",
-    "secret:unsplash": "wrangler secret put UNSPLASH_ACCESS_KEY"
+    "secret:unsplash": "wrangler secret put UNSPLASH_ACCESS_KEY",
+    "secret:timer-email": "wrangler secret put RESEND_API_KEY",
+    "secret:timer-to": "wrangler secret put TIMER_EMAIL_TO",
+    "secret:timer-from": "wrangler secret put TIMER_EMAIL_FROM"
   },
   "devDependencies": {
     "wrangler": "^4.34.0"

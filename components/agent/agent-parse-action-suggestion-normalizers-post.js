@@ -251,6 +251,10 @@ var S = (global.PriorityAgentParts = global.PriorityAgentParts || {});
       var guideKind = String(args.kind || args.guide || args.type || '').toLowerCase();
       return /breath|respir|medit|stretch|etir|breathe|timer|pomo|minuteur/.test(guideKind);
     }
+    if (action.tool === 'set_timer') {
+      var timerArg = args.minutes != null ? args.minutes : args.duration;
+      return typeof Timers !== 'undefined' ? !!Timers.parseDuration(timerArg) : Number(timerArg) > 0;
+    }
     if (action.tool === 'schedule_check') {
       var checkSeconds = Number(
         args.seconds != null ? args.seconds : args.delay != null ? args.delay : args.after
@@ -342,6 +346,9 @@ var S = (global.PriorityAgentParts = global.PriorityAgentParts || {});
     }
     if (action.tool === 'show_guide') {
       return 'show_guide: kind breathe ou stretch';
+    }
+    if (action.tool === 'set_timer') {
+      return 'set_timer: minutes (nombre ou texte comme 2 h 30) requis';
     }
     if (action.tool === 'schedule_check') {
       return 'schedule_check: seconds (5\u20133600) et message requis';

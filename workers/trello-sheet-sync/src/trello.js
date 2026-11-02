@@ -15,6 +15,11 @@ async function call(env, path, method = 'GET', body) {
   return text ? JSON.parse(text) : null;
 }
 
+/** Plugin data stored on the board (the Power-Up keeps its shared board values here). */
+export function getBoardPluginData(env) {
+  return call(env, `/boards/${env.TRELLO_BOARD_ID}/pluginData`);
+}
+
 export async function getLists(env) {
   return call(env, `/boards/${env.TRELLO_BOARD_ID}/lists?filter=open&fields=id,name`);
 }

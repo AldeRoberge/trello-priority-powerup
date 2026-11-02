@@ -621,6 +621,11 @@
               onMiniProgress: function () {
                 clickDetail('.gantt-detail-slot.is-progress button');
               },
+              onMiniTimer: function () {
+                if (global.CardFields && row.cardId) {
+                  global.CardFields.open('timer', { t: M.t, cardId: row.cardId, cardName: row.name, anchor: labelCell });
+                }
+              },
               onMiniDue: function () {
                 clickDetail(
                   '.gantt-detail-slot.is-due button, .gantt-detail-slot.is-overdue button'

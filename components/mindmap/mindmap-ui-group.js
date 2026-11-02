@@ -753,6 +753,7 @@
         layout: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
         group: '<circle cx="8" cy="12" r="3"/><circle cx="16" cy="8" r="3"/><circle cx="16" cy="16" r="3"/>',
         chevron: '<path d="m9 6 6 6-6 6"/>',
+        alarm: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3 2 6M22 6l-3-3"/>',
       };
       function icon(name) {
         var s = S.h('span', { class: 'mm-menu-ico' });
@@ -772,6 +773,7 @@
         items.push(['Priorité…', '', function () { M.openFieldEditor(cardRec, 'priority', anchorEl); }, false, 'flag']);
         items.push(['Échéance…', '', function () { M.openFieldEditor(cardRec, 'due', anchorEl); }, false, 'due']);
         items.push(['Description…', '', function () { M.openFieldEditor(cardRec, 'desc', anchorEl); }, false, 'desc']);
+        items.push(['Minuteur…', '', function () { M.openFieldEditor(cardRec, 'timer', anchorEl); }, false, 'alarm']);
         items.push([cardRec.blocked ? 'Bloqué…' : 'Bloquer…', '', function () { M.openFieldEditor(cardRec, 'blocked', anchorEl); }, false, 'ban']);
         items.push(['Contribue à… / Dépend de…', '', function () { M.startLink(n.id); }, false, 'link']);
         var statusLists = M.state.lists || [];
