@@ -33,6 +33,22 @@ A component too big for one file is cut into ordered parts that share their top-
 
 **Rules for parts:** a function from another part is reached through a generated stub (`function x() { return S.x.apply(this, arguments); }`), a constant through `var x = S.x;` (so its part must load first). A top-level name that is reassigned must stay inside one part.
 
+### Other split components
+
+Same mechanism, cut by size at statement boundaries (see each `*.parts.json`):
+
+| Component | Parts |
+|---|---|
+| `priority/priority-ui` (`PriorityUIParts`) | `catalogs`, `markdown-icons`, `color-schemes-due`, `scoring`, `score-help`, `statut-field`, `overview-field`, `info-field` (9.7k lines, one function), `en-attente-field`, `due-date-field`, `variant-mount`, `mini-editors-api` |
+| `priority/priority-trello` | `board-card`, `badges-due`, `sort-actions` |
+| `completion/completion-trello` | `estimate-scales`, `completion-data` |
+| `docs/docs-model` | `core`, `html-folders` |
+| `entities/entities-model` | `core`, `schema-graph` |
+| `shared/context-menu` | `core`, `builders` |
+| `shared/effects` | `sounds`, `overlays` |
+
+A top-level variable that is reassigned in one part and read in another is reached as `S.name` everywhere (the splitter rewrites it), so it always has one shared value.
+
 ## Still monolithic (see `scripts/size-baseline.json`)
 
-`priority/priority-ui.js` (27k lines, `createInfoField` is one 9.7k-line function), `agent/agent-ui.js` (10k), `docs/docs-ui.js` (7.7k), `completion/completion-ui.js` (6.8k), `gantt/gantt-ui.js` (5.9k). Shrink them, then run `node scripts/check-structure.js --update-baseline` to lower their limit.
+the `*-ui.js` view files are one big `mount()` closure each (`agent-ui` 9.6k lines, `docs-ui` 7.5k, `completion-ui` 4.5k, `gantt-ui` 5.5k, `dashboard-ui`, `mindmap-ui`, `entities-ui`, `table-ui`), and a few single functions (`createInfoField` 9.7k, `createDueDateField` 2.8k, `chatTurn` 2.9k, `executeAction` dispatch is now small). These share local state, so they need a hand refactor (state object plus feature modules), not a mechanical cut. Shrink them, then run `node scripts/check-structure.js --update-baseline` to lower their limit.

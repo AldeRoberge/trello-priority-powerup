@@ -3,7 +3,7 @@
  * refreshed in the background (stale-while-revalidate, GitHub Pages caches for 10 minutes only).
  * Trello calls are never cached: the notes themselves live in IndexedDB.
  */
-const CACHE = 'keep-shell-v1';
+const CACHE = 'keep-shell-v2';
 const SHELL = [
   './keep.html',
   './manifest.webmanifest',
@@ -18,7 +18,8 @@ const SHELL = [
   './components/keep/keep-boot.js',
   './components/shared/rest-config.js',
   './components/sheets/sheets-trello.js',
-  './components/docs/docs-model.js',
+  './components/docs/docs-model-core.js',
+  './components/docs/docs-model-html-folders.js',
   './components/docs/docs-trello.js',
 ];
 

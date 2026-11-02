@@ -13,19 +13,33 @@
   <script src="./components/shared/debug-log.js"></script>
   <script src="./components/shared/capabilities.js"></script>
   <script src="./components/priority/priority-matrix.js"></script>
-  <script src="./components/priority/priority-ui.js"></script>
+  <script src="./components/priority/priority-ui-catalogs.js"></script>
+  <script src="./components/priority/priority-ui-markdown-icons.js"></script>
+  <script src="./components/priority/priority-ui-color-schemes-due.js"></script>
+  <script src="./components/priority/priority-ui-scoring.js"></script>
+  <script src="./components/priority/priority-ui-score-help.js"></script>
+  <script src="./components/priority/priority-ui-statut-field.js"></script>
+  <script src="./components/priority/priority-ui-overview-field.js"></script>
+  <script src="./components/priority/priority-ui-info-field.js"></script>
+  <script src="./components/priority/priority-ui-en-attente-field.js"></script>
+  <script src="./components/priority/priority-ui-due-date-field.js"></script>
+  <script src="./components/priority/priority-ui-variant-mount.js"></script>
+  <script src="./components/priority/priority-ui-mini-editors-api.js"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority connector: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js"></script>
+  <script src="./components/priority/priority-trello-board-card.js"></script>
+  <script src="./components/priority/priority-trello-badges-due.js"></script>
+  <script src="./components/priority/priority-trello-sort-actions.js"></script>
   <script src="./components/statut/statut-match.js"></script>
   <script src="./components/statut/statut-trello.js"></script>
   <script src="./components/shared/tab-autocomplete.js"></script>
   <script src="./components/shared/insert-gap.js"></script>
   <script src="./components/completion/completion-ui.js"></script>
-  <script src="./components/completion/completion-trello.js"></script>
+  <script src="./components/completion/completion-trello-estimate-scales.js"></script>
+  <script src="./components/completion/completion-trello-completion-data.js"></script>
   <script src="./components/goals/goals-trello.js"></script>
   <script src="./components/agent/agent-base.js"></script>
   <script src="./components/agent/agent-provider.js"></script>
@@ -50,7 +64,8 @@
   <link rel="stylesheet" href="./components/shared/landing-guide.css" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
   <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-key-2" />
-  <script src="./components/shared/context-menu.js?v=ctx-key-2"></script>
+  <script src="./components/shared/context-menu-core.js"></script>
+  <script src="./components/shared/context-menu-builders.js"></script>
 </head>
 <body>
   <div id="landing" class="tp-landing" hidden>

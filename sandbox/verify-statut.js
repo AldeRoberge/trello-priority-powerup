@@ -5,11 +5,11 @@ var vm = require('vm');
 
 var sandbox = { window: {}, StatutMatch: null, StatutTrello: null };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'statut', 'statut-match.js'), 'utf8'),
+  require('./component-source').read('statut/statut-match.js'),
   sandbox
 );
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'statut', 'statut-trello.js'), 'utf8'),
+  require('./component-source').read('statut/statut-trello.js'),
   sandbox
 );
 

@@ -1,4 +1,43 @@
 ﻿/**
+ * Priority Power-Up AI agent — OpenAI-compatible client, member-private
+ * provider settings, JSON chat protocol with actionable follow-ups.
+ * Exposes window.PriorityAgent (no bundler).
+ *
+ * Role: LLM I/O + action protocol. AgentUI mounts the chat chrome; this
+ * module builds context, calls the model, parses JSON turns, and executes
+ * actions against Trello bridges (PriorityTrello, CompletionTrello, …).
+ *
+ * Hard constraints
+ * ────────────────
+ * - Trello pluginData ≤ 4096 chars per scope/visibility (ALL keys combined).
+ *   card/private is shared with cardEditHistory — keep chat/interview slim.
+ * - Assistant replies are JSON (message + actions + suggestions + blocks).
+ * - Never trust model HTML; UI renders via AgentUI / AgentBlocks safely.
+ *
+ * Table of contents
+ * ─────────────────
+ *  1.  Debug helpers, storage keys, assistant scopes (task vs project)
+ *  2.  Model tiers / modes / OpenAI–OpenRouter presets
+ *  3.  Task-type / color / point-at / effect normalizers
+ *  4.  Blocked-reason + People alias resolution; priority explanations
+ *  5.  Provider CRUD (member-private), apiFetch, relative-due rewrites
+ *  6.  Turn guards (due / why / progress-complete / Québec libre / highlights)
+ *  7.  buildContext(bridge) — card snapshot for the system prompt
+ *      (+ humanProfileJobLines — character-sheet job in systemPrompt)
+ *  8.  Heuristic + LLM suggest* helpers (subtasks, labels, goals, metrics…)
+ *  9.  memoryTurn — board long-term / short-term memory chat
+ * 10.  Card first-open interview (Akinator / Q20) + cardInterviewTurn
+ * 11.  Per-card / board chat history (budget-capped pluginData)
+ * 12.  Suggestions enrichment (heat, icons, impact-reach, subtask pick)
+ * 13.  parseAssistantPayload + chatCompletions (streaming-capable)
+ * 14.  chatTurn — main conversational loop
+ * 15.  Status brief / progress summary / cardDreamTurn (post-chat consolidate)
+ * 16.  executeAction / executeActions — apply model tools to the board
+ *      (+ rich actionFailure / formatActionErrors for user-facing errors)
+ * 17.  PriorityAgent public API
+ */
+
+/**
  * Priority Power-Up AI agent: base
  *
  * Part of the agent (see agent.parts.json). Debug helpers, storage keys, assistant scopes, model tiers and presets, and the normalizers every later part uses.

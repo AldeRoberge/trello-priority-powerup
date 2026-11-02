@@ -23,7 +23,7 @@ var sandbox = {
 };
 sandbox.window = sandbox;
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'priority', 'priority-ui.js'), 'utf8'),
+  require('./component-source').read('priority/priority-ui.js'),
   sandbox
 );
 

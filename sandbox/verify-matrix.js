@@ -6,7 +6,7 @@ var vm = require('vm');
 
 var sandbox = { PriorityMatrix: null };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'priority', 'priority-matrix.js'), 'utf8'),
+  require('./component-source').read('priority/priority-matrix.js'),
   sandbox
 );
 var PriorityMatrix = sandbox.PriorityMatrix;

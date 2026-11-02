@@ -1,0 +1,19 @@
+{
+  "name": "priority-ui",
+  "namespace": "PriorityUIParts",
+  "note": "Load order of the parts of priority-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "priority-ui-catalogs.js",
+    "priority-ui-markdown-icons.js",
+    "priority-ui-color-schemes-due.js",
+    "priority-ui-scoring.js",
+    "priority-ui-score-help.js",
+    "priority-ui-statut-field.js",
+    "priority-ui-overview-field.js",
+    "priority-ui-info-field.js",
+    "priority-ui-en-attente-field.js",
+    "priority-ui-due-date-field.js",
+    "priority-ui-variant-mount.js",
+    "priority-ui-mini-editors-api.js"
+  ]
+}

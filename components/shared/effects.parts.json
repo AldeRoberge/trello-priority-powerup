@@ -1,0 +1,9 @@
+{
+  "name": "effects",
+  "namespace": "EffectsParts",
+  "note": "Load order of the parts of effects. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "effects-sounds.js",
+    "effects-overlays.js"
+  ]
+}
