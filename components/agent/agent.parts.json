@@ -11,6 +11,10 @@
     "agent-parse.js",
     "agent-chat-turn.js",
     "agent-dream.js",
+    "agent-actions-card.js",
+    "agent-actions-subtasks.js",
+    "agent-actions-assistant.js",
+    "agent-actions-board.js",
     "agent-actions.js",
     "agent-api.js"
   ]

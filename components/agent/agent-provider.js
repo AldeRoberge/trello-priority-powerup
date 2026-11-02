@@ -1,7 +1,7 @@
 /**
  * AI agent: provider and HTTP
  *
- * Part 2/10 of agent. Member-private provider settings, apiFetch and relative-due rewrites, turn guards.
+ * Part of the agent (see agent.parts.json). Member-private provider settings, apiFetch and relative-due rewrites, turn guards.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

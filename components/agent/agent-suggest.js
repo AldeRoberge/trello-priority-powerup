@@ -1,7 +1,7 @@
 /**
  * AI agent: suggestions
  *
- * Part 4/10 of agent. Heuristic and LLM suggest helpers (subtasks, labels, goals, metrics) and memoryTurn.
+ * Part of the agent (see agent.parts.json). Heuristic and LLM suggest helpers (subtasks, labels, goals, metrics) and memoryTurn.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

@@ -1,7 +1,7 @@
 /**
  * AI agent: context
  *
- * Part 3/10 of agent. buildContext (card and board snapshot) and the system prompt inputs.
+ * Part of the agent (see agent.parts.json). buildContext (card and board snapshot) and the system prompt inputs.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

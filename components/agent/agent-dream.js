@@ -1,7 +1,7 @@
 /**
  * AI agent: card dream
  *
- * Part 8/10 of agent. Status brief, progress summary and the background consolidation after a chat.
+ * Part of the agent (see agent.parts.json). Status brief, progress summary and the background consolidation after a chat.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

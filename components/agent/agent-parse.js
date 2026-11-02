@@ -1,7 +1,7 @@
 /**
  * AI agent: normalizers and parsing
  *
- * Part 6/10 of agent. Action and suggestion normalizers, parseAssistantPayload, chatCompletions.
+ * Part of the agent (see agent.parts.json). Action and suggestion normalizers, parseAssistantPayload, chatCompletions.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

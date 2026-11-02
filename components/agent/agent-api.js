@@ -1,7 +1,7 @@
 /**
  * AI agent: public API
  *
- * Part 10/10 of agent. Builds and exposes window.PriorityAgent.
+ * Part of the agent (see agent.parts.json). Builds and exposes window.PriorityAgent.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

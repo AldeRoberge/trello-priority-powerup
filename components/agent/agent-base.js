@@ -1,7 +1,7 @@
 ﻿/**
  * Priority Power-Up AI agent: base
  *
- * Part 1/10 of agent. Debug helpers, storage keys, assistant scopes, model tiers and presets, and the normalizers every later part uses.
+ * Part of the agent (see agent.parts.json). Debug helpers, storage keys, assistant scopes, model tiers and presets, and the normalizers every later part uses.
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */
@@ -1137,7 +1137,16 @@ function dbg() {
     );
   }
 
+  // Action registry: each agent tool registers one handler (see agent-actions-*.js);
+  // executeAction in agent-actions.js dispatches on it.
+  var ACTION_HANDLERS = {};
+  function registerAction(tools, handler) {
+    for (var i = 0; i < tools.length; i++) ACTION_HANDLERS[tools[i]] = handler;
+  }
+
   // exports
+  S.ACTION_HANDLERS = ACTION_HANDLERS;
+  S.registerAction = registerAction;
   S.ACTION_VERB_REASON_RE = ACTION_VERB_REASON_RE;
   S.AGENT_COLOR_KEYS = AGENT_COLOR_KEYS;
   S.ASSISTANT_SCOPES = ASSISTANT_SCOPES;

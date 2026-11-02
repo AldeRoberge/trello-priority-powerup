@@ -1,7 +1,7 @@
 /**
  * AI agent: interview and chat history
  *
- * Part 5/10 of agent. Card first-open interview and per-card or board chat history (budget-capped pluginData).
+ * Part of the agent (see agent.parts.json). Card first-open interview and per-card or board chat history (budget-capped pluginData).
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */

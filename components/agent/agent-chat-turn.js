@@ -1,7 +1,7 @@
 /**
  * AI agent: chat turn
  *
- * Part 7/10 of agent. chatTurn, the main conversational loop (task or project scope).
+ * Part of the agent (see agent.parts.json). chatTurn, the main conversational loop (task or project scope).
  * Shares its top-level names with the other parts through window.PriorityAgentParts
  * (imports below, exports at the end). Load order: see agent.parts.json.
  */
