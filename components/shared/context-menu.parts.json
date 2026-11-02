@@ -3,7 +3,8 @@
   "namespace": "ContextMenuParts",
   "note": "Load order of the parts of context-menu. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
   "parts": [
-    "context-menu-core.js",
+    "context-menu-core-menu.js",
+    "context-menu-core-agent.js",
     "context-menu-builders.js"
   ]
 }

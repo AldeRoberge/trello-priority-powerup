@@ -3,7 +3,8 @@
   "namespace": "EntitiesModelParts",
   "note": "Load order of the parts of entities-model. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
   "parts": [
-    "entities-model-core.js",
+    "entities-model-core-max.js",
+    "entities-model-core-relation.js",
     "entities-model-schema-graph.js"
   ]
 }

@@ -1,0 +1,10 @@
+{
+  "name": "gantt-model",
+  "namespace": "GanttModelParts",
+  "note": "Load order of the parts of gantt-model. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "gantt-model-day.js",
+    "gantt-model-sort.js",
+    "gantt-model-section.js"
+  ]
+}

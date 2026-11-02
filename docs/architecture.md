@@ -49,6 +49,21 @@ Same mechanism, cut by size at statement boundaries (see each `*.parts.json`):
 
 A top-level variable that is reassigned in one part and read in another is reached as `S.name` everywhere (the splitter rewrites it), so it always has one shared value.
 
-## Still monolithic (see `scripts/size-baseline.json`)
+### Exploded functions (views and big builders)
 
-the `*-ui.js` view files are one big `mount()` closure each (`agent-ui` 9.6k lines, `docs-ui` 7.5k, `completion-ui` 4.5k, `gantt-ui` 5.5k, `dashboard-ui`, `mindmap-ui`, `entities-ui`, `table-ui`), and a few single functions (`createInfoField` 9.7k, `createDueDateField` 2.8k, `chatTurn` 2.9k, `executeAction` dispatch is now small). These share local state, so they need a hand refactor (state object plus feature modules), not a mechanical cut. Shrink them, then run `node scripts/check-structure.js --update-baseline` to lower their limit.
+A big `mount()` (or `createInfoField`, `chatTurn`...) is cut into ordered part files, `<file>-<topic>.js`, followed by the original file as the core. Each part registers `{ define(M), run(M) }` in `window.<Namespace>Mount<Function>`; the core's function is a small driver:
+
+1. every part's `define(M)` assigns its inner functions to `M` (this replaces hoisting);
+2. every part's `run(M)` executes its statements in the original order (a `return` stops the whole mount).
+
+`M` is a per-call object: every local variable, parameter and inner function of the old closure is `M.name`. Top-level helpers and constants of the file are `S.name` (the file's shared namespace, exported by the core). Rules for editing these files:
+
+- Write `M.x` for state of the view and `S.f()` for module-level helpers, exactly like the code around you.
+- A new inner function goes in a part's `define`, a new statement in `run` at the right point in the order.
+- Parts must be listed in the page before the core file; `<file>.parts.json` has the order and `npm run check` verifies the pages.
+
+Covered this way: table, kanban, gantt, docs, dashboard (and its Today board), mindmap, entities (and its composer), journey, completion, agent UI, plus `createInfoField`, `createDueDateField` and `chatTurn`.
+
+## Size rule
+
+No component file may pass 1500 lines unless it is in `scripts/size-baseline.json`; a listed file may not grow. When you shrink one, run `node scripts/check-structure.js --update-baseline`. The files still listed are mostly stylesheets (`priority-ui.css` 10k, `trello-theme.css` 6k, `agent-ui.css` 5k, ...) and single parts that are one long list of statements.

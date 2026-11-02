@@ -7,6 +7,8 @@
     "completion-ui-sync.js",
     "completion-ui-nested.js",
     "completion-ui-suggestion.js",
-    "completion-ui.js"
+    "completion-ui-completion.js",
+    "completion-ui-selection.js",
+    "completion-ui-mount.js"
   ]
 }
