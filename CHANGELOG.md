@@ -10,6 +10,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Archiver une carte affiche un message flottant avec Annuler (Tableau, Kanban, Gantt), aussi sur téléphone.
 - Mobile : dans le Tableau, toucher le titre d’une carte l’ouvre au lieu de lancer la saisie (renommer : menu Modifier).
 - Dashboard : le bouton + et la touche C créent une carte même sans liste Triage (dans la première liste À faire).
+- Notes : Notes devient une vue du Power-Up (onglet « Notes » à côté de Documents), avec la connexion Trello du Power-Up. L'app installable à part est retirée.
 
 ## 2026-11-01
 

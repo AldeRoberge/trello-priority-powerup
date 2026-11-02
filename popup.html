@@ -29,21 +29,36 @@
   <script src="./components/shared/version.js"></script>
   <script src="./components/shared/debug-log.js"></script>
   <script src="./components/shared/trello-confirm.js"></script>
-  <script src="./components/shared/context-menu.js?v=ctx-key-2"></script>
+  <script src="./components/shared/context-menu-core.js"></script>
+  <script src="./components/shared/context-menu-builders.js"></script>
   <script>
     if (window.PriorityBrand && typeof PriorityBrand.applyDocumentTitle === 'function') {
       PriorityBrand.applyDocumentTitle(document);
     }
   </script>
-  <script src="./components/shared/effects.js?v=fx-7"></script>
+  <script src="./components/shared/effects-sounds.js"></script>
+  <script src="./components/shared/effects-overlays.js"></script>
   <script src="./components/priority/priority-matrix.js?v=due-time-picker-1"></script>
-  <script src="./components/priority/priority-ui.js?v=imp-1"></script>
+  <script src="./components/priority/priority-ui-catalogs.js"></script>
+  <script src="./components/priority/priority-ui-markdown-icons.js"></script>
+  <script src="./components/priority/priority-ui-color-schemes-due.js"></script>
+  <script src="./components/priority/priority-ui-scoring.js"></script>
+  <script src="./components/priority/priority-ui-score-help.js"></script>
+  <script src="./components/priority/priority-ui-statut-field.js"></script>
+  <script src="./components/priority/priority-ui-overview-field.js"></script>
+  <script src="./components/priority/priority-ui-info-field.js"></script>
+  <script src="./components/priority/priority-ui-en-attente-field.js"></script>
+  <script src="./components/priority/priority-ui-due-date-field.js"></script>
+  <script src="./components/priority/priority-ui-variant-mount.js"></script>
+  <script src="./components/priority/priority-ui-mini-editors-api.js"></script>
   <script>
     if (!window.PriorityUI) {
       console.error('Priority popup: priority-ui.js did not expose window.PriorityUI');
     }
   </script>
-  <script src="./components/priority/priority-trello.js?v=gantt-task-modal-1"></script>
+  <script src="./components/priority/priority-trello-board-card.js"></script>
+  <script src="./components/priority/priority-trello-badges-due.js"></script>
+  <script src="./components/priority/priority-trello-sort-actions.js"></script>
   <script src="./components/statut/statut-match.js?v=attente-hourglass-1"></script>
   <script src="./components/statut/statut-trello.js?v=encours-progress-1"></script>
   <script src="./components/shared/tab-autocomplete.js?v=tab-complete-1"></script>
@@ -54,8 +69,12 @@
     onerror="console.error('Priority popup: failed to load completion-ui.js', this.src)"
   ></script>
   <script
-    src="./components/completion/completion-trello.js?v=blocked-slider-1"
-    onerror="console.error('Priority popup: failed to load completion-trello.js', this.src)"
+    src="./components/completion/completion-trello-estimate-scales.js"
+    onerror="console.error('Priority popup: failed to load completion-trello-estimate-scales.js', this.src)"
+  ></script>
+  <script
+    src="./components/completion/completion-trello-completion-data.js"
+    onerror="console.error('Priority popup: failed to load completion-trello-completion-data.js', this.src)"
   ></script>
   <script>
     if (!window.CompletionUI || !window.CompletionTrello) {

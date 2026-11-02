@@ -1,0 +1,10 @@
+{
+  "name": "priority-trello",
+  "namespace": "PriorityTrelloParts",
+  "note": "Load order of the parts of priority-trello. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "priority-trello-board-card.js",
+    "priority-trello-badges-due.js",
+    "priority-trello-sort-actions.js"
+  ]
+}

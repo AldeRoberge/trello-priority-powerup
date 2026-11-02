@@ -5,11 +5,11 @@ var vm = require('vm');
 
 var sandbox = { PriorityUI: null, PriorityTrello: null, window: {} };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'priority', 'priority-ui.js'), 'utf8'),
+  require('./component-source').read('priority/priority-ui.js'),
   sandbox
 );
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'priority', 'priority-trello.js'), 'utf8'),
+  require('./component-source').read('priority/priority-trello.js'),
   sandbox
 );
 

@@ -5,7 +5,7 @@ var vm = require('vm');
 
 var sandbox = { GoalsTrello: null };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'goals', 'goals-trello.js'), 'utf8'),
+  require('./component-source').read('goals/goals-trello.js'),
   sandbox
 );
 

@@ -473,6 +473,18 @@
     return '<aside class="dc-outline">' + div('sk-doutline', sk(30, 8, 'sk--soft') + sk('70%', 10) + sk('52%', 10) + sk('62%', 10)) + '</aside>';
   }
 
+  /** Notes: search bar, then a wall of note cards of different heights. */
+  function keepWall() {
+    var heights = [90, 140, 70, 120, 100, 150, 80, 110];
+    return times(8, function (i) {
+      return div('sk-kcard', sk('70%', 16, 'sk--k') + spacer() + sk('100%', heights[i], 'sk--k') + spacer() + sk('50%', 12, 'sk--k'));
+    });
+  }
+
+  function keep() {
+    return view('k-root', div('sk-krow', box('100%', 36, '40%', 'sk-box--field')) + div('sk-kgrid', keepWall()));
+  }
+
   function docs() {
     return view('dc-root', div('dc-main', docsSide() + docsMain() + docsOutline()) + dock());
   }
@@ -568,13 +580,14 @@
     docs: docs,
     'docs.list': docsList,
     'docs.main': docsMainInner,
+    keep: keep,
     entities: entities,
     'entities.list': entitiesList,
     'entities.main': entitiesPage,
   };
 
   /** One name per tab, in the order of the tab strip (ViewTabs.VIEWS). */
-  var VIEWS = ['dashboard', 'gantt', 'table', 'kanban', 'mindmap', 'journey', 'docs', 'entities'];
+  var VIEWS = ['dashboard', 'gantt', 'table', 'kanban', 'mindmap', 'journey', 'docs', 'keep', 'entities'];
 
   function html(name) {
     var build = BUILDERS[name];

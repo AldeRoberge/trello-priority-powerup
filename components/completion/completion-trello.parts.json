@@ -1,0 +1,9 @@
+{
+  "name": "completion-trello",
+  "namespace": "CompletionTrelloParts",
+  "note": "Load order of the parts of completion-trello. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "completion-trello-estimate-scales.js",
+    "completion-trello-completion-data.js"
+  ]
+}

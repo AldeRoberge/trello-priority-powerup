@@ -1,7 +1,7 @@
 /*
  * Role: screen of the Notes app (Google Keep clone). Grid of notes, quick composer, editor, search,
  * archive, sync status. Everything is written to the device first (KeepSync.save) and sent to Trello
- * in the background, so it works offline. DOM only, no Trello calls except through KeepSync / KeepAuth.
+ * in the background, so it works offline. DOM only, no Trello calls except through KeepSync.
  * Exposes window.KeepUI.mount(root).
  */
 (function (global) {
@@ -161,7 +161,7 @@
     header.appendChild(search);
     header.appendChild(statusEl);
     header.appendChild(archiveBtn);
-    header.appendChild(outBtn);
+    if (deps.onSignOut) header.appendChild(outBtn);
     var composerHost = el('div', 'k-composer-host');
     var main = el('main', 'k-main');
     root.appendChild(header);

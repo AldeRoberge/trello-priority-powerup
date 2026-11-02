@@ -15,7 +15,8 @@
     }
   </style>
   <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-key-2" />
-  <script src="./components/shared/context-menu.js?v=ctx-key-2"></script>
+  <script src="./components/shared/context-menu-core.js"></script>
+  <script src="./components/shared/context-menu-builders.js"></script>
 </head>
 <body>
   <p id="msg">Autorisation en cours…</p>
@@ -40,12 +41,6 @@
           window.opener.authorize(token);
           if (window.TpDebug) TpDebug.log('authReturn', 'token.delivered');
           if (msg) msg.textContent = 'Autorisation réussie. Cette fenêtre va se fermer.';
-        } else if (token && !window.opener && localStorage.getItem('keep.authReturn')) {
-          // Notes app (full-page redirect, no popup): keep the token and go back
-          var back = localStorage.getItem('keep.authReturn');
-          localStorage.removeItem('keep.authReturn');
-          localStorage.setItem('trello_token', token);
-          window.location.replace(back);
         } else if (denied || !token) {
           if (window.TpDebug) {
             TpDebug.log('authReturn', 'token.missing', { denied: !!denied });

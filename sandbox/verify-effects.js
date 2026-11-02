@@ -5,7 +5,7 @@ var vm = require('vm');
 
 var sandbox = { CelebrationEffects: null, PriorityAgent: null };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'shared', 'effects.js'), 'utf8'),
+  require('./component-source').read('shared/effects.js'),
   sandbox
 );
 vm.runInNewContext(

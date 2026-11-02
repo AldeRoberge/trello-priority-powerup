@@ -5,15 +5,15 @@ var vm = require('vm');
 
 var sandbox = { PriorityTrello: null, CompletionTrello: null, CompletionUI: null };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'priority', 'priority-trello.js'), 'utf8'),
+  require('./component-source').read('priority/priority-trello.js'),
   sandbox
 );
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'completion', 'completion-ui.js'), 'utf8'),
+  require('./component-source').read('completion/completion-ui.js'),
   sandbox
 );
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'completion', 'completion-trello.js'), 'utf8'),
+  require('./component-source').read('completion/completion-trello.js'),
   sandbox
 );
 

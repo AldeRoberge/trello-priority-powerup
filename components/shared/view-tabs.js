@@ -18,6 +18,7 @@
     { key: 'mindmap', label: 'Mindmap', icon: 'hierarchy-2', page: './mindmap.html' },
     { key: 'journey', label: 'Parcours', icon: 'route', page: './journey.html' },
     { key: 'docs', label: 'Documents', icon: 'file-text', page: './docs.html' },
+    { key: 'keep', label: 'Notes', icon: 'notes', page: './keep.html' },
     { key: 'entities', label: 'Entités', icon: 'stack-2', page: './entities.html' },
   ];
 
