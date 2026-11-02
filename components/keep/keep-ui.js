@@ -174,8 +174,9 @@
       ui.status = s;
       statusEl.className = 'k-status is-' + s;
       statusEl.textContent = '';
-      var name = s === 'offline' ? 'cloud-off' : s === 'syncing' || pending ? 'refresh' : 'cloud-check';
-      statusEl.appendChild(icon(name));
+      var name = s === 'syncing' || pending ? 'refresh' : 'cloud-check';
+      if (s === 'offline' && global.Connection) statusEl.appendChild(global.Connection.indicator());
+      else statusEl.appendChild(icon(s === 'offline' ? 'cloud-off' : name));
       if (pending) statusEl.appendChild(el('span', 'k-pending', { text: String(pending) }));
       statusEl.title = s === 'offline' ? 'Hors ligne' : pending ? 'En attente d’envoi' : 'À jour';
     }

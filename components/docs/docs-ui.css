@@ -437,7 +437,7 @@ button.dc-item-icon:hover {
 .dc-status.is-saved {
   color: var(--tp-success);
 }
-.dc-status.is-error,
+.dc-status.is-offline, .dc-status.is-error,
 .dc-status.is-conflict {
   color: var(--tp-danger-text);
 }

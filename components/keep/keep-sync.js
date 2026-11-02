@@ -66,6 +66,24 @@
       return note;
     }
 
+    /** The stored record if the user edited it (or deleted it) while a pass was talking to Trello, else null. */
+    async function editedSince(rec) {
+      var cur = await store.get(rec.id);
+      if (!cur) return null;
+      return cur.updatedAt !== rec.updatedAt || !!cur.dirty !== !!rec.dirty || !!cur.deleted !== !!rec.deleted ? cur : null;
+    }
+
+    /** Stores what Trello now has, unless the user edited the note meanwhile: that edit is kept, still unsent. */
+    async function putRemote(rec, remoteNote) {
+      var cur = await editedSince(rec);
+      if (cur) {
+        await store.put(Object.assign({}, cur, { rev: remoteNote.rev, base: copyOf(remoteNote), props: remoteNote.props, dirty: true }));
+        return false;
+      }
+      await store.put(clean(remoteNote));
+      return true;
+    }
+
     async function pass() {
       var remote;
       try {
@@ -93,8 +111,15 @@
               continue;
             }
             var made = await push(rec);
+            var editedMeanwhile = await editedSince(rec);
             await store.remove(rec.id);
-            await store.put(clean(Object.assign({}, made, { updatedAt: made.updatedAt || now() })));
+            if (editedMeanwhile) {
+              await store.put(Object.assign({}, made, copyOf(editedMeanwhile), {
+                base: copyOf(made), dirty: true, deleted: !!editedMeanwhile.deleted, updatedAt: editedMeanwhile.updatedAt,
+              }));
+            } else {
+              await store.put(clean(Object.assign({}, made, { updatedAt: made.updatedAt || now() })));
+            }
             seen.add(made.id);
             continue;
           }
@@ -104,28 +129,36 @@
               continue;
             }
             var again2 = await push(rec); // edited here, deleted there: keep the edit
+            var edited2 = await editedSince(rec);
             await store.remove(rec.id);
-            await store.put(clean(again2));
+            if (edited2) {
+              await store.put(Object.assign({}, again2, copyOf(edited2), {
+                base: copyOf(again2), dirty: true, deleted: !!edited2.deleted, updatedAt: edited2.updatedAt,
+              }));
+            } else {
+              await store.put(clean(again2));
+            }
             seen.add(again2.id);
             continue;
           }
           var theirs = KM().fromDoc(r);
           if (!rec.dirty) {
-            if (KM().snapshot(rec) !== KM().snapshot(theirs) || rec.rev !== theirs.rev) await store.put(clean(theirs));
-            else if (rec.updatedAt !== theirs.updatedAt) await store.put(clean(theirs));
+            if (KM().snapshot(rec) !== KM().snapshot(theirs) || rec.rev !== theirs.rev || rec.updatedAt !== theirs.updatedAt) {
+              if (!(await editedSince(rec))) await store.put(clean(theirs));
+            }
             continue;
           }
           var verdict = KM().resolve(rec.base, rec, theirs);
           if (verdict === 'same' || verdict === 'pull') {
-            await store.put(clean(theirs));
+            await putRemote(rec, theirs);
           } else if (verdict === 'push') {
             if (rec.title !== theirs.title) await api.rename(rec.id, rec.title || '');
             var saved = await api.save(Object.assign({}, rec, { rev: theirs.rev, props: Object.assign({}, theirs.props) }));
-            await store.put(clean(Object.assign({}, rec, { rev: saved.rev, updatedAt: saved.updatedAt || now(), props: theirs.props })));
+            await putRemote(rec, Object.assign({}, rec, { rev: saved.rev, updatedAt: saved.updatedAt || now(), props: theirs.props }));
           } else {
             var copy = await push(rec, (rec.title || 'Sans titre') + ' (conflit)');
             await store.put(clean(copy));
-            await store.put(clean(theirs));
+            await putRemote(rec, theirs);
             seen.add(copy.id);
           }
         } catch (e) {
@@ -139,6 +172,7 @@
       for (var j = 0; j < remote.length; j++) {
         var d = remote[j];
         if (recs.some(function (x) { return x.id === String(d.id); })) continue;
+        if (await store.get(String(d.id))) continue; // created here while the pass was running
         await store.put(clean(KM().fromDoc(d)));
       }
       return { ok: errors === 0, offline: false, pending: await store.pending(), errors: errors };

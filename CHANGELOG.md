@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Hors ligne : un lien brisé avec une roue qui tourne remplace le message (Documents, Notes). Les modifications sont gardées sur l’appareil, renvoyées dès le retour du réseau, et une note modifiée pendant une synchronisation n’est plus écrasée.
 - Mobile : une loupe dans la barre d’onglets ouvre la recherche (cartes, projets, documents).
 - Mobile : un bouton + rond crée une nouvelle carte (Tableau, Kanban, Gantt, Mindmap, Dashboard); il se range quand une carte est ouverte ou que le clavier est affiché.
 - Archiver une carte affiche un message flottant avec Annuler (Tableau, Kanban, Gantt), aussi sur téléphone.
