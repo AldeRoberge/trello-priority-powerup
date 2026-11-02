@@ -134,6 +134,19 @@ describe('Notes sync (device <-> Documents cards)', () => {
     assert.equal(remoteCards().length, 1);
     assert.equal(DM.unpackDesc(remoteCards()[0].desc).body, 'a2');
   });
+  it('every save of a note gets a later stamp than the one before, even in the same millisecond', async () => {
+    const frozen = KS.create({ store, api: KS.trelloApi(fake.t), now: () => '2026-11-02T10:00:00.000Z' });
+    const first = await frozen.save({ title: 'A', body: 'a' });
+    const second = await frozen.save({ ...(await store.get(first.id)), body: 'a2' });
+    const third = await frozen.save({ ...(await store.get(first.id)), body: 'a3' });
+    assert.ok(second.updatedAt > first.updatedAt, second.updatedAt + ' > ' + first.updatedAt);
+    assert.ok(third.updatedAt > second.updatedAt);
+    // a clock that went backwards does not take the stamp back either
+    const slow = KS.create({ store, api: KS.trelloApi(fake.t), now: () => '2020-01-01T00:00:00.000Z' });
+    const fourth = await slow.save({ ...(await store.get(first.id)), body: 'a4' });
+    assert.ok(fourth.updatedAt > third.updatedAt);
+  });
+
   it('keeps an edit typed while the sync is talking to Trello', async () => {
     const doc = await DT.createDoc(fake.t, 'A', 'a');
     await sync.run();

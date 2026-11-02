@@ -23,10 +23,10 @@
     var a = active;
     active = null;
     if (typeof a.closeSub === 'function') a.closeSub();
-    document.removeEventListener('mousedown', a.onDown, true);
+    document.removeEventListener('pointerdown', a.onDown, true);
     document.removeEventListener('keydown', a.onKey, true);
     global.removeEventListener('blur', a.onBlur);
-    global.removeEventListener('resize', a.onBlur);
+    global.removeEventListener('resize', a.onResize);
     if (a.node.parentNode) a.node.parentNode.removeChild(a.node);
     if (typeof a.onClose === 'function') a.onClose();
   }
@@ -274,7 +274,8 @@
       return r.item.checked;
     });
     if (checked >= 0) setCursor(checked);
-    if (input) input.focus();
+    if (input && !(global.matchMedia && global.matchMedia('(pointer: coarse)').matches)) input.focus(); // on a phone the keyboard would cover the menu
+    var openedWidth = global.innerWidth;
 
     active = {
       node: node,
@@ -286,6 +287,7 @@
         hide();
       },
       onBlur: hide,
+      onResize: function () { if (global.innerWidth !== openedWidth) hide(); }, // the keyboard resizes in height only; a rotation changes the width
       onKey: function (e) {
         var pool = sub && sub.rows.length ? sub.rows : rows;
         if (tryShortcut(e, pool)) return;
@@ -353,10 +355,10 @@
         }
       },
     };
-    document.addEventListener('mousedown', active.onDown, true);
+    document.addEventListener('pointerdown', active.onDown, true); // iOS sends no mousedown for a tap on a plain area
     document.addEventListener('keydown', active.onKey, true);
     global.addEventListener('blur', active.onBlur);
-    global.addEventListener('resize', active.onBlur);
+    global.addEventListener('resize', active.onResize);
   }
 
   global.TableMenu = { show: show, hide: hide };

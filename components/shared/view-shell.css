@@ -250,8 +250,7 @@ html:has(body.tp-page--journey) body {
 
 /* ── Pickers as sheets ─────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .vt-tab,
-  .vt-tab.is-on {
+  .vt-tab:not(.is-on) {
     padding: 10px 10px 8px;
     font-size: 0;
     gap: 0;
@@ -743,6 +742,7 @@ html:has(body.tp-page--journey) body {
     opacity: 0.45;
   }
   .tp-context-menu-item,
+  .tbm-item,
   .lp-item {
     min-height: 40px;
     padding-top: 10px;
@@ -983,4 +983,17 @@ html:has(.gantt-card-overlay) .lk-new { display: none !important; }
   .kb-ai-toggle:active,
   .gantt-bar-clear:active,
   .td-pin:active { opacity: 1 !important; }
+}
+
+/* ── Touch baseline ─────────────────────────────────────────────────────────────────────────────────
+   Twin of the block at the end of touch-base.css (the pages that do not load view-shell.css): keep them in step. */
+html {
+  -webkit-text-size-adjust: 100%; /* no landscape text inflation on iOS */
+  text-size-adjust: 100%;
+  overscroll-behavior: none; /* an overscroll must not chain to the Trello page behind the modal */
+}
+body { overscroll-behavior: none; }
+@media (pointer: coarse) {
+  /* Tapping a control twice quickly must not zoom the page. */
+  button, a, label, select, summary, [role='button'] { touch-action: manipulation; }
 }

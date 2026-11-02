@@ -152,3 +152,35 @@ test('every control revealed on touch really is hidden by its own base rule (the
     assert.match(css, rule, cls + ' starts at opacity 0 in ' + file);
   }
 });
+
+/* ── Touch polish: menu rows, the active tab's name, the touch baseline ───── */
+
+const readShared = (file) => fs.readFileSync(path.join(__dirname, '..', 'components', 'shared', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+test('the Table and Kanban menu rows are as tall as the other menus on a touch screen (40 px)', () => {
+  const css = readShared('view-shell.css');
+  const rule = css.match(/\n\s*\.tp-context-menu-item,[^{}]*\{[^}]*\}/);
+  assert.ok(rule, 'the shared coarse row rule exists');
+  assert.match(rule[0], /\.tbm-item/);
+  assert.match(rule[0], /min-height:\s*40px/);
+});
+
+test('on a phone the active tab keeps its name: only the inactive tabs collapse to an icon', () => {
+  const css = readShared('view-shell.css');
+  const collapsing = [];
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (/font-size:\s*0\s*[;}]/.test(m[2] + ';') && /\.vt-tab/.test(m[1])) collapsing.push(m[1].replace(/\s+/g, ' ').trim());
+  }
+  assert.ok(collapsing.length > 0, 'the phone collapse rule exists');
+  for (const selector of collapsing) assert.equal(selector, '.vt-tab:not(.is-on)', 'only the inactive tabs collapse');
+});
+
+test('both stylesheets that cover every page carry the same touch baseline (no scroll chaining, no text inflation, no double-tap zoom)', () => {
+  for (const file of ['view-shell.css', 'touch-base.css']) {
+    const css = readShared(file);
+    assert.match(css, /html\s*\{[^}]*overscroll-behavior:\s*none/, file + ': html does not chain overscroll to the Trello page');
+    assert.match(css, /body\s*\{\s*overscroll-behavior:\s*none/, file + ': body too');
+    assert.match(css, /text-size-adjust:\s*100%/, file + ': no text inflation');
+    assert.match(css, /@media \(pointer: coarse\)\s*\{[^@]*button, a, label, select, summary, \[role='button'\]\s*\{\s*touch-action:\s*manipulation/, file + ': controls do not double-tap zoom');
+  }
+});

@@ -31,6 +31,71 @@
     return api.getToken();
   }
 
+  /* ── A fetch that waits and retries instead of hanging or failing at the first 429 ──────────────────
+   * Trello allows about 100 requests per 10 s per token, so a bulk write (the automatic 100 % on a long "Terminé" list)
+   * meets 429s, and a stalled phone connection never answers. A request that is refused with 429 was not processed, so
+   * every method may be repeated; GET and PUT (same values, same result) are also repeated after a 502/503/504 or a
+   * dropped connection; POST and DELETE are not, so a create can never be duplicated. */
+  var FETCH_TIMEOUT_MS = 20000;
+  var FETCH_RETRIES = 2;
+  var RETRY_AFTER_CAP_MS = 10000;
+
+  function pause(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function isIdempotent(method) {
+    var m = String(method || 'GET').toUpperCase();
+    return m === 'GET' || m === 'PUT';
+  }
+
+  /** Wait before retry number `attempt` (0 = the first): Retry-After when the answer carries it (capped), else 1 s then 2 s, plus a little jitter. */
+  function retryDelay(response, attempt) {
+    var header = response && response.headers && typeof response.headers.get === 'function' ? response.headers.get('retry-after') : null;
+    var seconds = header == null ? NaN : Number(header);
+    if (isFinite(seconds) && seconds >= 0) return Math.min(RETRY_AFTER_CAP_MS, Math.round(seconds * 1000));
+    return 1000 * Math.pow(2, attempt) + Math.round(Math.random() * 250);
+  }
+
+  /** opts: { retries, timeoutMs, sleep } (the last one lets tests skip the waiting). */
+  async function fetchWithRetry(url, init, opts) {
+    opts = opts || {};
+    var wait = opts.sleep || pause;
+    var retries = opts.retries == null ? FETCH_RETRIES : opts.retries;
+    var timeoutMs = opts.timeoutMs || FETCH_TIMEOUT_MS;
+    var method = init && init.method;
+    for (var attempt = 0; ; attempt++) {
+      var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = ctl ? setTimeout(function () { ctl.abort(); }, timeoutMs) : null;
+      var response;
+      try {
+        response = await fetch(url, ctl ? Object.assign({}, init, { signal: ctl.signal }) : init);
+      } catch (err) {
+        if (timer) clearTimeout(timer);
+        var offline = !!(global.navigator && global.navigator.onLine === false);
+        if (attempt < retries && isIdempotent(method) && !offline) {
+          await wait(retryDelay(null, attempt));
+          continue;
+        }
+        if (ctl && ctl.signal.aborted) {
+          // A request that never answered: say so (reason 'network', like a dropped connection) instead of waiting for ever.
+          var timeout = new Error('Trello ne répond pas (délai dépassé)');
+          timeout.reason = 'network';
+          timeout.timeout = true;
+          throw timeout;
+        }
+        throw err;
+      }
+      if (timer) clearTimeout(timer);
+      var retry = response.status === 429 || (isIdempotent(method) && (response.status === 502 || response.status === 503 || response.status === 504));
+      if (retry && attempt < retries) {
+        await wait(retryDelay(response, attempt));
+        continue;
+      }
+      return response;
+    }
+  }
+
   async function trelloRest(t, path, method, body) {
     var cfg = restCfg();
     if (!cfg) return { ok: false, reason: 'no-app-key' };
@@ -42,7 +107,7 @@
       'https://api.trello.com/1' + path + sep +
       'key=' + encodeURIComponent(cfg.appKey) + '&token=' + encodeURIComponent(token);
 
-    var response = await fetch(url, {
+    var response = await fetchWithRetry(url, {
       method: method || 'GET',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
@@ -254,6 +319,8 @@
 
   global.SheetsTrello = {
     trelloRest: trelloRest,
+    fetchWithRetry: fetchWithRetry,
+    retryDelay: retryDelay,
     getSettings: getSettings,
     saveSettings: saveSettings,
     normalizeSettings: normalizeSettings,

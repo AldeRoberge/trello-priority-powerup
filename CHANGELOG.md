@@ -5,6 +5,12 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Mobile : les menus et sélecteurs restent au-dessus de la barre d’accueil, n’ouvrent plus le clavier tout seuls, se ferment d’un toucher à côté (iOS compris) et restent ouverts quand le clavier apparaît.
+- Mobile : les lignes du menu des cartes du Tableau et du Kanban sont plus hautes au toucher.
+- Mobile : l’onglet de la vue en cours affiche son nom (les autres restent des icônes).
+- Mobile : plus de zoom au double toucher sur les boutons ni de texte agrandi en paysage, et le défilement ne passe plus à la page Trello derrière.
+- Les enregistrements vers Trello patientent et réessayent quand Trello répond « trop de requêtes » (429), et ne restent plus bloqués sans réponse.
+- Notes : deux modifications dans la même milliseconde ne s’écrasent plus (une modification faite pendant une synchro pouvait ne pas être détectée).
 - Hors ligne : un lien brisé avec une roue qui tourne remplace le message (Documents, Notes). Les modifications sont gardées sur l’appareil, renvoyées dès le retour du réseau, et une note modifiée pendant une synchronisation n’est plus écrasée.
 - Notes : l’écran ressemble à Google Keep : une seule barre de recherche arrondie avec menu (Notes, Archives), un bouton + rond pour créer une note, une barre du bas pour une nouvelle liste; les cartes sont épurées et l’épingle, l’archivage et la suppression sont dans la note ouverte.
 - Mobile : un appui long dans un champ de texte ouvre de nouveau le menu du téléphone (curseur, sélection, coller) au lieu du menu de l’application.

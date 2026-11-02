@@ -38,11 +38,22 @@
     var running = null;
     var again = false;
 
+    /**
+     * A stamp strictly after the note's previous one. A pass tells that the user edited a note meanwhile by comparing
+     * updatedAt, and two edits in the same millisecond (a fast typist, a script) carried the same stamp: the second one
+     * went unnoticed and was overwritten.
+     */
+    function after(stamp, last) {
+      var lastMs = last ? Date.parse(last) : NaN;
+      if (isNaN(lastMs) || stamp > last) return stamp;
+      return new Date(lastMs + 1).toISOString();
+    }
+
     /** Saves a note edit on this device. A new note has no id yet. */
     async function save(note) {
       var prev = note.id ? await store.get(note.id) : null;
       var rec = Object.assign({}, KM().blank(note.id || newId()), prev || {}, note);
-      rec.updatedAt = now();
+      rec.updatedAt = after(now(), prev && prev.updatedAt);
       rec.dirty = true;
       rec.deleted = false;
       if (!prev) rec.base = null;

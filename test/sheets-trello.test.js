@@ -136,3 +136,140 @@ describe('SheetsTrello: the secret goes only to the URL it was issued for', () =
     assert.equal(ST.hostOf(''), '');
   });
 });
+
+/* ── The shared REST helper waits and retries instead of hanging or failing at the first 429 ── */
+
+describe('SheetsTrello.fetchWithRetry', () => {
+  let ST;
+  let calls;
+  let waits;
+  const sleep = async (ms) => { waits.push(ms); };
+  const res = (status, headers) => ({ ok: status >= 200 && status < 300, status, headers: { get: (k) => (headers || {})[String(k).toLowerCase()] ?? null }, text: async () => '{"ok":true}' });
+
+  /** fetch that answers from a list (a function entry may reject or hang), recording each call. */
+  function useFetch(plan) {
+    calls = [];
+    global.fetch = (url, init) => {
+      calls.push({ url, method: init && init.method, signal: init && init.signal });
+      const next = plan[Math.min(calls.length - 1, plan.length - 1)];
+      return typeof next === 'function' ? next(init) : Promise.resolve(next);
+    };
+  }
+  const hang = (init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })));
+  });
+  const dropped = () => Promise.reject(new TypeError('Failed to fetch'));
+
+  before(() => {
+    loadComponent('table/table-model.js');
+    loadComponent('sheets/sheets-trello.js');
+    ST = global.SheetsTrello;
+  });
+  beforeEach(() => { waits = []; });
+
+  it('a normal answer is one call, no waiting', async () => {
+    useFetch([res(200)]);
+    const r = await ST.fetchWithRetry('https://x/a', { method: 'GET' }, { sleep });
+    assert.equal(r.status, 200);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(waits, []);
+  });
+
+  it('a 429 waits about a second and then succeeds', async () => {
+    useFetch([res(429), res(200)]);
+    const r = await ST.fetchWithRetry('https://x/a', { method: 'GET' }, { sleep });
+    assert.equal(r.status, 200);
+    assert.equal(calls.length, 2);
+    assert.ok(waits[0] >= 1000 && waits[0] <= 1250, 'waited ' + waits[0]);
+  });
+
+  it('Retry-After is honored, and capped at 10 s', async () => {
+    useFetch([res(429, { 'retry-after': '3' }), res(429, { 'retry-after': '120' }), res(200)]);
+    const r = await ST.fetchWithRetry('https://x/a', { method: 'PUT' }, { sleep });
+    assert.equal(r.status, 200);
+    assert.deepEqual(waits, [3000, 10000]);
+  });
+
+  it('after two retries a still-429 answer is handed back as it is (the caller reports http-429)', async () => {
+    useFetch([res(429)]);
+    const r = await ST.fetchWithRetry('https://x/a', { method: 'GET' }, { sleep });
+    assert.equal(r.status, 429);
+    assert.equal(calls.length, 3);
+    assert.ok(waits[0] >= 1000 && waits[0] <= 1250 && waits[1] >= 2000 && waits[1] <= 2250, JSON.stringify(waits));
+  });
+
+  it('a POST is retried after a 429 (refused, not processed) but never after a 503 (it may have gone through)', async () => {
+    useFetch([res(429), res(200)]);
+    assert.equal((await ST.fetchWithRetry('https://x/a', { method: 'POST' }, { sleep })).status, 200);
+    assert.equal(calls.length, 2);
+    useFetch([res(503), res(200)]);
+    assert.equal((await ST.fetchWithRetry('https://x/a', { method: 'POST' }, { sleep })).status, 503);
+    assert.equal(calls.length, 1, 'no duplicate create');
+    useFetch([res(503), res(200)]);
+    assert.equal((await ST.fetchWithRetry('https://x/a', { method: 'DELETE' }, { sleep })).status, 503);
+    assert.equal(calls.length, 1);
+  });
+
+  it('GET and PUT are retried after a 502, 503 or 504', async () => {
+    for (const [method, status] of [['GET', 502], ['GET', 503], ['PUT', 504]]) {
+      useFetch([res(status), res(200)]);
+      assert.equal((await ST.fetchWithRetry('https://x/a', { method }, { sleep })).status, 200, method + ' ' + status);
+      assert.equal(calls.length, 2);
+    }
+  });
+
+  it('a dropped connection is retried for a read, and thrown at once for a write', async () => {
+    useFetch([dropped, res(200)]);
+    assert.equal((await ST.fetchWithRetry('https://x/a', { method: 'GET' }, { sleep })).status, 200);
+    assert.equal(calls.length, 2);
+    useFetch([dropped, res(200)]);
+    await assert.rejects(ST.fetchWithRetry('https://x/a', { method: 'POST' }, { sleep }), /Failed to fetch/);
+    assert.equal(calls.length, 1);
+  });
+
+  it('offline: a failed read is not retried (there is nobody to answer)', async () => {
+    const original = Object.getOwnPropertyDescriptor(global, 'navigator'); // a getter-only global on recent Node
+    Object.defineProperty(global, 'navigator', { value: { onLine: false }, configurable: true, writable: true });
+    try {
+      useFetch([dropped, res(200)]);
+      await assert.rejects(ST.fetchWithRetry('https://x/a', { method: 'GET' }, { sleep }), /Failed to fetch/);
+      assert.equal(calls.length, 1);
+    } finally {
+      if (original) Object.defineProperty(global, 'navigator', original);
+      else delete global.navigator;
+    }
+  });
+
+  it('a request that never answers ends with a clear timeout error, shaped like a network failure', async () => {
+    useFetch([hang]);
+    await assert.rejects(
+      ST.fetchWithRetry('https://x/a', { method: 'POST' }, { sleep, timeoutMs: 20 }),
+      (err) => err.timeout === true && err.reason === 'network' && /ne répond pas/.test(err.message)
+    );
+    assert.equal(calls.length, 1, 'a write that may have landed is not sent again');
+    useFetch([hang]);
+    await assert.rejects(ST.fetchWithRetry('https://x/a', { method: 'GET' }, { sleep, timeoutMs: 20, retries: 1 }), (err) => err.timeout === true);
+    assert.equal(calls.length, 2, 'a read is tried once more');
+  });
+
+  it('trelloRest goes through it: a 429 then a 200 returns the data', async () => {
+    global.PriorityRestConfig = { appKey: 'app-key' };
+    const t = { getRestApi: async () => ({ isAuthorized: async () => true, getToken: async () => 'tok' }) };
+    useFetch([res(429, { 'retry-after': '0' }), res(200)]);
+    const out = await ST.trelloRest(t, '/cards/c1', 'GET');
+    assert.equal(out.ok, true);
+    assert.deepEqual(out.data, { ok: true });
+    assert.equal(calls.length, 2);
+    delete global.PriorityRestConfig;
+  });
+
+  it('trelloRest still reports the final status when Trello keeps refusing', async () => {
+    global.PriorityRestConfig = { appKey: 'app-key' };
+    const t = { getRestApi: async () => ({ isAuthorized: async () => true, getToken: async () => 'tok' }) };
+    useFetch([res(429, { 'retry-after': '0' })]);
+    const out = await ST.trelloRest(t, '/cards/c1', 'PUT', { name: 'x' });
+    assert.deepEqual({ ok: out.ok, reason: out.reason }, { ok: false, reason: 'http-429' });
+    assert.equal(calls.length, 3);
+    delete global.PriorityRestConfig;
+  });
+});

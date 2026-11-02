@@ -25,3 +25,15 @@
     overflow: visible !important;
   }
 }
+
+/* Touch baseline. Twin of the block at the end of view-shell.css (the card views): keep them in step. */
+html {
+  -webkit-text-size-adjust: 100%; /* no landscape text inflation on iOS */
+  text-size-adjust: 100%;
+  overscroll-behavior: none; /* an overscroll must not chain to the Trello page behind the modal */
+}
+body { overscroll-behavior: none; }
+@media (pointer: coarse) {
+  /* Tapping a control twice quickly must not zoom the page. */
+  button, a, label, select, summary, [role='button'] { touch-action: manipulation; }
+}

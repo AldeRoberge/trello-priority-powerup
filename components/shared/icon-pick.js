@@ -17,7 +17,7 @@
   function close() {
     if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
     pop = null;
-    document.removeEventListener('mousedown', onDoc, true);
+    document.removeEventListener('pointerdown', onDoc, true);
     document.removeEventListener('keydown', onKey, true);
   }
 
@@ -141,10 +141,10 @@
     document.body.appendChild(box);
     place(box, opts.anchor.getBoundingClientRect());
     pop = box;
-    document.addEventListener('mousedown', onDoc, true);
+    document.addEventListener('pointerdown', onDoc, true); // iOS sends no mousedown for a tap on a plain area
     document.addEventListener('keydown', onKey, true);
     paint();
-    search.focus();
+    if (!(global.matchMedia && global.matchMedia('(pointer: coarse)').matches)) search.focus(); // on a phone the keyboard would cover the picker
   }
 
   /** A fixed-size glyph. Click opens the chooser. `onChoose` receives the normalized icon, or null. */

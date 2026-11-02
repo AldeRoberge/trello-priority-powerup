@@ -535,7 +535,7 @@
       schedBtn.setAttribute('aria-expanded', openPop ? 'true' : 'false');
       paintSched();
     });
-    document.addEventListener('mousedown', function (e) {
+    document.addEventListener('pointerdown', function (e) { // iOS sends no mousedown for a tap on a plain area
       if (schedPop.hidden) return;
       if (schedBtn.contains(e.target) || schedPop.contains(e.target)) return;
       schedPop.hidden = true;

@@ -67,7 +67,7 @@
     if (!current) return;
     var c = current;
     current = null;
-    document.removeEventListener('mousedown', c.onDown, true);
+    document.removeEventListener('pointerdown', c.onDown, true);
     document.removeEventListener('keydown', c.onKey, true);
     if (c.root.parentNode) c.root.parentNode.removeChild(c.root);
     if (typeof c.opts.onClose === 'function') c.opts.onClose();
@@ -82,7 +82,7 @@
       root.style.left = '8px';
       root.style.right = '8px';
       root.style.top = 'auto';
-      root.style.bottom = '8px';
+      root.style.bottom = 'max(8px, env(safe-area-inset-bottom, 0px))'; // not a plain 8px: the home bar of a phone
       return;
     }
     var r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: (anchor && anchor.x) || 0, bottom: (anchor && anchor.y) || 0, top: (anchor && anchor.y) || 0 };
@@ -180,8 +180,8 @@
     place(root, opts.anchor);
     document.addEventListener('keydown', onKey, true);
     // Registered on the next tick so the click that opened the popover does not close it at once.
-    setTimeout(function () { if (current && current.root === root) document.addEventListener('mousedown', onDown, true); }, 0);
-    input.focus();
+    setTimeout(function () { if (current && current.root === root) document.addEventListener('pointerdown', onDown, true); }, 0); // iOS sends no mousedown for a tap on a plain area
+    if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) input.focus(); // on a phone the keyboard would cover the sheet
     return true;
   }
 

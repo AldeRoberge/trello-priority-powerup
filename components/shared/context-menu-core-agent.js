@@ -325,7 +325,9 @@
     (d.body || d.documentElement).appendChild(menu);
     S.activeMenu = menu;
     positionMenu(menu, clientX, clientY);
-    if (input && typeof input.focus === 'function') {
+    // On a phone the keyboard would open over the sheet: the search field is focused when the user taps it.
+    var touchScreen = !!(global.matchMedia && global.matchMedia('(pointer: coarse)').matches);
+    if (input && !touchScreen && typeof input.focus === 'function') {
       try {
         input.focus();
       } catch (e0) {
@@ -424,24 +426,31 @@
     }
 
     var openedAt = Date.now();
+    var openedWidth = global.innerWidth;
+
+    // The on-screen keyboard resizes the window in height only: that must not close the menu, a rotation (width) does.
+    function onResize(e) {
+      if (global.innerWidth === openedWidth) return;
+      onScroll(e);
+    }
 
     // Defer outside listeners so the opening contextmenu event does not close us.
     var bindTimer = global.setTimeout(function () {
-      d.addEventListener('mousedown', onPointerDown, true);
+      d.addEventListener('pointerdown', onPointerDown, true); // iOS sends no mousedown for a tap on a plain area
       d.addEventListener('contextmenu', onPointerDown, true);
       d.addEventListener('keydown', onKey, true);
       global.addEventListener('scroll', onScroll, true);
-      global.addEventListener('resize', onScroll, true);
+      global.addEventListener('resize', onResize, true);
     }, 0);
 
     S.activeCleanup = function () {
       global.clearTimeout(bindTimer);
       closeSub();
-      d.removeEventListener('mousedown', onPointerDown, true);
+      d.removeEventListener('pointerdown', onPointerDown, true);
       d.removeEventListener('contextmenu', onPointerDown, true);
       d.removeEventListener('keydown', onKey, true);
       global.removeEventListener('scroll', onScroll, true);
-      global.removeEventListener('resize', onScroll, true);
+      global.removeEventListener('resize', onResize, true);
     };
 
     return menu;

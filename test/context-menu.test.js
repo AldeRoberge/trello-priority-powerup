@@ -865,4 +865,83 @@ describe('ContextMenu', () => {
       assert.ok(global.document.body.querySelector('.tp-context-menu'));
     });
   });
+
+  describe('on a phone', () => {
+    const items = () => [
+      { id: 'a', label: 'Archiver', action() {} },
+      { id: 'b', label: 'Ouvrir', action() {} },
+      { id: 'c', label: 'Copier', action() {} },
+      { id: 'd', label: 'Modifier', action() {} },
+      { id: 'e', label: 'Déplacer', action() {} },
+    ];
+    const tick = () => new Promise((r) => setTimeout(r, 5));
+    let focusCalls;
+    let realMatchMedia;
+
+    function spyOnFocus() {
+      focusCalls = [];
+      const create = global.document.createElement;
+      global.document.createElement = (tag) => {
+        const el = create.call(global.document, tag);
+        if (tag === 'input') el.focus = () => focusCalls.push(el);
+        return el;
+      };
+    }
+
+    beforeEach(() => {
+      realMatchMedia = global.matchMedia;
+      spyOnFocus();
+    });
+    afterEach(() => {
+      global.matchMedia = realMatchMedia;
+      delete global.ViewShell;
+      global.innerWidth = 800;
+    });
+
+    it('the sheet keeps the home-bar inset instead of a plain 8px', () => {
+      global.ViewShell = { isNarrow: () => true };
+      const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, items());
+      assert.ok(menu.classList.contains('is-sheet'));
+      assert.match(menu.style.bottom, /env\(safe-area-inset-bottom/);
+    });
+
+    it('the search field takes focus with a mouse, not with a finger (the keyboard would cover the sheet)', () => {
+      global.matchMedia = (q) => ({ matches: false });
+      ContextMenu.show({ clientX: 1, clientY: 1 }, items());
+      assert.equal(focusCalls.length, 1, 'fine pointer: focused');
+      ContextMenu.hide();
+      focusCalls.length = 0;
+      global.matchMedia = (q) => ({ matches: /coarse/.test(q) });
+      ContextMenu.show({ clientX: 1, clientY: 1 }, items());
+      assert.equal(focusCalls.length, 0, 'coarse pointer: not focused');
+    });
+
+    it('a tap outside closes it (pointerdown), a tap inside does not', async () => {
+      const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, items());
+      await tick(); // the outside listeners are registered on the next tick
+      assert.equal((global._docListeners.mousedown || []).length, 0, 'no document mousedown listener');
+      global.document._dispatch('pointerdown', { type: 'pointerdown', target: menu.querySelector('.tp-context-menu-item') });
+      assert.equal(menu.parentNode, global.document.body, 'inside: stays');
+      global.document._dispatch('pointerdown', { type: 'pointerdown', target: global.document.body });
+      assert.equal(menu.parentNode, null, 'outside: closed');
+    });
+
+    it('a resize that only changes the height (the keyboard) keeps it open, a width change (rotation) closes it', async () => {
+      const menu = ContextMenu.show({ clientX: 1, clientY: 1 }, items());
+      await tick();
+      const realNow = Date.now;
+      Date.now = () => realNow() + 1000; // past the 400 ms grace after opening
+      try {
+        global.innerHeight = 300; // the on-screen keyboard
+        (global._winListeners.resize || []).slice().forEach((fn) => fn({ type: 'resize', target: global }));
+        assert.equal(menu.parentNode, global.document.body, 'height only: stays');
+        global.innerWidth = 1024; // rotation
+        (global._winListeners.resize || []).slice().forEach((fn) => fn({ type: 'resize', target: global }));
+        assert.equal(menu.parentNode, null, 'width changed: closed');
+      } finally {
+        Date.now = realNow;
+        global.innerHeight = 600;
+      }
+    });
+  });
 });

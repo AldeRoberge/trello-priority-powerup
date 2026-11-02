@@ -25,6 +25,12 @@ function node(tag) {
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parentNode = null; return c; },
     addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
     removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn); },
+    contains(other) {
+      if (other === this) return true;
+      return this.children.some((c) => c && c.contains && c.contains(other));
+    },
+    focus() {},
+    scrollIntoView() {},
     getBoundingClientRect() { return this.rect || { left: 0, top: 0, width: 100, height: 0 }; },
     /** Calls the listeners of `type` the way the browser would (target defaults to this node). */
     fire(type, evt) {

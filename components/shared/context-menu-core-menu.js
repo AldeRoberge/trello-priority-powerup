@@ -506,7 +506,7 @@ var MENU_CLASS = 'tp-context-menu';
       menuEl.style.left = '8px';
       menuEl.style.right = '8px';
       menuEl.style.top = 'auto';
-      menuEl.style.bottom = '8px';
+      menuEl.style.bottom = 'max(8px, env(safe-area-inset-bottom, 0px))'; // not a plain 8px: the home bar of a phone
       menuEl.style.width = 'auto';
       return;
     }
