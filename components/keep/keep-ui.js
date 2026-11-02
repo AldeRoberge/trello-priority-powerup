@@ -74,19 +74,49 @@
 
     root.textContent = '';
     var header = el('header', 'k-header');
-    var search = el('input', 'k-search', { type: 'search', placeholder: 'Rechercher', 'aria-label': 'Rechercher' });
+    var pill = el('div', 'k-pill');
+    var menuBtn = btn('menu-2', 'Menu', function () { toggleMenu(); }, 'k-menu-btn');
+    var search = el('input', 'k-search', { type: 'search', placeholder: 'Rechercher dans les notes', 'aria-label': 'Rechercher' });
     var statusEl = el('span', 'k-status');
-    var archiveBtn = btn('archive', 'Archives', function () { ui.archive = !ui.archive; draw(); }, 'k-archive');
-    var outBtn = btn('logout', 'Se déconnecter', function () { deps.onSignOut(); });
-    header.appendChild(search);
-    header.appendChild(statusEl);
-    header.appendChild(archiveBtn);
-    if (deps.onSignOut) header.appendChild(outBtn);
-    var composerHost = el('div', 'k-composer-host');
+    pill.appendChild(menuBtn);
+    pill.appendChild(search);
+    pill.appendChild(statusEl);
+    header.appendChild(pill);
+    var menuEl = el('div', 'k-menu');
+    menuEl.hidden = true;
+    pill.appendChild(menuEl);
     var main = el('main', 'k-main');
+    var fab = el('button', 'k-fab', { type: 'button', title: 'Nouvelle note', 'aria-label': 'Nouvelle note' });
+    fab.appendChild(icon('plus'));
+    fab.addEventListener('click', function () { openComposer(false); });
+    var dock = el('nav', 'k-dock');
+    dock.appendChild(btn('checkbox', 'Nouvelle liste', function () { openComposer(true); }));
     root.appendChild(header);
-    root.appendChild(composerHost);
     root.appendChild(main);
+    root.appendChild(dock);
+    root.appendChild(fab);
+
+    function toggleMenu(force) {
+      var open = force === undefined ? menuEl.hidden : force;
+      menuEl.hidden = !open;
+      if (!open) return;
+      menuEl.textContent = '';
+      [['notes', 'Notes', false], ['archive', 'Archives', true]].forEach(function (it) {
+        var b = el('button', 'k-menu-item' + (ui.archive === it[2] ? ' is-on' : ''), { type: 'button' });
+        b.appendChild(icon(it[0]));
+        b.appendChild(el('span', '', { text: it[1] }));
+        b.addEventListener('click', function () { ui.archive = it[2]; toggleMenu(false); draw(); });
+        menuEl.appendChild(b);
+      });
+      if (deps.onSignOut) {
+        var o = el('button', 'k-menu-item', { type: 'button' });
+        o.appendChild(icon('logout'));
+        o.appendChild(el('span', '', { text: 'Se déconnecter' }));
+        o.addEventListener('click', function () { deps.onSignOut(); });
+        menuEl.appendChild(o);
+      }
+    }
+    document.addEventListener('click', function (e) { if (!menuEl.hidden && !pill.contains(e.target)) toggleMenu(false); });
 
     search.addEventListener('input', function () { ui.query = search.value; drawGrid(); });
 
@@ -94,10 +124,11 @@
       ui.status = s;
       statusEl.className = 'k-status is-' + s;
       statusEl.textContent = '';
-      var name = s === 'offline' ? 'cloud-off' : s === 'syncing' || pending ? 'refresh' : 'cloud-check';
+      statusEl.hidden = s !== 'offline' && s !== 'syncing' && !pending;
+      var name = s === 'offline' ? 'cloud-off' : 'refresh';
       statusEl.appendChild(icon(name));
       if (pending) statusEl.appendChild(el('span', 'k-pending', { text: String(pending) }));
-      statusEl.title = s === 'offline' ? 'Hors ligne' : pending ? 'En attente d’envoi' : 'À jour';
+      statusEl.title = s === 'offline' ? 'Hors ligne' : 'En attente d’envoi';
     }
 
     async function reload() {
@@ -126,56 +157,16 @@
     }
 
     function draw() {
-      archiveBtn.classList.toggle('is-on', ui.archive);
-      composerHost.hidden = ui.archive;
-      drawComposer();
+      menuBtn.classList.toggle('is-on', ui.archive);
+      fab.hidden = dock.hidden = ui.archive;
       drawGrid();
     }
 
-    /* composer */
-    function drawComposer() {
-      composerHost.textContent = '';
-      if (!ui.composing) {
-        var closed = el('div', 'k-composer is-closed');
-        var hint = el('span', 'k-composer-hint', { text: 'Créer une note…' });
-        closed.appendChild(hint);
-        closed.appendChild(btn('checkbox', 'Nouvelle liste', function () { openComposer(true); }));
-        closed.addEventListener('click', function () { openComposer(false); });
-        composerHost.appendChild(closed);
-        return;
-      }
-      var box = el('div', 'k-composer');
-      var ed = ui.composing;
-      box.appendChild(ed.el);
-      var bar = el('div', 'k-bar');
-      bar.appendChild(colorPicker(function (c) { ed.patch({ color: c }); box.setAttribute('data-color', c || ''); }));
-      var close = el('button', 'k-close', { type: 'button', text: 'Fermer' });
-      close.addEventListener('click', closeComposer);
-      bar.appendChild(close);
-      box.appendChild(bar);
-      box.setAttribute('data-color', ed.getNote().color || '');
-      composerHost.appendChild(box);
-    }
-
+    /* composer: a new note opens in the same sheet as an existing one */
     function openComposer(asList) {
       var n = KM().blank('');
       n.id = '';
-      ui.composing = buildEditor(n, null);
-      if (asList) ui.composing.setBody('- [ ] ');
-      drawComposer();
-      global.setTimeout(function () {
-        if (ui.composing) ui.composing.focusBody();
-      }, 0);
-    }
-
-    async function closeComposer() {
-      var note = ui.composing && ui.composing.getNote();
-      ui.composing = null;
-      drawComposer();
-      if (note && !KM().isEmpty(note) && KM().serializeLines(KM().parseLines(note.body)) !== '- [ ]') {
-        delete note.id;
-        await saveNote(note);
-      }
+      openDialog(n, true, asList);
     }
 
     /* grid */
@@ -214,10 +205,6 @@
         saveNote(Object.assign({}, n, { body: KM().isFlatList(next) ? KM().sinkDone(next) : next }));
       });
       c.appendChild(body);
-      var actions = el('div', 'k-actions');
-      actions.appendChild(btn('pin', n.pin ? 'Désépingler' : 'Épingler', function () { saveNote(Object.assign({}, n, { pin: !n.pin })); }, n.pin ? 'is-on' : ''));
-      actions.appendChild(btn(n.arch ? 'archive-off' : 'archive', n.arch ? 'Désarchiver' : 'Archiver', function () { saveNote(Object.assign({}, n, { arch: !n.arch })); }));
-      c.appendChild(actions);
       c.addEventListener('click', function () { openDialog(n); });
       c.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target === c) openDialog(n); });
       return c;
@@ -234,20 +221,38 @@
       return wrap;
     }
 
-    function openDialog(n) {
+    function openDialog(n, isNew, asList) {
       closeDialog();
       var ed = buildEditor(n, null);
+      if (asList) ed.setBody('- [ ] ');
+      if (isNew) ui.composing = ed;
       var shade = el('div', 'k-shade');
       var box = el('div', 'k-dialog', { role: 'dialog', 'aria-modal': 'true', 'data-color': n.color || '' });
+      if (!isNew) {
+        var top = el('div', 'k-top');
+        top.appendChild(btn('pin', n.pin ? 'Désépingler' : 'Épingler', function (e) {
+          n.pin = !n.pin;
+          ed.patch({ pin: n.pin });
+          e.currentTarget.classList.toggle('is-on', n.pin);
+        }, n.pin ? 'is-on' : ''));
+        box.appendChild(top);
+      }
       box.appendChild(ed.el);
       var bar = el('div', 'k-bar');
       bar.appendChild(colorPicker(function (c) { ed.patch({ color: c }); box.setAttribute('data-color', c || ''); }));
-      bar.appendChild(btn('trash', 'Supprimer', function () {
-        if (!global.confirm('Supprimer cette note ?')) return;
-        ui.dialog = null;
-        shade.remove();
-        sync.remove(n.id).then(reload).then(queueSync);
-      }));
+      if (!isNew) {
+        bar.appendChild(btn(n.arch ? 'archive-off' : 'archive', n.arch ? 'Désarchiver' : 'Archiver', function () {
+          ui.dialog = null;
+          shade.remove();
+          saveNote(Object.assign({}, ed.getNote(), { arch: !n.arch }));
+        }));
+        bar.appendChild(btn('trash', 'Supprimer', function () {
+          if (!global.confirm('Supprimer cette note ?')) return;
+          ui.dialog = null;
+          shade.remove();
+          sync.remove(n.id).then(reload).then(queueSync);
+        }));
+      }
       var close = el('button', 'k-close', { type: 'button', text: 'Fermer' });
       close.addEventListener('click', function () { closeDialog(true); });
       bar.appendChild(close);
@@ -255,16 +260,25 @@
       shade.appendChild(box);
       shade.addEventListener('click', function (e) { if (e.target === shade) closeDialog(true); });
       document.body.appendChild(shade);
-      ui.dialog = { shade: shade, ed: ed, original: n };
+      ui.dialog = { shade: shade, ed: ed, original: n, isNew: !!isNew };
+      if (isNew) global.setTimeout(function () { ed.focusBody(); }, 0);
     }
 
     function closeDialog(save) {
       var d = ui.dialog;
       if (!d) return;
       ui.dialog = null;
+      ui.composing = null;
       d.shade.remove();
       if (!save) return;
       var next = d.ed.getNote();
+      if (d.isNew) {
+        if (!KM().isEmpty(next) && KM().serializeLines(KM().parseLines(next.body)) !== '- [ ]') {
+          delete next.id;
+          saveNote(next);
+        }
+        return;
+      }
       if (KM().snapshot(next) === KM().snapshot(d.original)) return;
       saveNote(next);
     }
