@@ -108,6 +108,24 @@ function loadComponent(relPath) {
 }
 
 /**
+ * Source text of a file given relative to the repo root. A file that belongs to a split component
+ * (components/<dir>/<name>.parts.json) is returned as the whole component: all its parts in load order.
+ */
+function readSource(relFromRoot) {
+  const abs = path.join(ROOT, relFromRoot);
+  const dir = path.dirname(abs);
+  const base = path.basename(abs);
+  if (fs.existsSync(dir)) {
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.parts.json')) continue;
+      const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      if (m.parts.includes(base)) return m.parts.map((p) => fs.readFileSync(path.join(dir, p), 'utf8')).join('\n');
+    }
+  }
+  return fs.readFileSync(abs, 'utf8');
+}
+
+/**
  * Clear require cache for component modules so a later load picks up edits.
  */
 function clearComponentCache() {
@@ -124,5 +142,6 @@ module.exports = {
   COMPONENTS,
   installBrowserShim,
   loadComponent,
+  readSource,
   clearComponentCache,
 };

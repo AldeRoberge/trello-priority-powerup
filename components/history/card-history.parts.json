@@ -1,0 +1,9 @@
+{
+  "name": "card-history",
+  "namespace": "CardHistoryParts",
+  "note": "Load order of the parts of card-history. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "card-history-history.js",
+    "card-history-describe.js"
+  ]
+}

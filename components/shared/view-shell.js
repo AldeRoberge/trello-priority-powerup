@@ -142,7 +142,7 @@
    * takes over), a tap replays it as a quick press, a vertical move drops it and the page scrolls. Without this, a
    * thumb that lands on a bar while scrolling changes the progress or opens the date editor.
    */
-  var GUARDED_BARS = '.kb-prog-bar, .tb-prog-bar, .jy-prog-bar, .gantt-bar';
+  var GUARDED_BARS = '.kb-prog-bar, .tb-prog-bar, .jy-prog-bar, .tt-prog-bar, .cq-bar, .gantt-bar';
   var INTENT_PX = 6;
 
   function installTouchDragGuard(doc) {
@@ -211,6 +211,21 @@
       },
       true
     );
+  }
+
+  /**
+   * Where a floating control sits just above the assistant dock: the distance (px) from the bottom of the viewport
+   * to `gap` px over the dock's top edge. The dock is in the page flow, so this follows its height. Null with no
+   * dock on the page (the caller then falls back to a fixed margin).
+   */
+  function dockBottom(gap) {
+    var doc = global.document;
+    var dock = doc && typeof doc.querySelector === 'function' ? doc.querySelector('.ad-dock') : null;
+    if (!dock || typeof dock.getBoundingClientRect !== 'function') return null;
+    var r = dock.getBoundingClientRect();
+    var h = (doc.documentElement && doc.documentElement.clientHeight) || global.innerHeight || 0;
+    if (!r || !(r.height > 0) || !h) return null;
+    return Math.max(16, Math.round(h - r.top + (gap == null ? 12 : gap)));
   }
 
   function collapseDocsOnce() {
@@ -295,6 +310,8 @@
     labelsMin: labelsMin,
     syncViewport: syncViewport,
     boot: boot,
+    GUARDED_BARS: GUARDED_BARS,
+    dockBottom: dockBottom,
   };
 
   if (global.document) {

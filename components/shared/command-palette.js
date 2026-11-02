@@ -11,6 +11,7 @@
  *   }) -> detach()
  *
  * Every view mounts it; a view without cards (Documents, Entités) still gets the view / Assistant / settings jumps.
+ * CommandPalette.open() opens the attached palette from a button (touch has no Ctrl+K).
  * reveal(selector) scrolls a row to the middle and pulses it, for views whose list is already on screen.
  * buildItems is exported for unit tests.
  */
@@ -54,6 +55,9 @@
     return true;
   }
 
+  /** The open() of the latest attach(), so a button (the phone's search icon) can open the palette without Ctrl+K. */
+  var current = null;
+
   function attach(o) {
     function open() {
       var LP = global.LinearPick;
@@ -86,8 +90,19 @@
       open();
     }
     document.addEventListener('keydown', onKey);
-    return function detach() { document.removeEventListener('keydown', onKey); };
+    current = open;
+    return function detach() {
+      document.removeEventListener('keydown', onKey);
+      if (current === open) current = null;
+    };
   }
 
-  global.CommandPalette = { attach: attach, reveal: reveal, buildItems: buildItems, activeViewKey: activeViewKey };
+  /** Opens the palette of the view (same guards as Ctrl+K). False when no view has attached one. */
+  function openCurrent() {
+    if (!current) return false;
+    current();
+    return true;
+  }
+
+  global.CommandPalette = { attach: attach, open: openCurrent, reveal: reveal, buildItems: buildItems, activeViewKey: activeViewKey };
 })(typeof window !== 'undefined' ? window : this);

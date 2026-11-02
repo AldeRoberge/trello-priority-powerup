@@ -1,0 +1,9 @@
+{
+  "name": "mindmap-model",
+  "namespace": "MindmapModelParts",
+  "note": "Load order of the parts of mindmap-model. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "mindmap-model-level.js",
+    "mindmap-model-hull.js"
+  ]
+}

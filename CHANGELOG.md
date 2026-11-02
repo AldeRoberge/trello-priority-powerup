@@ -6,12 +6,18 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 ## 2026-11-02
 
 - Notes : contenu riche comme Documents (titres, gras, couleurs, listes à cocher, tableaux, encadrés, liens) dans l'éditeur et sur les cartes.
+- Mobile : une loupe dans la barre d’onglets ouvre la recherche (cartes, projets, documents).
+- Mobile : un bouton + rond crée une nouvelle carte (Tableau, Kanban, Gantt, Mindmap, Dashboard); il se range quand une carte est ouverte ou que le clavier est affiché.
+- Archiver une carte affiche un message flottant avec Annuler (Tableau, Kanban, Gantt), aussi sur téléphone.
+- Mobile : dans le Tableau, toucher le titre d’une carte l’ouvre au lieu de lancer la saisie (renommer : menu Modifier).
+- Dashboard : le bouton + et la touche C créent une carte même sans liste Triage (dans la première liste À faire).
 - Notes : Notes devient une vue du Power-Up (onglet « Notes » à côté de Documents), avec la connexion Trello du Power-Up. L'app installable à part est retirée.
 
 ## 2026-11-01
 
 - Mobile : le Kanban défile de nouveau d'une liste à l'autre quand le doigt commence sur une barre de progression.
 - Notes : nouvelle app installable (keep.html), un clone de Google Keep avec listes à cocher, épingles, couleurs et archives, qui marche hors ligne et se synchronise avec les documents Trello.
+- Mobile : faire défiler la page avec le doigt sur le Gantt, sur la liste Triage ou sur la fiche rapide d’une carte ne planifie plus une date et ne change plus un avancement par accident.
 - Assistant : le choix Auto / Économe / Équilibré / Puissant est maintenant dans le panneau repliable du bas (flèche à côté des stats).
 - Assistant : les listes de cartes (« quoi faire aujourd'hui ») s'affichent enfin au lieu de laisser une phrase d'intro sans rien dessous.
 - Mobile : l'onglet Tâche utilise toute la largeur au lieu d'être serré au centre.

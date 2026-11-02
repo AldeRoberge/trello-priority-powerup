@@ -3,7 +3,8 @@
   "namespace": "DocsModelParts",
   "note": "Load order of the parts of docs-model. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
   "parts": [
-    "docs-model-core.js",
+    "docs-model-core-constants-naming-packing.js",
+    "docs-model-core-html.js",
     "docs-model-html-folders.js"
   ]
 }

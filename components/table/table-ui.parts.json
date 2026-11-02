@@ -1,0 +1,10 @@
+{
+  "name": "table-ui",
+  "namespace": "TableUiParts",
+  "note": "Load order of the parts of table-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "table-ui-statut.js",
+    "table-ui-section.js",
+    "table-ui.js"
+  ]
+}

@@ -405,3 +405,30 @@ describe('DashboardTrello.setAssignees', () => {
     assert.equal(inputs.length, 0);
   });
 });
+
+describe('DashboardTrello.newCardList (where "+" and the C key put a new card)', () => {
+  let DT;
+  before(() => {
+    loadComponent('statut/statut-match.js');
+    loadComponent('statut/statut-trello.js');
+    loadComponent('dashboard/dashboard-model.js');
+    loadComponent('dashboard/dashboard-trello.js');
+    DT = global.DashboardTrello;
+  });
+  const L = (id, category) => ({ id, name: id, category });
+
+  it('prefers the triage list', () => {
+    assert.equal(DT.newCardList([L('a', 'unstarted'), L('b', 'triage'), L('c', 'started')]).id, 'b');
+  });
+
+  it('on a board without a triage list, falls back to the first to do list, then backlog', () => {
+    assert.equal(DT.newCardList([L('a', 'started'), L('b', 'unstarted'), L('c', 'backlog')]).id, 'b');
+    assert.equal(DT.newCardList([L('a', 'started'), L('c', 'backlog')]).id, 'c');
+  });
+
+  it('else the first list, and null only when the board has no list at all', () => {
+    assert.equal(DT.newCardList([L('a', 'started'), L('b', 'completed')]).id, 'a');
+    assert.equal(DT.newCardList([]), null);
+    assert.equal(DT.newCardList(null), null);
+  });
+});

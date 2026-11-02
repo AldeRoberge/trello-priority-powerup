@@ -465,10 +465,12 @@
           c.classList.toggle('is-done', cur >= 100);
         }
         function move(ev) { cur = at(ev.clientX); paint(); }
-        function up() {
+        function up(ev) {
           document.removeEventListener('pointermove', move);
           document.removeEventListener('pointerup', up);
           document.removeEventListener('pointercancel', up);
+          // pointercancel is the browser taking the gesture for a scroll, not the user letting go: put the value back.
+          if (ev && ev.type === 'pointercancel') { cur = pct; paint(); return; }
           if (cur !== pct) opts.onSet(cur);
         }
         move(e);

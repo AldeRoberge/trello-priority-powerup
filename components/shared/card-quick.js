@@ -505,11 +505,13 @@
           pct = pctFromX(r.left, r.width, ev.clientX, pct);
           paintPct();
         }
-        function up() {
+        function up(ev) {
           document.removeEventListener('pointermove', at);
           document.removeEventListener('pointerup', up);
           document.removeEventListener('pointercancel', up);
           wrap.classList.remove('is-dragging');
+          // pointercancel is the browser taking the gesture for a scroll, not the user letting go: put the value back.
+          if (ev && ev.type === 'pointercancel') { pct = info.pct; paintPct(); return; }
           if (pct !== info.pct) run(function () { return setProgress(t, row, state.lists, pct); }, pct >= 100 ? 'Carte terminée' : '');
         }
         wrap.classList.add('is-dragging');

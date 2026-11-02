@@ -1,0 +1,10 @@
+{
+  "name": "kanban-ui",
+  "namespace": "KanbanUiParts",
+  "note": "Load order of the parts of kanban-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "kanban-ui-smart.js",
+    "kanban-ui-move.js",
+    "kanban-ui.js"
+  ]
+}

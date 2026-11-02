@@ -1,0 +1,14 @@
+{
+  "name": "completion-ui",
+  "namespace": "CompletionUiParts",
+  "note": "Load order of the parts of completion-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "completion-ui-master.js",
+    "completion-ui-sync.js",
+    "completion-ui-nested.js",
+    "completion-ui-suggestion.js",
+    "completion-ui-completion.js",
+    "completion-ui-selection.js",
+    "completion-ui-mount.js"
+  ]
+}

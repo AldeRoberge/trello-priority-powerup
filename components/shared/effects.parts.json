@@ -3,7 +3,8 @@
   "namespace": "EffectsParts",
   "note": "Load order of the parts of effects. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
   "parts": [
-    "effects-sounds.js",
+    "effects-sounds-sound.js",
+    "effects-sounds-play.js",
     "effects-overlays.js"
   ]
 }

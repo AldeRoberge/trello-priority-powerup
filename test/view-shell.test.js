@@ -1,6 +1,6 @@
 'use strict';
 
-const { describe, it, before } = require('node:test');
+const { describe, it, before, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -51,22 +51,61 @@ describe('ViewShell', () => {
     assert.equal(VS.NARROW_MAX, 640);
     assert.equal(VS.NARROW_MQ, '(max-width: 640px)');
   });
-});
 
-describe('ViewShell on every view page', () => {
-  const root = path.join(__dirname, '..');
-  const VT = (function () {
-    loadComponent('shared/view-tabs.js');
-    return global.ViewTabs;
-  })();
+  describe('dockBottom (where floating controls sit above the assistant dock)', () => {
+    let saved;
+    beforeEach(() => {
+      saved = { q: global.document.querySelector, de: global.document.documentElement };
+    });
+    afterEach(() => {
+      global.document.querySelector = saved.q;
+      global.document.documentElement = saved.de;
+    });
+    function withDock(rect, viewportHeight) {
+      global.document.documentElement = { clientHeight: viewportHeight };
+      global.document.querySelector = (sel) => (sel === '.ad-dock' && rect ? { getBoundingClientRect: () => rect } : null);
+    }
 
-  it('loads view-shell.css and view-shell.js next to the tab strip', () => {
-    for (const v of VT.VIEWS) {
-      const file = path.join(root, v.page);
-      const html = fs.readFileSync(file, 'utf8');
-      assert.match(html, /components\/shared\/view-shell\.css/, v.page + ' loads view-shell.css');
-      assert.match(html, /components\/shared\/view-shell\.js/, v.page + ' loads view-shell.js');
-      assert.match(html, /viewport-fit=cover/, v.page + ' has viewport-fit=cover');
+    it('hangs the control `gap` px above the dock top (12 by default)', () => {
+      withDock({ top: 600, height: 100 }, 700);
+      assert.equal(VS.dockBottom(12), 112);
+      assert.equal(VS.dockBottom(), 112);
+      assert.equal(VS.dockBottom(0), 100);
+    });
+
+    it('never goes under 16 px from the bottom', () => {
+      withDock({ top: 699, height: 1 }, 700);
+      assert.equal(VS.dockBottom(12), 16);
+    });
+
+    it('is null with no dock, or a dock that is not showing', () => {
+      withDock(null, 700);
+      assert.equal(VS.dockBottom(12), null);
+      withDock({ top: 700, height: 0 }, 700);
+      assert.equal(VS.dockBottom(12), null);
+    });
+  });
+
+  it('guards every drag bar, Triage and quick-card bars included, so a scroll never changes a progress', () => {
+    const bars = VS.GUARDED_BARS.split(',').map((s) => s.trim());
+    for (const sel of ['.kb-prog-bar', '.tb-prog-bar', '.jy-prog-bar', '.tt-prog-bar', '.cq-bar', '.gantt-bar']) {
+      assert.ok(bars.includes(sel), sel + ' is held back until the finger shows its intent');
+    }
+  });
+
+  it('gives every guarded bar a touch-action: pan-* rule on coarse pointers (JS guard and CSS stay in step)', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'components', 'shared', 'view-shell.css'), 'utf8');
+    // The "Phone pass 2" coarse block: every rule that sets touch-action: pan-y or pan-x pan-y (Kanban's lists swipe sideways).
+    const start = css.indexOf('Phone pass 2');
+    assert.ok(start >= 0, 'the phone block exists');
+    const block = css.slice(start, css.indexOf('\n}\n', start)).replace(/\/\*[\s\S]*?\*\//g, '');
+    const covered = new Set();
+    for (const m of block.matchAll(/([^{}]+)\{[^{}]*touch-action:\s*pan-[^;{}]*;[^{}]*\}/g)) {
+      m[1].split(',').forEach((sel) => covered.add(sel.trim()));
+    }
+    assert.ok(covered.size > 0, 'the coarse touch-action rules exist');
+    for (const sel of VS.GUARDED_BARS.split(',').map((x) => x.trim())) {
+      assert.ok(covered.has(sel), sel + ' has a touch-action: pan-* rule');
     }
   });
 });

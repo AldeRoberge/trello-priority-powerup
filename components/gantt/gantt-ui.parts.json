@@ -1,0 +1,13 @@
+{
+  "name": "gantt-ui",
+  "namespace": "GanttUiParts",
+  "note": "Load order of the parts of gantt-ui. Pages list these scripts in this order; scripts/check-structure.js verifies it.",
+  "parts": [
+    "gantt-ui-bar.js",
+    "gantt-ui-project.js",
+    "gantt-ui-subtask.js",
+    "gantt-ui-row.js",
+    "gantt-ui-chart.js",
+    "gantt-ui.js"
+  ]
+}

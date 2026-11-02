@@ -44,6 +44,10 @@ Every push to `main` deploys to GitHub Pages through `.github/workflows/static.y
 This is a rule for me, not a settings hook: hooks only run shell commands and cannot send the notification. Skip it only if `gh` is unavailable, and say so.
 
 
+## Code layout
+
+Read `docs/architecture.md` before editing a view or the assistant: big files are split into ordered parts (`*.parts.json`), view state lives on `M.`, shared helpers on `S.`. `npm run check` must pass (page script lists, 1500-line limit). A new script file must be added to every page that loads its component, in the manifest order.
+
 ## How to work on this app (distilled from past chats)
 
 The UI copy is French (Québec). The user writes short, informal requests and expects initiative.
