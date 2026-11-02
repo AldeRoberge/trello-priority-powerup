@@ -93,6 +93,67 @@ test('long-press: moving the finger cancels it, as before', () => {
   assert.deepEqual(card.events, []);
 });
 
+/** A mouse event that records whether the page stopped it, as the browser sends after a finger is lifted. */
+function mouse(log, type) {
+  return { stopImmediatePropagation() { log.push(type + ' stopped'); }, preventDefault() { log.push(type + ' prevented'); } };
+}
+const GHOST = ['mousedown', 'mouseup', 'click'];
+
+test('long-press: lifting the finger after a hold that opened a menu does not also tap what is under the finger', () => {
+  const { doc, timers } = load();
+  const card = target('div');
+  doc.fire('touchstart', Object.assign(touch(10, 20), { target: card }));
+  timers.run(480);
+  assert.deepEqual(card.events, ['contextmenu']);
+  doc.fire('touchend', {});
+  const log = [];
+  GHOST.forEach((t) => doc.fire(t, mouse(log, t)));
+  assert.deepEqual(log, ['mousedown stopped', 'mousedown prevented', 'mouseup stopped', 'mouseup prevented', 'click stopped', 'click prevented']);
+  const later = [];
+  doc.fire('click', mouse(later, 'click'));
+  assert.deepEqual(later, [], 'only that release is swallowed: the next tap (a menu row, say) goes through');
+});
+
+test('long-press: a plain tap, or a hold lifted before the menu, is not touched', () => {
+  const { doc, timers } = load();
+  const card = target('div');
+  doc.fire('touchstart', Object.assign(touch(10, 20), { target: card }));
+  doc.fire('touchend', {});
+  const log = [];
+  GHOST.forEach((t) => doc.fire(t, mouse(log, t)));
+  assert.deepEqual(log, [], 'a tap clicks as usual');
+  doc.fire('touchstart', Object.assign(touch(10, 20), { target: card }));
+  timers.run(479);
+  doc.fire('touchend', {});
+  GHOST.forEach((t) => doc.fire(t, mouse(log, t)));
+  assert.deepEqual(log, [], 'released at 479 ms: no menu, so the click is kept');
+  assert.deepEqual(card.events, []);
+});
+
+test('long-press: if the browser sends no click after the release, the next real tap is not eaten for long', () => {
+  const { doc, timers } = load();
+  const card = target('div');
+  doc.fire('touchstart', Object.assign(touch(10, 20), { target: card }));
+  timers.run(480);
+  doc.fire('touchend', {});
+  timers.run(300);
+  const log = [];
+  doc.fire('click', mouse(log, 'click'));
+  assert.deepEqual(log, []);
+});
+
+test('long-press: a gesture the browser cancelled (a scroll took over) swallows nothing', () => {
+  const { doc, timers } = load();
+  const card = target('div');
+  doc.fire('touchstart', Object.assign(touch(10, 20), { target: card }));
+  timers.run(480);
+  doc.fire('touchcancel', {});
+  doc.fire('touchend', {});
+  const log = [];
+  GHOST.forEach((t) => doc.fire(t, mouse(log, t)));
+  assert.deepEqual(log, []);
+});
+
 test('viewportHeight: a pinch-zoom (scale 2) does not halve the height, the keyboard still shrinks it', () => {
   assert.equal(load({ visualViewport: { height: 400, scale: 2 } }).VS.viewportHeight(), 800, 'zoomed: 400 x 2');
   assert.equal(load({ visualViewport: { height: 700, scale: 1 } }).VS.viewportHeight(), 700, 'no zoom, no keyboard');
@@ -182,5 +243,25 @@ test('both stylesheets that cover every page carry the same touch baseline (no s
     assert.match(css, /body\s*\{\s*overscroll-behavior:\s*none/, file + ': body too');
     assert.match(css, /text-size-adjust:\s*100%/, file + ': no text inflation');
     assert.match(css, /@media \(pointer: coarse\)\s*\{[^@]*button, a, label, select, summary, \[role='button'\]\s*\{\s*touch-action:\s*manipulation/, file + ': controls do not double-tap zoom');
+  }
+});
+
+test('the Table and Kanban menu sheet has its look in the narrow block of view-shell.css, next to the other sheets', () => {
+  const css = readShared('view-shell.css');
+  let found = null;
+  for (let at = css.indexOf('@media (max-width: 640px)'); at >= 0 && !found; at = css.indexOf('@media (max-width: 640px)', at + 1)) {
+    let depth = 0;
+    let i = css.indexOf('{', at);
+    const start = i + 1;
+    for (; i < css.length; i++) {
+      if (css[i] === '{') depth++;
+      else if (css[i] === '}' && --depth === 0) break;
+    }
+    const block = css.slice(start, i);
+    if (block.includes('.tp-context-menu.is-sheet')) found = block;
+  }
+  assert.ok(found, 'the narrow block that holds the ContextMenu sheet');
+  for (const sel of ['.tbm.tbm-sheet', '.tbm-sheet .tbm-subgroup', '.tbm-sheet .tbm-item.is-open .tbm-chevron', '.tbm-sheet .tbm-label']) {
+    assert.ok(found.includes(sel), sel + ' is styled for the sheet');
   }
 });

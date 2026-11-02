@@ -11,6 +11,13 @@
 
   var active = null;
 
+  /** A phone-sized screen: the menu is a sheet at the bottom, like the other menus (ContextMenu, LinearPick). */
+  function narrowScreen() {
+    var VS = global.ViewShell;
+    if (VS && typeof VS.isNarrow === 'function') return !!VS.isNarrow();
+    return (global.innerWidth || 1024) <= 640;
+  }
+
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -39,7 +46,8 @@
   function show(point, items, opts) {
     hide();
     opts = opts || {};
-    var node = el('div', 'tbm');
+    var sheet = narrowScreen();
+    var node = el('div', 'tbm' + (sheet ? ' tbm-sheet' : ''));
     node.setAttribute('role', 'menu');
     if (opts.minWidth) node.style.minWidth = opts.minWidth + 'px';
     var rows = [];
@@ -125,9 +133,12 @@
 
     function openSub(ownerEl, item) {
       if (!item.children || !item.children.length) return;
-      if (sub && sub.owner === ownerEl) return;
+      if (sub && sub.owner === ownerEl) {
+        if (sheet) closeSub(); // in a sheet a second tap folds it back
+        return;
+      }
       closeSub();
-      var fly = el('div', 'tbm tbm-sub');
+      var fly = el('div', sheet ? 'tbm-subgroup' : 'tbm tbm-sub');
       fly.setAttribute('role', 'menu');
       var subRows = [];
       item.children.forEach(function (child) {
@@ -140,12 +151,23 @@
           if (e && e.stopPropagation) e.stopPropagation();
           run(child);
         });
-        row.addEventListener('mousemove', function () {
+        // No hover on a phone, and the compatibility mouse events of a tap must not act before the click does.
+        if (!sheet) row.addEventListener('mousemove', function () {
           if (!child.disabled && sub && sub.cursor !== idx) setSubCursor(idx);
         });
         subRows.push({ el: row, item: child });
         fly.appendChild(row);
       });
+      if (sheet) {
+        // Unfold under the tapped row, inside the sheet (there is no room beside it on a phone).
+        ownerEl.classList.add('is-open');
+        ownerEl.parentNode.insertBefore(fly, ownerEl.nextSibling);
+        sub = { node: fly, rows: subRows, cursor: -1, owner: ownerEl };
+        var checkedHere = subRows.findIndex(function (r) { return r.item.checked; });
+        if (checkedHere >= 0) setSubCursor(checkedHere);
+        if (typeof fly.scrollIntoView === 'function') fly.scrollIntoView({ block: 'nearest' });
+        return;
+      }
       document.body.appendChild(fly);
       ownerEl.classList.add('is-open');
       var rect = ownerEl.getBoundingClientRect();
@@ -176,7 +198,7 @@
         if (item.children && item.children.length) openSub(row, item);
         else run(item);
       });
-      row.addEventListener('mousemove', function () {
+      if (!sheet) row.addEventListener('mousemove', function () {
         if (cursor !== idx) setCursor(idx);
         if (item.children && item.children.length) openSub(row, item);
         else closeSub();
@@ -260,15 +282,25 @@
     document.body.appendChild(node);
     var vw = global.innerWidth;
     var vh = global.innerHeight;
-    var w = node.offsetWidth;
-    var h = node.offsetHeight;
-    var left = Math.max(6, Math.min(point.x, vw - w - 6));
-    var top = point.y;
-    if (top + h > vh - 6) top = Math.max(6, (point.above != null ? point.above : point.y) - h);
-    if (top + h > vh - 6) top = Math.max(6, vh - h - 6);
-    node.style.left = Math.round(left) + 'px';
-    node.style.top = Math.round(top) + 'px';
-    node.style.maxHeight = vh - 12 + 'px';
+    if (sheet) {
+      // A panel along the bottom edge, above the home bar (the touch point does not matter).
+      node.style.left = '8px';
+      node.style.right = '8px';
+      node.style.top = 'auto';
+      node.style.width = 'auto';
+      node.style.bottom = 'max(8px, env(safe-area-inset-bottom, 0px))';
+      node.style.maxHeight = Math.round(Math.min(480, vh * 0.7)) + 'px';
+    } else {
+      var w = node.offsetWidth;
+      var h = node.offsetHeight;
+      var left = Math.max(6, Math.min(point.x, vw - w - 6));
+      var top = point.y;
+      if (top + h > vh - 6) top = Math.max(6, (point.above != null ? point.above : point.y) - h);
+      if (top + h > vh - 6) top = Math.max(6, vh - h - 6);
+      node.style.left = Math.round(left) + 'px';
+      node.style.top = Math.round(top) + 'px';
+      node.style.maxHeight = vh - 12 + 'px';
+    }
 
     var checked = rows.findIndex(function (r) {
       return r.item.checked;

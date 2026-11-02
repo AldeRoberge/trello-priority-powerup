@@ -284,6 +284,29 @@ html:has(body.tp-page--journey) body {
     max-height: min(70dvh, 480px);
     border-radius: 16px;
   }
+  /* Table / Kanban menus (components/table/table-menu.js): the same sheet; submenus unfold under their row. */
+  .tbm.tbm-sheet {
+    max-width: none;
+    border-radius: 16px;
+  }
+  .tbm-sheet .tbm-item,
+  .tbm-sheet .tbm-title {
+    white-space: normal;
+  }
+  .tbm-sheet .tbm-label,
+  .tbm-sheet .tbm-title {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .tbm-sheet .tbm-subgroup {
+    margin: 0 0 4px 22px;
+    padding-left: 8px;
+    border-left: 2px solid var(--tp-border);
+  }
+  .tbm-sheet .tbm-item.is-open .tbm-chevron {
+    transform: rotate(90deg);
+  }
 
   .nc-scrim {
     padding-top: 8px;

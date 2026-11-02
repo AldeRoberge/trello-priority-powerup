@@ -22,6 +22,17 @@ function node(tag) {
     setAttribute(k, v) { this.attrs[k] = String(v); if (k === 'class') this._class = String(v); },
     getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
     appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
+    insertBefore(n, ref) {
+      if (n.parentNode) n.parentNode.removeChild(n);
+      const i = ref ? this.children.indexOf(ref) : -1;
+      n.parentNode = this;
+      if (i < 0) this.children.push(n); else this.children.splice(i, 0, n);
+      return n;
+    },
+    get nextSibling() {
+      const sibs = this.parentNode ? this.parentNode.children : [];
+      return sibs[sibs.indexOf(this) + 1] || null;
+    },
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parentNode = null; return c; },
     addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
     removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn); },

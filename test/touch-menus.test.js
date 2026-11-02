@@ -24,6 +24,8 @@ function load(file, opts) {
   doc.createElement = (tag) => {
     const el = create(tag);
     el.focus = () => focused.push(el);
+    el.offsetWidth = 220; // a menu has a size once it is on the page
+    el.offsetHeight = 160;
     return el;
   };
   const win = node('window');
@@ -35,6 +37,7 @@ function load(file, opts) {
     clearTimeout: timers.clearTimeout,
     matchMedia: (q) => ({ matches: /coarse/.test(q) && !!opts.coarse }),
   });
+  if (opts.viewShell) win.ViewShell = opts.viewShell;
   const ctx = vm.createContext({ window: win, document: doc, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout });
   vm.runInContext(fs.readFileSync(file, 'utf8'), ctx);
   return { win, doc, timers, focused };
@@ -90,6 +93,115 @@ test('TableMenu: hiding removes its listeners (nothing left behind)', () => {
   assert.equal(env.menu(), undefined);
   assert.equal((env.doc.listeners.pointerdown || []).length, 0);
   assert.equal((env.win.listeners.resize || []).length, 0);
+});
+
+/* ── TableMenu as a bottom sheet on a phone, submenus unfolding in place ─────── */
+
+const withKids = () => {
+  const ran = [];
+  const act = (name) => () => ran.push(name);
+  return {
+    ran,
+    items: [
+      { label: 'Archiver', action: act('archiver') },
+      { label: 'Modifier', children: [{ label: 'Nom', action: act('nom') }, { label: 'Échéance', action: act('echeance') }] },
+      { label: 'Trier', children: [{ label: 'Priorité', action: act('priorite') }] },
+      { label: 'Ouvrir', action: act('ouvrir') },
+    ],
+  };
+};
+const rowNamed = (menu, label) => findAll(menu, (n) => n.classList.contains('tbm-item') && /tbm-label/.test(JSON.stringify(n.children.map((c) => c.className))) && n.children.some((c) => c.className === 'tbm-label' && c.textContent === label))[0];
+const tap = (row) => row.fire('click', {});
+
+test('TableMenu sheet: on a narrow screen the menu lies along the bottom edge, above the home bar', () => {
+  const env = tableMenu({ width: 390 });
+  env.TM.show({ x: 200, y: 300 }, withKids().items);
+  const st = env.menu().style;
+  assert.ok(env.menu().classList.contains('tbm-sheet'));
+  assert.deepEqual([st.left, st.right, st.top, st.width], ['8px', '8px', 'auto', 'auto']);
+  assert.match(st.bottom, /env\(safe-area-inset-bottom/);
+  assert.equal(st.maxHeight, '480px'.replace('480', String(Math.round(Math.min(480, 800 * 0.7)))), 'at most 70 % of the screen, 480 px');
+});
+
+test('TableMenu sheet: on a wide screen nothing changes (a floating menu at the touch point)', () => {
+  const env = tableMenu({ width: 1280 });
+  env.TM.show({ x: 200, y: 300 }, withKids().items);
+  const m = env.menu();
+  assert.ok(!m.classList.contains('tbm-sheet'));
+  assert.equal(m.style.left, '200px');
+  assert.equal(m.style.top, '300px');
+  assert.equal(m.style.bottom, undefined);
+});
+
+test('TableMenu sheet: ViewShell decides when it is loaded (the same rule as the other menus)', () => {
+  const narrow = tableMenu({ width: 1280, viewShell: { isNarrow: () => true } });
+  narrow.TM.show({ x: 5, y: 5 }, withKids().items);
+  assert.ok(narrow.menu().classList.contains('tbm-sheet'));
+  const wide = tableMenu({ width: 390, viewShell: { isNarrow: () => false } });
+  wide.TM.show({ x: 5, y: 5 }, withKids().items);
+  assert.ok(!wide.menu().classList.contains('tbm-sheet'));
+});
+
+test('TableMenu sheet: a submenu unfolds right under its row, inside the sheet, and folds back on a second tap', () => {
+  const env = tableMenu({ width: 390 });
+  env.TM.show({ x: 5, y: 5 }, withKids().items);
+  const menu = env.menu();
+  const modifier = rowNamed(menu, 'Modifier');
+  tap(modifier);
+  const group = classes(menu, 'tbm-subgroup')[0];
+  assert.ok(group, 'the children are in the sheet');
+  assert.equal(menu.children[menu.children.indexOf(modifier) + 1], group, 'right under Modifier');
+  assert.equal(classes(env.doc.body, 'tbm-sub').length, 0, 'no floating flyout');
+  assert.ok(modifier.classList.contains('is-open'));
+  assert.deepEqual(group.children.map((r) => r.children.find((c) => c.className === 'tbm-label').textContent), ['Nom', 'Échéance']);
+  tap(modifier);
+  assert.equal(classes(menu, 'tbm-subgroup').length, 0, 'folded back');
+  assert.ok(!modifier.classList.contains('is-open'));
+  assert.ok(env.menu(), 'and the menu stays open');
+});
+
+test('TableMenu sheet: opening another submenu folds the first, and a child runs its action once and closes the menu', () => {
+  const kids = withKids();
+  const env = tableMenu({ width: 390 });
+  env.TM.show({ x: 5, y: 5 }, kids.items);
+  const menu = env.menu();
+  tap(rowNamed(menu, 'Modifier'));
+  tap(rowNamed(menu, 'Trier'));
+  const groups = classes(menu, 'tbm-subgroup');
+  assert.equal(groups.length, 1, 'one at a time');
+  assert.ok(!rowNamed(menu, 'Modifier').classList.contains('is-open'));
+  assert.ok(rowNamed(menu, 'Trier').classList.contains('is-open'));
+  tap(groups[0].children[0]);
+  assert.deepEqual(kids.ran, ['priorite']);
+  assert.equal(env.menu(), undefined, 'the menu closed');
+});
+
+test('TableMenu sheet: a plain row still runs its action and closes the menu', () => {
+  const kids = withKids();
+  const env = tableMenu({ width: 390 });
+  env.TM.show({ x: 5, y: 5 }, kids.items);
+  tap(rowNamed(env.menu(), 'Archiver'));
+  assert.deepEqual(kids.ran, ['archiver']);
+  assert.equal(env.menu(), undefined);
+});
+
+test('TableMenu sheet: rows have no hover handlers (the mouse events of a tap must not act before the click)', () => {
+  const sheet = tableMenu({ width: 390 });
+  sheet.TM.show({ x: 5, y: 5 }, withKids().items);
+  assert.equal(findAll(sheet.menu(), (n) => n.classList.contains('tbm-item') && (n.listeners.mousemove || []).length).length, 0);
+  tap(rowNamed(sheet.menu(), 'Modifier'));
+  assert.equal(findAll(sheet.menu(), (n) => n.classList.contains('tbm-item') && (n.listeners.mousemove || []).length).length, 0, 'children too');
+  const wide = tableMenu({ width: 1280 });
+  wide.TM.show({ x: 5, y: 5 }, withKids().items);
+  assert.ok(findAll(wide.menu(), (n) => n.classList.contains('tbm-item') && (n.listeners.mousemove || []).length).length >= 3, 'desktop keeps hover');
+});
+
+test('TableMenu on a wide screen: the submenu is still a floating flyout beside its row', () => {
+  const env = tableMenu({ width: 1280 });
+  env.TM.show({ x: 5, y: 5 }, withKids().items);
+  tap(rowNamed(env.menu(), 'Modifier'));
+  assert.equal(classes(env.doc.body, 'tbm-sub').length, 1);
+  assert.equal(classes(env.menu(), 'tbm-subgroup').length, 0);
 });
 
 /* ── LinearPick (statut, urgence, échéance pickers) ───────────────────── */

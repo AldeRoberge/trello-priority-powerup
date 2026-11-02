@@ -5,6 +5,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Mobile : les menus du Tableau et du Kanban s’ouvrent en bas de l’écran comme ceux du Gantt, et leurs sous-menus se déplient sous la ligne touchée.
+- Mobile : relever le doigt après un appui long n’ouvre plus la carte qui se trouve derrière le menu.
 - Mobile : les menus et sélecteurs restent au-dessus de la barre d’accueil, n’ouvrent plus le clavier tout seuls, se ferment d’un toucher à côté (iOS compris) et restent ouverts quand le clavier apparaît.
 - Mobile : les lignes du menu des cartes du Tableau et du Kanban sont plus hautes au toucher.
 - Mobile : l’onglet de la vue en cours affiche son nom (les autres restent des icônes).

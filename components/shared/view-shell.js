@@ -11,6 +11,7 @@
   var NARROW_MQ = '(max-width: 640px)';
   var COARSE_MQ = '(pointer: coarse)';
   var LONG_PRESS_MS = 480;
+  var SWALLOW_MS = 300;
   var MOVE_PX = 12;
   var booted = false;
 
@@ -90,6 +91,8 @@
     if (!doc || typeof doc.addEventListener !== 'function') return;
     var timer = null;
     var start = null;
+    var fired = false; // the hold became a menu
+    var swallow = false; // the next mouse events are the release of that hold
 
     function clear() {
       if (timer) {
@@ -118,12 +121,15 @@
       } catch (e) {
         return;
       }
+      fired = true;
       t.target.dispatchEvent(ev);
     }
 
     doc.addEventListener(
       'touchstart',
       function (e) {
+        fired = false;
+        swallow = false;
         if (!e || !e.touches || e.touches.length !== 1) return;
         if (isEditable(e.target)) return; // no app menu over the OS caret / selection / paste bubble
         var t = e.touches[0];
@@ -141,8 +147,33 @@
       },
       { passive: true }
     );
-    doc.addEventListener('touchend', clear, { passive: true });
-    doc.addEventListener('touchcancel', clear, { passive: true });
+    // Releasing the finger after a hold still sends mousedown, mouseup and click to the press point. A menu that sits
+    // under the finger absorbs them, but a bottom sheet does not: the click would open the card behind it.
+    doc.addEventListener(
+      'touchend',
+      function () {
+        var turnedIntoMenu = fired;
+        fired = false;
+        clear();
+        if (!turnedIntoMenu) return;
+        swallow = true;
+        global.setTimeout(function () { swallow = false; }, SWALLOW_MS); // in case the browser sent no click
+      },
+      { passive: true }
+    );
+    doc.addEventListener('touchcancel', function () { fired = false; clear(); }, { passive: true });
+    ['mousedown', 'mouseup', 'click'].forEach(function (type) {
+      doc.addEventListener(
+        type,
+        function (e) {
+          if (!swallow) return;
+          if (type === 'click') swallow = false; // the last of the three
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        },
+        true
+      );
+    });
   }
 
 
