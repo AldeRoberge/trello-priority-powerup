@@ -134,4 +134,32 @@ describe('Notes sync (device <-> Documents cards)', () => {
     assert.equal(remoteCards().length, 1);
     assert.equal(DM.unpackDesc(remoteCards()[0].desc).body, 'a2');
   });
+  it('keeps an edit typed while the sync is talking to Trello', async () => {
+    const doc = await DT.createDoc(fake.t, 'A', 'a');
+    await sync.run();
+    await sync.save({ ...(await store.get(doc.id)), body: 'a2' });
+    const real = KS.trelloApi(fake.t);
+    let typed = false;
+    const slow = KS.create({
+      store,
+      api: {
+        ...real,
+        save: async (n) => {
+          const r = await real.save(n);
+          if (!typed) {
+            typed = true;
+            await sync.save({ ...(await store.get(doc.id)), body: 'a3' }); // typed during the request
+          }
+          return r;
+        },
+      },
+    });
+    await slow.run();
+    const rec = await store.get(doc.id);
+    assert.equal(rec.body, 'a3');
+    assert.equal(rec.dirty, true);
+    await slow.run();
+    assert.equal(DM.unpackDesc(remoteCards()[0].desc).body, 'a3');
+    assert.equal((await store.get(doc.id)).dirty, false);
+  });
 });

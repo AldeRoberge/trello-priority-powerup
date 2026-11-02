@@ -385,7 +385,7 @@
       var pre = M.state.current && !opts.skipSave ? M.saveNow() : Promise.resolve(true);
       return pre.then(function (ok) {
         if (token !== M.loadToken) return;
-        if (!ok && M.state.current && (M.state.saveState === 'error' || M.state.saveState === 'conflict')) {
+        if (!ok && M.state.current && (M.state.saveState === 'error' || M.state.saveState === 'conflict') && !M.readDraft(M.state.current.id)) {
           return M.dialog({
             title: 'Changer de document ?',
             text: 'Les dernières modifications de « ' + (M.state.current.title || 'ce document') + ' » n’ont pas pu être enregistrées. Elles seront perdues.',
@@ -421,6 +421,7 @@
             M.rebuildIndex();
             M.buildEditor(doc);
             M.setSave('saved');
+            M.restoreDraft(doc);
             S.remember(S.LAST_KEY, id);
             M.paintList();
             M.els.scroll.scrollTop = 0;
@@ -481,7 +482,43 @@
         M.newDoc(S.DM().cleanTitle((doc.title || S.DM().UNTITLED) + ' (copie)'), doc.body, null, null, doc.cover);
       }, M.failure);
     };
+    /* An unsent copy from an earlier session or a failed save wins over the stored version: it is then saved, or goes through the usual conflict choice. */
+    M.restoreDraft = function restoreDraft(doc) {
+      var dr = M.readDraft(doc.id);
+      if (!dr || !M.editor) return;
+      if (dr.body === doc.body && dr.title === doc.title) { M.clearDraft(doc.id); return; }
+      if (typeof dr.body === 'string' && dr.body !== doc.body) {
+        M.editor.innerHTML = S.DM().mdToHtml(dr.body);
+        M.ensureTail();
+        M.fixImages();
+        M.fixTables();
+        M.hydrateImages();
+        M.refreshChips();
+      }
+      if (typeof dr.title === 'string' && dr.title !== doc.title) {
+        M.els.title.value = dr.title === S.DM().UNTITLED ? '' : dr.title;
+        M.fitTitle();
+        doc.title = dr.title;
+      }
+      doc.rev = dr.rev != null ? dr.rev : doc.rev;
+      M.paintEmptyClass();
+      M.setSave('dirty');
+      M.scheduleSave(300);
+    };
+    M.draftKey = function draftKey(id) { return 'doc.' + id; };
+    M.readDraft = function readDraft(id) { return global.Connection ? global.Connection.readDraft(M.draftKey(id)) : null; };
+    M.clearDraft = function clearDraft(id) { if (global.Connection) global.Connection.clearDraft(M.draftKey(id)); };
+    /* Every unsent edit is copied to this device first, so a failed save, a closed tab or a lost connection never loses it. */
+    M.keepDraft = function keepDraft() {
+      var cur = M.state.current;
+      if (!cur || !M.editor || !global.Connection) return;
+      var md = S.DM().domToMd(M.editor);
+      var title = S.DM().cleanTitle(M.els.title.value) || S.DM().UNTITLED;
+      if (md === M.lastMd && title === M.savedTitle) { M.clearDraft(cur.id); return; }
+      global.Connection.writeDraft(M.draftKey(cur.id), { body: md, title: title, rev: cur.rev });
+    };
     M.scheduleSave = function scheduleSave(ms) {
+      M.keepDraft();
       clearTimeout(M.saveTimer);
       M.saveTimer = setTimeout(function () { M.saveNow(); }, ms == null ? S.SAVE_DELAY_MS : ms);
     };
@@ -506,6 +543,12 @@
       }
       if (bodyChanged && S.DM().sizeInfo(md).over) {
         M.setSave('error', 'Document trop long : réduisez-le pour enregistrer.');
+        return Promise.resolve(false);
+      }
+      M.keepDraft();
+      if (global.Connection && global.Connection.offline() && !opts.force) {
+        M.setSave('offline');
+        M.retryLater();
         return Promise.resolve(false);
       }
       M.saving = true;
@@ -546,6 +589,7 @@
           M.saving = false;
           if (M.state.current !== cur) return true;
           var stillDirty = M.editor && (S.DM().domToMd(M.editor) !== M.lastMd || (S.DM().cleanTitle(M.els.title.value) || S.DM().UNTITLED) !== M.savedTitle);
+          M.keepDraft();
           M.setSave(stillDirty ? 'dirty' : 'saved');
           if (stillDirty) M.scheduleSave(300);
           M.paintMeta();
@@ -557,6 +601,9 @@
             M.state.conflict = err.remote;
             M.setSave('conflict', 'Modifié ailleurs');
             M.paintConflict();
+          } else if (global.Connection && global.Connection.isNetworkError(err)) {
+            M.setSave('offline');
+            M.retryLater();
           } else {
             if (S.isAuthReason(err)) {
               M.state.authOk = false;
@@ -567,6 +614,13 @@
           return false;
         }
       );
+    };
+    /* While offline the spinner is honest: we retry every few seconds and as soon as the browser says the network is back. */
+    M.retryLater = function retryLater() {
+      clearTimeout(M.retryTimer);
+      M.retryTimer = setTimeout(function () {
+        if (M.state.saveState === 'offline') M.saveNow({ retry: true });
+      }, 5000);
     };
     M.paintConflict = function paintConflict() {
       var c = M.els.conflict;
@@ -581,6 +635,7 @@
           onclick: function () {
             M.state.conflict = null;
             c.hidden = true;
+            M.clearDraft(M.state.current.id);
             M.openDoc(M.state.current.id, { reload: true, skipSave: true });
           },
         }, [S.icon('refresh'), 'Charger sa version'])
@@ -1133,7 +1188,11 @@
               });
             }
             var last = S.recall(S.LAST_KEY);
-            var pick = docs.filter(function (d) { return d.id === last; })[0]
+            var drafted = docs.map(function (d) { return { d: d, dr: M.readDraft(d.id) }; })
+              .filter(function (x) { return x.dr; })
+              .sort(function (a, b) { return b.dr.at - a.dr.at; })[0];
+            var pick = (drafted && drafted.d)
+              || docs.filter(function (d) { return d.id === last; })[0]
               || docs.filter(function (d) { return !(d.subject && d.subject.k === 'day'); })[0]
               || docs[0];
             if (pick) return M.openDoc(pick.id, { skipSave: true });
@@ -1251,7 +1310,14 @@
       if (document.visibilityState === 'hidden') M.saveNow();
       else M.refreshRemote();
     });
+    if (global.Connection) {
+      global.Connection.onChange(function (off) {
+        if (off) { if (M.state.saveState === 'dirty') M.setSave('offline'); return; }
+        if (M.state.saveState === 'offline') M.saveNow({ retry: true });
+      });
+    }
     global.addEventListener('pagehide', function () {
+      M.keepDraft();
       M.histFlush();
       M.flushCover();
       M.saveNow();

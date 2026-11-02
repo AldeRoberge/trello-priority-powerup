@@ -125,8 +125,8 @@
       statusEl.className = 'k-status is-' + s;
       statusEl.textContent = '';
       statusEl.hidden = s !== 'offline' && s !== 'syncing' && !pending;
-      var name = s === 'offline' ? 'cloud-off' : 'refresh';
-      statusEl.appendChild(icon(name));
+      if (s === 'offline' && global.Connection) statusEl.appendChild(global.Connection.indicator());
+      else statusEl.appendChild(icon(s === 'offline' ? 'cloud-off' : 'refresh'));
       if (pending) statusEl.appendChild(el('span', 'k-pending', { text: String(pending) }));
       statusEl.title = s === 'offline' ? 'Hors ligne' : 'En attente d’envoi';
     }

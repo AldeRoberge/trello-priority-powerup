@@ -5,6 +5,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-02
 
+- Hors ligne : un lien brisé avec une roue qui tourne remplace le message (Documents, Notes). Les modifications sont gardées sur l’appareil, renvoyées dès le retour du réseau, et une note modifiée pendant une synchronisation n’est plus écrasée.
 - Notes : l’écran ressemble à Google Keep : une seule barre de recherche arrondie avec menu (Notes, Archives), un bouton + rond pour créer une note, une barre du bas pour une nouvelle liste; les cartes sont épurées et l’épingle, l’archivage et la suppression sont dans la note ouverte.
 - Mobile : un appui long dans un champ de texte ouvre de nouveau le menu du téléphone (curseur, sélection, coller) au lieu du menu de l’application.
 - Mobile : les boutons qui n’apparaissaient qu’au survol (+ du Triage, IA du Kanban, épingle d’Aujourd’hui, retirer une date du Gantt, copier / modifier / pouces des messages) restent visibles, discrets, sur écran tactile.

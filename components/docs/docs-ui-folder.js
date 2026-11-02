@@ -110,6 +110,10 @@
       s.textContent = '';
       if (!M.state.current) return;
       var k = M.state.saveState;
+      if (k === 'offline' && global.Connection) {
+        s.appendChild(global.Connection.indicator());
+        return;
+      }
       if (k === 'saved') s.appendChild(S.icon('cloud-check'));
       else if (k === 'dirty') s.appendChild(S.icon('pencil'));
       else if (k === 'saving') s.appendChild(S.icon('loader-2', 'dc-spin'));
@@ -1093,7 +1097,7 @@
       sources: null,
       index: null,
       entityPack: null,
-      saveState: 'saved', // saved | dirty | saving | error | conflict
+      saveState: 'saved', // saved | dirty | saving | offline | error | conflict
       saveMsg: '',
       conflict: null,
       busy: '',
