@@ -3,6 +3,10 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-02
+
+- Notes : Notes devient une vue du Power-Up (onglet « Notes » à côté de Documents), avec la connexion Trello du Power-Up. L'app installable à part est retirée.
+
 ## 2026-11-01
 
 - Mobile : le Kanban défile de nouveau d'une liste à l'autre quand le doigt commence sur une barre de progression.
