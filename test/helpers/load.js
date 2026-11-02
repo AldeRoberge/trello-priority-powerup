@@ -92,6 +92,13 @@ function installBrowserShim() {
 function loadComponent(relPath) {
   installBrowserShim();
   const abs = path.join(COMPONENTS, relPath);
+  // A component split into parts ("agent/agent.js" -> agent.parts.json) loads every part in order.
+  const manifest = abs.replace(/\.js$/, '.parts.json');
+  if (!fs.existsSync(abs) && fs.existsSync(manifest)) {
+    const parts = JSON.parse(fs.readFileSync(manifest, 'utf8')).parts;
+    parts.forEach((part) => require(path.join(path.dirname(abs), part)));
+    return global;
+  }
   if (!fs.existsSync(abs)) {
     throw new Error(`Component not found: ${abs}`);
   }

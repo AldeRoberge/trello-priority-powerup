@@ -1,0 +1,21 @@
+{
+  "name": "agent",
+  "namespace": "PriorityAgentParts",
+  "note": "Load order of the AI agent parts. Pages list these scripts in this order; scripts/check-pages.js verifies it.",
+  "parts": [
+    "agent-base.js",
+    "agent-provider.js",
+    "agent-context.js",
+    "agent-suggest.js",
+    "agent-chat-store.js",
+    "agent-parse.js",
+    "agent-chat-turn.js",
+    "agent-dream.js",
+    "agent-actions-card.js",
+    "agent-actions-subtasks.js",
+    "agent-actions-assistant.js",
+    "agent-actions-board.js",
+    "agent-actions.js",
+    "agent-api.js"
+  ]
+}

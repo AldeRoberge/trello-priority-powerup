@@ -13,6 +13,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-11-01
 
+- Mobile : le Kanban défile de nouveau d'une liste à l'autre quand le doigt commence sur une barre de progression.
+- Notes : nouvelle app installable (keep.html), un clone de Google Keep avec listes à cocher, épingles, couleurs et archives, qui marche hors ligne et se synchronise avec les documents Trello.
 - Mobile : faire défiler la page avec le doigt sur le Gantt, sur la liste Triage ou sur la fiche rapide d’une carte ne planifie plus une date et ne change plus un avancement par accident.
 - Assistant : le choix Auto / Économe / Équilibré / Puissant est maintenant dans le panneau repliable du bas (flèche à côté des stats).
 - Assistant : les listes de cartes (« quoi faire aujourd'hui ») s'affichent enfin au lieu de laisser une phrase d'intro sans rien dessous.
@@ -20,6 +22,7 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 
 ## 2026-10-31
 
+- Documents : synchro avec Google Keep dans les deux sens (comptes Workspace), avec des listes « To bring to Kate in Kirkland Lake » créées automatiquement à partir des tâches à apporter (`npm run setup:keep`).
 - Triage : double-clic sur le titre d’une tâche dans la liste pour le renommer sur place.
 - Une carte dans la liste Terminé passe automatiquement à 100 % (Tableau et Kanban), y compris celles qui y étaient déjà.
 - Triage : nouvelle colonne « Lieu » et bouton pour afficher toutes les tâches ouvertes des projets, pas seulement celles à trier.

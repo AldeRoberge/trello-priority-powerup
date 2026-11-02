@@ -9,6 +9,7 @@
 //   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
 //   POST /alerts/ack             acknowledge CRITICAL alerts
 //   POST /documents/sync         reconcile Documents ↔ the Drive folder now
+//   POST /keep/sync              reconcile Documents ↔ Google Keep notes now (Workspace)
 //   GET  /unsplash?q=            Unsplash photos for document covers (secret UNSPLASH_ACCESS_KEY)
 //   POST /webhook/register       (re)register the Trello webhook
 // Everything except the webhook and /health needs the header x-sync-secret.
@@ -34,6 +35,7 @@ import { describeAction, isDocumentAction, isEntityAction } from './webhook.js';
 import { ensureWebhook } from './trello.js';
 import { searchWeb } from './search.js';
 import { searchUnsplash } from './unsplash.js';
+import { keepEnabled, syncAllKeep, keepSyncStatus } from './keep.js';
 import { driveEnabled, syncDocumentCard, syncAllDocuments, docSyncStatus } from './drive.js';
 
 function corsHeaders(request, env) {
@@ -116,6 +118,7 @@ export default {
           defaults: DEFAULT_COLUMNS,
           lastSync,
           documents: { enabled: driveEnabled(env), folderUrl: driveEnabled(env) ? `https://drive.google.com/drive/folders/${env.GOOGLE_DRIVE_FOLDER_ID}` : '', status: docSyncStatus },
+          keep: { enabled: keepEnabled(env), status: keepSyncStatus },
           alerts: await readAlerts(env),
         });
       }
@@ -124,8 +127,9 @@ export default {
         const saved = await saveSettings(env, { columns: body.columns, logLevel: body.logLevel, sheetTheme: body.sheetTheme });
         return json(request, env, { ...saved, sync: await runSync(env, { forceFormat: true }) });
       }
-      if (url.pathname === '/sync' && request.method === 'POST') return json(request, env, { ...(await runSync(env)), documents: await syncAllDocuments(env) });
+      if (url.pathname === '/sync' && request.method === 'POST') return json(request, env, { ...(await runSync(env)), documents: await syncAllDocuments(env), keep: await syncAllKeep(env) });
       if (url.pathname === '/documents/sync' && request.method === 'POST') return json(request, env, await syncAllDocuments(env));
+      if (url.pathname === '/keep/sync' && request.method === 'POST') return json(request, env, await syncAllKeep(env));
       if (url.pathname === '/push' && request.method === 'POST') {
         const body = await request.json();
         return json(request, env, await pushComputed(env, Array.isArray(body.cards) ? body.cards : []));
@@ -163,6 +167,7 @@ export default {
       (async () => {
         // Drive has no push either: one pass a minute picks up edits and new .md files (unchanged boards are two reads)
         await syncAllDocuments(env).catch((e) => console.error('documents sync failed', e));
+        await syncAllKeep(env).catch((e) => console.error('keep sync failed', e));
         await watchSheet(env).catch((e) => console.error('scheduled sync failed', e));
       })(),
     );

@@ -73,6 +73,19 @@ Le script demande le dossier Drive (collez l'URL d'un dossier d'un **Drive parta
 
 **Limite** : un compte de service n'a aucun quota de stockage. Sur un compte Google personnel, les fichiers sont donc créés avec votre compte (autorisation Drive demandée une fois). Un dossier de Drive partagé fonctionne aussi, sans cette autorisation. Sans `GOOGLE_DRIVE_FOLDER_ID`, la copie Drive est simplement désactivée.
 
+## Synchronisation Google Keep
+
+Comptes **Google Workspace** seulement (l'API Keep refuse les Gmail personnels). Un document et une note Keep de même titre se suivent dans les deux sens (environ une minute). En cas de modification des deux côtés en même temps, Trello gagne.
+
+- Notes suivies : les titres du réglage `KEEP_LISTS` (par défaut « To sell/to buy », « Todo in Rouyn », « Things to pack for Cottage ») et toute liste « To bring to … ». Les autres notes ne sont jamais touchées.
+- Une note Keep suivie qui n'a pas de document en devient un. Une note Keep supprimée est réécrite depuis le document.
+- Listes automatiques : les tâches ouvertes à apporter à une personne ou à un lieu forment « To bring to Kate in Kirkland Lake ». Cocher une ligne (dans le document ou dans Keep) termine la tâche.
+- Format : `## Section` devient un élément parent dans Keep et ses cases ses sous-éléments (un seul niveau). Une note texte reste du texte.
+- **Limite de l'API Keep** : elle ne peut pas modifier une note. Un changement venu de Trello crée une nouvelle note puis supprime l'ancienne (couleur, épingle et étiquettes sont perdues).
+- `POST /keep/sync` force une passe ; `GET /info` donne `keep.status`.
+
+Installation, une fois (après `npm run setup:sheet-sync`) : `npm run setup:keep`. Un administrateur Workspace doit activer l'API Keep et autoriser le compte de service (délégation à l'échelle du domaine, scope `https://www.googleapis.com/auth/keep`) ; le script affiche l'ID client à saisir.
+
 ## Synchronisation Google Sheets
 
 Le Worker ignore les événements des cartes `📄` côté Sheet (sinon chaque sauvegarde automatique remplirait l'onglet **Activités** et déclencherait une synchronisation) ; ils ne servent qu'à la copie Drive ci-dessus. Après avoir récupéré cette version, redéployez le Worker une fois :

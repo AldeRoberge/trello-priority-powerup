@@ -58,6 +58,7 @@
         <dl>
           <dt>Google Sheet</dt><dd><a id="sheetLink" href="#" target="_blank" rel="noopener"></a></dd>
           <dt>Google Drive</dt><dd><a id="driveLink" target="_blank" rel="noopener">—</a></dd>
+          <dt>Google Keep</dt><dd id="keepState">—</dd>
           <dt>Worker</dt><dd id="workerUrl"></dd>
           <dt>Dernière synchronisation</dt><dd id="lastSync">—</dd>
           <dt>Colonnes</dt><dd id="columns">—</dd>
@@ -148,6 +149,9 @@
             driveLink.removeAttribute('href');
             driveLink.textContent = '—';
           }
+          var kp = d.keep || {};
+          var ks = kp.status || {};
+          $('keepState').textContent = !kp.enabled ? '—' : ks.ok === false ? 'Erreur : ' + ks.error : ks.at ? 'Synchronisé ' + new Date(ks.at).toLocaleString('fr-CA') : 'Actif';
           size();
         });
       }

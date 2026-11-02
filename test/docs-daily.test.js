@@ -102,4 +102,16 @@ describe('daily document', () => {
     assert.deepEqual(DM.unpackDesc(DM.packDesc('x', { subject: { k: 'day', id: 'today' } })).subject, { k: 'day', id: 'today' });
     assert.equal(DM.normalizeSubject('day:other'), null);
   });
+  it('builds one "To bring to" list per recipient for Google Keep', () => {
+    const lists = DD.bringLists([
+      row('e', 'Pumpkins', { inputs: { customAssignees: [{ name: 'Kate' }], places: { to: { name: 'Kirkland Lake' } } } }),
+      row('f', 'Candy', { inputs: { customAssignees: [{ name: 'Kate' }], places: { to: { name: 'Kirkland Lake' } } } }),
+      row('g', 'Pegs', { inputs: { places: { to: { name: 'Chalet' } } } }),
+      row('h', 'Back', { inputs: { places: { from: { name: 'Chalet' } }, customAssignees: [{ name: 'Kate' }] } }),
+      row('i', 'Done', { statutKey: 'completed', inputs: { customAssignees: [{ name: 'Kate' }] } }),
+      row('j', 'Nobody'),
+    ]);
+    assert.deepEqual(lists.map((l) => l.title), ['To bring to Kate in Kirkland Lake', 'To bring to Chalet']);
+    assert.deepEqual(lists[0].items.map((i) => i.name).sort(), ['Candy', 'Pumpkins']);
+  });
 });

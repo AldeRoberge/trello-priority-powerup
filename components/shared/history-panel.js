@@ -141,6 +141,8 @@
       if (state.items.length > max) state.items.length = max;
       persist();
       changed();
+      // An archive offers its undo at once ("« X » archivée · Annuler"), the same in every view that records one.
+      if (e.type === 'archive' && cfg.toast !== false) toast(e, '\u00ab ' + (e.title || 'Carte') + ' \u00bb archiv\u00e9e');
       return e;
     }
 

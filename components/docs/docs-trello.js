@@ -190,6 +190,7 @@
           updatedAt: c.dateLastActivity || '',
           size: u.body.length,
           body: u.body,
+          rev: u.rev,
           subject: u.subject,
           props: u.props,
           icon: u.icon,
@@ -865,6 +866,50 @@
   }
 
   /**
+   * Keeps one "To bring to Kate in Kirkland Lake" document per recipient (the Worker mirrors them to
+   * Google Keep). Open tasks are added as checkbox lines; a line ticked in the document (or in Keep)
+   * completes its task and goes away; lines the user typed are kept.
+   */
+  async function syncBringLists(t, rows, docs) {
+    var DD = global.DocsDaily;
+    if (!DD || typeof DD.bringLists !== 'function') return;
+    var RE_LINE = /^\s{0,3}[-*+]\s+\[( |x|X)\][ \t]+(.*)$/;
+    var RE_TASK = /\(task:([A-Za-z0-9_-]+)\)/;
+    var wanted = DD.bringLists(rows);
+    var i;
+    for (i = 0; i < wanted.length; i++) {
+      var list = wanted[i];
+      var open = Object.create(null);
+      list.items.forEach(function (it) { open[it.id] = it; });
+      var found = (docs || []).filter(function (d) { return d.title === list.title; })[0];
+      var lines = [];
+      var seen = Object.create(null);
+      if (found) {
+        var doc0 = await loadDoc(t, found.id);
+        String(doc0.body || '').split('\n').forEach(function (raw) {
+          var m = RE_LINE.exec(raw);
+          var task = m && RE_TASK.exec(m[2]);
+          if (!task) { lines.push(raw); return; }
+          if (m[1] !== ' ') { lines.push({ done: task[1] }); return; }
+          if (open[task[1]]) { seen[task[1]] = true; lines.push(raw); }
+        });
+      }
+      var done = lines.filter(function (l) { return typeof l === 'object'; });
+      for (var d = 0; d < done.length; d++) await setTaskDone(t, done[d].done, true).catch(function () {});
+      var body = lines.filter(function (l) { return typeof l === 'string'; }).join('\n').replace(/\s+$/, '');
+      var add = list.items.filter(function (it) { return !seen[it.id] && !done.some(function (x) { return x.done === it.id; }); });
+      add.forEach(function (it) { body += (body ? '\n' : '') + '- [ ] [@' + it.name.replace(/[\\\[\]]/g, '\\$&') + '](task:' + it.id + ')'; });
+      if (found) {
+        if (body === String(doc0.body || '').replace(/\s+$/, '')) continue;
+        doc0.body = body;
+        await saveDoc(t, doc0, { force: true });
+      } else if (body) {
+        await createDoc(t, list.title, body, {});
+      }
+    }
+  }
+
+  /**
    * Rebuilds the day page from the board. Lines typed by hand become cards first (due today under
    * "À faire aujourd'hui"), then the page is rewritten from the cards and saved when it changed.
    * @returns {Promise<{doc:object, docs:object[], created:number, changed:boolean}>}
@@ -905,6 +950,9 @@
       doc.rev = saved.rev;
       doc.updatedAt = saved.updatedAt;
     }
+    try {
+      await syncBringLists(t, data.rows, docs);
+    } catch (e) { /* the day page must still open */ }
     return { doc: doc, docs: docs, created: wanted.create.length, changed: changed };
   }
 

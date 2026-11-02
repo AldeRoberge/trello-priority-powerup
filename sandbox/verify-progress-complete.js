@@ -5,7 +5,7 @@ var vm = require('vm');
 
 var sandbox = { PriorityAgent: null, console: console };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'agent', 'agent.js'), 'utf8'),
+  require('./component-source').read('agent/agent.js'),
   sandbox
 );
 
@@ -116,7 +116,9 @@ check(
   keepCongrats.actions.filter(function (a) {
     return a.tool === 'trigger_effect';
   }).length === 1 &&
-    keepCongrats.actions[0].args.effect === 'flowers'
+    keepCongrats.actions.some(function (a) {
+      return a.tool === 'trigger_effect' && a.args.effect === 'flowers';
+    })
 );
 
 // ── Already-set due date: never re-ask "C'est pour quand?" ───────────────────

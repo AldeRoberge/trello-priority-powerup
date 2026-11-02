@@ -1057,8 +1057,7 @@
 
     function createCard() {
       var target = DT().newCardList(state.lists);
-      if (!global.NewCard) return;
-      if (!target) return setStatus('Aucune liste pour la nouvelle carte', 'error');
+      if (!target || !global.NewCard) return;
       global.NewCard.open({
         t: t,
         lists: state.lists,

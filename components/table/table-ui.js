@@ -1393,11 +1393,7 @@
       TT().archiveCard(t, row.id).then(function () {
         state.rows = state.rows.filter(function (r) { return r.id !== row.id; });
         renderGrid();
-        var entry = record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' });
-        var msg = '« ' + (row.name || 'Carte') + ' » archivée';
-        // The floating toast shows on every width (the toolbar status is hidden on a phone).
-        if (HP && typeof HP.toast === 'function') HP.toast(entry, msg);
-        else setStatus(msg, 'ok', 8000, { label: 'Annuler', run: function () { toggleEntry(entry); } });
+        record({ type: 'archive', targetId: row.id, title: row.name, after: row.statut || '' }); // offers its own Annuler toast
       }, fail);
     }
 

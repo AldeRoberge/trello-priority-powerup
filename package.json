@@ -9,6 +9,7 @@
   "scripts": {
     "test": "node scripts/run-tests.js",
     "test:unit": "node scripts/run-tests.js --unit",
+    "check": "node scripts/check-structure.js",
     "test:e2e": "node scripts/run-e2e.js",
     "test:pw": "playwright test",
     "test:pw:headed": "playwright test --headed --workers=1",
@@ -28,7 +29,8 @@
     "stamp:build": "node scripts/stamp-build.js",
     "render:icon": "node scripts/render-icon.js",
     "setup:sheet-sync": "powershell -ExecutionPolicy Bypass -File scripts/setup-sheet-sync.ps1",
-    "setup:documents-drive": "powershell -ExecutionPolicy Bypass -File scripts/setup-documents-drive.ps1"
+    "setup:documents-drive": "powershell -ExecutionPolicy Bypass -File scripts/setup-documents-drive.ps1",
+    "setup:keep": "powershell -ExecutionPolicy Bypass -File scripts/setup-keep.ps1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1"

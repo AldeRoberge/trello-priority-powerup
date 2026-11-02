@@ -48,7 +48,7 @@ function panel(extra, cfgExtra) {
 
 test('toast: shows the message with Annuler, and Annuler undoes the entry once and hides the toast', async () => {
   const { doc, hp, applied } = panel();
-  const entry = hp.record({ type: 'archive', title: 'Écrire' });
+  const entry = hp.record({ type: 'edit', title: 'Écrire' });
   hp.toast(entry, '« Écrire » archivée');
   const toast = byClass(doc.body, 'hp-toast')[0];
   assert.ok(toast, 'the toast is on the page');
@@ -63,7 +63,7 @@ test('toast: shows the message with Annuler, and Annuler undoes the entry once a
 
 test('toast: fades after 8 s, not before', () => {
   const { doc, hp, timers } = panel();
-  hp.toast(hp.record({ type: 'archive', title: 'A' }), 'A archivée');
+  hp.toast(hp.record({ type: 'edit', title: 'A' }), 'A archivée');
   timers.run(7999);
   assert.equal(byClass(doc.body, 'hp-toast').length, 1);
   timers.run(8000);
@@ -72,8 +72,8 @@ test('toast: fades after 8 s, not before', () => {
 
 test('toast: a new toast replaces the old one (one at a time, one timer)', () => {
   const { doc, hp, timers } = panel();
-  hp.toast(hp.record({ type: 'archive', title: 'A' }), 'A archivée');
-  hp.toast(hp.record({ type: 'archive', title: 'B' }), 'B archivée');
+  hp.toast(hp.record({ type: 'edit', title: 'A' }), 'A archivée');
+  hp.toast(hp.record({ type: 'edit', title: 'B' }), 'B archivée');
   const toasts = byClass(doc.body, 'hp-toast');
   assert.equal(toasts.length, 1);
   assert.match(textOf(toasts[0]), /B archivée/);
@@ -90,11 +90,38 @@ test('toast: an entry that cannot be undone gets no Annuler, only the message an
 
 test('toast: sits just above the assistant dock when the page has one', () => {
   const withDock = panel({ ViewShell: { dockBottom: (gap) => (gap === 12 ? 148 : null) } });
-  withDock.hp.toast(withDock.hp.record({ type: 'archive', title: 'A' }), 'x');
+  withDock.hp.toast(withDock.hp.record({ type: 'edit', title: 'A' }), 'x');
   assert.equal(byClass(withDock.doc.body, 'hp-toast')[0].style.bottom, '148px');
   const noDock = panel({ ViewShell: { dockBottom: () => null } });
-  noDock.hp.toast(noDock.hp.record({ type: 'archive', title: 'A' }), 'x');
+  noDock.hp.toast(noDock.hp.record({ type: 'edit', title: 'A' }), 'x');
   assert.equal(byClass(noDock.doc.body, 'hp-toast')[0].style.bottom, undefined, 'the CSS margin applies');
+});
+
+test('record: an archive entry offers its own Annuler toast, in every host, and Annuler undoes it', async () => {
+  const { doc, hp, applied } = panel();
+  const entry = hp.record({ type: 'archive', title: 'Écrire', targetId: 'c1' });
+  const toast = byClass(doc.body, 'hp-toast')[0];
+  assert.ok(toast, 'recording the archive is enough');
+  assert.match(textOf(toast), /« Écrire » archivée/);
+  buttonWith(toast, 'Annuler').fire('click');
+  assert.deepEqual(applied, [[entry.id, true]]);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(entry.state, 'undone');
+});
+
+test('record: other kinds of entry show no toast, and an archive without a title still reads well', () => {
+  const { doc, hp } = panel();
+  hp.record({ type: 'edit', title: 'A' });
+  hp.record({ type: 'move', title: 'B' });
+  assert.equal(byClass(doc.body, 'hp-toast').length, 0);
+  hp.record({ type: 'archive' });
+  assert.match(textOf(byClass(doc.body, 'hp-toast')[0]), /« Carte » archivée/);
+});
+
+test('record: a host can turn the automatic archive toast off (toast: false)', () => {
+  const { doc, hp } = panel({}, { toast: false });
+  hp.record({ type: 'archive', title: 'A' });
+  assert.equal(byClass(doc.body, 'hp-toast').length, 0);
 });
 
 /* ── Search: CommandPalette.open, QuickFind.request, the tab strip button ── */

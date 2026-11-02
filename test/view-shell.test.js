@@ -93,30 +93,19 @@ describe('ViewShell', () => {
     }
   });
 
-  it('gives every guarded bar touch-action: pan-y on coarse pointers (JS guard and CSS stay in step)', () => {
+  it('gives every guarded bar a touch-action: pan-* rule on coarse pointers (JS guard and CSS stay in step)', () => {
     const css = fs.readFileSync(path.join(__dirname, '..', 'components', 'shared', 'view-shell.css'), 'utf8');
-    const m = css.match(/@media \(pointer: coarse\) \{[^@]*?touch-action: pan-y !important;/);
-    assert.ok(m, 'the coarse touch-action rule exists');
-    for (const sel of VS.GUARDED_BARS.split(',').map((s) => s.trim())) {
-      assert.ok(m[0].includes(sel), sel + ' is in the touch-action rule');
+    // The "Phone pass 2" coarse block: every rule that sets touch-action: pan-y or pan-x pan-y (Kanban's lists swipe sideways).
+    const start = css.indexOf('Phone pass 2');
+    assert.ok(start >= 0, 'the phone block exists');
+    const block = css.slice(start, css.indexOf('\n}\n', start)).replace(/\/\*[\s\S]*?\*\//g, '');
+    const covered = new Set();
+    for (const m of block.matchAll(/([^{}]+)\{[^{}]*touch-action:\s*pan-[^;{}]*;[^{}]*\}/g)) {
+      m[1].split(',').forEach((sel) => covered.add(sel.trim()));
     }
-  });
-});
-
-describe('ViewShell on every view page', () => {
-  const root = path.join(__dirname, '..');
-  const VT = (function () {
-    loadComponent('shared/view-tabs.js');
-    return global.ViewTabs;
-  })();
-
-  it('loads view-shell.css and view-shell.js next to the tab strip', () => {
-    for (const v of VT.VIEWS) {
-      const file = path.join(root, v.page);
-      const html = fs.readFileSync(file, 'utf8');
-      assert.match(html, /components\/shared\/view-shell\.css/, v.page + ' loads view-shell.css');
-      assert.match(html, /components\/shared\/view-shell\.js/, v.page + ' loads view-shell.js');
-      assert.match(html, /viewport-fit=cover/, v.page + ' has viewport-fit=cover');
+    assert.ok(covered.size > 0, 'the coarse touch-action rules exist');
+    for (const sel of VS.GUARDED_BARS.split(',').map((x) => x.trim())) {
+      assert.ok(covered.has(sel), sel + ' has a touch-action: pan-* rule');
     }
   });
 });

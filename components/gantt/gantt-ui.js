@@ -957,9 +957,7 @@
     function recordRemoval(row, res) {
       if (!res) return;
       if (res.archived) {
-        var entry = record({ type: 'archive', targetId: row.cardId, title: row.name });
-        // An archived card can be restored: offer it right away, also on a phone (no Ctrl+Z there).
-        if (HP && typeof HP.toast === 'function') HP.toast(entry, '\u00ab ' + (row.name || 'Carte') + ' \u00bb archiv\u00e9e');
+        record({ type: 'archive', targetId: row.cardId, title: row.name });
       } else {
         record({
           type: 'delete',
@@ -4434,18 +4432,16 @@
           if (iv) placeGhost(ghost, iv);
         }
 
-        // commit=false is a pointercancel: the browser took the gesture for a scroll (a thumb swiping over the
-        // timeline), so nothing is planned. Only a real release (pointerup) writes dates.
-        function finish(commit) {
-          try { timeRow.releasePointerCapture(ev.pointerId); } catch (err) { /* the pointer is already gone */ }
+        function onUp(upEv) {
+          timeRow.releasePointerCapture(ev.pointerId);
           timeRow.removeEventListener('pointermove', onMove);
           timeRow.removeEventListener('pointerup', onUp);
-          timeRow.removeEventListener('pointercancel', onCancel);
+          timeRow.removeEventListener('pointercancel', onUp);
           timeRow.classList.remove('is-painting');
           var paint = state.paint;
           state.paint = null;
           ghost.hidden = true;
-          if (!paint || !commit) return;
+          if (!paint || (upEv && upEv.type === 'pointercancel')) return; // a cancel is a scroll taking the swipe: plan nothing
           var iv = model.orderedInterval(paint.origin, paint.current, {
             keepTime: usesTimedTimeline(),
           });
@@ -4471,12 +4467,9 @@
           persistRow(row);
         }
 
-        function onUp() { finish(true); }
-        function onCancel() { finish(false); }
-
         timeRow.addEventListener('pointermove', onMove);
         timeRow.addEventListener('pointerup', onUp);
-        timeRow.addEventListener('pointercancel', onCancel);
+        timeRow.addEventListener('pointercancel', onUp);
       });
     }
 
@@ -4663,8 +4656,7 @@
           state.drag = null;
           if (!drag) return;
           if (!moved && drag.mode === 'move') {
-            // A plain click (no drag) opens the date/time editor. A pointercancel (the page took the gesture
-            // for a scroll) is not a click.
+            // A plain click (no drag) opens the date/time editor; a pointercancel (a scroll) is not a click.
             if (!(upEv && upEv.type === 'pointercancel')) openScheduleEditor(row, barEl);
             return;
           }

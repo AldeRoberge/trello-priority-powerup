@@ -6,7 +6,7 @@ var vm = require('vm');
 
 var sandbox = { PriorityAgent: null, UserProfile: null };
 vm.runInNewContext(
-  fs.readFileSync(path.join(__dirname, '..', 'components', 'agent', 'agent.js'), 'utf8'),
+  require('./component-source').read('agent/agent.js'),
   sandbox
 );
 

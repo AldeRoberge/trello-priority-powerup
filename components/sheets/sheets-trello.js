@@ -153,6 +153,11 @@
     return workerCall(settings, 'POST', '/documents/sync');
   }
 
+  /** Documents ↔ Google Keep notes (no-op when Keep is not configured). */
+  function syncKeep(settings) {
+    return workerCall(settings, 'POST', '/keep/sync');
+  }
+
   /** Sets the Sheet's column set (the Worker re-lays out the tab, keeping the values). */
   function pushColumns(settings, columns) {
     return workerCall(settings, 'PUT', '/config', { columns: columns });
@@ -218,6 +223,7 @@
     info: info,
     syncNow: syncNow,
     syncDocuments: syncDocuments,
+    syncKeep: syncKeep,
     pushColumns: pushColumns,
     pushComputed: pushComputed,
     logs: logs,
