@@ -253,6 +253,25 @@
       var next = M.state.docs.filter(function (x) { return !(M.state.idx.archived || {})[x.id]; })[0];
       if (next) M.openDoc(next.id, { skipSave: true });
     };
+    /** Archive the board card. It leaves the list and stays restorable in Trello. */
+    M.archiveTaskDoc = function archiveTaskDoc(docId) {
+      if (!M.taskById(docId)) return;
+      var wasCurrent = M.state.current && M.state.current.id === docId;
+      S.DT().archiveTask(M.t, docId).then(function () {
+        M.state.tasks = (M.state.tasks || []).filter(function (x) { return x.id !== docId; });
+        M.toast('Tâche archivée.', 'ok');
+        if (wasCurrent) {
+          M.state.current = null;
+          S.remember(S.LAST_KEY, null);
+          M.showCurrent();
+        }
+        M.paintList();
+        if (!wasCurrent) return;
+        var next = (M.state.tasks || []).filter(function (x) { return !(global.HideDone && global.HideDone.get() && x.dueComplete); })[0]
+          || M.state.docs.filter(function (x) { return !(M.state.idx.archived || {})[x.id]; })[0];
+        if (next) M.openDoc(next.id, { skipSave: true, asTask: next.kind === 'task' });
+      }, M.failure);
+    };
     M.confirmDelete = function confirmDelete(docId) {
       var d = M.state.docs.filter(function (x) { return x.id === docId; })[0];
       if (!d) return;
@@ -267,7 +286,7 @@
     M.exportDoc = function exportDoc(docId, mode) {
       var load = M.state.current && M.state.current.id === docId
         ? Promise.resolve({ title: M.els.title.value || M.state.current.title, body: M.lastDomMd() })
-        : S.DT().loadDoc(M.t, docId);
+        : (M.taskById(docId) && S.DT().loadTask ? S.DT().loadTask(M.t, docId) : S.DT().loadDoc(M.t, docId));
       load.then(function (doc) {
         var text = S.DM().exportMarkdown(doc.title, doc.body);
         if (mode === 'copy') {
@@ -406,7 +425,8 @@
         var prep = target && target.subject && target.subject.k === 'day' && S.DT().refreshDaily
           ? S.DT().refreshDaily(M.t).catch(function () {})
           : Promise.resolve();
-        return prep.then(function () { return S.DT().loadDoc(M.t, id); }).then(
+        var asTask = M.isTaskId(id, opts);
+        return prep.then(function () { return asTask && S.DT().loadTask ? S.DT().loadTask(M.t, id) : S.DT().loadDoc(M.t, id); }).then(
           function (doc) {
             if (token !== M.loadToken) return;
             M.els.page.classList.remove('is-loading');
@@ -433,8 +453,9 @@
           function (err) {
             M.els.page.classList.remove('is-loading');
             if (token !== M.loadToken) return;
-            if ((err && err.reason) === 'http-404' || (err && err.reason) === 'not-a-document') {
+            if ((err && err.reason) === 'http-404' || (err && err.reason) === 'not-a-document' || (err && err.reason) === 'not-a-task') {
               M.state.docs = M.state.docs.filter(function (d) { return d.id !== id; });
+              M.state.tasks = (M.state.tasks || []).filter(function (d) { return d.id !== id; });
               M.paintList();
             }
             M.failure(err);
@@ -554,15 +575,17 @@
       M.saving = true;
       M.setSave('saving');
       var chain = Promise.resolve();
+      var taskDoc = cur.kind === 'task';
       if (titleChanged) {
         chain = chain.then(function () {
-          return S.DT().renameDoc(M.t, cur.id, want).then(function (r) {
+          var rename = taskDoc ? S.DT().renameTask(M.t, cur.id, want) : S.DT().renameDoc(M.t, cur.id, want);
+          return rename.then(function (r) {
             var oldTitle = M.savedTitle;
             M.savedTitle = r.title;
             cur.title = r.title;
             M.histRenamed(cur.id, oldTitle, r.title);
             M.touchListItem(cur.id, { title: r.title });
-            M.syncFolderName(cur.id, r.title);
+            if (!taskDoc) M.syncFolderName(cur.id, r.title);
             if (cur.subject && cur.subject.k === 'project' && S.DT().syncProjectTitle) {
               S.DT().syncProjectTitle(M.t, cur.subject.id, r.title).catch(function () {});
             }
@@ -573,14 +596,17 @@
       if (bodyChanged || opts.force) {
         chain = chain.then(function () {
           var coverAt = cur.cover || null;
-          return S.DT().saveDoc(M.t, { id: cur.id, body: md, rev: cur.rev, cover: coverAt }, { force: !!opts.force }).then(function (res) {
+          var write = taskDoc
+            ? S.DT().saveTask(M.t, { id: cur.id, body: md, rev: cur.rev }, { force: !!opts.force })
+            : S.DT().saveDoc(M.t, { id: cur.id, body: md, rev: cur.rev, cover: coverAt }, { force: !!opts.force });
+          return write.then(function (res) {
             cur.rev = res.rev;
             cur.updatedAt = res.updatedAt;
             cur.body = md;
             cur.savedCover = coverAt;
             M.lastMd = md;
             M.histBodySaved();
-            M.touchListItem(cur.id, { updatedAt: res.updatedAt, size: md.length });
+            M.touchListItem(cur.id, { updatedAt: res.updatedAt, size: md.length, body: md });
           });
         });
       }
@@ -665,12 +691,38 @@
           ? S.DT().ensureProjectDocs(M.t, docs, { keepTitles: keep }).then(function (r) { return r.docs; }, function () { return docs; })
           : docs;
       }).then(function (docs) {
+        var tasksJob = S.DT().listTasks ? S.DT().listTasks(M.t).catch(function () { return M.state.tasks || []; }) : Promise.resolve(M.state.tasks || []);
+        return tasksJob.then(function (tasks) { return { docs: docs, tasks: tasks || [] }; });
+      }).then(function (pair) {
+        var docs = pair.docs;
         var openId = M.state.current && M.state.current.id;
+        var openTask = !!(M.state.current && M.state.current.kind === 'task');
         M.state.docs = docs;
+        M.state.tasks = pair.tasks;
         M.state.idx = S.DT().getFolderIndex();
         M.paintList();
         M.rebuildIndex();
         if (!openId) return;
+        if (openTask) {
+          if (!M.state.tasks.some(function (d) { return d.id === openId; })) {
+            M.toast('Cette tâche a été archivée.', 'error');
+            return;
+          }
+          if (M.state.saveState !== 'saved' || !M.editor || S.DM().domToMd(M.editor) !== M.lastMd) return;
+          return S.DT().loadTask(M.t, openId).then(function (doc) {
+            if (!M.state.current || M.state.current.id !== openId || M.saving || S.DM().domToMd(M.editor) !== M.lastMd) return;
+            if (doc.rev === M.state.current.rev && doc.body === M.state.current.body) return;
+            var top = M.els.scroll.scrollTop;
+            M.state.current = doc;
+            M.histBase(doc);
+            M.savedTitle = doc.title;
+            M.els.title.value = doc.title === S.DM().UNTITLED ? '' : doc.title;
+            M.fitTitle();
+            M.buildEditor(doc);
+            M.els.scroll.scrollTop = top;
+            M.toast('Tâche mise à jour.', 'ok');
+          }, function () {});
+        }
         if (!docs.some(function (d) { return d.id === openId; })) {
           M.toast('Ce document a été supprimé par quelqu’un d’autre.', 'error');
           return;
@@ -1141,6 +1193,22 @@
       });
       document.addEventListener('scroll', function () { if (!drag) hideDots(); }, true);
     };
+    /** Opens a task card as the document. An empty description takes the text of its old linked page. */
+    M.openTaskDoc = function openTaskDoc(id, opts) {
+      opts = opts || {};
+      var page = S.DM().docForSubject(M.state.docs, 'task', id);
+      var incoming = page && String(page.body || '').trim();
+      var adopt = incoming && S.DT().adoptTaskPage ? S.DT().adoptTaskPage(M.t, id, page.body) : Promise.resolve(null);
+      return Promise.resolve(adopt).then(function (res) {
+        if (!(res && res.adopted && page)) return null;
+        return M.editFolders(function (idx) { S.DM().archiveDocIn(idx, page.id); }, 'La page a été reprise dans la tâche.');
+      }).then(function () {
+        return M.openDoc(id, Object.assign({ asTask: true }, opts));
+      }, function (err) {
+        M.failure(err);
+        return M.openDoc(id, Object.assign({ asTask: true }, opts));
+      });
+    };
     M.boot = function boot() {
       S.DT().isAuthorized(M.t).then(function (ok) {
         M.state.authOk = ok;
@@ -1166,15 +1234,21 @@
         }).then(function (docs) {
           if (!S.DT().refreshDaily || S.DM().docForSubject(docs, 'day', 'today')) return docs;
           return S.DT().refreshDaily(M.t).then(function (r) { return r.docs; }, function () { return docs; });
+        }).then(function (docs) {
+          var tasksJob = S.DT().listTasks ? S.DT().listTasks(M.t).catch(function () { return []; }) : Promise.resolve([]);
+          return tasksJob.then(function (tasks) { return { docs: docs, tasks: tasks || [] }; });
         }).then(
-          function (docs) {
+          function (loaded) {
+            var docs = loaded.docs;
             M.state.docs = docs;
+            M.state.tasks = loaded.tasks;
             M.state.idx = S.DT().getFolderIndex();
             M.state.docsLoaded = true;
             M.paintList();
             M.rebuildIndex();
             M.loadDrive();
             var want = M.takeWantedSubject();
+            if (want && want.k === 'task') return M.openTaskDoc(want.id, { skipSave: true });
             if (want) {
               var existing = S.DM().docForSubject(docs, want.k, want.id);
               if (existing) return M.openDoc(existing.id, { skipSave: true });
@@ -1188,6 +1262,8 @@
               });
             }
             var last = S.recall(S.LAST_KEY);
+            var taskPick = M.state.tasks.filter(function (d) { return d.id === last; })[0];
+            if (taskPick) return M.openDoc(taskPick.id, { skipSave: true, asTask: true });
             var drafted = docs.map(function (d) { return { d: d, dr: M.readDraft(d.id) }; })
               .filter(function (x) { return x.dr; })
               .sort(function (a, b) { return b.dr.at - a.dr.at; })[0];
@@ -1213,6 +1289,9 @@
     },
     run: function (M) {
     M.daySyncTimer = null;
+    if (global.HideDone && typeof global.HideDone.subscribe === 'function') {
+      global.HideDone.subscribe(function () { if (M.state.docsLoaded) M.paintList(); });
+    }
     M.HP = null;
     M.HIST_MAX_BODY = 6000;
     M.editBase = null;

@@ -37,3 +37,15 @@ body { overscroll-behavior: none; }
   /* Tapping a control twice quickly must not zoom the page. */
   button, a, label, select, summary, [role='button'] { touch-action: manipulation; }
 }
+
+/* Touch without a mouse: keyboard shortcut hints (⇧1, Tab, letters) mean nothing, hide them. */
+@media (hover: none) and (pointer: coarse) {
+  .agent-suggestion-num,
+  .tp-tab-hint,
+  .lp-key,
+  .tp-context-menu-key,
+  .tri-act kbd,
+  .iv-opt kbd {
+    display: none !important;
+  }
+}

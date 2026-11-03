@@ -44,6 +44,8 @@ Les données de Power-Up sont limitées à 4096 caractères par portée, c'est t
 - la carte est classée dans la **première liste** du tableau (une carte archivée a besoin d'une liste) ;
 - un bloc caché `<!--cerveau-meta type: document, rev: N -->` en fin de description porte un compteur de révision : si quelqu'un d'autre enregistre entre-temps, la sauvegarde est refusée et une barre propose *Charger sa version* ou *Écraser avec la mienne*.
 
+Une tâche du tableau est aussi un document. Son titre est le nom de la carte, son texte est la description (les données cachées de la carte restent en place). Elle apparaît dans la section **Tâches** de la liste. Cliquer la description dans le Tableau, le Tableau de bord, la Mindmap ou la carte rapide ouvre ce document. Les notes `📄` restent des cartes archivées. Si une ancienne page liée n’avait pas encore de description sur la carte, son texte est repris une fois, puis la page est masquée.
+
 Format Markdown : `# ## ###`, `**gras**`, `*italique*`, `++souligné++`, `~~barré~~`, `==surligné==`, `{c:red}texte{/c}` et `{h:green}texte{/h}` (gris, brun, orange, jaune, vert, bleu, violet, rose, rouge), `` `code` ``, `[texte](https://…)` ou `[texte](doc:ID)`, `![légende](https://…)`, listes imbriquées (2 espaces), `- [ ]` / `- [x]`, `>`, encadrés `> [!note]` / `> [!tip]` / `> [!warning]`, tableaux, `<!--align:center-->` ou `<!--align:right-->` sur la ligne suivante, blocs ```` ``` ````, `---`, et les mentions `[@Nom](person:ID)`, `[@Titre](task:ID_CARTE)`, `[@Titre](doc:ID_DOCUMENT)`, `[@texte](entity:ID)`.
 
 ## Limites

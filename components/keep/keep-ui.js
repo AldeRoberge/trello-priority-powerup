@@ -177,6 +177,7 @@
         main.appendChild(el('p', 'k-empty', { text: ui.archive ? 'Aucune note archivée' : ui.query ? 'Aucun résultat' : '' }));
         return;
       }
+      lastCols = columnCount();
       var pinned = list.filter(function (n) { return n.pin; });
       var others = list.filter(function (n) { return !n.pin; });
       if (pinned.length && others.length) section('Épinglées', pinned);
@@ -186,9 +187,31 @@
     function section(label, notes) {
       if (label) main.appendChild(el('h2', 'k-section', { text: label }));
       var grid = el('div', 'k-grid');
-      notes.forEach(function (n) { grid.appendChild(card(n)); });
+      // Real columns, not CSS multi-columns: iOS WebKit overlaps text when a card is split across them.
+      var count = columnCount();
+      var cols = [];
+      var load = [];
+      for (var i = 0; i < count; i++) {
+        cols.push(grid.appendChild(el('div', 'k-col')));
+        load.push(0);
+      }
+      notes.forEach(function (n) {
+        var at = load.indexOf(Math.min.apply(null, load));
+        cols[at].appendChild(card(n));
+        load[at] += 2 + (n.title ? 1 : 0) + String(n.body || '').split('\n').length;
+      });
       main.appendChild(grid);
     }
+
+    function columnCount() {
+      var w = main.clientWidth || global.innerWidth || 360;
+      return w <= 520 ? 2 : Math.max(1, Math.floor((w + 12) / 252));
+    }
+    var lastCols = 0;
+    global.addEventListener('resize', function () {
+      var n = columnCount();
+      if (n !== lastCols && lastCols) { lastCols = n; drawGrid(); }
+    });
 
     function card(n) {
       var c = el('article', 'k-card', { 'data-color': n.color || '', tabindex: '0' });

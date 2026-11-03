@@ -864,6 +864,10 @@
       return dm && typeof dm.splitDesc === 'function' ? dm.splitDesc(rec.desc || '').visible : String(rec.desc || '');
     };
     M.openFieldEditor = function openFieldEditor(rec, kind, anchor) {
+      if (kind === 'desc') {
+        if (global.ViewTabs) global.ViewTabs.openSubject('task', rec.id);
+        return;
+      }
       var CF = global.CardFields;
       var TT = global.TableTrello;
       if (!CF || !TT) return M.setStatus('Éditeur indisponible', 'error');

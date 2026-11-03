@@ -332,7 +332,7 @@
     };
     M.patchPage = function patchPage(patch) {
       var cur = M.state.current;
-      if (!cur) return Promise.resolve();
+      if (!cur || cur.kind === 'task') return Promise.resolve();
       return S.DT().patchMeta(M.t, { id: cur.id, rev: cur.rev }, patch).then(function (res) {
         cur.rev = res.rev;
         cur.updatedAt = res.updatedAt;
@@ -788,14 +788,6 @@
         onSaved: function () { M.loadFace(); },
       });
     };
-    M.editDesc = function editDesc(anchor) {
-      if (!global.CardFields || !M.isTaskPage()) return;
-      global.CardFields.open('desc', {
-        t: M.t, cardId: M.state.current.subject.id, anchor: anchor, value: M.state.face.desc || '',
-        save: function (text) { return S.DT().saveCardDesc(M.t, M.state.current.subject.id, text); },
-        onSaved: function () { M.loadFace(); },
-      });
-    };
     M.commitTag = function commitTag(input) {
       var raw = input.value;
       if (!raw || !String(raw).trim()) return;
@@ -885,12 +877,12 @@
         M.state.propFor = cur.id;
         M.state.propOpen = {};
       }
-      var sub = cur.subject;
-      if (!sub) {
+      var sub = cur.kind === 'task' ? null : cur.subject;
+      if (cur.kind !== 'task' && !sub) {
         M.els.props.appendChild(M.propRow('link', 'Lié à', function (v) {
           v.appendChild(M.emptyBtn('Cliquer pour lier…', function (e) { M.openLinkPicker(e.currentTarget); }));
         }));
-      } else if (sub.k !== 'project' && sub.k !== 'day') {
+      } else if (sub && sub.k !== 'project' && sub.k !== 'day') {
         var face = M.state.face;
         var missing = !!(face && face.missing);
         var name = (face && face.name) || (sub.k === 'entity' ? 'Entité' : 'Tâche');
@@ -928,16 +920,7 @@
             ? S.h('button', { class: 'dc-prop-text', type: 'button', onclick: function (e) { M.editDue(e.currentTarget); } }, [due])
             : M.emptyBtn('Cliquer pour ajouter…', function (e) { M.editDue(e.currentTarget); }));
         }));
-        M.els.props.appendChild(M.propRow('align-left', 'Description', function (v) {
-          var shown = String(M.state.face.desc || '').replace(/\s+/g, ' ').trim();
-          if (!shown) {
-            v.appendChild(M.emptyBtn('Cliquer pour ajouter…', function (e) { M.editDesc(e.currentTarget); }));
-            return;
-          }
-          v.appendChild(S.h('button', { class: 'dc-prop-text', type: 'button', title: shown, onclick: function (e) { M.editDesc(e.currentTarget); } }, [shown]));
-          M.endList(v, 'desc', null);
-        }));
-      } else if (!sub || sub.k === 'entity') {
+      } else if (cur.kind !== 'task' && (!sub || sub.k === 'entity')) {
         if (sub && M.state.face && M.state.face.aliases && M.state.face.aliases.length) {
           M.els.props.appendChild(M.propRow('quote', 'Alias', function (v) {
             M.state.face.aliases.forEach(function (a) { v.appendChild(S.h('span', { class: 'dc-chip is-quiet', title: a, text: a })); });
@@ -956,6 +939,7 @@
           M.endList(v, 'people', M.plusBtn('Ajouter une personne', function (btn) { M.openPeoplePicker(btn); }));
         }));
       }
+      if (cur.kind !== 'task') {
       var tags = M.pageProps().tags;
       M.els.props.appendChild(M.propRow('tag', 'Mots-clés', function (v) {
         tags.forEach(function (tag) {
@@ -996,6 +980,7 @@
           input.focus();
         }));
       }));
+      }
       M.els.props.appendChild(M.propRow('files', 'Documents', function (v) {
         M.childFolders().forEach(function (f) {
           v.appendChild(S.h('button', { class: 'dc-subdoc', type: 'button', title: M.folderLabel(f), onclick: function () { M.openFolder(f.id); } }, [

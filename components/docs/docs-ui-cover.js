@@ -682,6 +682,24 @@
     };
     M.openDocMenu = function openDocMenu(anchor, docId) {
       M.closePop();
+      var task = M.taskById(docId);
+      if (task) {
+        var taskItem = function (iconName, label, run, danger) {
+          return S.h('button', {
+            class: 'dc-menu-item' + (danger ? ' is-danger' : ''),
+            type: 'button',
+            onclick: function () { M.closePop(); run(); },
+          }, [S.icon(iconName), S.h('span', { text: label })]);
+        };
+        M.pop = S.h('div', { class: 'dc-pop dc-menu', role: 'menu' }, [
+          taskItem('download', 'Télécharger (.md)', function () { M.exportDoc(docId, 'download'); }),
+          taskItem('clipboard', 'Copier en Markdown', function () { M.exportDoc(docId, 'copy'); }),
+          S.h('div', { class: 'dc-menu-sep' }),
+          taskItem('archive', 'Archiver', function () { M.archiveTaskDoc(docId); }, true),
+        ]);
+        M.placePop(M.pop, anchor.getBoundingClientRect());
+        return;
+      }
       var d = M.state.docs.filter(function (x) { return x.id === docId; })[0] || (M.state.current && M.state.current.id === docId ? M.state.current : null);
       if (!d) return;
       var asFolder = S.DM().folderByDoc(M.state.idx, docId);
@@ -760,7 +778,11 @@
       box.hidden = !c;
       M.els.page.classList.toggle('has-cover', !!c);
       M.els.coverAdd.textContent = '';
-      if (!cur) return;
+      if (!cur || cur.kind === 'task') {
+        box.hidden = true;
+        M.els.page.classList.remove('has-cover');
+        return;
+      }
       if (!c) {
         M.els.coverAdd.appendChild(
           S.h('button', { class: 'dc-cover-ghost', type: 'button', onclick: M.addCover }, [S.icon('photo'), S.h('span', { text: 'Ajouter une couverture' })])

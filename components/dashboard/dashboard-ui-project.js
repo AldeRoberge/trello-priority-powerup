@@ -520,6 +520,10 @@
       M.render();
     };
     M.openEditor = function openEditor(row, kind, anchor) {
+      if (kind === 'desc') {
+        if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id);
+        return;
+      }
       if (!global.CardFields || !anchor) return;
       var extra = {};
       if (kind === 'desc' && global.TableTrello && global.TableTrello.saveDesc) {

@@ -3,8 +3,15 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-03
+- Documents : chaque tâche est un document. Sa description s’écrit avec le même éditeur, et la tâche apparaît dans la section Tâches.
+
 ## 2026-11-02
 
+- Notes : sur téléphone, les cartes ne se chevauchent plus (vraies colonnes) et les titres des cartes sont moins gros.
+- Mobile : dans le Gantt, les noms de tâches passent sur deux lignes au lieu d’être coupés.
+- Mobile : toucher une barre du Gantt n’efface plus ses dates (le petit × est retiré sur écran tactile, « Effacer les dates » reste dans le menu d’appui long).
+- Mobile : les raccourcis clavier (⇧1, Tab, lettres) ne s’affichent plus sur un appareil tactile.
 - Triage : quand l’IA attend ta revue du document, le reste de la page s’assombrit et seul le plan reste éclairé.
 - Mobile : les menus du Tableau et du Kanban s’ouvrent en bas de l’écran comme ceux du Gantt, et leurs sous-menus se déplient sous la ligne touchée.
 - Mobile : relever le doigt après un appui long n’ouvre plus la carte qui se trouve derrière le menu.
