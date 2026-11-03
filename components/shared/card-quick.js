@@ -622,10 +622,7 @@
       }
       box.addEventListener('click', function (e) {
         if (e.target.closest && e.target.closest('a')) return; // links inside the text keep working
-        openField('desc', box, {
-          value: row.desc || '',
-          save: function (text) { return TT().saveDesc(t, row, text); },
-        });
+        if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id);
       });
       return box;
     }

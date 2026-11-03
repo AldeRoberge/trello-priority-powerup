@@ -895,6 +895,10 @@
         });
     };
     M.openEditor = function openEditor(row, kind, anchor) {
+      if (kind === 'desc') {
+        if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id);
+        return true;
+      }
       if (!global.CardFields || !anchor) return false;
       return global.CardFields.open(kind, {
         t: M.t,

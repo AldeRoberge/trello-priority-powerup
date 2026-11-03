@@ -8,6 +8,11 @@
  * lists them with GET /boards/{id}/cards/closed and keeps only names starting with the 📄 marker.
  * They stay visible (and restorable / deletable) in Trello's "Archived items".
  *
+ * A task is also a document: the open board card itself. Its title is the card name and its body is
+ * the visible description. Hidden Cerveau keys (Outlook id, lieu, …) stay in the same description;
+ * a `docrev` key in that block detects a newer save. Task cards are never packed with the document
+ * meta block, which would drop those keys.
+ *
  * Writes go through SheetsTrello.trelloRest (the Power-Up REST token), like the Table view.
  * Concurrent edits are detected with a `rev` counter stored in the hidden meta block of the
  * description (optimistic concurrency: a save over a newer revision is refused with reason 'conflict').
@@ -283,16 +288,15 @@
     var subject = doc.subject;
     var props = doc.props;
     var icon = doc.icon;
-    // A body save that omits cover / subject / props / icon keeps whatever is already stored.
-    if (!opts.force || cover === undefined || subject === undefined || props === undefined || icon === undefined) {
-      var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
-      var remote = DM().unpackDesc(cur && cur.desc);
-      if (!opts.force && remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
-      if (cover === undefined) cover = remote.cover;
-      if (subject === undefined) subject = remote.subject;
-      if (props === undefined) props = remote.props;
-      if (icon === undefined) icon = remote.icon;
-    }
+    // Always re-read: a task card must never be packed as a document (that block drops its hidden keys).
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=name,desc'));
+    if (!cur || !DM().isDocName(cur.name)) throw fail('not-a-document');
+    var remote = DM().unpackDesc(cur.desc);
+    if (!opts.force && remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
+    if (cover === undefined) cover = remote.cover;
+    if (subject === undefined) subject = remote.subject;
+    if (props === undefined) props = remote.props;
+    if (icon === undefined) icon = remote.icon;
     var desc = DM().packDesc(doc.body, { rev: nextRev, cover: cover, subject: subject, props: props, icon: icon });
     if (desc.length > DM().MAX_DESC) throw fail('too-long');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
@@ -305,7 +309,8 @@
    * @returns {Promise<{rev:number, updatedAt:string, cover:object|null}>}
    */
   async function setCover(t, doc, cover) {
-    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=name,desc'));
+    if (!cur || !DM().isDocName(cur.name)) throw fail('not-a-document');
     var remote = DM().unpackDesc(cur && cur.desc);
     if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
     var next = DM().normalizeCover(cover);
@@ -322,7 +327,8 @@
    * @returns {Promise<{rev:number, updatedAt:string, icon:object|null}>}
    */
   async function setIcon(t, doc, icon) {
-    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc,dateLastActivity'));
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=name,desc,dateLastActivity'));
+    if (!cur || !DM().isDocName(cur.name)) throw fail('not-a-document');
     var remote = DM().unpackDesc(cur && cur.desc);
     if (doc.rev != null && remote.rev !== doc.rev) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
     var next = DM().normalizeIcon(icon);
@@ -415,13 +421,133 @@
   }
 
   async function renameDoc(t, docId, title) {
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(docId) + '?fields=name'));
+    if (!cur || !DM().isDocName(cur.name)) throw fail('not-a-document');
     var card = need(await ST().trelloRest(t, '/cards/' + enc(docId), 'PUT', { name: DM().nameFromTitle(title) }));
     return { title: DM().titleFromName((card && card.name) || DM().nameFromTitle(title)) };
   }
 
-  /** Permanent: the card is deleted from Trello (not just left archived). */
+  /** Permanent: the card is deleted from Trello (not just left archived). Never a task card. */
   async function deleteDoc(t, docId) {
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(docId) + '?fields=name'));
+    if (!cur || !DM().isDocName(cur.name)) throw fail('not-a-document');
     need(await ST().trelloRest(t, '/cards/' + enc(docId), 'DELETE'));
+  }
+
+  /* ── Task documents: the open board card is the document ───────── */
+
+  function isTaskName(name) {
+    if (typeof name !== 'string' || !name.trim()) return false;
+    if (DM().isDocName(name)) return false;
+    if (name.indexOf('🧩') === 0) return false;
+    if (DM().isFolderIndexName(name)) return false;
+    return true;
+  }
+
+  function taskRev(meta) {
+    return Math.max(1, parseInt(meta && meta.docrev, 10) || 1);
+  }
+
+  function taskRecord(card) {
+    var meta = metaOf(card && card.desc);
+    var body = visibleOf(card && card.desc);
+    var id = String(card.id);
+    return {
+      id: id,
+      kind: 'task',
+      title: String(card.name || '').trim() || DM().UNTITLED,
+      body: body,
+      rev: taskRev(meta),
+      updatedAt: card.dateLastActivity || '',
+      size: body.length,
+      dueComplete: !!card.dueComplete,
+      subject: { k: 'task', id: id },
+      cover: null,
+      props: null,
+      icon: null,
+    };
+  }
+
+  function byUpdated(a, b) {
+    return a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0;
+  }
+
+  /** Open board cards (not notes, not entities). Newest first. */
+  async function listTasks(t) {
+    var id = await boardId(t);
+    var cards = need(await ST().trelloRest(t, '/boards/' + enc(id) + '/cards/open?fields=name,desc,dateLastActivity,dueComplete,closed')) || [];
+    return cards
+      .filter(function (c) { return c && c.id && !c.closed && isTaskName(c.name); })
+      .map(taskRecord)
+      .sort(byUpdated);
+  }
+
+  /** @returns {Promise<{id,kind,title,body,rev,updatedAt,dueComplete,subject}>} */
+  async function loadTask(t, cardId) {
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=name,desc,dateLastActivity,dueComplete,closed'));
+    if (!card || !isTaskName(card.name)) throw fail('not-a-task');
+    return taskRecord(card);
+  }
+
+  /**
+   * Writes the visible description and keeps every hidden key. `docrev` bumps like a document revision.
+   * Refuses ({reason:'conflict', remote}) when `docrev` moved on, unless opts.force.
+   */
+  async function saveTask(t, doc, opts) {
+    opts = opts || {};
+    var metaApi = global.DescMeta;
+    if (!metaApi || typeof metaApi.joinDesc !== 'function') throw fail('no-meta');
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=name,desc'));
+    if (!card || !isTaskName(card.name)) throw fail('not-a-task');
+    var meta = metaOf(card.desc);
+    var remoteRev = taskRev(meta);
+    if (!opts.force && remoteRev !== (doc.rev || 1)) {
+      throw fail('conflict', { remote: { rev: remoteRev, body: visibleOf(card.desc) } });
+    }
+    var nextRev = (doc.rev || 1) + 1;
+    meta.docrev = String(nextRev);
+    var desc = metaApi.joinDesc(doc.body, meta);
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
+    var saved = need(await ST().trelloRest(t, '/cards/' + enc(doc.id), 'PUT', { desc: desc }));
+    return { rev: nextRev, updatedAt: (saved && saved.dateLastActivity) || new Date().toISOString() };
+  }
+
+  /** Renames the board card. The name never gains the 📄 marker. */
+  async function renameTask(t, cardId, title) {
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=name'));
+    if (!cur || !isTaskName(cur.name)) throw fail('not-a-task');
+    var name = DM().cleanTitle(title) || DM().UNTITLED;
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { name: name }));
+    return { title: String((card && card.name) || name).trim() || name };
+  }
+
+  /** Archive, not delete: the card leaves the board and can be restored in Trello. */
+  async function archiveTask(t, cardId) {
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=name'));
+    if (!cur || !isTaskName(cur.name)) throw fail('not-a-task');
+    need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { closed: true }));
+  }
+
+  /**
+   * When the card's visible description is empty, copy the linked page's text into it (hidden keys stay).
+   * A description that already has text is left as it is.
+   * @returns {Promise<{adopted:boolean, body:string, rev:number}>}
+   */
+  async function adoptTaskPage(t, cardId, pageBody) {
+    var incoming = String(pageBody == null ? '' : pageBody).trim();
+    var card = need(await ST().trelloRest(t, '/cards/' + enc(cardId) + '?fields=name,desc'));
+    if (!card || !isTaskName(card.name)) throw fail('not-a-task');
+    var visible = visibleOf(card.desc).trim();
+    if (visible || !incoming) return { adopted: false, body: visibleOf(card.desc), rev: taskRev(metaOf(card.desc)) };
+    var metaApi = global.DescMeta;
+    if (!metaApi || typeof metaApi.joinDesc !== 'function') throw fail('no-meta');
+    var meta = metaOf(card.desc);
+    var rev = taskRev(meta);
+    meta.docrev = String(rev);
+    var desc = metaApi.joinDesc(incoming, meta);
+    if (desc.length > DM().MAX_DESC) throw fail('too-long');
+    need(await ST().trelloRest(t, '/cards/' + enc(cardId), 'PUT', { desc: desc }));
+    return { adopted: true, body: incoming, rev: rev };
   }
 
   /** Raw material for the @ picker; DocsModel.buildMentionIndex turns it into a searchable index. */
@@ -649,7 +775,8 @@
    */
   async function patchMeta(t, doc, patch) {
     patch = patch || {};
-    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=desc'));
+    var cur = need(await ST().trelloRest(t, '/cards/' + enc(doc.id) + '?fields=name,desc'));
+    if (!cur || !DM().isDocName(cur.name)) throw fail('not-a-document');
     var remote = DM().unpackDesc(cur && cur.desc);
     if (remote.rev !== (doc.rev || 1)) throw fail('conflict', { remote: { rev: remote.rev, body: remote.body } });
     var nextRev = remote.rev + 1;
@@ -980,6 +1107,12 @@
     deleteDoc: deleteDoc,
     createTask: createTask,
     loadMentionSources: loadMentionSources,
+    listTasks: listTasks,
+    loadTask: loadTask,
+    saveTask: saveTask,
+    renameTask: renameTask,
+    archiveTask: archiveTask,
+    adoptTaskPage: adoptTaskPage,
     loadCardFace: loadCardFace,
     saveCardDesc: saveCardDesc,
     setCardMembers: setCardMembers,

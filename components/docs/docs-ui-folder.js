@@ -211,6 +211,88 @@
       if (subject && subject.k === 'day') return 'calendar-event';
       return 'file-text';
     };
+    M.visibleTasks = function visibleTasks() {
+      var q = S.DM().fold(String(M.state.filter || '').trim());
+      var hide = global.HideDone ? global.HideDone.get() : true;
+      return (M.state.tasks || []).filter(function (d) {
+        if (hide && d.dueComplete) return false;
+        if (q && S.DM().fold(d.title).indexOf(q) < 0) return false;
+        return true;
+      });
+    };
+    M.paintTaskSection = function paintTaskSection(list) {
+      var all = M.state.tasks || [];
+      if (!all.length) return;
+      var hide = global.HideDone ? global.HideDone.get() : true;
+      var done = all.filter(function (d) { return d.dueComplete; }).length;
+      var head = S.h('div', { class: 'dc-sec' }, [S.h('span', { class: 'dc-sec-label', text: 'Tâches' })]);
+      if (done && global.HideDone) {
+        head.appendChild(S.h('button', {
+          class: 'dc-sec-toggle',
+          type: 'button',
+          title: global.HideDone.title(hide),
+          'aria-label': global.HideDone.title(hide),
+          onclick: function (e) {
+            e.stopPropagation();
+            global.HideDone.set(!global.HideDone.get());
+            M.paintList();
+          },
+        }, [S.icon(global.HideDone.icon(hide))]));
+      }
+      list.appendChild(head);
+      var tasks = M.visibleTasks();
+      if (!tasks.length) {
+        list.appendChild(S.h('p', {
+          class: 'dc-list-empty',
+          text: hide && done ? 'Tâches terminées masquées.' : 'Aucune tâche ne correspond.',
+        }));
+        return;
+      }
+      tasks.forEach(function (d) {
+        var on = M.state.current && M.state.current.id === d.id;
+        var more = S.h('button', {
+          class: 'dc-item-more',
+          title: 'Actions',
+          'aria-label': 'Actions de la tâche',
+          onclick: function (e) {
+            e.stopPropagation();
+            M.openDocMenu(more, d.id);
+          },
+        }, [S.icon('dots')]);
+        list.appendChild(S.h('div', {
+          class: 'sp-row dc-item' + (on ? ' is-on' : '') + (d.dueComplete ? ' is-done' : ''),
+          role: 'option',
+          'aria-selected': on ? 'true' : 'false',
+          tabindex: '0',
+          'data-id': d.id,
+          onclick: function () { M.openTaskDoc(d.id); },
+          onkeydown: function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              M.openTaskDoc(d.id);
+            }
+          },
+          oncontextmenu: function (e) {
+            e.preventDefault();
+            M.openDocMenu(more, d.id);
+          },
+        }, [
+          S.h('span', { class: 'dc-item-icon', 'aria-hidden': 'true' }, [S.icon('checkbox')]),
+          S.h('span', { class: 'dc-item-main' }, [
+            S.h('span', { class: 'dc-item-title', text: d.title }),
+            S.h('span', { class: 'dc-item-time', text: S.DM().relativeTime(d.updatedAt) }),
+          ]),
+          more,
+        ]));
+      });
+    };
+    M.taskById = function taskById(id) {
+      return (M.state.tasks || []).filter(function (x) { return x.id === id; })[0]
+        || (M.state.current && M.state.current.kind === 'task' && M.state.current.id === id ? M.state.current : null);
+    };
+    M.isTaskId = function isTaskId(id, opts) {
+      return !!((opts && opts.asTask) || M.taskById(id));
+    };
     M.paintList = function paintList() {
       var list = M.els.sideList;
       list.textContent = '';
@@ -219,20 +301,24 @@
         return;
       }
       var rows = S.DM().folderRows(M.state.docs, M.state.idx, M.state.openFolders, M.state.filter, M.state.sort, M.state.showArchived);
-      global.Skeleton.remember('docs', { items: rows.length });
+      global.Skeleton.remember('docs', { items: rows.length + (M.state.tasks ? M.state.tasks.length : 0) });
       var pend = M.state.pendingFolder;
       if (pend && pend.parent && !rows.some(function (r) { return r.type === 'folder' && r.folder.id === pend.parent; })) pend = M.state.pendingFolder = null;
+      M.paintTaskSection(list);
       if (pend && !pend.parent) list.appendChild(M.newFolderRow(0));
       if (!rows.length && !pend) {
-        list.appendChild(
-          S.h('p', {
-            class: 'dc-list-empty',
-            text: !M.state.authOk ? 'Autorisation Trello requise.' : M.state.filter ? 'Aucun document ne correspond.' : 'Aucun document pour l’instant.',
-          })
-        );
+        if (M.state.filter || !(M.state.tasks || []).length) {
+          list.appendChild(
+            S.h('p', {
+              class: 'dc-list-empty',
+              text: !M.state.authOk ? 'Autorisation Trello requise.' : M.state.filter ? 'Aucun document ne correspond.' : 'Aucun document pour l’instant.',
+            })
+          );
+        }
         M.appendAddRow(list);
         return;
       }
+      if ((M.state.tasks || []).length) list.appendChild(S.h('div', { class: 'dc-sec' }, [S.h('span', { class: 'dc-sec-label', text: 'Notes' })]));
       rows.forEach(function (r) {
         if (r.type === 'folder') {
           list.appendChild(M.folderRow(r));
@@ -962,9 +1048,12 @@
     };
     M.touchListItem = function touchListItem(id, patch) {
       var d = M.state.docs.filter(function (x) { return x.id === id; })[0];
-      if (!d) return;
-      Object.keys(patch).forEach(function (k) { d[k] = patch[k]; });
-      M.sortDocs();
+      var task = !d && (M.state.tasks || []).filter(function (x) { return x.id === id; })[0];
+      var hit = d || task;
+      if (!hit) return;
+      Object.keys(patch).forEach(function (k) { hit[k] = patch[k]; });
+      if (d) M.sortDocs();
+      else M.state.tasks.sort(function (a, b) { return a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0; });
       M.paintList();
     };
     M.closestIn = function closestIn(node, selector) {
@@ -1087,6 +1176,7 @@
     run: function (M) {
     M.state = {
       docs: [],
+      tasks: [], // open board cards shown as documents (kind: 'task')
       idx: S.DM().emptyIndex(), // folder tree (DocsModel "Folders")
       openFolders: S.loadOpenFolders(),
       sort: S.loadSort(),

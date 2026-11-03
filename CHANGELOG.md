@@ -3,6 +3,9 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-03
+- Documents : chaque tâche est un document. Sa description s’écrit avec le même éditeur, et la tâche apparaît dans la section Tâches.
+
 ## 2026-11-02
 
 - Notes : sur téléphone, les cartes ne se chevauchent plus (vraies colonnes) et les titres des cartes sont moins gros.

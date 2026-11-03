@@ -11,6 +11,7 @@ describe('DocsTrello (against an in-memory Trello)', () => {
   let fake;
 
   before(() => {
+    loadComponent('shared/desc-meta.js');
     loadComponent('docs/docs-model.js');
     loadComponent('docs/docs-trello.js');
     DT = global.DocsTrello;
@@ -239,5 +240,73 @@ describe('DocsTrello (against an in-memory Trello)', () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0].type, 'folder');
     assert.equal(rows[0].doc.id, first.created[0].id);
+  });
+
+  it('lists open tasks as documents and skips notes, entities and archived cards', async () => {
+    fake.cards.find((c) => c.id === 'task1').dueComplete = false;
+    fake.cards.push({ id: 'done1', name: 'Finie', idList: 'l1', closed: false, dueComplete: true, desc: 'ok', dateLastActivity: '2026-10-01T00:00:00Z' });
+    fake.cards.push({ id: 'ent1', name: '🧩 Lieu', idList: 'l1', closed: false, desc: '' });
+    const note = await DT.createDoc(fake.t, 'Note', 'texte');
+    const tasks = await DT.listTasks(fake.t);
+    assert.deepEqual(tasks.map((d) => d.id).sort(), ['done1', 'task1']);
+    assert.equal(tasks.find((d) => d.id === 'task1').kind, 'task');
+    assert.equal(tasks.find((d) => d.id === 'done1').dueComplete, true);
+    assert.equal(tasks.some((d) => d.id === note.id || d.id === 'old1' || d.id === 'ent1'), false);
+    assert.equal((await DT.listDocs(fake.t)).some((d) => d.id === 'task1'), false);
+  });
+
+  it('saves a task description without dropping hidden keys, and detects a newer revision', async () => {
+    const meta = global.DescMeta;
+    const card = fake.cards.find((c) => c.id === 'task1');
+    card.desc = meta.joinDesc('Bonjour', { 'outlook-event-id': 'ev-1' });
+    const mine = await DT.loadTask(fake.t, 'task1');
+    assert.equal(mine.body, 'Bonjour');
+    assert.equal(mine.rev, 1);
+    assert.equal(mine.subject.k, 'task');
+    const saved = await DT.saveTask(fake.t, { id: 'task1', body: 'Bonjour **monde**', rev: mine.rev });
+    assert.equal(saved.rev, 2);
+    const stored = meta.splitDesc(fake.cards.find((c) => c.id === 'task1').desc);
+    assert.equal(stored.visible, 'Bonjour **monde**');
+    assert.equal(stored.meta['outlook-event-id'], 'ev-1');
+    assert.equal(stored.meta.docrev, '2');
+    await assert.rejects(
+      () => DT.saveTask(fake.t, { id: 'task1', body: 'autre', rev: 1 }),
+      (err) => err.reason === 'conflict' && err.remote.rev === 2 && err.remote.body === 'Bonjour **monde**'
+    );
+    assert.equal((await DT.loadTask(fake.t, 'task1')).body, 'Bonjour **monde**');
+    const forced = await DT.saveTask(fake.t, { id: 'task1', body: 'la mienne', rev: 1 }, { force: true });
+    assert.equal(forced.rev, 2);
+    assert.equal(meta.splitDesc(fake.cards.find((c) => c.id === 'task1').desc).meta['outlook-event-id'], 'ev-1');
+  });
+
+  it('renames a task without the document marker and archives it instead of deleting it', async () => {
+    const renamed = await DT.renameTask(fake.t, 'task1', '  Nouveau nom ');
+    assert.equal(renamed.title, 'Nouveau nom');
+    assert.equal(fake.cards.find((c) => c.id === 'task1').name, 'Nouveau nom');
+    await DT.archiveTask(fake.t, 'task1');
+    const card = fake.cards.find((c) => c.id === 'task1');
+    assert.equal(card.closed, true);
+    assert.ok(card, 'the card is still there');
+    assert.equal((await DT.listTasks(fake.t)).some((d) => d.id === 'task1'), false);
+    await assert.rejects(() => DT.deleteDoc(fake.t, 'task1'), { reason: 'not-a-document' });
+    await assert.rejects(() => DT.saveDoc(fake.t, { id: 'task1', body: 'x', rev: 1 }), { reason: 'not-a-document' });
+  });
+
+  it('copies an empty task description from its linked page and leaves a written description alone', async () => {
+    const meta = global.DescMeta;
+    const page = await DT.createDoc(fake.t, 'Page de la tâche', '# Déjà écrit', { subject: { k: 'task', id: 'task1' } });
+    fake.cards.find((c) => c.id === 'task1').desc = meta.joinDesc('', { 'outlook-event-id': 'ev-9' });
+    const adopted = await DT.adoptTaskPage(fake.t, 'task1', page.body);
+    assert.equal(adopted.adopted, true);
+    const stored = meta.splitDesc(fake.cards.find((c) => c.id === 'task1').desc);
+    assert.equal(stored.visible, '# Déjà écrit');
+    assert.equal(stored.meta['outlook-event-id'], 'ev-9');
+    const again = await DT.adoptTaskPage(fake.t, 'task1', 'autre texte');
+    assert.equal(again.adopted, false);
+    assert.equal(meta.splitDesc(fake.cards.find((c) => c.id === 'task1').desc).visible, '# Déjà écrit');
+    fake.cards.push({ id: 'keep1', name: 'Garder', idList: 'l1', closed: false, desc: meta.joinDesc('Déjà là', {}) });
+    const kept = await DT.adoptTaskPage(fake.t, 'keep1', 'page plus longue');
+    assert.equal(kept.adopted, false);
+    assert.equal(meta.splitDesc(fake.cards.find((c) => c.id === 'keep1').desc).visible, 'Déjà là');
   });
 });
