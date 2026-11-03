@@ -95,12 +95,43 @@
 
   /* ── Storage ─────────────────────────────────────────────────────── */
 
+  var cache = {};
+  var cacheSig = '';
+
+  /** Running timer of a card from the last read (no I/O), for the chips views draw. */
+  function running(cardId) {
+    var x = cache[cardId];
+    return x && !x.firedAt ? x : null;
+  }
+
+  /** "14 h 30", "demain 14 h 30", or "3/11 14 h 30". */
+  function endLabel(timer) {
+    var d = new Date(timer.endsAt);
+    var hm = d.getHours() + ' h ' + pad(d.getMinutes());
+    var n = new Date();
+    var days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(n.getFullYear(), n.getMonth(), n.getDate())) / 86400000);
+    if (days === 1) return 'demain ' + hm;
+    if (days > 1) return d.getDate() + '/' + (d.getMonth() + 1) + ' ' + hm;
+    return hm;
+  }
+
+  function remember(map) {
+    cache = map;
+    var sig = Object.keys(map).sort().map(function (k) { return map[k].id + (map[k].firedAt ? '!' : ''); }).join('|');
+    if (sig !== cacheSig) {
+      var initial = cacheSig === '' && sig === '';
+      cacheSig = sig;
+      if (!initial && global.dispatchEvent && typeof global.CustomEvent === 'function') global.dispatchEvent(new CustomEvent('timers-changed'));
+    }
+    return map;
+  }
+
   function load(t) {
-    return Promise.resolve(t.get('board', 'shared', KEY)).then(norm);
+    return Promise.resolve(t.get('board', 'shared', KEY)).then(norm).then(remember);
   }
 
   function save(t, map) {
-    return Promise.resolve(t.set('board', 'shared', KEY, map)).then(function () { return map; });
+    return Promise.resolve(t.set('board', 'shared', KEY, map)).then(function () { return remember(map); });
   }
 
   function list(t) {
@@ -240,6 +271,8 @@
     upsert: upsert,
     without: without,
     list: list,
+    running: running,
+    endLabel: endLabel,
     set: set,
     cancel: cancel,
     start: start,

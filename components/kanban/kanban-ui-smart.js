@@ -520,6 +520,18 @@
         kids.push(S.h('div', { class: 'kb-place' }, placeKids));
       }
       if (badges.length) kids.push(S.h('div', { class: 'kb-badges' }, badges));
+      var cardTimer = global.Timers && global.Timers.running(row.id);
+      if (cardTimer) {
+        kids.push(S.h('button', {
+          class: 'kb-timer',
+          type: 'button',
+          title: 'Minuteur · cliquer pour modifier',
+          onclick: function (e) {
+            e.stopPropagation();
+            M.openEditor(row, 'timer', e.currentTarget);
+          },
+        }, [S.icon('alarm'), S.h('span', { text: global.Timers.endLabel(cardTimer) })]));
+      }
       var prog = null;
       if (typeof row.progress === 'number') {
         var p = Math.max(0, Math.min(100, row.progress));

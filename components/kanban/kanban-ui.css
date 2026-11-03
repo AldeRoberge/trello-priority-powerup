@@ -307,6 +307,20 @@ html[data-color-mode] .tp-page--kanban {
 }
 .kb-title { font-size: 13.5px; line-height: 1.35; word-break: break-word; }
 .kb-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.kb-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--tp-text-muted);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.kb-timer:hover { color: var(--tp-text); }
 .kb-chip {
   font: inherit;
   display: inline-flex;

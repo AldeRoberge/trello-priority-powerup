@@ -95,6 +95,9 @@
     M.root = root;
     M.t = t;
     if (global.Timers) global.Timers.ensure(t);
+    global.addEventListener('timers-changed', function () {
+      if (M.els && M.els.board && M.renderBoard) M.renderBoard();
+    });
     var __parts = (global.KanbanUiPartsMountMount || { list: [] }).list;
     for (var __i = 0; __i < __parts.length; __i++) __parts[__i].define(M);
     for (var __j = 0; __j < __parts.length; __j++) {
