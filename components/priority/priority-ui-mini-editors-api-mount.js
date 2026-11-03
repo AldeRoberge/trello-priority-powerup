@@ -1173,6 +1173,38 @@ var S = (global.PriorityUIParts = global.PriorityUIParts || {});
 
     fieldsSection.appendChild(fieldsWrap);
     priorityBody.appendChild(fieldsSection);
+
+    // The three sliders and the matrix open in a popover from the pencil on the badge.
+    var priorityEditBtn = document.createElement('button');
+    priorityEditBtn.type = 'button';
+    priorityEditBtn.className = 'priority-edit-btn';
+    priorityEditBtn.setAttribute('aria-label', 'Ajuster la priorit\u00e9');
+    priorityEditBtn.setAttribute('aria-expanded', 'false');
+    priorityEditBtn.title = 'Ajuster';
+    priorityEditBtn.innerHTML = '<i class="ti ti-pencil" aria-hidden="true"></i>';
+    var priorityHeatHead = priorityBody.querySelector('.heat-head');
+    (priorityHeatHead || priorityBody).appendChild(priorityEditBtn);
+    function setPriorityEditing(on) {
+      priorityBody.classList.toggle('is-editing', !!on);
+      priorityEditBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (typeof variantConfig.onLayoutChange === 'function') variantConfig.onLayoutChange();
+    }
+    priorityEditBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      setPriorityEditing(!priorityBody.classList.contains('is-editing'));
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (!priorityBody.classList.contains('is-editing')) return;
+      if (priorityBody.contains(e.target)) return;
+      setPriorityEditing(false);
+    });
+    priorityBody.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && priorityBody.classList.contains('is-editing')) {
+        e.stopPropagation();
+        setPriorityEditing(false);
+        priorityEditBtn.focus();
+      }
+    });
     priorityField.appendChild(priorityBody);
     prioritySection.appendChild(priorityField);
     card.appendChild(prioritySection);

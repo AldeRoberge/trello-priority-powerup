@@ -3,6 +3,10 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-03
+
+- Tâche : deux colonnes (description, progrès à gauche ; assignés, priorité, échéance à droite), priorité réduite à un badge avec crayon pour ajuster, titre en double retiré de Progrès.
+
 ## 2026-11-02
 
 - Notes : sur téléphone, les cartes ne se chevauchent plus (vraies colonnes) et les titres des cartes sont moins gros.

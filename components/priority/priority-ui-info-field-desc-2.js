@@ -862,7 +862,26 @@
     M.syncTitleInputSize();
     M.setDescMode('rich', { focus: false });
     M.applyMoreDetailsExpanded(M.moreDetailsExpanded, { silent: true });
-    M.sortEmptyRowsDown(M.body);
+    // Two columns on wide panels: main work (description, progress, details) on the left,
+    // metadata (assignees, places, priority, due) in a narrow sidebar. The title stays on top.
+    // Rows are only moved, so every M.*Row reference keeps working; sorting runs per column.
+    M.layoutEl = document.createElement('div');
+    M.layoutEl.className = 'info-layout';
+    M.mainColEl = document.createElement('div');
+    M.mainColEl.className = 'info-col info-col--main';
+    M.sideColEl = document.createElement('div');
+    M.sideColEl.className = 'info-col info-col--side';
+    M.layoutEl.appendChild(M.mainColEl);
+    M.layoutEl.appendChild(M.sideColEl);
+    M.body.insertBefore(M.layoutEl, M.titleRow.row.nextSibling);
+    [M.descRow, M.progressInline, M.moreRow].forEach(function (r) {
+      if (r && r.row) M.mainColEl.appendChild(r.row);
+    });
+    [M.membersRow, M.placesRow, M.priorityInline, M.dueInline, M.creatorRow].forEach(function (r) {
+      if (r && r.row) M.sideColEl.appendChild(r.row);
+    });
+    M.sortEmptyRowsDown(M.mainColEl);
+    M.sortEmptyRowsDown(M.sideColEl);
     M.sortEmptyRowsDown(M.moreBody);
     M.scheduleLabelSuggestions(false);
     M.scheduleTaskTypeSuggestions(false);
