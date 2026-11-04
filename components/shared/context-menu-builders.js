@@ -171,6 +171,8 @@
       items.unshift({
         id: 'delete',
         label: opts.deleteLabel || 'Supprimer',
+        // Same glyphs as the Table and Kanban: archiving is not trashing.
+        icon: /^Archiver/.test(opts.deleteLabel || '') ? 'archive' : /^Retirer le lien/.test(opts.deleteLabel || '') ? 'unlink' : 'trash',
         danger: true,
         action: function () {
           if (typeof opts.onDelete === 'function') opts.onDelete();

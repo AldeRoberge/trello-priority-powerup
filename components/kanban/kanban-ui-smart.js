@@ -694,7 +694,7 @@
         { sep: true },
         { icon: 'external-link', label: 'Ouvrir la carte', action: function () { M.openCard(row); } },
         {
-          icon: 'external-link',
+          icon: 'app-window',
           label: 'Ouvrir dans',
           children: (global.ViewTabs ? global.ViewTabs.OPEN_IN : []).map(function (v) {
             return { icon: v.icon, label: v.label, action: function () { global.ViewTabs.openIn(v.key, row.id); } };
