@@ -307,6 +307,13 @@ html[data-color-mode] .tp-page--kanban {
 }
 .kb-title { font-size: 13.5px; line-height: 1.35; word-break: break-word; }
 .kb-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Each property keeps its own column (width set from the widest chip on the board), present even when empty. */
+.kb-slot { display: inline-flex; flex: none; }
+.kb-slot--u { min-width: var(--kb-slot-u, 0); }
+.kb-slot--due { min-width: var(--kb-slot-due, 0); }
+.kb-slot--prio { min-width: var(--kb-slot-prio, 0); }
+.kb-slot--est { min-width: var(--kb-slot-est, 0); }
+.kb-slot:empty { min-height: 20px; }
 .kb-timer {
   display: inline-flex;
   align-items: center;

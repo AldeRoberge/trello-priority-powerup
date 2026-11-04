@@ -445,6 +445,18 @@
     M.chip = function chip(cls, iconName, text, title, onclick) {
       return S.h('button', { class: 'kb-chip ' + cls, title: title || null, onclick: onclick }, [S.icon(iconName), text ? S.h('span', { text: text }) : null]);
     };
+    /** Gives each chip slot the width of its widest chip on the board, so a property starts at the same place on every card. */
+    M.alignChips = function alignChips() {
+      var board = M.els && M.els.board;
+      if (!board) return;
+      ['u', 'due', 'prio', 'est'].forEach(function (k) { board.style.removeProperty('--kb-slot-' + k); });
+      var max = {};
+      board.querySelectorAll('.kb-slot > .kb-chip').forEach(function (chip) {
+        var m = /kb-slot--(\w+)/.exec(chip.parentNode.className);
+        if (m) max[m[1]] = Math.max(max[m[1]] || 0, Math.ceil(chip.getBoundingClientRect().width));
+      });
+      Object.keys(max).forEach(function (k) { if (max[k]) board.style.setProperty('--kb-slot-' + k, max[k] + 'px'); });
+    };
     M.subList = function subList(row) {
       var lines = [];
       function walk(items) {
@@ -465,14 +477,19 @@
     };
     M.tile = function tile(row, list) {
       var badges = [];
-      if (row.urgency) {
-        var tone = S.URGENCY_TONE[row.urgency];
-        badges.push(M.chip('kb-chip--u' + (tone == null ? 0 : tone), 'flame', row.urgency, 'Urgence · cliquer pour modifier', function (e) {
+      // One slot per property, always in the same order and always present (an empty value is a dimmed chip that
+      // sets it), so urgency, date, score and estimate line up from card to card (see M.alignChips).
+      var tone = row.urgency ? S.URGENCY_TONE[row.urgency] : null;
+      badges.push(M.chip('kb-chip--u' + (tone == null ? 0 : tone) + (row.urgency ? '' : ' kb-chip--empty'), 'flame', row.urgency || '', row.urgency ? 'Urgence · cliquer pour modifier' : 'Urgence · cliquer pour ajouter', function (e) {
+        e.stopPropagation();
+        M.openEditor(row, 'priority', e.currentTarget);
+      }));
+      if (!row.due) {
+        badges.push(M.chip('kb-chip--due kb-chip--empty', 'calendar-event', '', 'Échéance · cliquer pour ajouter', function (e) {
           e.stopPropagation();
-          M.openEditor(row, 'priority', e.currentTarget);
+          M.openEditor(row, 'due', e.currentTarget);
         }));
-      }
-      if (row.due) {
+      } else {
         var closed = S.KM().isClosedKey(row.statutKey);
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < S.todayIso() && !closed;
         var hard = global.WorkOS && global.WorkOS.dateKind(row) === 'hard';
@@ -486,6 +503,8 @@
           e.stopPropagation();
           M.openEditor(row, 'priority', e.currentTarget);
         }));
+      } else {
+        badges.push(null); // the score is computed, nothing to set here: the slot stays empty but keeps its width
       }
       var estLabel = row.estimate > 0 && global.CardFields ? global.CardFields.formatMinutes(row.estimate) : '';
       badges.push(M.chip('kb-chip--est' + (estLabel ? '' : ' kb-chip--empty'), 'clock', estLabel, 'Estimation · cliquer pour modifier', function (e) {
@@ -522,7 +541,13 @@
         }
         kids.push(S.h('div', { class: 'kb-place' }, placeKids));
       }
-      if (badges.length) kids.push(S.h('div', { class: 'kb-badges' }, badges));
+      var SLOTS = ['u', 'due', 'prio', 'est'];
+      var slots = badges.map(function (chip, i) {
+        return S.h('span', { class: 'kb-slot kb-slot--' + SLOTS[i] }, chip ? [chip] : []);
+      });
+      // The estimate sits at the end of the progress row (time next to %) so the four chips never need a second line.
+      var estSlot = typeof row.progress === 'number' ? slots.pop() : null;
+      kids.push(S.h('div', { class: 'kb-badges' }, slots));
       var cardTimer = global.Timers && global.Timers.running(row.id);
       if (cardTimer) {
         kids.push(S.h('button', {
@@ -566,6 +591,7 @@
               M.openEditor(row, 'progress', e.currentTarget.parentNode);
             },
           }),
+          estSlot,
         ]);
         kids.push(prog);
       }
