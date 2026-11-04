@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-03
+- Kanban : le tableau se charge de nouveau (il affichait « Impossible de charger le tableau » depuis l’ajout du minuteur sur les cartes).
 - Le bouton des tâches terminées est le même partout (Tableau, Kanban, Gantt, Mindmap, Aujourd’hui) : un œil et le nombre de tâches masquées. La barre du Kanban et celle du Gantt tiennent maintenant sur une ligne.
 - Gantt : la pastille « Masqué : Tâches terminées » en double est retirée, l’œil suffit.
 - Tableau et Gantt : un long titre passe à la ligne au lieu d’être coupé par « … », et l’étape en cours s’aligne sous le titre.
