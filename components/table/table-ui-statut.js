@@ -213,11 +213,9 @@
       var doneCount = M.state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
       var hideBtn = S.btn(M.HD.icon(M.state.hideDone), null, {
         active: M.state.hideDone,
-        title: M.HD.label(M.state.hideDone, doneCount) + ' · ' + M.HD.title(M.state.hideDone),
         onclick: function () { M.HD.set(!M.state.hideDone); },
       });
-      if (M.state.hideDone && doneCount) hideBtn.appendChild(S.h('span', { class: 'tb-badge tb-badge--soft', text: String(Math.min(doneCount, 99)) }));
-      kids.push(hideBtn);
+      kids.push(M.HD.decorate ? M.HD.decorate(hideBtn, M.state.hideDone, doneCount) : hideBtn);
       var histBtn = S.btn('history', 'Historique', { active: M.state.drawer === 'history', title: 'Tout ce qui a été modifié depuis ce tableau, avec annulation', onclick: function () { M.openDrawer('history'); } });
       histBtn.appendChild(S.h('span', { class: 'tb-badge tb-badge--soft', hidden: !(M.HP && M.HP.count()), text: String(Math.min(M.HP ? M.HP.count() : 0, 99)) }));
       kids.push(histBtn);

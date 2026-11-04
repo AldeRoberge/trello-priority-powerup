@@ -939,6 +939,9 @@ html:has(body.tp-page--journey) body {
     padding: 0;
     margin-right: 0;
   }
+  .tb-subtoggle.is-empty + .tb-name { max-width: calc(100% - 4px); }
+  .tb-subtoggle.is-empty ~ .tb-step,
+  .tb-subtoggle.is-empty ~ .tb-place { margin-left: 4px; }
 
   /* Gantt: summary chips on one swipeable line instead of three */
   .gantt-summary {
@@ -1046,3 +1049,16 @@ body { overscroll-behavior: none; }
     display: none !important;
   }
 }
+
+/* "Hide completed" toggle, same look in every view (HideDone.decorate): eye icon + hidden count.
+   The count slot keeps its width when empty, so toggling never moves the buttons next to it. */
+.hd-btn { gap: 3px; }
+.hd-btn .hd-n {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
+  background: color-mix(in srgb, currentColor 16%, transparent); color: inherit;
+  position: static;
+}
+.hd-btn .hd-n:empty { background: transparent; }
+.mm-tool.hd-btn { width: auto; min-width: 30px; padding: 0 6px; }

@@ -110,6 +110,16 @@
       if (!HD || !M.hideDoneBtn) return;
       var on = !!M.state.hideCompleted;
       M.hideDoneBtn.classList.toggle('is-active', on);
+      if (HD.decorate) {
+        var done = 0;
+        (M.state.tree || []).forEach(function walk(n) {
+          if (!n) return;
+          if (n.kind === 'card' && (n.done || n.category === 'completed')) done++;
+          if (n.kind === 'section') (n.children || []).forEach(walk);
+        });
+        HD.decorate(M.hideDoneBtn, on, done);
+        return;
+      }
       M.hideDoneBtn.title = HD.title(on);
       M.hideDoneBtn.innerHTML = '';
       var i = document.createElement('i');

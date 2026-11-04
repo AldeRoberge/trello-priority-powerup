@@ -430,6 +430,13 @@
       var HD = global.HideDone;
       if (!HD) return null;
       var hidden = HD.get();
+      if (HD.decorate) {
+        return HD.decorate(S.h('button', {
+          class: 'td-btn td-btn--quiet' + (hidden ? ' is-on' : '') + (count ? '' : ' is-idle'),
+          type: 'button',
+          onclick: function () { HD.set(!hidden); },
+        }), hidden, count);
+      }
       return S.h('button', {
         class: 'td-btn td-btn--quiet' + (hidden ? ' is-on' : '') + (count ? '' : ' is-idle'),
         type: 'button',

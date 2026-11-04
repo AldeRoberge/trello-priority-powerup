@@ -343,11 +343,14 @@
             M.renderBoard();
           },
         }),
-        M.btn(M.HD.icon(M.state.hideDone), M.HD.label(M.state.hideDone, done), {
-          active: M.state.hideDone,
-          title: M.HD.title(M.state.hideDone),
-          onclick: function () { M.HD.set(!M.state.hideDone); },
-        }),
+        (function () {
+          var b = M.btn(M.HD.icon(M.state.hideDone), M.HD.decorate ? null : M.HD.label(M.state.hideDone, done), {
+            active: M.state.hideDone,
+            title: M.HD.title(M.state.hideDone),
+            onclick: function () { M.HD.set(!M.state.hideDone); },
+          });
+          return M.HD.decorate ? M.HD.decorate(b, M.state.hideDone, done) : b;
+        })(),
         M.HP ? M.HP.button(document.body) : null,
       ].forEach(function (c) { if (c) M.els.bar.appendChild(c); });
       M.paintStatus();

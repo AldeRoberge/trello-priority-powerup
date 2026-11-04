@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "e2e-static", "runtimeExecutable": "npm", "runtimeArgs": ["run", "test:e2e", "--", "--serve"], "port": 4173 }
+    { "name": "e2e-static", "runtimeExecutable": "npm", "runtimeArgs": ["run", "test:e2e", "--", "--serve"], "port": 4173 },
+    { "name": "fake-trello", "runtimeExecutable": "npm", "runtimeArgs": ["run", "test:pw:serve"], "port": 4300 }
   ]
 }

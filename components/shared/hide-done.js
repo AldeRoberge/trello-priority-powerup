@@ -52,5 +52,32 @@
     title: function (hidden) {
       return hidden ? 'Afficher les tâches terminées' : 'Masquer les tâches terminées';
     },
+    /**
+     * Fills a view's own toolbar button with the same content in every view: the eye icon, then the number of
+     * hidden tasks in a quiet pill (only while they are hidden). The words go in the tooltip, so the toolbar
+     * stays one compact line and the button keeps the same width whatever the state.
+     */
+    decorate: function (btn, hidden, count) {
+      if (!btn || !global.document) return btn;
+      var doc = global.document;
+      hidden = !!hidden;
+      count = Math.max(0, Number(count) || 0);
+      btn.textContent = '';
+      var i = doc.createElement('i');
+      i.className = 'ti ti-' + (hidden ? 'eye-off' : 'eye');
+      i.setAttribute('aria-hidden', 'true');
+      btn.appendChild(i);
+      var n = doc.createElement('span');
+      n.className = 'hd-n';
+      n.textContent = hidden && count ? String(Math.min(count, 99)) : '';
+      btn.appendChild(n);
+      btn.classList.add('hd-btn');
+      btn.classList.toggle('is-hiding', hidden);
+      var words = hidden ? 'Terminées masquées' + (count ? ' (' + count + ')' : '') : 'Terminées affichées';
+      btn.title = words + ' · ' + (hidden ? 'cliquer pour les afficher' : 'cliquer pour les masquer');
+      btn.setAttribute('aria-label', words);
+      btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+      return btn;
+    },
   };
 })(typeof window !== 'undefined' ? window : this);

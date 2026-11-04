@@ -507,7 +507,7 @@
   /** Which TIME_COLUMNS bucket a due date (ISO text) falls in, relative to `now`. */
   function dueBucket(due, now) {
     if (!due) return 'none';
-    var m = /^(d{4})-(d{2})-(d{2})/.exec(String(due));
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(due));
     var d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(due);
     if (isNaN(d.getTime())) return 'none';
     var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
