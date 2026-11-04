@@ -1062,3 +1062,7 @@ body { overscroll-behavior: none; }
 }
 .hd-btn .hd-n:empty { background: transparent; }
 .mm-tool.hd-btn { width: auto; min-width: 30px; padding: 0 6px; }
+
+/* Card chips in fixed columns (ChipSlots): every slot is present, its width comes from ChipSlots.align. */
+.cs-slot { display: inline-flex; flex: none; box-sizing: border-box; }
+.cs-slot:empty { min-height: 20px; }

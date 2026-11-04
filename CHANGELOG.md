@@ -4,6 +4,8 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-03
+- Orchestrateur : la priorité, l’estimation, l’heure et le jour sont alignés d’une carte à l’autre, comme dans le Kanban.
+- Documents : chaque propriété vide affiche seulement « Cliquer pour ajouter… » (plus de + en double), y compris Documents; un champ à une seule valeur n’a plus de +. Les titres de la barre de gauche passent à la ligne, et l’œil des tâches terminées affiche leur nombre.
 - Kanban : l’urgence, la date et le score sont alignés d’une carte à l’autre, chacun dans sa colonne. Une urgence ou une date manquante se règle d’un clic sur sa pastille pâle, et l’estimation est au bout de la barre de progrès.
 - Kanban : le tableau se charge de nouveau (il affichait « Impossible de charger le tableau » depuis l’ajout du minuteur sur les cartes).
 - Le bouton des tâches terminées est le même partout (Tableau, Kanban, Gantt, Mindmap, Aujourd’hui) : un œil et le nombre de tâches masquées. La barre du Kanban et celle du Gantt tiennent maintenant sur une ligne.

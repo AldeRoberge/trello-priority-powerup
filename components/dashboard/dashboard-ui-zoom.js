@@ -726,6 +726,11 @@
       }
       return S.h('span', { class: 'db-place' }, kids);
     };
+    M.metaSlots = function metaSlots(pairs) {
+      pairs = pairs.filter(Boolean);
+      if (global.ChipSlots) return global.ChipSlots.slots(pairs);
+      return pairs.map(function (p) { return p[1]; });
+    };
     M.taskCard = function taskCard(row, showDue, owner) {
       var late = !!(S.DM().plannedDay(row) && S.DM().plannedDay(row) < M.today);
       var hard = S.WO() && S.WO().dateKind(row) === 'hard';
@@ -733,13 +738,15 @@
         S.h('div', { class: 'db-task-name', text: row.name }),
         M.stepLine(row),
         M.placeLine(row),
-        S.h('div', { class: 'db-task-meta' }, [
-          hard ? S.h('span', { class: 'db-chip', text: 'Échéance' }) : null,
-          M.prioBadge(row, true),
-          M.estChip(row),
-          row.startTime ? S.h('span', { class: 'db-chip', text: S.clockLabel(row.startTime) }) : null,
-          showDue === true ? M.dueChip(row) : null,
-        ]),
+        // One slot per property, same order on every card (shared ChipSlots), so nothing shifts when a value is
+        // missing. "Échéance" (a hard date) comes last: it is rare, so its empty slot only pads the end.
+        S.h('div', { class: 'db-task-meta' }, M.metaSlots([
+          ['prio', M.prioBadge(row, true)],
+          ['est', M.estChip(row)],
+          ['time', row.startTime ? S.h('span', { class: 'db-chip', text: S.clockLabel(row.startTime) }) : null],
+          showDue === true ? ['due', M.dueChip(row)] : null,
+          ['hard', hard ? S.h('span', { class: 'db-chip', text: 'Échéance' }) : null],
+        ])),
       ]);
       el.addEventListener('dragstart', function (e) {
         e.dataTransfer.setData('text/plain', row.id);

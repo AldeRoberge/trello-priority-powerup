@@ -222,7 +222,9 @@
     M.endList = function endList(value, key, add) {
       var bits = S.h('div', { class: 'dc-prop-bits' });
       while (value.firstChild) bits.appendChild(value.firstChild);
-      if (add) bits.appendChild(add);
+      // An empty row already says "Cliquer pour ajouter…": no second "+" next to it.
+      var empty = bits.querySelector('.dc-prop-empty, .dc-tag-input.is-empty');
+      if (add && !empty) bits.appendChild(add);
       value.appendChild(bits);
       value.setAttribute('data-clip', key);
     };
@@ -752,7 +754,8 @@
               onRemove: field.kind === 'priority' && !fromLabel ? null : function () { M.commitField(field, ''); },
             }));
           }
-          M.endList(v, 'field:' + field.id, M.plusBtn('Ajouter', function (btn) { M.openField(field, btn); }));
+          // One value per field: the chip itself edits it, so no "+" (that icon only adds a new item).
+          M.endList(v, 'field:' + field.id, null);
         }));
       });
       var loose = fc.loose(M.state.face.labels || []);
@@ -994,6 +997,9 @@
             S.h('span', { text: d.title }),
           ]));
         });
+        if (!M.childFolders().length && !M.childDocs().length) {
+          v.appendChild(M.emptyBtn('Cliquer pour ajouter…', function () { M.newDoc(null, null, null, cur.id); }));
+        }
         M.endList(v, 'docs', M.plusBtn('Nouveau sous-document', function () { M.newDoc(null, null, null, cur.id); }));
       }));
       M.scheduleClips();

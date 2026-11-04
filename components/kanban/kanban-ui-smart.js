@@ -445,17 +445,9 @@
     M.chip = function chip(cls, iconName, text, title, onclick) {
       return S.h('button', { class: 'kb-chip ' + cls, title: title || null, onclick: onclick }, [S.icon(iconName), text ? S.h('span', { text: text }) : null]);
     };
-    /** Gives each chip slot the width of its widest chip on the board, so a property starts at the same place on every card. */
+    /** Lines the chips up from card to card (shared ChipSlots, see components/shared/chip-slots.js). */
     M.alignChips = function alignChips() {
-      var board = M.els && M.els.board;
-      if (!board) return;
-      ['u', 'due', 'prio', 'est'].forEach(function (k) { board.style.removeProperty('--kb-slot-' + k); });
-      var max = {};
-      board.querySelectorAll('.kb-slot > .kb-chip').forEach(function (chip) {
-        var m = /kb-slot--(\w+)/.exec(chip.parentNode.className);
-        if (m) max[m[1]] = Math.max(max[m[1]] || 0, Math.ceil(chip.getBoundingClientRect().width));
-      });
-      Object.keys(max).forEach(function (k) { if (max[k]) board.style.setProperty('--kb-slot-' + k, max[k] + 'px'); });
+      if (M.els && M.els.board && global.ChipSlots) global.ChipSlots.align(M.els.board);
     };
     M.subList = function subList(row) {
       var lines = [];
@@ -542,9 +534,7 @@
         kids.push(S.h('div', { class: 'kb-place' }, placeKids));
       }
       var SLOTS = ['u', 'due', 'prio', 'est'];
-      var slots = badges.map(function (chip, i) {
-        return S.h('span', { class: 'kb-slot kb-slot--' + SLOTS[i] }, chip ? [chip] : []);
-      });
+      var slots = global.ChipSlots.slots(badges.map(function (chip, i) { return [SLOTS[i], chip]; }));
       // The estimate sits at the end of the progress row (time next to %) so the four chips never need a second line.
       var estSlot = typeof row.progress === 'number' ? slots.pop() : null;
       kids.push(S.h('div', { class: 'kb-badges' }, slots));
