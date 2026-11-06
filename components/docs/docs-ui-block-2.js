@@ -526,14 +526,16 @@
       }, [S.icon('layout-sidebar')]);
       M.els.head.textContent = '';
       var mentionBtn = function (cmd, iconName, label, hint) {
+        // Icon only, like every other button of the bar; the typed shortcut stays in the tooltip.
         return S.h('button', {
-          class: 'dc-tb dc-tb--text',
+          class: 'dc-tb',
           type: 'button',
           title: label + ' (' + hint + ')',
+          'aria-label': label,
           'data-cmd': cmd,
           onmousedown: function (e) { e.preventDefault(); },
           onclick: function () { M.runCommand(cmd); },
-        }, [S.icon(iconName), S.h('span', { text: hint })]);
+        }, [S.icon(iconName)]);
       };
       var more = S.h('button', {
         class: 'dc-tb',

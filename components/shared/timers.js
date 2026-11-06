@@ -242,12 +242,13 @@
     setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 15000);
   }
 
-  var running = false;
+  // Not named `running`: that would overwrite the running(cardId) function above (Kanban failed to load).
+  var tickerStarted = false;
 
   /** Starts the ticker once per page, with a built-in toast. Safe to call from every view. */
   function ensure(t) {
-    if (running || !t || typeof t.get !== 'function') return;
-    running = true;
+    if (tickerStarted || !t || typeof t.get !== 'function') return;
+    tickerStarted = true;
     start(t, { onFire: function (x) { toast(x, t); } });
   }
 

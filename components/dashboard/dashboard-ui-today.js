@@ -492,6 +492,7 @@
       if (M.state.section === 'triage') M.renderTriage();
       else if (M.state.section === 'orchestrator') M.renderOrchestrator();
       else M.renderToday();
+      if (global.ChipSlots) global.ChipSlots.align(M.els.main);
       M.els.main.scrollTop = keepScroll;
       M.els.main.querySelectorAll('[data-keep]').forEach(function (n) {
         var top = kept[n.getAttribute('data-keep')];

@@ -67,6 +67,7 @@
       if (model) M.els.board.appendChild(M.lanesBoard(model));
       else cols.forEach(function (c) { M.els.board.appendChild(M.column(c)); });
       global.Skeleton.remember('kanban', { cols: cols.map(function (c) { return c.cards.length; }) });
+      M.alignChips();
       M.els.board.scrollLeft = scrollX;
       if (model) M.els.board.scrollTop = scrollY;
       M.els.board.querySelectorAll('.kb-col').forEach(function (c) {

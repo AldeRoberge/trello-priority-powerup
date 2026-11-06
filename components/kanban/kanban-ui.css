@@ -495,7 +495,8 @@ html[data-color-mode] .tp-page--kanban {
   color: var(--tp-text-muted);
 }
 .kb-ai:focus-within .kb-ai-input:placeholder-shown ~ .kb-ai-hint { display: inline-block; }
-.kb-chip--empty { opacity: 0.55; }
+.kb-chip--empty { opacity: 0.55; background: transparent; box-shadow: none; color: var(--tp-text-muted); } /* a missing value: icon only, no pill */
+.kb-chip--empty:hover { background: var(--tp-surface-hover); }
 .kb-card:hover .kb-chip--empty,
 .kb-chip--empty:hover,
 .kb-chip--empty:focus-visible { opacity: 0.9; }

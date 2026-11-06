@@ -143,6 +143,14 @@ body.tp-page--gantt #ganttMount {
 }
 .gantt-task-name {
   font-size: 13px;
+  /* A long name wraps on two lines (fits the 40px row) instead of being cut after a few words. */
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 .gantt-section-title {
   font-weight: 600;

@@ -78,3 +78,8 @@ test('start fires a due timer once and marks it fired', async () => {
   const [saved] = await T.list(t);
   assert.ok(saved.firedAt);
 });
+
+test('running(cardId) stays a function (the ticker flag must not overwrite it)', () => {
+  assert.equal(typeof T.running, 'function');
+  assert.equal(typeof T.ensure, 'function');
+});

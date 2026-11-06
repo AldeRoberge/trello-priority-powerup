@@ -1090,7 +1090,7 @@
       var items = describeCriteria(criteria, facets);
       var options = opts.getOptions();
       var hides = [
-        ['hideCompleted', 'Tâches terminées', 'ti-circle-check'],
+        // Completed tasks are not listed: the eye toggle next to Historique already shows that state.
         ['hideBlocked', 'Tâches bloquées', 'ti-lock'],
         ['hideUndated', 'Tâches sans date', 'ti-calendar-off'],
       ];

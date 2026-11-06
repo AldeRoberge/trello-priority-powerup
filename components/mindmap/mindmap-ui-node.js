@@ -176,13 +176,15 @@
       }
       kids.push(S.h('span', { class: 'mm-count' }, [tasks + (tasks > 1 ? ' tâches' : ' tâche')]));
       var doneCount = M.state.records.filter(function (r) { return S.MM().isClosed(r); }).length;
+      var hdTool = M.tool(M.HD.icon(M.state.hideDone), M.HD.label(M.state.hideDone, doneCount), {
+        pressed: M.state.hideDone,
+        title: M.HD.title(M.state.hideDone),
+        badge: M.state.hideDone && doneCount ? String(Math.min(doneCount, 99)) : '',
+        onclick: function () { M.HD.set(!M.state.hideDone); },
+      });
+      if (M.HD.decorate) M.HD.decorate(hdTool, M.state.hideDone, doneCount).classList.add('mm-tool--hd');
       kids.push(S.h('div', { class: 'mm-tools', role: 'group', 'aria-label': 'Affichage' }, [
-        M.tool(M.HD.icon(M.state.hideDone), M.HD.label(M.state.hideDone, doneCount), {
-          pressed: M.state.hideDone,
-          title: M.HD.title(M.state.hideDone),
-          badge: M.state.hideDone && doneCount ? String(Math.min(doneCount, 99)) : '',
-          onclick: function () { M.HD.set(!M.state.hideDone); },
-        }),
+        hdTool,
         M.toolSep(),
         M.tool('zoom-out', 'Dézoomer', { toggle: false, onclick: function () { M.zoomBy(1 / 1.25); } }),
         S.h('button', {

@@ -234,7 +234,7 @@
     items.push({
       id: 'open-in',
       label: 'Ouvrir dans',
-      icon: 'external-link',
+      icon: 'app-window',
       group: 'Ouvrir',
       children: [
         { id: 'open-in:mindmap', label: 'Mindmap', icon: 'hierarchy-2' },

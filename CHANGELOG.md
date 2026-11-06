@@ -4,6 +4,17 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-03
+- Les barres d’outils ont toutes la même taille de boutons et d’icônes (Tableau, Kanban, Gantt, Mindmap, Documents). Le Gantt a de vraies flèches pour Précédent et Suivant, et la barre de l’éditeur de Documents tient sur une ligne.
+- Menus : « Archiver la carte » a l’icône d’archive dans le Gantt (plus la poubelle), et « Ouvrir dans » a sa propre icône.
+- Kanban : une valeur manquante n’est plus qu’une icône pâle, sans contour.
+- Orchestrateur : la priorité, l’estimation, l’heure et le jour sont alignés d’une carte à l’autre, comme dans le Kanban.
+- Documents : chaque propriété vide affiche seulement « Cliquer pour ajouter… » (plus de + en double), y compris Documents; un champ à une seule valeur n’a plus de +. Les titres de la barre de gauche passent à la ligne, et l’œil des tâches terminées affiche leur nombre.
+- Kanban : l’urgence, la date et le score sont alignés d’une carte à l’autre, chacun dans sa colonne. Une urgence ou une date manquante se règle d’un clic sur sa pastille pâle, et l’estimation est au bout de la barre de progrès.
+- Kanban : le tableau se charge de nouveau (il affichait « Impossible de charger le tableau » depuis l’ajout du minuteur sur les cartes).
+- Le bouton des tâches terminées est le même partout (Tableau, Kanban, Gantt, Mindmap, Aujourd’hui) : un œil et le nombre de tâches masquées. La barre du Kanban et celle du Gantt tiennent maintenant sur une ligne.
+- Gantt : la pastille « Masqué : Tâches terminées » en double est retirée, l’œil suffit.
+- Tableau et Gantt : un long titre passe à la ligne au lieu d’être coupé par « … », et l’étape en cours s’aligne sous le titre.
+- Mindmap : une tâche due aujourd’hui n’est plus classée « En retard » dans la vue par échéance.
 - Documents : chaque tâche est un document. Sa description s’écrit avec le même éditeur, et la tâche apparaît dans la section Tâches.
 
 ## 2026-11-02

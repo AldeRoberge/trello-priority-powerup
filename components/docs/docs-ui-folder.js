@@ -227,7 +227,7 @@
       var done = all.filter(function (d) { return d.dueComplete; }).length;
       var head = S.h('div', { class: 'dc-sec' }, [S.h('span', { class: 'dc-sec-label', text: 'Tâches' })]);
       if (done && global.HideDone) {
-        head.appendChild(S.h('button', {
+        var hdBtn = S.h('button', {
           class: 'dc-sec-toggle',
           type: 'button',
           title: global.HideDone.title(hide),
@@ -237,7 +237,10 @@
             global.HideDone.set(!global.HideDone.get());
             M.paintList();
           },
-        }, [S.icon(global.HideDone.icon(hide))]));
+        }, [S.icon(global.HideDone.icon(hide))]);
+        // Same eye + count as the other views' toolbars.
+        if (global.HideDone.decorate) global.HideDone.decorate(hdBtn, hide, done);
+        head.appendChild(hdBtn);
       }
       list.appendChild(head);
       var tasks = M.visibleTasks();

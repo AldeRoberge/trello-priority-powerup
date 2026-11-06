@@ -343,11 +343,14 @@
             M.renderBoard();
           },
         }),
-        M.btn(M.HD.icon(M.state.hideDone), M.HD.label(M.state.hideDone, done), {
-          active: M.state.hideDone,
-          title: M.HD.title(M.state.hideDone),
-          onclick: function () { M.HD.set(!M.state.hideDone); },
-        }),
+        (function () {
+          var b = M.btn(M.HD.icon(M.state.hideDone), M.HD.decorate ? null : M.HD.label(M.state.hideDone, done), {
+            active: M.state.hideDone,
+            title: M.HD.title(M.state.hideDone),
+            onclick: function () { M.HD.set(!M.state.hideDone); },
+          });
+          return M.HD.decorate ? M.HD.decorate(b, M.state.hideDone, done) : b;
+        })(),
         M.HP ? M.HP.button(document.body) : null,
       ].forEach(function (c) { if (c) M.els.bar.appendChild(c); });
       M.paintStatus();
@@ -442,6 +445,10 @@
     M.chip = function chip(cls, iconName, text, title, onclick) {
       return S.h('button', { class: 'kb-chip ' + cls, title: title || null, onclick: onclick }, [S.icon(iconName), text ? S.h('span', { text: text }) : null]);
     };
+    /** Lines the chips up from card to card (shared ChipSlots, see components/shared/chip-slots.js). */
+    M.alignChips = function alignChips() {
+      if (M.els && M.els.board && global.ChipSlots) global.ChipSlots.align(M.els.board);
+    };
     M.subList = function subList(row) {
       var lines = [];
       function walk(items) {
@@ -462,14 +469,19 @@
     };
     M.tile = function tile(row, list) {
       var badges = [];
-      if (row.urgency) {
-        var tone = S.URGENCY_TONE[row.urgency];
-        badges.push(M.chip('kb-chip--u' + (tone == null ? 0 : tone), 'flame', row.urgency, 'Urgence · cliquer pour modifier', function (e) {
+      // One slot per property, always in the same order and always present (an empty value is a dimmed chip that
+      // sets it), so urgency, date, score and estimate line up from card to card (see M.alignChips).
+      var tone = row.urgency ? S.URGENCY_TONE[row.urgency] : null;
+      badges.push(M.chip('kb-chip--u' + (tone == null ? 0 : tone) + (row.urgency ? '' : ' kb-chip--empty'), 'flame', row.urgency || '', row.urgency ? 'Urgence · cliquer pour modifier' : 'Urgence · cliquer pour ajouter', function (e) {
+        e.stopPropagation();
+        M.openEditor(row, 'priority', e.currentTarget);
+      }));
+      if (!row.due) {
+        badges.push(M.chip('kb-chip--due kb-chip--empty', 'calendar-event', '', 'Échéance · cliquer pour ajouter', function (e) {
           e.stopPropagation();
-          M.openEditor(row, 'priority', e.currentTarget);
+          M.openEditor(row, 'due', e.currentTarget);
         }));
-      }
-      if (row.due) {
+      } else {
         var closed = S.KM().isClosedKey(row.statutKey);
         var overdue = /^\d{4}-\d{2}-\d{2}/.test(row.due) && row.due.slice(0, 10) < S.todayIso() && !closed;
         var hard = global.WorkOS && global.WorkOS.dateKind(row) === 'hard';
@@ -483,6 +495,8 @@
           e.stopPropagation();
           M.openEditor(row, 'priority', e.currentTarget);
         }));
+      } else {
+        badges.push(null); // the score is computed, nothing to set here: the slot stays empty but keeps its width
       }
       var estLabel = row.estimate > 0 && global.CardFields ? global.CardFields.formatMinutes(row.estimate) : '';
       badges.push(M.chip('kb-chip--est' + (estLabel ? '' : ' kb-chip--empty'), 'clock', estLabel, 'Estimation · cliquer pour modifier', function (e) {
@@ -519,7 +533,11 @@
         }
         kids.push(S.h('div', { class: 'kb-place' }, placeKids));
       }
-      if (badges.length) kids.push(S.h('div', { class: 'kb-badges' }, badges));
+      var SLOTS = ['u', 'due', 'prio', 'est'];
+      var slots = global.ChipSlots.slots(badges.map(function (chip, i) { return [SLOTS[i], chip]; }));
+      // The estimate sits at the end of the progress row (time next to %) so the four chips never need a second line.
+      var estSlot = typeof row.progress === 'number' ? slots.pop() : null;
+      kids.push(S.h('div', { class: 'kb-badges' }, slots));
       var cardTimer = global.Timers && global.Timers.running(row.id);
       if (cardTimer) {
         kids.push(S.h('button', {
@@ -563,6 +581,7 @@
               M.openEditor(row, 'progress', e.currentTarget.parentNode);
             },
           }),
+          estSlot,
         ]);
         kids.push(prog);
       }
@@ -675,7 +694,7 @@
         { sep: true },
         { icon: 'external-link', label: 'Ouvrir la carte', action: function () { M.openCard(row); } },
         {
-          icon: 'external-link',
+          icon: 'app-window',
           label: 'Ouvrir dans',
           children: (global.ViewTabs ? global.ViewTabs.OPEN_IN : []).map(function (v) {
             return { icon: v.icon, label: v.label, action: function () { global.ViewTabs.openIn(v.key, row.id); } };

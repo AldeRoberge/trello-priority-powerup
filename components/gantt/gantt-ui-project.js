@@ -61,7 +61,11 @@
 
       var navGroup = tbGroup();
       var nav = S.el('div', 'gantt-nav gantt-segmented');
-      var prev = S.el('button', 'gantt-btn', { type: 'button', text: '\u2039' });
+      var prev = S.el('button', 'gantt-btn gantt-btn--icon', { type: 'button' });
+      var prevIcon = S.el('i', 'ti ti-chevron-left');
+      prevIcon.setAttribute('aria-hidden', 'true');
+      prev.appendChild(prevIcon);
+      prev.setAttribute('aria-label', 'Pr\u00e9c\u00e9dent');
       prev.title = 'Pr\u00e9c\u00e9dent';
       prev.addEventListener('click', function () {
         M.nudgePeriod(-1);
@@ -77,7 +81,11 @@
         M.state.scrollToToday = true;
         M.render();
       });
-      var next = S.el('button', 'gantt-btn', { type: 'button', text: '\u203a' });
+      var next = S.el('button', 'gantt-btn gantt-btn--icon', { type: 'button' });
+      var nextIcon = S.el('i', 'ti ti-chevron-right');
+      nextIcon.setAttribute('aria-hidden', 'true');
+      next.appendChild(nextIcon);
+      next.setAttribute('aria-label', 'Suivant');
       next.title = 'Suivant';
       next.addEventListener('click', function () {
         M.nudgePeriod(1);

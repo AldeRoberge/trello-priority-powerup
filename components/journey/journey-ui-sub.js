@@ -588,7 +588,7 @@
         items.push({
           id: 'views',
           label: 'Ouvrir dans',
-          icon: 'layout-grid',
+          icon: 'app-window',
           children: [
             { id: 'table', label: 'Tableau', action: function () { M.goView('./table.html', id); } },
             { id: 'gantt', label: 'Gantt', action: function () { M.goView('./gantt.html', id); } },
