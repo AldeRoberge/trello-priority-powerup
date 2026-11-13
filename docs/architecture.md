@@ -64,6 +64,10 @@ A big `mount()` (or `createInfoField`, `chatTurn`...) is cut into ordered part f
 
 Covered this way: table, kanban, gantt, docs, dashboard (and its Today board), mindmap, entities (and its composer), journey, completion, agent UI, plus `createInfoField`, `createDueDateField` and `chatTurn`.
 
+## Standalone (/work)
+
+`components/work/work-sdk.js` remplace `power-up.min.js` sur alderoberge.com/work et le Worker (`workers/trello-sheet-sync/src/work/`) répond à ses appels. Voir [work.md](work.md). Une vue qui appelle un nouveau `t.*` doit l'avoir dans ce SDK (et dans `e2e/fake-trello`).
+
 ## Size rule
 
 No component file may pass 1500 lines unless it is in `scripts/size-baseline.json`; a listed file may not grow. When you shrink one, run `node scripts/check-structure.js --update-baseline`. The files still listed are mostly stylesheets (`priority-ui.css` 10k, `trello-theme.css` 6k, `agent-ui.css` 5k, ...) and single parts that are one long list of statements.

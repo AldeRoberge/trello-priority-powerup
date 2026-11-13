@@ -26,8 +26,10 @@
     "verify:version": "node sandbox/verify-version.js",
     "verify": "npm run verify:presets && npm run verify:matrix && npm run verify:version && npm run verify:badges && npm run verify:completion && npm run verify:effects && npm run verify:statut",
     "dev": "node scripts/dev-server.js",
+    "dev:work": "node scripts/work-dev.js",
     "stamp:build": "node scripts/stamp-build.js",
     "render:icon": "node scripts/render-icon.js",
+    "setup:work": "powershell -ExecutionPolicy Bypass -File scripts/setup-work.ps1",
     "setup:sheet-sync": "powershell -ExecutionPolicy Bypass -File scripts/setup-sheet-sync.ps1",
     "setup:documents-drive": "powershell -ExecutionPolicy Bypass -File scripts/setup-documents-drive.ps1",
     "setup:keep": "powershell -ExecutionPolicy Bypass -File scripts/setup-keep.ps1"

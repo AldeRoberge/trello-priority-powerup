@@ -3,6 +3,9 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-13
+- Nouvelle adresse alderoberge.com/work : le Cerveau s’ouvre directement, sans passer par Trello. Connexion avec Google, mêmes vues (Dashboard, Tableau, Kanban, Gantt, Mindmap, Documents), les modifications vont dans Trello et dans le Google Sheet.
+
 ## 2026-11-03
 - Les barres d’outils ont toutes la même taille de boutons et d’icônes (Tableau, Kanban, Gantt, Mindmap, Documents). Le Gantt a de vraies flèches pour Précédent et Suivant, et la barre de l’éditeur de Documents tient sur une ligne.
 - Menus : « Archiver la carte » a l’icône d’archive dans le Gantt (plus la poubelle), et « Ouvrir dans » a sa propre icône.

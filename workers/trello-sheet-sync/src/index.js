@@ -12,6 +12,7 @@
 //   POST /keep/sync              reconcile Documents ↔ Google Keep notes now (Workspace)
 //   GET  /unsplash?q=            Unsplash photos for document covers (secret UNSPLASH_ACCESS_KEY)
 //   POST /webhook/register       (re)register the Trello webhook
+//   /work/*                      the standalone app (Google sign-in, see src/work/)
 // Everything except the webhook and /health needs the header x-sync-secret.
 
 import { COLUMNS, DEFAULT_COLUMNS } from './columns.js';
@@ -38,6 +39,10 @@ import { searchWeb } from './search.js';
 import { searchUnsplash } from './unsplash.js';
 import { keepEnabled, syncAllKeep, keepSyncStatus } from './keep.js';
 import { driveEnabled, syncDocumentCard, syncAllDocuments, docSyncStatus } from './drive.js';
+import { handleWork } from './work/index.js';
+import { dropSnapshot } from './work/api.js';
+
+export { WorkStore } from './work/store.js';
 
 function corsHeaders(request, env) {
   const origin = request.headers.get('origin') || '';
@@ -64,6 +69,7 @@ function json(request, env, body, status = 200) {
 
 async function handleWebhook(request, env, ctx) {
   if (request.method !== 'POST') return new Response('ok'); // Trello verifies the URL with HEAD
+  if (env.WORK_STORE) ctx.waitUntil(dropSnapshot(env).catch(() => {})); // /work shows the change at once
   let payload = null;
   try {
     payload = await request.json();
@@ -95,9 +101,10 @@ async function handleWebhook(request, env, ctx) {
   return new Response('ok');
 }
 
-export default {
+const worker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === '/work' || url.pathname.startsWith('/work/')) return handleWork(request, env, ctx, worker);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(request, env) });
 
     if (url.pathname === '/health') return json(request, env, { ok: true });
@@ -176,3 +183,5 @@ export default {
     );
   },
 };
+
+export default worker;
