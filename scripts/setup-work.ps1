@@ -82,15 +82,23 @@ try {
     if ((Invoke-Native { npx --yes wrangler login }) -ne 0) { throw "wrangler login a echoue" }
   }
   $have = Get-DeployedSecretNames
-  foreach ($need in @("TRELLO_KEY", "TRELLO_TOKEN", "TRELLO_BOARD_ID", "SYNC_SECRET")) {
-    if ($have -notcontains $need) { throw "Le secret $need manque: lancez d'abord  npm run setup:sheet-sync" }
+  $missing = @("TRELLO_KEY", "TRELLO_TOKEN", "TRELLO_BOARD_ID", "SYNC_SECRET") | Where-Object { $have -notcontains $_ }
+  if ($missing.Count -gt 0) {
+    Write-Host "  Secrets manquants ($($missing -join ', ')): configuration Trello + Google Sheet d'abord." -ForegroundColor Yellow
+    $sheet = Join-Path $Root "scripts\setup-sheet-sync.ps1"
+    if ((Invoke-Native { powershell -NoProfile -ExecutionPolicy Bypass -File $sheet }) -ne 0) { throw "setup-sheet-sync a echoue" }
+    $have = Get-DeployedSecretNames
+    foreach ($need in $missing) { if ($have -notcontains $need) { throw "Le secret $need manque toujours apres setup-sheet-sync" } }
   }
 
   Write-Step "2/3 Connexion Google"
   Write-Host "  Dans Google Cloud Console > APIs et services > Identifiants > Creer des identifiants > ID client OAuth (Application Web)"
   Write-Host "  ajoutez cette URI de redirection autorisee (aussi sur un client existant, ex. celui de /storage):"
   Write-Host "    $RedirectUri" -ForegroundColor Green
-  Write-Host "  Page des identifiants: https://console.cloud.google.com/apis/credentials"
+  try { Set-Clipboard -Value $RedirectUri; Write-Host "  (URI copiee dans le presse-papiers)" -ForegroundColor DarkGray } catch { }
+  if (-not ($GoogleClientId -and $GoogleClientSecret)) {
+    try { Start-Process "https://console.cloud.google.com/apis/credentials" } catch { Write-Host "  https://console.cloud.google.com/apis/credentials" }
+  }
 
   $secrets = [ordered]@{}
   if ($GoogleClientId) {
