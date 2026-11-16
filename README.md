@@ -1,3 +1,5 @@
+<!-- lang -->**Français** | [English](README.en.md)
+
 # Trello Cerveau
 
 Un Power-Up Trello pour décider quoi faire en premier : priorité urgence / impact / facilité, sous-tâches, Gantt, Kanban, Documents et un assistant IA, directement dans vos tableaux.
