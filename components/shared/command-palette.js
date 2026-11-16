@@ -38,7 +38,7 @@
   }
 
   function activeViewKey(loc) {
-    var m = /\/([a-z]+)\.html$/.exec((loc && loc.pathname) || '');
+    var m = /\/([a-z]+)(?:\.html)?$/.exec((loc && loc.pathname) || '');
     return m ? m[1] : '';
   }
 

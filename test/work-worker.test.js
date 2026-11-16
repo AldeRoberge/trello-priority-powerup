@@ -151,7 +151,16 @@ test('page: the Trello SDK script is replaced by the stand-in with the identity 
   assert.match(out, /<script src="\/work\/sdk\.js"><\/script><script src="\.\/a\.js">/);
   assert.doesNotMatch(out, /trellocdn/);
   assert.doesNotMatch(out, /"<\/script>"/); // an address cannot close the script tag
+  assert.match(out, /<link rel="icon" type="image\/svg\+xml" href="\/work\/assets\/icon\.svg"><\/head>/);
   assert.equal(rewriteHtml('<p>no sdk</p>', {}), '<p>no sdk</p>');
   assert.match(signInPage('not_allowed'), /n’a pas accès/);
+  assert.match(signInPage('not_allowed'), /rel="icon"/);
   assert.doesNotMatch(signInPage('<b>'), /<b>/);
+});
+
+test('url: /work/docs.html moves to /work/docs and keeps the query', async () => {
+  const { handleWork } = await load('index.js');
+  const res = await handleWork(new Request('https://alderoberge.com/work/docs.html?docTask=1'), { WORK_STORE: {} }, {}, null);
+  assert.equal(res.status, 301);
+  assert.equal(res.headers.get('location'), '/work/docs?docTask=1');
 });

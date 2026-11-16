@@ -20,7 +20,7 @@ export function signInPage(reason) {
     unconfigured: 'La connexion Google n’est pas configurée.',
   };
   const note = reason && messages[reason] ? `<p class="n">${escapeHtml(messages[reason])}</p>` : '';
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Work</title>
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Work</title>${FAVICON}
 <style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#1d2125;color:#dee4ea;font:15px system-ui,sans-serif}
 main{text-align:center}h1{font-size:22px;font-weight:600;margin:0 0 18px}a{display:inline-block;padding:10px 18px;border-radius:8px;background:#e08a4f;color:#1d2125;font-weight:600;text-decoration:none}
 a:hover{filter:brightness(1.08)}.n{color:#f87168;margin:0 0 14px}</style></head><body><main><h1>Work</h1>${note}<a href="/work/api/auth/google">Se connecter avec Google</a></main></body></html>`;
@@ -102,11 +102,13 @@ function assetsOrigin(env) {
   return String(env.WORK_ASSETS_ORIGIN || DEFAULT_ASSETS).replace(/\/+$/, '');
 }
 
+const FAVICON = '<link rel="icon" type="image/svg+xml" href="/work/assets/icon.svg">';
+
 /** The page with the Trello SDK script replaced by the stand-in, and the signed-in identity injected before it. */
 export function rewriteHtml(html, config) {
   const inject = `<script>window.__WORK__=${JSON.stringify(config).replace(/</g, '\\u003c')};</script><script src="/work/sdk.js"></script>`;
-  if (!html.includes(TRELLO_SDK)) return html;
-  return html.split(`<script src="${TRELLO_SDK}"></script>`).join(inject);
+  const body = html.includes(TRELLO_SDK) ? html.split(`<script src="${TRELLO_SDK}"></script>`).join(inject) : html;
+  return body.replace('</head>', `${FAVICON}</head>`);
 }
 
 async function fetchAsset(env, path, request) {
@@ -122,11 +124,15 @@ async function handlePage(request, env, url) {
   if (!path) {
     const user = await readSession(request, env);
     if (!user) return new Response(signInPage(url.searchParams.get('signin')), { status: 401, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
-    return redirect('/work/dashboard.html');
+    return redirect('/work/dashboard');
   }
   if (path.includes('..')) return new Response('bad path', { status: 400 });
+  // The address never shows .html: /work/docs.html moves to /work/docs (the query and hash are kept)
+  if (path.endsWith('.html')) return redirect(`/work/${path.slice(0, -'.html'.length)}${url.search}`, 301);
 
   if (path === 'sdk.js') path = 'components/work/work-sdk.js';
+  // A page is one plain word (/work/docs); the file is its .html (no dot, so assets and scripts stay as they are)
+  if (/^[a-z][a-z0-9-]*$/.test(path)) path += '.html';
   const isHtml = path.endsWith('.html');
   let config = null;
   if (isHtml) {
