@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-16
+- Notes : la page reprend l’apparence de Google Keep : tiroir à gauche (Notes, Archive), barre « Prendre une note… » au-dessus de la grille, cartes épinglables avec couleur et archive au survol, palette de couleurs Keep.
 - Cerveau sur alderoberge.com/work : les adresses sans `.html` (`/work/docs`), et l'icône du Cerveau dans l'onglet du navigateur.
 - Documents : les onglets de couverture (Couleur, Dégradé, Unsplash, Importer) ont une icône ; l'onglet actif n'est plus en gras.
 - Documents : la recherche de photos Unsplash affiche « Unsplash indisponible. » au lieu de « Aucune photo » quand le Worker ne répond pas, et réessaie à la recherche suivante.
