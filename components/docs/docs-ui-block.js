@@ -482,6 +482,23 @@
         }
         var before = M.textBeforeCaret();
         var nn = M.selNode();
+        // The first line of a doc can be a bare text node directly under the editor (no P/DIV).
+        if (nn && nn !== M.editor && M.editor.contains(nn) && !M.closestIn(nn, S.BLOCK_SEL)) {
+          var bareLine = nn;
+          while (bareLine.parentNode && bareLine.parentNode !== M.editor) bareLine = bareLine.parentNode;
+          var bareKind = S.DM().listShortcutKind(bareLine.textContent);
+          if (bareKind) {
+            e.preventDefault();
+            var bareP = document.createElement('p');
+            bareP.appendChild(document.createElement('br'));
+            M.editor.insertBefore(bareP, bareLine);
+            M.editor.removeChild(bareLine);
+            M.focusInside(bareP);
+            M.toggleList(bareKind);
+            M.onEdit();
+            return;
+          }
+        }
         var block = nn && M.closestIn(nn, 'P,DIV');
         if (block && !M.closestIn(block, 'LI') && before !== null) {
           var t2 = block.textContent.replace(/[\u00a0\u200b]/g, ' ').trim();
