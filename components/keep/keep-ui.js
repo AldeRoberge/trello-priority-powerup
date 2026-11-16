@@ -378,7 +378,42 @@
       c.appendChild(cardFoot(n));
       c.addEventListener('click', function () { openDialog(n); });
       c.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target === c) openDialog(n); });
+      c.addEventListener('contextmenu', function (e) {
+        if (!global.ContextMenu || typeof global.ContextMenu.show !== 'function') return;
+        e.preventDefault();
+        global.ContextMenu.show({ clientX: e.clientX, clientY: e.clientY }, noteMenuItems(n));
+      });
       return c;
+    }
+
+    /* right-click menu of a note: the same actions as the card footer, plus delete */
+    function noteMenuItems(n) {
+      var colors = [{ color: '', label: 'Sans couleur' }].concat(KM().COLORS.map(function (c) {
+        return { color: c, label: COLOR_LABEL[c] };
+      }));
+      return [
+        { id: 'pin', label: n.pin ? 'Désépingler' : 'Épingler', icon: n.pin ? 'pin-filled' : 'pin', action: function () { saveNote(Object.assign({}, n, { pin: !n.pin })); } },
+        { id: 'archive', label: n.arch ? 'Désarchiver' : 'Archiver', icon: n.arch ? 'archive-off' : 'archive', action: function () { saveNote(Object.assign({}, n, { arch: !n.arch })); } },
+        {
+          id: 'color',
+          label: 'Couleur',
+          icon: 'palette',
+          children: colors.map(function (c) {
+            return { id: 'color-' + (c.color || 'none'), label: c.label, checked: (n.color || '') === c.color, action: function () { saveNote(Object.assign({}, n, { color: c.color })); } };
+          }),
+        },
+        { sep: true },
+        {
+          id: 'delete',
+          label: 'Supprimer',
+          icon: 'trash',
+          danger: true,
+          action: function () {
+            if (!global.confirm('Supprimer cette note ?')) return;
+            sync.remove(n.id).then(reload).then(queueSync);
+          },
+        },
+      ];
     }
 
     /* hover actions under the card: colour and archive */
