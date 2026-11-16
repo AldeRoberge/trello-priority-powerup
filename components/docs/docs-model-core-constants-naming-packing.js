@@ -957,8 +957,17 @@ var S = (global.DocsModelParts = global.DocsModelParts || {});
   S.findBacktickRun = findBacktickRun;
   S.findCloser = findCloser;
   S.firstName = firstName;
+  // A list starter typed alone in a paragraph, then Enter: "*", "-" or "+" make a bullet list, "1." a numbered one.
+  function listShortcutKind(text) {
+    var t = String(text == null ? '' : text).replace(/[ ​]/g, ' ').trim();
+    if (/^[*+-]$/.test(t)) return 'ul';
+    if (t === '1.') return 'ol';
+    return null;
+  }
+
   S.iconLine = iconLine;
   S.isAlignLine = isAlignLine;
+  S.listShortcutKind = listShortcutKind;
   S.isDocName = isDocName;
   S.isInk = isInk;
   S.isWordChar = isWordChar;

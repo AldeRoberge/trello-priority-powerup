@@ -485,6 +485,19 @@
         var block = nn && M.closestIn(nn, 'P,DIV');
         if (block && !M.closestIn(block, 'LI') && before !== null) {
           var t2 = block.textContent.replace(/[\u00a0\u200b]/g, ' ').trim();
+          var listKind = S.DM().listShortcutKind(t2);
+          if (listKind) {
+            e.preventDefault();
+            var rl = document.createRange();
+            rl.selectNodeContents(block);
+            var sl = global.getSelection();
+            sl.removeAllRanges();
+            sl.addRange(rl);
+            document.execCommand('delete');
+            M.toggleList(listKind);
+            M.onEdit();
+            return;
+          }
           if (/^(---|\*\*\*|___)$/.test(t2)) {
             e.preventDefault();
             var rr = document.createRange();

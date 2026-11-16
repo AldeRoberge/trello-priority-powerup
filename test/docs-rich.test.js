@@ -63,6 +63,19 @@ describe('DocsModel rich text', () => {
     );
   });
 
+  it('turns a lone list starter into a list on Enter', () => {
+    assert.equal(DM.listShortcutKind('*'), 'ul');
+    assert.equal(DM.listShortcutKind('-'), 'ul');
+    assert.equal(DM.listShortcutKind('+'), 'ul');
+    assert.equal(DM.listShortcutKind(' *  '), 'ul');
+    assert.equal(DM.listShortcutKind('1.'), 'ol');
+    assert.equal(DM.listShortcutKind('---'), null);
+    assert.equal(DM.listShortcutKind('** '), null);
+    assert.equal(DM.listShortcutKind('* un élément'), null);
+    assert.equal(DM.listShortcutKind(''), null);
+    assert.equal(DM.listShortcutKind(null), null);
+  });
+
   it('round-trips centered and right-aligned blocks', () => {
     assert.equal(DM.mdToHtml('Bonjour\n<!--align:center-->'), '<p data-align="center">Bonjour</p>');
     assert.equal(roundTrip('Bonjour\n<!--align:center-->'), 'Bonjour\n<!--align:center-->');

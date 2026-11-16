@@ -45,6 +45,7 @@
   function isDocName() { return S.isDocName.apply(this, arguments); }
   function kids() { return S.kids.apply(this, arguments); }
   function mdToHtml() { return S.mdToHtml.apply(this, arguments); }
+  function listShortcutKind() { return S.listShortcutKind.apply(this, arguments); }
   function mentionHtml() { return S.mentionHtml.apply(this, arguments); }
   function nameFromTitle() { return S.nameFromTitle.apply(this, arguments); }
   function normalizeCover() { return S.normalizeCover.apply(this, arguments); }
@@ -807,6 +808,7 @@
     mdToHtml: mdToHtml,
     inlineToHtml: inlineToHtml,
     mentionHtml: mentionHtml,
+    listShortcutKind: listShortcutKind,
     firstName: firstName,
     domToMd: domToMd,
     detectTrigger: detectTrigger,
