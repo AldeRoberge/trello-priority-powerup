@@ -1050,7 +1050,7 @@
     },
     run: function (M) {
     M.COVER_TAB_KEY = 'cerveau.docs.coverTab';
-    M.COVER_TABS = [['color', 'Couleur'], ['gradient', 'Dégradé'], ['unsplash', 'Unsplash'], ['upload', 'Importer']];
+    M.COVER_TABS = [['color', 'Couleur', 'palette'], ['gradient', 'Dégradé', 'gradienter'], ['unsplash', 'Unsplash', 'photo'], ['upload', 'Importer', 'upload']];
     M.coverTimer = null;
     M.coverCur = null;
     M.repositioning = false;

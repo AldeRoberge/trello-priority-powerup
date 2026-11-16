@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-16
+- Documents : les onglets de couverture (Couleur, Dégradé, Unsplash, Importer) ont une icône ; l'onglet actif n'est plus en gras.
 - Documents : la recherche de photos Unsplash affiche « Unsplash indisponible. » au lieu de « Aucune photo » quand le Worker ne répond pas, et réessaie à la recherche suivante.
 - Documents : taper `*`, `-` ou `+` seul dans un paragraphe puis Entrée lance une liste à puces (`1.` lance une liste numérotée).
 

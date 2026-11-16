@@ -682,13 +682,9 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   padding: 0;
   gap: 0;
 }
-.dc-cover-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 4px 8px 0;
-  border-bottom: 1px solid var(--tp-border);
-}
+.dc-cover-tabs { display: flex; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--tp-border); }
 .dc-cover-tab {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 8px 7px;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -697,12 +693,12 @@ html[data-color-mode="dark"] .dc-cover-zoom-btn:hover {
   font: inherit;
   cursor: pointer;
 }
+.dc-cover-tab .ti { font-size: 16px; }
 .dc-cover-tab:hover {
   color: var(--tp-text);
 }
 .dc-cover-tab.is-on {
   color: var(--tp-text);
-  font-weight: 600;
   border-bottom-color: var(--tp-primary);
 }
 .dc-cover-body {

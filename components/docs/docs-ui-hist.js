@@ -54,7 +54,7 @@
                 S.remember(M.COVER_TAB_KEY, tab);
                 paint();
               },
-            }, [x[1]])
+            }, [S.icon(x[2]), S.h('span', { text: x[1] })])
           );
         });
       }
