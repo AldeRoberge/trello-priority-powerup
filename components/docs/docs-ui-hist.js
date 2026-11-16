@@ -59,10 +59,10 @@
         });
       }
 
-      function photoGrid(list, box) {
+      function photoGrid(list, box, emptyText) {
         box.textContent = '';
         if (!list.length) {
-          box.appendChild(S.h('p', { class: 'dc-cover-none', text: 'Aucune photo.' }));
+          box.appendChild(S.h('p', { class: 'dc-cover-none', text: emptyText || 'Aucune photo.' }));
           return;
         }
         var cur = current();
@@ -83,19 +83,20 @@
       function runSearch(grid) {
         var token = ++searchToken;
         var local = S.DM().searchGallery(query);
-        if (!query.trim() || !M.unsplashRemote) return photoGrid(local, grid);
+        if (!query.trim()) return photoGrid(local, grid);
         grid.classList.add('is-loading');
+        // null = Worker not connected, no Unsplash key, or a failed call: say so, and try again on the next search
         S.DT().searchUnsplash(M.t, query).then(
           function (res) {
             if (token !== searchToken) return;
             grid.classList.remove('is-loading');
-            if (res === null) M.unsplashRemote = false;
-            photoGrid(res === null ? local : res, grid);
+            if (res === null) return photoGrid(local, grid, 'Unsplash indisponible.');
+            photoGrid(res, grid);
           },
           function () {
             if (token !== searchToken) return;
             grid.classList.remove('is-loading');
-            photoGrid(local, grid);
+            photoGrid(local, grid, 'Unsplash indisponible.');
           }
         );
       }

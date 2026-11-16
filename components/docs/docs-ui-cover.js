@@ -1054,7 +1054,6 @@
     M.coverTimer = null;
     M.coverCur = null;
     M.repositioning = false;
-    M.unsplashRemote = true;
     }
   });
 })(typeof window !== 'undefined' ? window : this);
