@@ -174,6 +174,15 @@
       return { nodes: nodes, tasks: tasks };
     }
     groups.sort(function (a, b) { return a.first - b.first; });
+    // Manual order (drag and drop) wins over the order the rows came in; what it does not know keeps its place.
+    var DND = global.TriageDnd;
+    if (DND && opts.order) {
+      groups = DND.applyOrder(groups, opts.order.projects, function (g) { return g.id; });
+      groups.forEach(function (g) {
+        var mine = opts.order.tasks && opts.order.tasks[g.id];
+        if (mine) g.rows = DND.applyOrder(g.rows, mine, function (r) { return r.id; });
+      });
+    }
     if (free.length) groups.push({ id: '', name: FREE_NAME, rows: free, first: Infinity, free: true });
     groups.forEach(function (g) {
       var key = 'p:' + g.id;
@@ -521,6 +530,7 @@
       tierI: n.tierI,
       blocked: n.blocked,
     }, ctx, { project: n }));
+    if (global.TriageDnd) global.TriageDnd.bindProject(row, n, ctx);
     // The rest of the line opens the project in the pane (the free group has none: it folds).
     row.addEventListener('click', function () {
       if (pickable) ctx.selectProject(n.id);
@@ -551,6 +561,7 @@
       depth: info.depth,
       choices: 'menu',
     }, ctx);
+    if (global.TriageDnd) global.TriageDnd.bindTask(rowEl, info, ctx);
     return rowEl;
   }
 
@@ -719,6 +730,7 @@
         ? {
           blocked: !!row.blocked,
           onSet: function (pct) { if (typeof ctx.setProgress === 'function') ctx.setProgress(opts.project, pct); },
+          onUnblock: function () { if (typeof ctx.unblockProject === 'function') ctx.unblockProject(opts.project); },
         }
         : (typeof ctx.taskProgress === 'function' ? ctx.taskProgress(row) : {});
       cell.appendChild(progressEl(row.progress, popts || {}));

@@ -333,6 +333,15 @@
         if (typeof opts.onReopen === 'function') opts.onReopen();
       },
     });
+    if (typeof opts.onMerge === 'function') {
+      items.push({
+        id: 'bulk-merge',
+        label: 'Fusionner avec l’IA',
+        action: function () {
+          opts.onMerge();
+        },
+      });
+    }
     items.push({
       id: 'bulk-delete',
       label: 'Supprimer',

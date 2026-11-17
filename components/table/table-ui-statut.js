@@ -190,7 +190,7 @@
         }),
       ];
       var gm = M.groupMode();
-      kids.push(S.btn(gm === 'lieu' ? 'map-pin' : gm === 'none' ? 'list' : 'stack-2', gm === 'none' ? 'Groupes' : 'Par ' + (gm === 'lieu' ? 'lieu' : 'projet'), {
+      kids.push(S.btn(M.groupSpec(gm).bar, M.groupSpec(gm).bar_label, {
         active: gm !== 'project',
         title: 'Grouper par…',
         onclick: function (e) {
@@ -207,6 +207,8 @@
           onclick: function () { M.setSort(null); },
         }));
       }
+      var bulk = M.bulkNode();
+      if (bulk) kids.push(bulk);
       kids.push(S.h('span', { class: 'tb-status' }));
       kids.push(S.h('span', { class: 'tb-spacer' }));
       kids.push(S.h('span', { class: 'tb-count', 'aria-live': 'polite' }));
@@ -350,15 +352,50 @@
         },
       });
     };
+    /** Documents of the board, read once and only when a card is opened (they feed "Mentionné dans"). */
+    M.loadLinkDocs = function loadLinkDocs() {
+      var DT = global.DocsTrello;
+      if (M.state.linkDocs) return Promise.resolve(M.state.linkDocs);
+      if (!DT || typeof DT.listDocs !== 'function') return Promise.resolve([]);
+      if (!M.state.linkDocsJob) {
+        M.state.linkDocsJob = DT.listDocs(M.t).then(function (docs) {
+          M.state.linkDocs = docs || [];
+          return M.state.linkDocs;
+        }, function () {
+          M.state.linkDocsJob = null; // retried on the next opening
+          return [];
+        });
+      }
+      return M.state.linkDocsJob;
+    };
+    M.mentionsFor = function mentionsFor(cardId) {
+      var os = global.WorkOS;
+      if (!M.state.linkDocs || !os || typeof os.backlinks !== 'function') return [];
+      return os.backlinks(M.state.linkDocs, 'task', cardId).map(function (d) {
+        return { title: d.title, open: function () { if (global.ViewTabs) global.ViewTabs.openDoc(d.id); } };
+      });
+    };
     M.openCard = function openCard(row) {
       if (!row || !global.TaskFocus) return;
+      var cardId = row.id;
+      var mentions = M.mentionsFor(cardId);
       global.TaskFocus.open({
         t: M.t,
-        cardId: row.id,
+        cardId: cardId,
         name: row.name || '',
+        isolate: false, // the table stays readable next to the panel
+        mentions: mentions,
         onChange: function () { M.reload({ quiet: true }); },
         onToast: function (m, kind) { M.setStatus(m || '', kind === 'error' ? 'error' : 'ok'); },
       });
+      if (!M.state.linkDocs) {
+        M.loadLinkDocs().then(function () {
+          var found = M.mentionsFor(cardId);
+          if (!found.length || global.TaskFocus.currentId() !== String(cardId)) return;
+          mentions.push.apply(mentions, found);
+          global.TaskFocus.refresh();
+        });
+      }
     };
     M.heatStyle = function heatStyle(key, row) {
       var spec = S.TM().COLUMNS[key];
@@ -514,9 +551,11 @@
 
       var body = S.h('tbody');
       var rowNo = 0;
+      M.state.order = [];
       function renderRowTr(row) {
         var i = rowNo++;
-        var tr = S.h('tr', { 'data-id': row.id, 'data-iso-card': row.id });
+        M.state.order.push(row.id);
+        var tr = S.h('tr', { 'data-id': row.id, 'data-iso-card': row.id, class: M.state.multi && M.state.multi[row.id] ? 'is-picked' : null });
         tr.addEventListener('dragover', function (e) {
           if (!M.state.dragId) return;
           var moved = M.findRow(M.state.dragId);
@@ -829,19 +868,21 @@
         document.addEventListener('pointercancel', up);
       });
     };
-    M.unblockRow = function unblockRow(row) {
-      M.setStatus('Déblocage…');
-      return global.GanttTrello.setCardBlocked(M.t, row.id, false).then(function (res) {
+    // Block or unblock (same write as every view: GanttTrello.setCardBlocked).
+    M.setRowBlocked = function setRowBlocked(row, on) {
+      M.setStatus(on ? 'Blocage…' : 'Déblocage…');
+      return global.GanttTrello.setCardBlocked(M.t, row.id, on).then(function (res) {
         if (!res || !res.ok) {
-          M.setStatus('Échec du déblocage' + (res && res.reason ? ' (' + res.reason + ')' : ''), 'error');
+          M.setStatus('Échec du ' + (on ? 'blocage' : 'déblocage') + (res && res.reason ? ' (' + res.reason + ')' : ''), 'error');
         } else {
-          M.record({ type: 'edit', key: 'blocked', label: 'Blocage', targetId: row.id, title: row.name, before: 'Bloqué', after: 'Non', beforeVal: true, afterVal: false });
-          M.setStatus('Carte débloquée', 'ok');
+          M.record({ type: 'edit', key: 'blocked', label: 'Blocage', targetId: row.id, title: row.name, before: on ? 'Non' : 'Bloqué', after: on ? 'Bloqué' : 'Non', beforeVal: !on, afterVal: on });
+          M.setStatus(on ? 'Carte bloquée' : 'Carte débloquée', 'ok');
           M.schedulePush();
         }
         return M.reload({ quiet: true });
       }, M.fail);
     };
+    M.unblockRow = function unblockRow(row) { return M.setRowBlocked(row, false); };
     M.writeProgress = function writeProgress(cardId, pct) {
       var CT = global.CompletionTrello;
       if (!CT || typeof CT.getCardCompletionById !== 'function') return Promise.reject(new Error('Éditeur de progrès indisponible'));

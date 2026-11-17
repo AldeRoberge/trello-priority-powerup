@@ -5,6 +5,7 @@
   "parts": [
     "dashboard-ui-project.js",
     "dashboard-ui-zoom.js",
+    "dashboard-ui-bulk.js",
     "dashboard-ui-today.js",
     "dashboard-ui.js"
   ]

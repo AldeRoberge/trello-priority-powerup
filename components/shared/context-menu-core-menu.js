@@ -265,7 +265,7 @@ var MENU_CLASS = 'tp-context-menu';
         checked: !!it.checked,
         disabled: !!it.disabled,
         danger: !!it.danger,
-        success: !!it.success,
+        success: !!it.success || (!it.danger && /^(Terminer|Marquer comme (termin|compl))/i.test(String(it.label || ''))),
         children: children,
         action: typeof it.action === 'function' ? it.action : null,
       });

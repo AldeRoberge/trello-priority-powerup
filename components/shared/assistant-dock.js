@@ -664,6 +664,15 @@
       submit();
       return true;
     }
+    // Publish the dock's height so floating things near the bottom (task panel, toasts, "+") stay clear of it
+    // when it is expanded; 0 once it is gone from the page.
+    function publishHeight() {
+      var h = root.isConnected ? Math.round(root.getBoundingClientRect().height) : 0;
+      try { document.documentElement.style.setProperty('--ad-dock-h', h + 'px'); } catch (e) { /* style unavailable */ }
+    }
+    if (global.ResizeObserver) new global.ResizeObserver(publishHeight).observe(root);
+    if (typeof global.addEventListener === 'function') global.addEventListener('resize', publishHeight);
+    publishHeight();
     live = { ask: ask };
     return { root: root, focus: focus, toggle: focus, ask: ask };
   }

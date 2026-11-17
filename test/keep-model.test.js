@@ -54,7 +54,7 @@ describe('Notes model (Keep clone)', () => {
   });
 
   it('ignores unknown flags and treats the untitled placeholder as empty', () => {
-    assert.deepEqual(KM.parseFlags('pin,color=rouge,nope,arch'), { pin: true, arch: true, color: '' });
+    assert.deepEqual(KM.parseFlags('pin,color=rouge,nope,arch'), { pin: true, arch: true, color: '', pct: 0, ord: null });
     assert.equal(KM.fromDoc({ id: 'x', title: 'Sans titre', body: '' }).title, '');
   });
 
@@ -78,5 +78,52 @@ describe('Notes model (Keep clone)', () => {
     assert.equal(KM.resolve(base, base, { ...base, body: 'z' }), 'pull');
     assert.equal(KM.resolve(base, { ...base, body: 'y' }, { ...base, body: 'z' }), 'copy');
     assert.equal(KM.resolve(null, { ...base, body: 'y' }, { ...base, body: 'z' }), 'copy');
+  });
+
+  it('round-trips the progress and order flags through the keep: meta line', () => {
+    const n = { pin: true, arch: false, color: 'blue', pct: 40, ord: 1536.5 };
+    const str = KM.flagString(n);
+    assert.equal(str, 'pin,color=blue,pct=40,ord=1536.5');
+    assert.deepEqual(KM.parseFlags(str), { pin: true, arch: false, color: 'blue', pct: 40, ord: 1536.5 });
+    assert.equal(KM.flagString({ pct: 0, ord: null }), '');
+    assert.equal(KM.parseFlags('pct=250,ord=abc').pct, 100);
+    assert.equal(KM.parseFlags('pct=250,ord=abc').ord, null);
+    // the Documents packer must keep the new tokens, not strip them
+    assert.equal(DM.normalizeProps({ keep: 'pin,pct=40,ord=-2048,bogus' }).keep, 'pin,pct=40,ord=-2048');
+    const note = KM.fromDoc({ id: '1', title: 't', body: 'b', props: { keep: 'pct=100,ord=2048' } });
+    assert.equal(note.pct, 100);
+    assert.equal(note.ord, 2048);
+    assert.equal(KM.isDone(note), true);
+    assert.equal(KM.isDone(KM.blank('x')), false);
+    // a change of progress or order counts as a change (it is synced)
+    assert.notEqual(KM.snapshot({ ...note, pct: 50 }), KM.snapshot(note));
+    assert.notEqual(KM.snapshot({ ...note, ord: 1 }), KM.snapshot(note));
+  });
+
+  it('sorts pinned first, then new notes (no ord) newest first, then by ord', () => {
+    const sorted = KM.sortNotes([
+      { id: 'o2', pin: false, ord: 2048, updatedAt: '2026-01-09' },
+      { id: 'o1', pin: false, ord: 1024, updatedAt: '2026-01-01' },
+      { id: 'new', pin: false, ord: null, updatedAt: '2026-01-05' },
+      { id: 'p2', pin: true, ord: 2048, updatedAt: '2026-01-01' },
+      { id: 'p1', pin: true, ord: 1024, updatedAt: '2026-01-01' },
+    ]);
+    assert.deepEqual(sorted.map((n) => n.id), ['p1', 'p2', 'new', 'o1', 'o2']);
+  });
+
+  it('plans a reorder: one ord when neighbours have one, a renumber otherwise, nothing when it does not move', () => {
+    const g = (...ords) => ords.map((o, i) => ({ id: 'n' + i, ord: o }));
+    assert.deepEqual(KM.reorderPlan(g(1024, 2048, 3072), 'n2', 1), [{ id: 'n2', ord: 1536 }]);
+    assert.deepEqual(KM.reorderPlan(g(1024, 2048, 3072), 'n2', 0), [{ id: 'n2', ord: 0 }]);
+    assert.deepEqual(KM.reorderPlan(g(1024, 2048, 3072), 'n0', 2), [{ id: 'n0', ord: 4096 }]);
+    assert.deepEqual(KM.reorderPlan(g(1024, 2048, 3072), 'n1', 1), []);
+    assert.deepEqual(KM.reorderPlan(g(null, null, null), 'n2', 0), [
+      { id: 'n2', ord: 1024 }, { id: 'n0', ord: 2048 }, { id: 'n1', ord: 3072 },
+    ]);
+    const tight = [{ id: 'a', ord: 1 }, { id: 'b', ord: 1.001 }, { id: 'c', ord: 5000 }];
+    const plan = KM.reorderPlan(tight, 'c', 1);
+    assert.deepEqual(plan.map((c) => c.id).sort(), ['a', 'b', 'c']);
+    assert.deepEqual(plan.map((c) => c.ord).sort((x, y) => x - y), [1024, 2048, 3072]);
+    assert.deepEqual(KM.reorderPlan(g(1024), 'zzz', 0), []);
   });
 });

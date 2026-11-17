@@ -219,11 +219,11 @@ var S = (global.DocsModelParts = global.DocsModelParts || {});
     return out;
   }
 
-  /** Notes app flags (`pin`, `arch`, `color=yellow`), kept as one short line: `keep: pin,color=yellow`. */
+  /** Notes app flags (`pin`, `arch`, `color=yellow`, `pct=40`, `ord=1024`), kept as one short line: `keep: pin,color=yellow`. */
   function cleanKeep(raw) {
     var seen = [];
     String(raw == null ? '' : raw).split(',').forEach(function (part) {
-      var m = /^\s*(pin|arch|color=[a-z]{3,12})\s*$/i.exec(part);
+      var m = /^\s*(pin|arch|color=[a-z]{3,12}|pct=\d{1,3}|ord=-?\d+(?:\.\d{1,4})?)\s*$/i.exec(part);
       var v = m && m[1].toLowerCase();
       if (v && seen.indexOf(v) < 0) seen.push(v);
     });

@@ -490,10 +490,30 @@
         return PriorityTrello.cardFaceBadges(t);
       }, 'card-badges'),
 
-      // card-buttons is not used (priority is opened via card-detail-badges).
+      // One button: mark the card complete (or reopen it). Priority itself opens via card-detail-badges.
       // list-actions / on-disable: stubs if enabled in admin (avoids IFrameIO "not implemented").
-      'card-buttons': trackCapability('card-buttons', function () {
-        return [];
+      'card-buttons': trackCapability('card-buttons', function (t) {
+        return t.card('dueComplete').then(
+          function (card) {
+            var done = !!(card && card.dueComplete);
+            return [
+              {
+                icon: 'https://cdn.jsdelivr.net/npm/lucide-static@0.263.0/icons/' + (done ? 'rotate-ccw' : 'check-circle-2') + '.svg',
+                text: done ? 'Rouvrir' : 'Marquer comme complété',
+                callback: function (tt) {
+                  return PriorityTrello.setCardDueComplete(tt, !done).then(function (res) {
+                    if (res && res.ok === false) {
+                      return tt.alert({ message: 'Impossible de modifier la carte (connexion Trello requise).', duration: 6, display: 'error' });
+                    }
+                  });
+                },
+              },
+            ];
+          },
+          function () {
+            return [];
+          }
+        );
       }),
       'list-actions': trackCapability('list-actions', function () {
         return [];

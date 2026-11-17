@@ -285,18 +285,20 @@
           M.reload({ quiet: true });
         });
     };
-    M.unblockRow = function unblockRow(row) {
-      M.setStatus('Déblocage…');
-      return global.GanttTrello.setCardBlocked(M.t, row.id, false).then(function (res) {
+    // Block or unblock (same write as every view: GanttTrello.setCardBlocked).
+    M.setRowBlocked = function setRowBlocked(row, on) {
+      M.setStatus(on ? 'Blocage…' : 'Déblocage…');
+      return global.GanttTrello.setCardBlocked(M.t, row.id, on).then(function (res) {
         if (!res || !res.ok) {
-          M.setStatus('Échec du déblocage' + (res && res.reason ? ' (' + res.reason + ')' : ''), 'error');
+          M.setStatus('Échec du ' + (on ? 'blocage' : 'déblocage') + (res && res.reason ? ' (' + res.reason + ')' : ''), 'error');
         } else {
-          M.record({ type: 'edit', key: 'blocked', label: 'Blocage', targetId: row.id, title: row.name, before: 'Bloqué', after: 'Non', beforeVal: true, afterVal: false });
-          M.setStatus('Carte débloquée', 'ok');
+          M.record({ type: 'edit', key: 'blocked', label: 'Blocage', targetId: row.id, title: row.name, before: on ? 'Non' : 'Bloqué', after: on ? 'Bloqué' : 'Non', beforeVal: !on, afterVal: on });
+          M.setStatus(on ? 'Carte bloquée' : 'Carte débloquée', 'ok');
         }
         return M.reload({ quiet: true });
       }, M.fail);
     };
+    M.unblockRow = function unblockRow(row) { return M.setRowBlocked(row, false); };
     M.goalPlaces = function goalPlaces() {
       var goals = global.MindmapGoalsTrello;
       var os = global.WorkOS;

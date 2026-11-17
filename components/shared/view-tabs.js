@@ -191,10 +191,71 @@
     return u.href;
   }
 
-  /** Leave the current view for the document page of a task or an entity. */
-  function openSubject(kind, id) {
+  /** Leave the current view for the full document page of a task, an entity, a project or a person. */
+  function openSubjectBig(kind, id, name) {
     if (!id || !global.location) return;
-    global.location.assign(hrefForSubject('./docs.html', global.location, kind, id));
+    global.location.assign(hrefForSubject('./docs.html', global.location, kind, id, name || ''));
+  }
+
+  /**
+   * A document opens as a popup first: the Documents page in a frame, without its chrome (?embed=1).
+   * "Ouvrir en grand" leaves for the full page. Documents itself, and a page with no room for a frame, go straight to the big view.
+   */
+  function openSubject(kind, id, name) {
+    if (!id || !global.location) return;
+    var onDocs = /\/docs(\.html)?$/.test(global.location.pathname);
+    if (onDocs || !global.document || !global.document.body || typeof global.document.createElement !== 'function') return openSubjectBig(kind, id, name);
+    var old = global.document.querySelector('.vt-docpop');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var src = new URL(hrefForSubject('./docs.html', global.location, kind, id, name || ''));
+    src.searchParams.set('embed', '1');
+    var wrap = global.document.createElement('div');
+    wrap.className = 'vt-docpop';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-label', 'Document');
+    var card = global.document.createElement('div');
+    card.className = 'vt-docpop-card';
+    var bar = global.document.createElement('div');
+    bar.className = 'vt-docpop-bar';
+    function btn(icon, label, fn) {
+      var b = global.document.createElement('button');
+      b.type = 'button';
+      b.className = 'vt-docpop-btn';
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.innerHTML = '<i class="ti ti-' + icon + '" aria-hidden="true"></i>';
+      b.addEventListener('click', fn);
+      return b;
+    }
+    function close() {
+      global.document.removeEventListener('keydown', onKey, true);
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    }
+    var grow = global.document.createElement('span');
+    grow.className = 'vt-docpop-grow';
+    bar.appendChild(grow);
+    bar.appendChild(btn('arrows-maximize', 'Ouvrir en grand', function () { close(); openSubjectBig(kind, id, name); }));
+    bar.appendChild(btn('x', 'Fermer', close));
+    var frame = global.document.createElement('iframe');
+    frame.className = 'vt-docpop-frame';
+    frame.title = 'Document';
+    frame.src = src.href;
+    card.appendChild(bar);
+    card.appendChild(frame);
+    wrap.appendChild(card);
+    wrap.addEventListener('mousedown', function (e) { if (e.target === wrap) close(); });
+    global.document.addEventListener('keydown', onKey, true);
+    global.document.body.appendChild(wrap);
+  }
+
+  /** Leave the current view for a document by id: Documents reopens the last document it showed. */
+  function openDoc(id) {
+    if (!id || !global.location) return;
+    try { global.localStorage.setItem('cerveau.docs.last', String(id)); } catch (e) { /* Documents opens its usual page */ }
+    global.location.assign(new URL('./docs.html', global.location.href).href);
   }
 
   /** "Ouvrir dans" targets: view key, label, icon. Documents opens the task's document. */
@@ -244,6 +305,8 @@
     hrefForCard: hrefForCard,
     hrefForSubject: hrefForSubject,
     openSubject: openSubject,
+    openSubjectBig: openSubjectBig,
+    openDoc: openDoc,
     openIn: openIn,
     OPEN_IN: OPEN_IN,
     highlightFromUrl: highlightFromUrl,

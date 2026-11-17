@@ -18,6 +18,7 @@
     move: { icon: 'arrows-move', tone: 'violet', group: 'move' },
     reorder: { icon: 'arrows-sort', tone: 'violet', group: 'move' },
     delete: { icon: 'trash', tone: 'danger', group: 'archive' },
+    merge: { icon: 'arrows-join', tone: 'violet', group: 'edit' },
   };
 
   /** How long the floating undo message stays (ms). */
@@ -142,7 +143,9 @@
       persist();
       changed();
       // An archive offers its undo at once ("« X » archivée · Annuler"), the same in every view that records one.
-      if (e.type === 'archive' && cfg.toast !== false) toast(e, '\u00ab ' + (e.title || 'Carte') + ' \u00bb archiv\u00e9e');
+      // e.quiet: the caller records several entries and shows one toast for all (toast(entries, message)).
+      if (e.type === 'archive' && cfg.toast !== false && !e.quiet) toast(e, '\u00ab ' + (e.title || 'Carte') + ' \u00bb archiv\u00e9e');
+      else if (e.type === 'merge' && cfg.toast !== false && !e.quiet) toast(e, e.toastText || '\u00ab ' + (e.title || 'Carte') + ' \u00bb fusionn\u00e9e');
       return e;
     }
 
@@ -375,10 +378,15 @@
       hideToast();
       if (!global.document || !global.document.body) return;
       var kids = [h('span', { class: 'hp-toast-msg', text: message || '' })];
-      if (entry && canToggle(entry)) {
+      var undoable = (Array.isArray(entry) ? entry : entry ? [entry] : []).filter(canToggle);
+      if (undoable.length) {
         kids.push(h('button', {
           class: 'hp-toast-btn', type: 'button',
-          onclick: function () { hideToast(); toggle(entry); },
+          onclick: function () {
+            hideToast();
+            var chain = null; // the first one runs at once, the others follow one by one
+            undoable.forEach(function (en) { chain = chain ? chain.then(function () { return toggle(en); }) : toggle(en); });
+          },
         }, [icon('arrow-back-up'), h('span', { text: 'Annuler' })]));
       }
       kids.push(h('button', {

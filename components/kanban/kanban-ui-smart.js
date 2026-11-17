@@ -692,6 +692,9 @@
         { title: row.name || 'Carte' },
         { icon: 'archive', label: 'Archiver', danger: true, action: function () { M.archiveRow(row); } },
         { sep: true },
+        row.progress >= 100 ? null : { id: 'complete', icon: 'circle-check', label: 'Terminer', success: true, action: function () { M.saveProgress(row, 100); } },
+        { icon: row.blocked ? 'player-play' : 'player-pause', label: row.blocked ? 'Débloquer' : 'Bloquer', action: function () { M.setRowBlocked(row, !row.blocked); } },
+        { sep: true },
         { icon: 'external-link', label: 'Ouvrir la carte', action: function () { M.openCard(row); } },
         {
           icon: 'app-window',

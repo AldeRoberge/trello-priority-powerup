@@ -388,10 +388,63 @@
     return list;
   }
 
-  /** mode: 'project' (default) | 'lieu' | 'none'. */
+  /** Sections by Urgence, most urgent first, « Aucune urgence » last (empty or « Aucun »). Null without rows. */
+  function groupByUrgency(rows, folded) {
+    var NONE = 'Aucune urgence';
+    var order = Object.keys(URGENCY_LABELS).map(function (k) { return URGENCY_LABELS[k]; }).filter(function (l) { return l !== URGENCY_LABELS.aucun; }).reverse();
+    var by = {};
+    (rows || []).forEach(function (r) {
+      if (!r) return;
+      var label = r.urgency && r.urgency !== URGENCY_LABELS.aucun ? r.urgency : NONE;
+      (by[label] = by[label] || []).push(r);
+    });
+    var names = order.concat(Object.keys(by).filter(function (n) { return n !== NONE && order.indexOf(n) === -1; }), [NONE]);
+    var list = [];
+    names.forEach(function (n) {
+      if (!by[n]) return;
+      list.push({ key: 'u:' + n, id: '', icon: null, name: n, rows: by[n], free: n === NONE, priority: null, kind: 'urgency', open: !(folded && folded['u:' + n]) });
+    });
+    return list.length ? list : null;
+  }
+
+  /** Which Avancement bucket a row falls in: done, blocked, started or not started. */
+  function progressBucket(r) {
+    var done = (typeof r.progress === 'number' && r.progress >= 100) || r.statutKey === 'completed';
+    if (done) return 'done';
+    if (r.blocked) return 'blocked';
+    if (typeof r.progress === 'number' && r.progress > 0) return 'doing';
+    return 'todo';
+  }
+
+  var PROGRESS_BUCKETS = [
+    { id: 'blocked', name: 'Bloqué', icon: 'player-pause' },
+    { id: 'doing', name: 'En cours', icon: 'chart-donut-3' },
+    { id: 'todo', name: 'Pas commencé', icon: 'circle-dashed' },
+    { id: 'done', name: 'Terminé', icon: 'circle-check' },
+  ];
+
+  /** Sections by Avancement: Bloqué, En cours (1-99 %), Pas commencé (0 %), Terminé (100 %); empty ones are left out. */
+  function groupByProgress(rows, folded) {
+    var by = {};
+    (rows || []).forEach(function (r) {
+      if (!r) return;
+      var b = progressBucket(r);
+      (by[b] = by[b] || []).push(r);
+    });
+    var list = [];
+    PROGRESS_BUCKETS.forEach(function (b) {
+      if (!by[b.id]) return;
+      list.push({ key: 'a:' + b.id, id: '', icon: { i: b.icon }, name: b.name, rows: by[b.id], free: false, priority: null, kind: 'progress', open: !(folded && folded['a:' + b.id]) });
+    });
+    return list.length ? list : null;
+  }
+
+  /** mode: 'project' (default) | 'lieu' | 'urgency' | 'progress' | 'none'. */
   function groupRows(rows, mode, folded, projects) {
     if (mode === 'none') return null;
     if (mode === 'lieu') return groupByLieu(rows, folded);
+    if (mode === 'urgency') return groupByUrgency(rows, folded);
+    if (mode === 'progress') return groupByProgress(rows, folded);
     return groupByProject(rows, folded, projects);
   }
 
@@ -626,6 +679,9 @@
     withHierarchy: withHierarchy,
     groupByProject: groupByProject,
     groupByLieu: groupByLieu,
+    groupByUrgency: groupByUrgency,
+    groupByProgress: groupByProgress,
+    progressBucket: progressBucket,
     groupRows: groupRows,
     placeText: placeText,
     clampPriority: clampPriority,

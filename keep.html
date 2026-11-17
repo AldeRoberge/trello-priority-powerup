@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="./components/shared/skeleton.css" />
   <link rel="stylesheet" href="./components/docs/docs-ui.css" />
   <link rel="stylesheet" href="./components/docs/docs-rich.css" />
+  <link rel="stylesheet" href="./components/shared/context-menu.css?v=ctx-key-2" />
+  <link rel="stylesheet" href="./components/shared/progress-ring.css" />
   <link rel="stylesheet" href="./components/keep/keep-ui.css" />
   <script src="./components/shared/brand.js"></script>
   <script src="./components/shared/connection.js"></script>
@@ -66,6 +68,33 @@
   <script src="./components/keep/keep-store.js"></script>
   <script src="./components/keep/keep-sync.js"></script>
   <script src="./components/docs/docs-rich.js?v=quote-2"></script>
+  <script src="./components/shared/progress-ring.js"></script>
+  <script src="./components/agent/agent-base.js"></script>
+  <script src="./components/agent/agent-provider-provider-settings-http.js"></script>
+  <script src="./components/agent/agent-provider-highlight.js"></script>
+  <script src="./components/agent/agent-context-buildcontext-card-board-snapshot.js"></script>
+  <script src="./components/agent/agent-context-name.js"></script>
+  <script src="./components/agent/agent-context-system.js"></script>
+  <script src="./components/agent/agent-suggest-suggest-split-estimate-helpers.js"></script>
+  <script src="./components/agent/agent-suggest-suggest.js"></script>
+  <script src="./components/agent/agent-suggest-suggest-2.js"></script>
+  <script src="./components/agent/agent-chat-store.js"></script>
+  <script src="./components/agent/agent-parse-action-suggestion-normalizers-post.js"></script>
+  <script src="./components/agent/agent-parse-suggestion.js"></script>
+  <script src="./components/agent/agent-chat-turn-rewrite.js"></script>
+  <script src="./components/agent/agent-chat-turn-chatturn-primary-conversational-entry.js"></script>
+  <script src="./components/agent/agent-chat-turn-status.js"></script>
+  <script src="./components/agent/agent-chat-turn-progress.js"></script>
+  <script src="./components/agent/agent-dream-card-dream-background-consolidate.js"></script>
+  <script src="./components/agent/agent-dream-subtask.js"></script>
+  <script src="./components/agent/agent-dream-action.js"></script>
+  <script src="./components/agent/agent-actions-card.js"></script>
+  <script src="./components/agent/agent-actions-subtasks.js"></script>
+  <script src="./components/agent/agent-actions-assistant.js"></script>
+  <script src="./components/agent/agent-actions-board.js"></script>
+  <script src="./components/agent/agent-actions.js"></script>
+  <script src="./components/agent/agent-api.js"></script>
+  <script src="./components/keep/keep-ai.js"></script>
   <script src="./components/keep/keep-rich.js"></script>
   <script src="./components/keep/keep-ui.js"></script>
 </head>
@@ -79,7 +108,7 @@
     PriorityTrello.initIframePage(function (t) {
       var store = KeepStore.create();
       var sync = KeepSync.create({ store: store, api: KeepSync.trelloApi(t) });
-      KeepUI.mount(document.getElementById('app'), { sync: sync, store: store });
+      KeepUI.mount(document.getElementById('app'), { sync: sync, store: store, t: t });
     });
   </script>
 </body>

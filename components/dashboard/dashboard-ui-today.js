@@ -665,6 +665,12 @@
       var cardEl = e.target && e.target.closest && e.target.closest('[data-card]');
       var editable = CM.isNativeEditableTarget && CM.isNativeEditableTarget(e.target);
       if (!cardEl && editable) return;
+      var projEl = !cardEl && !editable && e.target && e.target.closest && e.target.closest('.tt-project');
+      if (projEl && typeof M.projectMenuEntries === 'function') {
+        e.preventDefault();
+        CM.show(e, M.projectMenuEntries(M.projectNodeOf(projEl)));
+        return;
+      }
       var row = null;
       if (cardEl) {
         row = M.state.rows.filter(function (r) { return r.id === cardEl.getAttribute('data-card'); })[0] || null;

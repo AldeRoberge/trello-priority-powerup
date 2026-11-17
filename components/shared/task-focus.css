@@ -3,7 +3,7 @@
   position: fixed;
   top: 46px;
   right: 12px;
-  bottom: 72px;
+  bottom: calc(var(--ad-dock-h, 60px) + 12px); /* clear of the assistant dock, however tall it is (assistant-dock.js) */
   z-index: 30;
   width: min(380px, calc(100vw - 24px));
   display: flex;

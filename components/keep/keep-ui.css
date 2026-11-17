@@ -393,3 +393,37 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .k-rich-wrap:focus-within .k-rtools { opacity: 1; }
 .k-rtool { width: 32px; height: 32px; font-size: 17px; }
 .k-composer .k-rich.dc-editor { min-height: 60px; }
+
+/* progress ring: fixed spot bottom right of the card (the footer reserves the room), quiet until it means something */
+.k-ring { position: absolute; right: 6px; bottom: 6px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--k-muted); opacity: 0.45; cursor: pointer; touch-action: none; transition: opacity 0.15s ease, background-color 0.15s ease; }
+.k-ring.has-pct, .k-card:hover .k-ring, .k-card:focus-within .k-ring { opacity: 0.9; }
+.k-ring:hover, .k-ring:focus-visible, .k-ring.is-dragging { opacity: 1; background: var(--k-hover); outline: 0; }
+.k-ring .pg-ring { width: 20px; height: 20px; }
+.k-ring .pg-track { stroke: var(--k-muted); opacity: 0.55; }
+.k-ring .pg-arc { stroke: var(--k-text); }
+/* completed notes are grayed, not bold */
+.k-card.is-done .k-card-title, .k-card.is-done .k-card-body { color: var(--k-muted); font-weight: 400; }
+.k-card.is-done .k-card-title { text-decoration: none; }
+
+/* drag to reorder: a thin marker between cards, nothing moves while hovering */
+.k-grid-area { position: relative; }
+.k-card.is-dragging { opacity: 0.4; }
+.k-drop-mark { position: absolute; z-index: 3; height: 3px; border-radius: 2px; background: var(--k-logo); pointer-events: none; }
+.k-drop-mark[hidden] { display: none; }
+
+/* assistant: sparkle in the search pill (always there, quieter until there is a question) and the answer strip */
+.k-ask { width: 36px; height: 36px; flex: none; opacity: 0.5; }
+.k-ask.is-ready, .k-ask:hover { opacity: 1; }
+.k-ai-slot { max-width: 720px; margin: 0 auto 16px; }
+.k-ai { display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px 10px 14px; border-radius: 8px; background: var(--k-nav-on); color: var(--k-text); font-size: 14px; line-height: 1.4; }
+.k-ai > .ti { flex: none; margin-top: 1px; font-size: 18px; }
+.k-ai.is-quiet { background: var(--k-search); color: var(--k-muted); }
+.k-ai-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.k-ai-close { width: 28px; height: 28px; flex: none; margin: -3px 0; font-size: 16px; }
+.k-spin { animation: k-spin 1s linear infinite; }
+@keyframes k-spin { to { transform: rotate(360deg); } }
+
+/* undo toast */
+.k-toast { position: fixed; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 16px; padding: 0 8px 0 16px; min-height: 48px; border-radius: 6px; background: #323232; color: #fff; font-size: 14px; box-shadow: var(--k-shadow); }
+.k-toast-undo { height: 32px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: #fbbc04; font: inherit; font-weight: 500; cursor: pointer; }
+.k-toast-undo:hover { background: rgba(255, 255, 255, 0.12); }

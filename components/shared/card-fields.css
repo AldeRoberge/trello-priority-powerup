@@ -272,7 +272,7 @@
 .tm-toast {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: calc(var(--ad-dock-h, 0px) + 16px);
   z-index: 10000;
   max-width: min(360px, calc(100vw - 32px));
   padding: 10px 14px;

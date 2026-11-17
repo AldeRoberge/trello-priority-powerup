@@ -763,3 +763,15 @@ button.tb-section-pri.is-empty { cursor: pointer; }
 .tb-section-count { flex: none; width: 28px; box-sizing: border-box; min-width: 28px; padding: 0 6px; border-radius: 999px; background: var(--tp-surface-active); color: var(--tp-text-muted); font-size: 11px; font-weight: 600; text-align: center; }
 .tb-section.is-drop-on td:not(.tb-num),
 tr.is-drop-on td:not(.tb-num) { box-shadow: inset 0 0 0 2px var(--tp-primary); }
+
+/* Multi-selection (table-ui-multi.js): quiet tint over the whole row, the size never changes. */
+.tb-grid tbody tr.is-picked td { box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--tp-primary) 12%, transparent); }
+.tb-grid tbody tr.is-picked td.tb-num { color: var(--tp-text); }
+.tb-bulk { display: inline-flex; align-items: center; gap: 4px; flex: none; min-width: 0; }
+.tb-bulk-n { font-size: 12px; color: var(--tp-text); white-space: nowrap; margin-right: 2px; }
+.tb-bulk .tb-btn:disabled { opacity: 0.45; cursor: default; }
+.tb-bulk .tb-btn:disabled:hover { background: transparent; }
+@media (max-width: 760px) {
+  .tb-bulk-n { display: none; }
+  .tb-bulk .tb-btn span { display: none; }
+}

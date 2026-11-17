@@ -319,4 +319,21 @@ describe('TableModel.subtaskRows', () => {
     assert.equal(TM.groupRows([r('a', '')], 'lieu'), null);
     assert.equal(TM.groupRows([{ id: 'a', project: 'P' }], 'none'), null);
   });
+  it('groupByUrgency: most urgent first, no urgency last, fold state kept', () => {
+    const r = (id, urgency) => ({ id, urgency });
+    const g = TM.groupRows([r('a', 'Vite'), r('b', ''), r('c', 'Au plus vite'), r('d', 'Aucun'), r('e', 'Vite')], 'urgency', { 'u:Vite': true });
+    assert.deepEqual(g.map((x) => [x.name, x.rows.length, x.open, x.kind]), [['Au plus vite', 1, true, 'urgency'], ['Vite', 2, false, 'urgency'], ['Aucune urgence', 2, true, 'urgency']]);
+    assert.equal(g[2].free, true);
+    assert.equal(TM.groupRows([], 'urgency'), null);
+  });
+
+  it('groupByProgress: Bloqué, En cours, Pas commencé, Terminé; empty buckets left out', () => {
+    const r = (id, progress, extra) => Object.assign({ id, progress }, extra);
+    const rows = [r('a', 0), r('b', 40), r('c', 100), r('d', null, { blocked: true }), r('e', 50, { blocked: true }), r('f', null, { statutKey: 'completed' }), r('g', null)];
+    const g = TM.groupRows(rows, 'progress', { 'a:done': true });
+    assert.deepEqual(g.map((x) => [x.name, x.rows.map((y) => y.id).join('')]), [['Bloqué', 'de'], ['En cours', 'b'], ['Pas commencé', 'ag'], ['Terminé', 'cf']]);
+    assert.equal(g[3].open, false);
+    assert.equal(TM.progressBucket(r('x', 100, { blocked: true })), 'done');
+    assert.deepEqual(TM.groupRows([r('a', 10)], 'progress').map((x) => x.name), ['En cours']);
+  });
 });

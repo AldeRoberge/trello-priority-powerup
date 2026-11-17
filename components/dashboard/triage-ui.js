@@ -569,7 +569,7 @@
       row.tier = d.tier;
       row.tierI = d.tierI;
       paintPrio();
-      host.refreshRow(row);
+      host.refreshRow(row, true);
     }
     paintPrio();
     var refine = h('button', {

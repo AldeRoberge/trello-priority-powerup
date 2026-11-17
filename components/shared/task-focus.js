@@ -2,12 +2,15 @@
  * Role: open one task inside the current view. The rest fades (Isolation) and the task
  * is edited here (CardQuick). Nothing navigates and nothing opens a Trello modal.
  *
- *   TaskFocus.open({ t, cardId, name, onChange, onToast, onGone })
+ *   TaskFocus.open({ t, cardId, name, onChange, onToast, onGone, isolate, mentions })
+ *   TaskFocus.refresh()   // reload the open card (e.g. once mentions are known)
  *   TaskFocus.close()
  *   TaskFocus.currentId() -> string
  *   TaskFocus.next(currentId, cardId) -> { action: 'noop'|'close'|'open', id }
  *
  * A second click on the same task closes it and leaves isolation.
+ * isolate:false keeps the rest of the view as it is (the Table uses it); mentions are the documents
+ * that link to the task ([{ title, open() }]), shown by CardQuick under "Mentionné dans".
  */
 (function (global) {
   'use strict';
@@ -15,6 +18,7 @@
   var panel = null;
   var quick = null;
   var ownedId = '';
+  var isolated = true;
   var listening = false;
 
   function next(currentId, cardId) {
@@ -24,8 +28,10 @@
     return { action: 'open', id: id };
   }
 
-  function isolate(cardId, name) {
+  function isolate(cardId, name, on) {
     ownedId = String(cardId);
+    isolated = on !== false;
+    if (!isolated) return;
     var Iso = global.Isolation;
     if (!Iso || typeof Iso.set !== 'function') return;
     Iso.set({ kind: 'task', id: ownedId, label: name || '' });
@@ -33,15 +39,16 @@
 
   function releaseIsolation() {
     var id = ownedId;
+    var was = isolated;
     ownedId = '';
     var Iso = global.Isolation;
-    if (!id || !Iso || typeof Iso.read !== 'function' || typeof Iso.clear !== 'function') return;
+    if (!was || !id || !Iso || typeof Iso.read !== 'function' || typeof Iso.clear !== 'function') return;
     var cur = Iso.read();
     if (cur && cur.kind === 'task' && cur.id === id) Iso.clear();
   }
 
   function onIsolation() {
-    if (!panel) return;
+    if (!panel || !isolated) return;
     var Iso = global.Isolation;
     var cur = Iso && typeof Iso.read === 'function' ? Iso.read() : null;
     if (!cur || cur.kind !== 'task' || cur.id !== ownedId) close(false);
@@ -82,7 +89,7 @@
     var name = opts.name || (opts.row && opts.row.name) || '';
     ensureListen();
     close(false);
-    isolate(step.id, name);
+    isolate(step.id, name, opts.isolate);
     var doc = global.document;
     if (!doc || typeof doc.createElement !== 'function' || !doc.body) return;
     var el = doc.createElement('aside');
@@ -110,6 +117,7 @@
         t: opts.t,
         cardId: step.id,
         name: name,
+        mentions: opts.mentions,
         onChange: opts.onChange,
         onToast: opts.onToast,
         onGone: function () {
@@ -123,6 +131,7 @@
   global.TaskFocus = {
     open: open,
     close: function () { close(true); },
+    refresh: function () { if (quick && typeof quick.refresh === 'function') quick.refresh(); },
     currentId: function () { return panel ? ownedId : ''; },
     next: next,
   };

@@ -112,6 +112,7 @@
     var store = deps.store;
     var ui = {
       notes: [], query: '', archive: false, status: 'idle', composing: null, dialog: null,
+      ai: null, hidden: {}, dragId: null, undo: null,
       drawer: (global.innerWidth || 1200) >= DRAWER_WIDE,
     };
     var syncTimer = null;
@@ -131,16 +132,21 @@
     var pill = el('div', 'k-pill');
     pill.appendChild(icon('search'));
     var search = el('input', 'k-search', { type: 'search', placeholder: 'Rechercher', 'aria-label': 'Rechercher' });
+    var askBtn = btn('sparkles', 'Demander à l’assistant', function () { askAssistant(); }, 'k-ask');
     var clear = btn('x', 'Effacer la recherche', function () {
       search.value = '';
       ui.query = '';
+      ui.ai = null;
       clear.hidden = true;
+      askBtn.classList.remove('is-ready');
+      drawAi();
       drawGrid();
       search.focus();
     }, 'k-clear');
     clear.hidden = true;
     var statusEl = el('span', 'k-status');
     pill.appendChild(search);
+    pill.appendChild(askBtn);
     pill.appendChild(clear);
     pill.appendChild(statusEl);
     header.appendChild(brand);
@@ -174,8 +180,11 @@
     var content = el('div', 'k-content');
     var main = el('main', 'k-main');
     var composerSlot = el('div', 'k-composer-slot');
+    var aiSlot = el('div', 'k-ai-slot');
+    aiSlot.hidden = true;
     var gridArea = el('div', 'k-grid-area');
     main.appendChild(composerSlot);
+    main.appendChild(aiSlot);
     main.appendChild(gridArea);
     content.appendChild(main);
     body.appendChild(drawer);
@@ -191,9 +200,58 @@
 
     search.addEventListener('input', function () {
       ui.query = search.value;
+      ui.ai = null;
       clear.hidden = !ui.query;
+      askBtn.classList.toggle('is-ready', !!ui.query.trim());
+      drawAi();
       drawGrid();
     });
+    search.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        askAssistant();
+      } else if (e.key === 'Escape' && (ui.query || ui.ai)) {
+        e.stopPropagation();
+        clear.click();
+      }
+    });
+
+    /* assistant: Enter asks, the answer strip sits above the ranked notes; typing or clearing goes back to the plain filter */
+    function askAssistant() {
+      var q = ui.query.trim();
+      if (!q || !global.KeepAI) return;
+      var mine = { q: q, status: 'busy', answer: '', ids: null };
+      ui.ai = mine;
+      drawAi();
+      drawGrid();
+      global.KeepAI.ask(deps.t, q, ui.notes.filter(function (n) { return !ui.hidden[n.id]; })).then(function (res) {
+        if (ui.ai !== mine) return;
+        mine.status = 'done';
+        mine.answer = res.answer;
+        mine.ids = res.ids;
+      }, function (err) {
+        if (ui.ai !== mine) return;
+        mine.status = 'error';
+        mine.answer = (err && err.message) || 'Assistant indisponible : recherche simple.';
+      }).then(function () {
+        if (ui.ai !== mine) return;
+        drawAi();
+        drawGrid();
+      });
+    }
+
+    function drawAi() {
+      var a = ui.ai;
+      aiSlot.textContent = '';
+      aiSlot.hidden = !a;
+      if (!a) return;
+      var strip = el('div', 'k-ai' + (a.status === 'error' ? ' is-quiet' : ''));
+      strip.appendChild(icon(a.status === 'busy' ? 'loader-2' : 'sparkles'));
+      if (a.status === 'busy') strip.firstChild.classList.add('k-spin');
+      strip.appendChild(el('span', 'k-ai-text', { text: a.status === 'busy' ? 'Je cherche…' : a.answer || (a.ids && a.ids.length ? '' : 'Aucune note ne correspond.') }));
+      strip.appendChild(btn('x', 'Fermer la réponse', function () { ui.ai = null; drawAi(); drawGrid(); }, 'k-ai-close'));
+      aiSlot.appendChild(strip);
+    }
 
     /* clicking outside an open composer saves it and folds it back, like Keep */
     document.addEventListener('click', function (e) {
@@ -317,7 +375,17 @@
 
     function drawGrid() {
       gridArea.textContent = '';
-      var list = KM().sortNotes(ui.notes.filter(function (n) { return !!n.arch === ui.archive && KM().matches(n, ui.query); }));
+      var visible = ui.notes.filter(function (n) { return !ui.hidden[n.id]; });
+      var ranked = ui.ai && ui.ai.status === 'done' && ui.ai.ids && ui.ai.ids.length;
+      if (ranked) {
+        // The assistant's answer: its notes in its order (archived ones too), no groups, no drag.
+        var byId = {};
+        visible.forEach(function (n) { byId[n.id] = n; });
+        lastCols = columnCount();
+        section('', ui.ai.ids.map(function (id) { return byId[id]; }).filter(Boolean), true);
+        return;
+      }
+      var list = KM().sortNotes(visible.filter(function (n) { return !!n.arch === ui.archive && KM().matches(n, ui.query); }));
       if (!list.length) {
         gridArea.appendChild(emptyState());
         return;
@@ -329,7 +397,7 @@
       section(pinned.length && others.length ? 'Autres' : '', pinned.length && others.length ? others : list);
     }
 
-    function section(label, notes) {
+    function section(label, notes, noDrag) {
       if (label) gridArea.appendChild(el('h2', 'k-section', { text: label }));
       var grid = el('div', 'k-grid');
       // Real columns, not CSS multi-columns: iOS WebKit overlaps text when a card is split across them.
@@ -342,7 +410,7 @@
       }
       notes.forEach(function (n) {
         var at = load.indexOf(Math.min.apply(null, load));
-        cols[at].appendChild(card(n));
+        cols[at].appendChild(card(n, !noDrag && !ui.query.trim()));
         load[at] += 2 + (n.title ? 1 : 0) + String(n.body || '').split('\n').length;
       });
       gridArea.appendChild(grid);
@@ -357,8 +425,10 @@
       if (n !== lastCols && lastCols) { lastCols = n; drawGrid(); }
     });
 
-    function card(n) {
-      var c = el('article', 'k-card', { 'data-color': n.color || '', tabindex: '0' });
+    function card(n, canDrag) {
+      var done = KM().isDone(n);
+      var c = el('article', 'k-card' + (done ? ' is-done' : ''), { 'data-color': n.color || '', tabindex: '0', 'data-id': n.id });
+      if (canDrag) bindReorder(c, n);
       c.appendChild(btn(n.pin ? 'pin-filled' : 'pin', n.pin ? 'Désépingler' : 'Épingler', function () {
         saveNote(Object.assign({}, n, { pin: !n.pin }));
       }, 'k-pin' + (n.pin ? ' is-on' : '')));
@@ -376,6 +446,7 @@
       });
       c.appendChild(body);
       c.appendChild(cardFoot(n));
+      c.appendChild(ring(n));
       c.addEventListener('click', function () { openDialog(n); });
       c.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target === c) openDialog(n); });
       c.addEventListener('contextmenu', function (e) {
@@ -386,14 +457,192 @@
       return c;
     }
 
-    /* right-click menu of a note: the same actions as the card footer, plus delete */
+    /* progress ring (bottom right, fixed spot): click completes or reopens, press and drag up or right sets a % */
+    function ring(n) {
+      var pct = KM().clampPct(n.pct);
+      var b = el('button', 'k-ring' + (pct > 0 ? ' has-pct' : ''), { type: 'button' });
+      var svg = global.ProgressRing.create(pct);
+      b.appendChild(svg);
+      b.title = pct >= 100 ? 'Terminé · cliquer pour rouvrir' : pct > 0 ? pct + ' % · cliquer pour terminer' : 'Cliquer pour terminer, glisser pour régler';
+      b.setAttribute('aria-label', b.title);
+      global.ProgressRing.bindDrag(b, {
+        get: function () { return pct; },
+        onPreview: function (p) {
+          global.ProgressRing.set(svg, p);
+          b.classList.toggle('has-pct', p > 0);
+          b.title = p + ' %';
+        },
+        onCommit: function (p) { setProgress(n, p); },
+        onClick: function () { setProgress(n, pct >= 100 ? 0 : 100); },
+      });
+      return b;
+    }
+
+    function setProgress(n, p) {
+      saveNote(Object.assign({}, n, { pct: p }));
+    }
+
+    /* drag a card onto another card of the same group (pinned or not) to move it before or after it */
+    function groupOf(n) {
+      return KM().sortNotes(ui.notes.filter(function (x) { return !ui.hidden[x.id] && !!x.arch === !!n.arch && !!x.pin === !!n.pin; }));
+    }
+
+    function dropSide(card, e) {
+      var r = card.getBoundingClientRect();
+      return e.clientY > r.top + r.height / 2 ? 'after' : 'before';
+    }
+
+    var mark = el('div', 'k-drop-mark');
+    mark.hidden = true;
+
+    function showMark(card, side) {
+      var host = gridArea.getBoundingClientRect();
+      var r = card.getBoundingClientRect();
+      mark.style.left = (r.left - host.left) + 'px';
+      mark.style.width = r.width + 'px';
+      mark.style.top = ((side === 'after' ? r.bottom : r.top) - host.top - 6) + 'px';
+      if (mark.parentNode !== gridArea) gridArea.appendChild(mark);
+      mark.hidden = false;
+    }
+
+    function clearDrag() {
+      ui.dragId = null;
+      mark.hidden = true;
+      gridArea.querySelectorAll('.k-card.is-dragging').forEach(function (c) { c.classList.remove('is-dragging'); });
+    }
+
+    function bindReorder(c, n) {
+      c.draggable = true;
+      c.addEventListener('dragstart', function (e) {
+        ui.dragId = n.id;
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', n.id); } catch (err) { /* ignore */ }
+        global.setTimeout(function () { c.classList.add('is-dragging'); }, 0);
+      });
+      c.addEventListener('dragend', clearDrag);
+    }
+
+    function dragTarget(e) {
+      if (!ui.dragId) return null;
+      var c = e.target && e.target.closest ? e.target.closest('.k-card') : null;
+      if (!c || c.getAttribute('data-id') === ui.dragId) return null;
+      var dragged = ui.notes.filter(function (x) { return x.id === ui.dragId; })[0];
+      var over = ui.notes.filter(function (x) { return x.id === c.getAttribute('data-id'); })[0];
+      // Pinned and other notes are separate groups: a drop across them is refused (the pin moves a note between groups).
+      if (!dragged || !over || !!dragged.pin !== !!over.pin || !!dragged.arch !== !!over.arch) return null;
+      return { el: c, note: over, dragged: dragged, side: dropSide(c, e) };
+    }
+
+    gridArea.addEventListener('dragover', function (e) {
+      var t = dragTarget(e);
+      if (!t) { mark.hidden = true; return; }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      showMark(t.el, t.side);
+    });
+    gridArea.addEventListener('drop', function (e) {
+      var t = dragTarget(e);
+      clearDrag();
+      if (!t) return;
+      e.preventDefault();
+      var group = groupOf(t.dragged);
+      var rest = group.filter(function (x) { return x.id !== t.dragged.id; });
+      var at = rest.map(function (x) { return x.id; }).indexOf(t.note.id) + (t.side === 'after' ? 1 : 0);
+      var plan = KM().reorderPlan(group, t.dragged.id, at);
+      if (!plan.length) return;
+      Promise.all(plan.map(function (ch) {
+        return store.get(ch.id).then(function (rec) { return sync.save(Object.assign({}, rec, { ord: ch.ord })); });
+      })).then(reload).then(queueSync);
+    });
+
+    /* undo toast (Ctrl+Z too): archive and delete act at once and can be taken back */
+    var toast = null;
+    var toastTimer = null;
+
+    function showToast(text, undo) {
+      if (toast) toast.remove();
+      global.clearTimeout(toastTimer);
+      toast = el('div', 'k-toast', { role: 'status' });
+      toast.appendChild(el('span', '', { text: text }));
+      var b = el('button', 'k-toast-undo', { type: 'button', text: 'Annuler' });
+      b.addEventListener('click', function () { runUndo(); });
+      toast.appendChild(b);
+      document.body.appendChild(toast);
+      ui.undo = undo;
+      toastTimer = global.setTimeout(hideToast, 6000);
+    }
+
+    function hideToast() {
+      if (toast) toast.remove();
+      toast = null;
+      ui.undo = null;
+    }
+
+    function runUndo() {
+      var fn = ui.undo;
+      hideToast();
+      if (fn) fn();
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || String(e.key).toLowerCase() !== 'z' || !ui.undo) return;
+      var tg = e.target;
+      if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA)$/.test(tg.tagName))) return;
+      e.preventDefault();
+      runUndo();
+    });
+
+    /** Sets a note's archive flag at once; the toast takes it back. `next` is the note to save (it may carry unsaved edits). */
+    function archiveNote(next, wasArchived) {
+      saveNote(next);
+      showToast(wasArchived ? 'Note désarchivée' : 'Note archivée', function () {
+        store.get(next.id).then(function (rec) { return rec && saveNote(Object.assign({}, rec, { arch: wasArchived })); });
+      });
+    }
+
+    function deleteNote(n) {
+      store.get(n.id).then(function (rec) {
+        if (!rec) return;
+        return sync.remove(n.id).then(reload).then(queueSync).then(function () {
+          showToast('Note supprimée', function () {
+            store.get(rec.id).then(function (cur) {
+              // Still marked deleted here: bring it back. Already gone from Trello: recreate it from its content.
+              if (cur) return store.put(Object.assign({}, rec, { deleted: false })).then(reload).then(queueSync);
+              var copy = Object.assign({}, rec);
+              delete copy.id;
+              return saveNote(copy);
+            });
+          });
+        });
+      });
+    }
+
+    function duplicateNote(n) {
+      var copy = Object.assign({}, n, { ord: null, rev: 1, props: null });
+      delete copy.id;
+      delete copy.updatedAt;
+      saveNote(copy);
+    }
+
+    /* right-click menu of a note: the same actions as the card, plus open, finish, convert, duplicate and delete */
     function noteMenuItems(n) {
       var colors = [{ color: '', label: 'Sans couleur' }].concat(KM().COLORS.map(function (c) {
         return { color: c, label: COLOR_LABEL[c] };
       }));
+      var done = KM().isDone(n);
+      var list = KM().isList(n.body);
       return [
+        { title: n.title || 'Note' },
+        { id: 'open', label: 'Ouvrir', icon: 'arrows-maximize', action: function () { openDialog(n); } },
+        {
+          id: 'done',
+          label: done ? 'Rouvrir' : 'Terminer',
+          icon: done ? 'rotate' : 'circle-check',
+          success: !done,
+          action: function () { setProgress(n, done ? 0 : 100); },
+        },
+        { sep: true },
         { id: 'pin', label: n.pin ? 'Désépingler' : 'Épingler', icon: n.pin ? 'pin-filled' : 'pin', action: function () { saveNote(Object.assign({}, n, { pin: !n.pin })); } },
-        { id: 'archive', label: n.arch ? 'Désarchiver' : 'Archiver', icon: n.arch ? 'archive-off' : 'archive', action: function () { saveNote(Object.assign({}, n, { arch: !n.arch })); } },
         {
           id: 'color',
           label: 'Couleur',
@@ -402,17 +651,16 @@
             return { id: 'color-' + (c.color || 'none'), label: c.label, checked: (n.color || '') === c.color, action: function () { saveNote(Object.assign({}, n, { color: c.color })); } };
           }),
         },
-        { sep: true },
         {
-          id: 'delete',
-          label: 'Supprimer',
-          icon: 'trash',
-          danger: true,
-          action: function () {
-            if (!global.confirm('Supprimer cette note ?')) return;
-            sync.remove(n.id).then(reload).then(queueSync);
-          },
+          id: 'convert',
+          label: list ? 'Convertir en texte' : 'Convertir en liste',
+          icon: list ? 'align-left' : 'checkbox',
+          action: function () { saveNote(Object.assign({}, n, { body: list ? KM().toText(n.body) : KM().toList(n.body) })); },
         },
+        { id: 'duplicate', label: 'Dupliquer', icon: 'copy', action: function () { duplicateNote(n); } },
+        { sep: true },
+        { id: 'archive', label: n.arch ? 'Désarchiver' : 'Archiver', icon: n.arch ? 'archive-off' : 'archive', action: function () { archiveNote(Object.assign({}, n, { arch: !n.arch }), !!n.arch); } },
+        { id: 'delete', label: 'Supprimer', icon: 'trash', danger: true, action: function () { deleteNote(n); } },
       ];
     }
 
@@ -425,7 +673,7 @@
       }));
       foot.appendChild(host);
       foot.appendChild(btn(n.arch ? 'archive-off' : 'archive', n.arch ? 'Désarchiver' : 'Archiver', function () {
-        saveNote(Object.assign({}, n, { arch: !n.arch }));
+        archiveNote(Object.assign({}, n, { arch: !n.arch }), !!n.arch);
       }));
       return foot;
     }
@@ -461,13 +709,12 @@
       bar.appendChild(btn(n.arch ? 'archive-off' : 'archive', n.arch ? 'Désarchiver' : 'Archiver', function () {
         ui.dialog = null;
         shade.remove();
-        saveNote(Object.assign({}, ed.getNote(), { arch: !original.arch }));
+        archiveNote(Object.assign({}, ed.getNote(), { arch: !original.arch }), !!original.arch);
       }));
       bar.appendChild(btn('trash', 'Supprimer', function () {
-        if (!global.confirm('Supprimer cette note ?')) return;
         ui.dialog = null;
         shade.remove();
-        sync.remove(original.id).then(reload).then(queueSync);
+        deleteNote(original);
       }));
       var close = el('button', 'k-close', { type: 'button', text: 'Fermer' });
       close.addEventListener('click', function () { closeDialog(true); });

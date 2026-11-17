@@ -349,12 +349,17 @@
           return M.histChk(r, 'Blocage impossible');
         });
       }
+      if (e.type === 'merge' && global.CardMerge) return global.CardMerge.applyEntry(M.t, e, back);
       return Promise.reject(new Error('Cette modification ne peut pas \u00eatre annul\u00e9e'));
     };
     M.histVerb = function histVerb(e) {
       if (e.type === 'archive') return 'archiv\u00e9e';
       if (e.type === 'delete') return e.label || 'supprim\u00e9e';
       if (e.type === 'move') return 'd\u00e9plac\u00e9e';
+      if (e.type === 'merge') {
+        var merged = e.merge && e.merge.sources ? e.merge.sources.length : 0;
+        return 'fusionn\u00e9e avec ' + merged + (merged > 1 ? ' cartes' : ' carte');
+      }
       if (e.type === 'add') return 'sous-t\u00e2che ajout\u00e9e';
       if (e.type === 'dates') return 'dates modifi\u00e9es';
       if (e.type === 'progress') return 't\u00e2che ' + (e.afterVal ? 'termin\u00e9e' : 'rouverte');
@@ -1094,6 +1099,7 @@
             onDelete: function (e) {
               M.runBulk('delete', e);
             },
+            onMerge: M.mergeRows().length >= 2 ? M.mergeSelected : null,
             onClear: M.clearSelection,
           });
         });

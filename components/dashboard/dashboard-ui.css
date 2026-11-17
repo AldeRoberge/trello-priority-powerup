@@ -545,3 +545,9 @@ button.db-result.is-missing { color: var(--tp-danger-text); }
 .db-project-nums { display: flex; gap: 12px; font-size: 12px; color: var(--tp-text-muted); }
 .db-project .db-row-name { cursor: default; }
 
+
+/* Orchestrateur, day scale: the line that shows the time a card will get where it is dropped. */
+.db-time-guide { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--tp-primary); pointer-events: none; z-index: 3; }
+.db-time-guide { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tp-primary); line-height: 1; }
+.db-time-guide { text-indent: 6px; padding-top: 3px; }
+.db-time-guide.is-none { border-top-style: dashed; color: var(--tp-text-muted); border-color: var(--tp-text-muted); }

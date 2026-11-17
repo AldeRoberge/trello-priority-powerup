@@ -163,6 +163,11 @@
         addTask: M.addSiblingTask,
         addInProject: M.addInProject,
         taskEl: function (row) { return M.triageRow(row, !picked && !M.state.subSel && row.id === selId); },
+        unblockProject: M.unblockProject,
+        reorderProject: M.reorderProject,
+        reorderTask: M.reorderTask,
+        moveToProject: M.moveToProject,
+        makeSubtask: M.makeSubtask,
         toggle: function (key) {
           if (M.state.triageFold[key]) delete M.state.triageFold[key];
           else M.state.triageFold[key] = true;
@@ -336,12 +341,14 @@
       M.render();
       return true;
     };
-    M.refreshRow = function refreshRow(row) {
+    // full: the change moves the project line (best priority, mean progress) or the sort, so rebuild the tree too.
+    M.refreshRow = function refreshRow(row, full) {
       var cur = M.els.main.querySelector('.db-triage-list .db-row[data-id="' + row.id + '"]');
       if (!cur) return;
       var fresh = M.triageRow(row, cur.classList.contains('is-sel'));
       if (global.TriageTree) global.TriageTree.carryOver(cur, fresh, M.treeCtx(M.state.selected));
       cur.replaceWith(fresh);
+      if (full) M.renderUnlessTyping();
     };
     M.exitHint = function exitHint(id) {
       var ex = S.DM().exitById(id);
@@ -762,15 +769,55 @@
       var iso = typeof spec === 'string' ? spec : ((spec && spec.iso) || '');
       var vague = spec && spec.vague ? spec.vague : '';
       var owner = spec && spec.owner ? spec.owner : S.ME; // the row this zone belongs to
-      el.addEventListener('dragover', function (e) { e.preventDefault(); el.classList.add('is-drop'); });
-      el.addEventListener('dragleave', function () { el.classList.remove('is-drop'); });
+      // A day column (day scale): how far down the card is dropped sets its time. The top strip means "no time".
+      var byY = !!iso && !vague && !(spec && spec.time) && el.classList.contains('db-col-card');
+      var guide = null;
+      function dayScale() {
+        try { return M.ensureZoom().scale === 'day'; } catch (err) { return false; }
+      }
+      function timeAt(e) {
+        var r = el.getBoundingClientRect();
+        var f = r.height ? (e.clientY - r.top) / r.height : 0;
+        if (f < 0.12) return '';
+        var m = 480 + Math.round(((Math.min(1, f) - 0.12) / 0.88) * 660 / 15) * 15; // 8:00 to 19:00, by quarters
+        return S.TM().toClock(Math.min(m, 19 * 60));
+      }
+      function paintGuide(e) {
+        var t = timeAt(e);
+        if (!guide) {
+          guide = document.createElement('div');
+          guide.className = 'db-time-guide';
+          if (global.getComputedStyle(el).position === 'static') el.style.position = 'relative';
+          el.appendChild(guide);
+        }
+        var r = el.getBoundingClientRect();
+        guide.style.top = Math.max(0, Math.min(r.height - 2, e.clientY - r.top)) + 'px';
+        guide.textContent = t ? t : 'Sans heure';
+        guide.classList.toggle('is-none', !t);
+      }
+      function clearGuide() {
+        if (guide && guide.parentNode) guide.parentNode.removeChild(guide);
+        guide = null;
+      }
+      el.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        el.classList.add('is-drop');
+        if (byY && dayScale()) paintGuide(e);
+      });
+      el.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && el.contains(e.relatedTarget)) return;
+        el.classList.remove('is-drop');
+        clearGuide();
+      });
       el.addEventListener('drop', function (e) {
         e.preventDefault();
         el.classList.remove('is-drop');
+        var dropTime = byY && dayScale() ? timeAt(e) : '';
+        clearGuide();
         var id = e.dataTransfer.getData('text/plain');
         var row = M.state.rows.filter(function (r) { return r.id === id; })[0];
         if (!row) return;
-        var wantTime = spec && spec.time ? spec.time : '';
+        var wantTime = spec && spec.time ? spec.time : dropTime;
         var curDay = row.dueVague ? '' : (row.start || row.due || '');
         var moves = vague ? row.dueVague !== vague : (row.dueVague || curDay !== iso || (row.startTime || '') !== wantTime);
         // Dropped on another person's row: the card changes hands (and day, when the cell is another day's).

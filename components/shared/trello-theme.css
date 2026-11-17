@@ -1292,7 +1292,7 @@ html[data-color-mode="dark"] .tp-color-scheme-option.is-active {
 
 .tp-toast {
   position: fixed;
-  bottom: 12px;
+  bottom: calc(var(--ad-dock-h, 0px) + 12px);
   left: 50%;
   transform: translateX(-50%) translateY(12px);
   background: var(--tp-success-bg);

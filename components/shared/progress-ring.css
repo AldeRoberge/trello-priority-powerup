@@ -55,3 +55,7 @@ button:hover > .pg-ring .pg-track,
 .pg-ring.is-blocked .pg-check {
   display: none;
 }
+/* Ring button being dragged to set a % (see ProgressRing.bindDrag): no size change, only the cursor. */
+.is-dragging > .pg-ring {
+  cursor: grabbing;
+}

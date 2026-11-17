@@ -690,6 +690,37 @@
       }
       start();
     };
+    /** Board cards in the selection, as the rows CardMerge takes (display order, the first one is kept). */
+    M.mergeRows = function mergeRows() {
+      return M.selectedRows()
+        .filter(function (row) { return row.kind === 'card' && row.cardId; })
+        .map(function (row) { return { id: row.cardId, name: row.name }; });
+    };
+    M.mergeSelected = function mergeSelected() {
+      var rows = M.mergeRows();
+      if (rows.length < 2 || M.state.saving) return;
+      if (!global.CardMerge) {
+        M.setStatus('Fusion indisponible', true);
+        return;
+      }
+      M.state.saving = true;
+      M.setStatus('Fusion de ' + rows.length + ' cartes…');
+      global.CardMerge.merge(M.t, rows).then(
+        function (res) {
+          M.state.saving = false;
+          M.state.selected = Object.create(null);
+          M.record(res.entry); // offers its own Annuler toast
+          M.setStatus(res.source === 'ai' ? 'Cartes fusionnées' : 'Cartes fusionnées (sans IA)');
+          return M.reload();
+        },
+        function (err) {
+          M.state.saving = false;
+          if (err && err.partial) M.record(err.partial.entry);
+          M.setStatus((err && err.message) || 'Fusion impossible', true);
+          return M.reload();
+        }
+      );
+    };
     M.makeIconBtn = function makeIconBtn(className, iconClass, label, onClick) {
       var btn = S.el('button', className, { type: 'button', title: label });
       var icon = S.el('i', 'ti ' + iconClass);
@@ -718,6 +749,10 @@
       );
       var removal = M.bulkRemoval(M.selectedRows().filter(M.canEditSubtask));
 
+      var mergeBtn = M.makeIconBtn('gantt-btn', 'ti-arrows-join', 'Fusionner', M.mergeSelected);
+      mergeBtn.title = 'Fusionner les cartes choisies avec l’IA';
+      mergeBtn.disabled = M.mergeRows().length < 2;
+      M.bulkBar.appendChild(mergeBtn);
       M.bulkBar.appendChild(
         M.makeIconBtn('gantt-btn', 'ti-circle-check', 'Terminer', function () {
           M.runBulk('done');

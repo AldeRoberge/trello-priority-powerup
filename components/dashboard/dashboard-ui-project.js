@@ -770,6 +770,7 @@
           return p ? { id: p.id, name: p.name, icon: p.icon || null } : null;
         },
         collapsed: M.state.triageFold,
+        order: global.TriageDnd ? global.TriageDnd.order() : null,
         adding: M.state.subAdding ? { key: M.state.subAdding, mode: M.state.addMode === 'task' ? 'task' : 'sub' } : '',
       });
     };

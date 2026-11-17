@@ -3,6 +3,18 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-17
+- Carte Trello : bouton « Marquer comme complété » (devient « Rouvrir » une fois terminée).
+- Triage : clic droit sur un projet pour « Tout marquer comme terminé » (les tâches s’effacent doucement, reviennent au survol, puis étincelles et retour en place) ou « Archiver toutes les cartes » (un seul Défaire).
+- Triage : glisser un projet ou une tâche pour les réordonner ; déposer une tâche au milieu d’une autre en fait une sous-tâche, sur un projet la range dedans.
+- Triage : changer la priorité met à jour tout de suite la ligne du projet et le tri ; la barre d’avancement s’élargit avec sa colonne ; le « II » rouge d’un projet débloque ses tâches.
+- Orchestrateur : déposer une carte plus bas dans une journée lui donne une heure plus tardive (repère d’heure pendant le glissement, bande du haut = sans heure).
+- « Terminer » est vert dans tous les menus du clic droit ; Bloquer / Débloquer et Terminer ajoutés au menu des cartes du Tableau et du Kanban.
+- Tableau : grouper par urgence ou par avancement ; Maj+clic / Ctrl+clic pour sélectionner plusieurs lignes et « Fusionner » (l’IA combine les cartes, Annuler remet tout) ; le panneau de droite n’estompe plus le tableau et liste les documents liés.
+- Assistant en bas : en l’agrandissant, les panneaux et messages remontent avec lui au lieu de se chevaucher.
+- Documents : une carte ou un document s’ouvre d’abord en fenêtre, avec « Ouvrir en grand ».
+- Notes : cercle d’avancement (clic pour terminer, glisser pour régler), glisser pour réordonner, clic droit complet avec Annuler, recherche par l’assistant IA (Entrée).
+
 ## 2026-11-16
 - Notes : clic droit sur une note pour l’épingler, l’archiver, changer sa couleur ou la supprimer (même menu que le reste de l’app).
 - Notes : la page reprend l’apparence de Google Keep : tiroir à gauche (Notes, Archive), barre « Prendre une note… » au-dessus de la grille, cartes épinglables avec couleur et archive au survol, palette de couleurs Keep.

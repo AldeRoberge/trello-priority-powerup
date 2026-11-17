@@ -78,6 +78,23 @@ describe('Notes sync (device <-> Documents cards)', () => {
     assert.equal(u.rev, 2);
   });
 
+  it('sends progress and order made offline and gets them back after a sync', async () => {
+    const doc = await DT.createDoc(fake.t, 'Liste', 'a', { props: { tags: ['maison'] } });
+    await sync.run();
+    offline = true;
+    await sync.save({ ...(await store.get(doc.id)), pct: 60, ord: 1536 });
+    offline = false;
+    await sync.run();
+    const u = DM.unpackDesc(fake.cards.find((c) => c.id === doc.id).desc);
+    assert.equal(u.props.keep, 'pct=60,ord=1536');
+    assert.deepEqual(u.props.tags, ['maison']);
+    const local = await store.get(doc.id);
+    assert.equal(local.dirty, false);
+    assert.equal(local.pct, 60);
+    assert.equal(local.ord, 1536);
+    assert.equal(KM.snapshot(local.base), KM.snapshot(local), 'the agreed state carries pct and ord, so nothing looks changed');
+  });
+
   it('pulls a change made elsewhere', async () => {
     const doc = await DT.createDoc(fake.t, 'Liste', 'v1');
     await sync.run();

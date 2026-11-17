@@ -235,8 +235,8 @@
         { icon: 'sort-descending', label: 'Ajouter au tri ' + S.TM().sortLabels(key).desc, checked: sorted === 'desc' && others, disabled: !M.state.sorts.length, action: function () { M.setSort(key, 'desc', true); } },
         { icon: 'arrows-sort', label: others ? 'Retirer ce niveau de tri' : 'Retirer le tri', disabled: !sorted, action: function () { M.setSort(key, null, true); } },
         { sep: true },
-      ].concat(key === 'project' || key === 'lieu' ? [
-        { icon: key === 'lieu' ? 'map-pin' : 'folder', label: 'Grouper par ' + (key === 'lieu' ? 'lieu' : 'projet'), checked: M.groupMode() === key, action: function () { M.setGroupMode(key === 'lieu' ? 'lieu' : 'project'); } },
+      ].concat(M.GROUP_BY_COLUMN[key] ? [
+        { icon: M.groupSpec(M.GROUP_BY_COLUMN[key]).icon, label: 'Grouper par ' + M.groupSpec(M.GROUP_BY_COLUMN[key]).noun, checked: M.groupMode() === M.GROUP_BY_COLUMN[key], action: function () { M.setGroupMode(M.GROUP_BY_COLUMN[key]); } },
         { sep: true },
       ] : []).concat([
         { icon: 'arrow-left', label: 'Déplacer à gauche', disabled: idx <= 0, action: function () { M.moveColumn(idx, -1); } },
@@ -252,6 +252,9 @@
       var items = [
         { title: row.name || 'Carte' },
         { icon: 'archive', label: 'Archiver la carte', danger: true, action: function () { M.archiveRow(row); } },
+        { sep: true },
+        row.progress >= 100 ? null : { id: 'complete', icon: 'circle-check', label: 'Terminer', success: true, action: function () { M.saveProgress(row, 100); } },
+        { icon: row.blocked ? 'player-play' : 'player-pause', label: row.blocked ? 'Débloquer' : 'Bloquer', action: function () { M.setRowBlocked(row, !row.blocked); } },
         { sep: true },
         { icon: 'arrow-up-right', label: 'Ouvrir la carte', action: function () { M.openCard(row); } },
         { icon: 'file-text', label: 'Document', action: function () { if (global.ViewTabs) global.ViewTabs.openSubject('task', row.id); } },
@@ -320,6 +323,10 @@
           M.createIn(list, 'Nouvelle carte', null, { rename: true });
         },
       });
+      var picked = M.pickedRows ? M.pickedRows() : [];
+      if (picked.length >= 2 && M.state.multi[row.id]) {
+        items.splice(1, 0, { icon: 'arrows-join', label: 'Fusionner ' + picked.length + ' cartes avec l’IA', action: M.mergePicked }, { sep: true });
+      }
       if (global.Isolation) {
         items = items.concat(global.Isolation.menuItems({
           cardId: row.id,
@@ -513,6 +520,7 @@
       if (e.type === 'move') return S.TT().moveCard(M.t, e.targetId, val, back ? e.beforePos : e.afterPos);
       if (e.type === 'reorder') return S.TT().reorderCard(M.t, e.targetId, val);
       if (e.type === 'progress') return M.writeProgress(e.targetId, val);
+      if (e.type === 'merge') return global.CardMerge ? global.CardMerge.applyEntry(M.t, e, back) : Promise.reject(new Error('Fusion indisponible'));
       if (e.type === 'edit') {
         if (e.key === 'name') return S.TT().saveName(M.t, e.targetId, val);
         if (e.key === 'category') return S.TT().saveCategory(M.t, e.targetId, M.state.categoryFieldId, val);
@@ -528,6 +536,7 @@
       if (e.type === 'create') return 'créée' + (e.after ? ' dans « ' + e.after + ' »' : '');
       if (e.type === 'move') return 'déplacée';
       if (e.type === 'reorder') return 'réordonnée' + (e.after ? ' dans « ' + e.after + ' »' : '');
+      if (e.type === 'merge') { var n = e.merge && e.merge.sources ? e.merge.sources.length : 0; return 'fusionnée avec ' + n + (n > 1 ? ' cartes' : ' carte'); }
       return (e.label || M.colName(e.key)) + ' modifié';
     };
     M.goalPlaces = function goalPlaces() {
@@ -540,10 +549,21 @@
         return os.places(M.state.goals);
       }).catch(function () { return {}; });
     };
+    M.GROUP_MODES = [
+      { id: 'project', icon: 'folder', bar: 'stack-2', label: 'Projet', noun: 'projet', bar_label: 'Par projet' },
+      { id: 'lieu', icon: 'map-pin', bar: 'map-pin', label: 'Lieu', noun: 'lieu', bar_label: 'Par lieu' },
+      { id: 'urgency', icon: 'flame', bar: 'flame', label: 'Urgence', noun: 'urgence', bar_label: 'Par urgence' },
+      { id: 'progress', icon: 'chart-donut', bar: 'chart-donut', label: 'Avancement', noun: 'avancement', bar_label: 'Par avancement' },
+      { id: 'none', icon: 'list', bar: 'list', label: 'Aucun groupe', noun: 'aucun groupe', bar_label: 'Groupes' },
+    ];
+    M.GROUP_BY_COLUMN = { project: 'project', lieu: 'lieu', urgency: 'urgency', progress: 'progress' };
+    M.groupSpec = function groupSpec(id) {
+      return M.GROUP_MODES.filter(function (g) { return g.id === id; })[0] || M.GROUP_MODES[0];
+    };
     M.groupMode = function groupMode() {
       try {
         var m = localStorage.getItem('tp-table-groupby');
-        return m === 'lieu' || m === 'none' ? m : 'project';
+        return M.GROUP_MODES.some(function (g) { return g.id === m; }) ? m : 'project';
       } catch (e) { return 'project'; }
     };
     M.setGroupMode = function setGroupMode(mode) {
@@ -553,12 +573,9 @@
     };
     M.groupItems = function groupItems() {
       var cur = M.groupMode();
-      return [
-        { title: 'Grouper par' },
-        { icon: 'folder', label: 'Projet', checked: cur === 'project', action: function () { M.setGroupMode('project'); } },
-        { icon: 'map-pin', label: 'Lieu', checked: cur === 'lieu', action: function () { M.setGroupMode('lieu'); } },
-        { icon: 'list', label: 'Aucun groupe', checked: cur === 'none', action: function () { M.setGroupMode('none'); } },
-      ];
+      return [{ title: 'Grouper par' }].concat(M.GROUP_MODES.map(function (g) {
+        return { icon: g.icon, label: g.label, checked: cur === g.id, action: function () { M.setGroupMode(g.id); } };
+      }));
     };
     M.foldedSections = function foldedSections() {
       try {
@@ -645,8 +662,9 @@
       });
     };
     M.sectionRow = function sectionRow(g) {
-      var isLieu = g.kind === 'lieu';
-      var sectionGlyph = S.icon(g.free ? 'inbox' : isLieu ? 'map-pin' : ((g.icon && g.icon.i) || 'stack-2'), 'tb-section-icon');
+      var isLieu = !!g.kind && g.kind !== 'project'; // lieu, urgency, progress: no project, no priority button, no drops
+      var kindIcon = { lieu: 'map-pin', urgency: 'flame' }[g.kind];
+      var sectionGlyph = S.icon(g.free ? 'inbox' : isLieu ? (kindIcon || (g.icon && g.icon.i) || 'stack-2') : ((g.icon && g.icon.i) || 'stack-2'), 'tb-section-icon');
       if (!g.free && !isLieu && g.id && global.ProjectIcon) {
         var picked = global.ProjectIcon.button({
           t: M.t,
@@ -659,13 +677,13 @@
         if (picked) sectionGlyph = picked;
       }
       var cols = M.shownColumns();
-      var pid = g.free ? '' : (g.id || ((g.rows[0] && g.rows[0].projectId) || ''));
+      var pid = g.free || isLieu ? '' : (g.id || ((g.rows[0] && g.rows[0].projectId) || ''));
       var tr = S.h('tr', {
         class: 'tb-section' + (g.free ? ' is-free' : ''),
         'aria-expanded': String(g.open),
         'data-project': pid,
         'data-iso-project': pid || null,
-        'data-iso-label': g.free ? null : g.name,
+        'data-iso-label': g.free || isLieu ? null : g.name,
         onclick: function (e) {
           if (e.target.closest('button, .ip-glyph, .tb-section-pri, .tb-section-prog')) return;
           M.toggleSection(g.key);

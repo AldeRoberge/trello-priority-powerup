@@ -123,17 +123,15 @@ button.tt-chev:hover { background: var(--tp-surface-active); color: var(--tp-tex
 .tt-prog-ring { flex: none; width: 18px; height: 18px; }
 .tt-prog.is-live .tt-prog-ring { cursor: pointer; }
 .tt-prog.is-live .tt-prog-bar { cursor: ew-resize; height: 8px; }
-.tt-prog-bar { flex: none; width: 34px; height: 6px; border-radius: 3px; background: var(--tp-surface-active); overflow: hidden; }
+.tt-prog-bar { flex: 1 1 34px; min-width: 34px; height: 6px; border-radius: 3px; background: var(--tp-surface-active); overflow: hidden; }
 .tt-prog-bar i { display: block; height: 100%; border-radius: 3px; background: var(--tp-primary); }
-.tt-prog-t { flex: 1; text-align: right; }
+.tt-prog-t { flex: none; min-width: 3.4ch; text-align: right; }
 .tt-prog.is-done { color: var(--tp-success); }
 .tt-prog.is-done .tt-prog-bar i { background: var(--tp-success); }
 .tt-prog.is-blocked { color: var(--tp-danger-text); }
 .tt-prog.is-blocked .tt-prog-bar i { background: var(--tp-danger-text); }
-.tt-prog:not(.is-live) .pg-ring.is-blocked,
-.tt-project .pg-ring.is-blocked { cursor: default; }
-.tt-prog:not(.is-live) .pg-ring.is-blocked:hover,
-.tt-project .pg-ring.is-blocked:hover { background: transparent; }
+.tt-prog:not(.is-live) .pg-ring.is-blocked { cursor: default; }
+.tt-prog:not(.is-live) .pg-ring.is-blocked:hover { background: transparent; }
 .tt-prio-col { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 0; max-width: 100%; overflow: hidden; }
 .tt-cell {
   display: block;
@@ -303,3 +301,10 @@ button.tt-add:hover { background: var(--tp-surface-active); color: var(--tp-text
 
 /* The tree / list button in the Triage header: filled while the tree is on. */
 .db-icon-btn.is-on { background: var(--tp-surface-active); color: var(--tp-text); }
+
+/* Drag and drop: only a marker changes, never the size or position of a line. */
+.tt-project[draggable="true"], .tt-task[draggable="true"] { -webkit-user-drag: element; }
+.tt-project.is-dragging, .tt-task.is-dragging { opacity: 0.45; }
+.tt-drop-before { box-shadow: inset 0 2px 0 var(--tp-primary); }
+.tt-drop-after { box-shadow: inset 0 -2px 0 var(--tp-primary); }
+.tt-drop-into { background: color-mix(in srgb, var(--tp-primary) 14%, transparent); box-shadow: inset 0 0 0 1px var(--tp-primary); }
