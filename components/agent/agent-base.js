@@ -128,7 +128,8 @@ function dbg() {
     remove_place: true,
     trigger_effect: true,
     show_guide: true,
-    schedule_check: true
+    schedule_check: true,
+    vvd_status: true
   };
   var DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1';
   var DEFAULT_OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -418,6 +419,7 @@ function dbg() {
     remove_place: 'Lieu retir\u00e9.',
     show_guide: 'Module ouvert.',
     schedule_check: 'Rappel planifi\u00e9.',
+    vvd_status: 'Centre de contr\u00f4le consult\u00e9.',
     set_timer: 'Minuteur d\u00e9marr\u00e9.',
     cancel_timer: 'Minuteur annul\u00e9.'
   };

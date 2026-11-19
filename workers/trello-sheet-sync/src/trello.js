@@ -51,6 +51,19 @@ export async function getCards(env, categoryFieldId) {
   });
 }
 
+/** Open cards with what /tasks needs (labels, start, dueComplete) and Catégorie folded in as `card.category`. */
+export async function getTaskCards(env, categoryFieldId) {
+  const cards = await call(env, `/boards/${env.TRELLO_BOARD_ID}/cards?filter=open&fields=id,name,idList,due,start,dueComplete,shortUrl,labels&customFieldItems=true`);
+  return cards.map((c) => {
+    const item = categoryFieldId ? (c.customFieldItems || []).find((i) => i.idCustomField === categoryFieldId) : null;
+    return { ...c, category: item && item.value && item.value.text ? item.value.text : '' };
+  });
+}
+
+export function getBoardInfo(env) {
+  return call(env, `/boards/${env.TRELLO_BOARD_ID}?fields=id,name`);
+}
+
 /** Archived cards of the board (the Documents view keeps its documents there), with their text. */
 export function getClosedCards(env) {
   return call(env, `/boards/${env.TRELLO_BOARD_ID}/cards/closed?fields=id,name,desc,dateLastActivity`);

@@ -6,6 +6,7 @@
 //   PUT  /config                 {columns?, logLevel?, sheetTheme?: 'light'|'dark'}
 //   POST /sync                   manual full sync
 //   POST /push                   {cards:[...]} computed columns from the Power-Up
+//   GET  /tasks?project=&limit=&done=1  read-only task list for the VVD Control Center (see src/tasks.js)
 //   GET  /logs?limit=&level=     Logs tab            GET /activities?limit=   Activities tab
 //   POST /alerts/ack             acknowledge CRITICAL alerts
 //   POST /documents/sync         reconcile Documents ↔ the Drive folder now
@@ -34,7 +35,8 @@ import {
   lastSync,
 } from './sync.js';
 import { describeAction, isDocumentAction, isEntityAction } from './webhook.js';
-import { ensureWebhook } from './trello.js';
+import { ensureWebhook, getLists, getCategoryField, getTaskCards, getBoardInfo } from './trello.js';
+import { formatTasks } from './tasks.js';
 import { searchWeb } from './search.js';
 import { searchUnsplash } from './unsplash.js';
 import { keepEnabled, syncAllKeep, keepSyncStatus } from './keep.js';
@@ -141,6 +143,11 @@ const worker = {
       if (url.pathname === '/push' && request.method === 'POST') {
         const body = await request.json();
         return json(request, env, await pushComputed(env, Array.isArray(body.cards) ? body.cards : []));
+      }
+      if (url.pathname === '/tasks' && request.method === 'GET') {
+        const field = await getCategoryField(env, false);
+        const [cards, lists, board, pushed] = await Promise.all([getTaskCards(env, field && field.id), getLists(env), getBoardInfo(env), readPushed(env)]);
+        return json(request, env, formatTasks({ cards, lists, pushed, board, project: url.searchParams.get('project') || '', limit: url.searchParams.get('limit'), includeDone: url.searchParams.get('done') === '1' }));
       }
       if (url.pathname === '/logs' && request.method === 'GET') {
         const limit = Math.min(500, Number(url.searchParams.get('limit')) || 200);

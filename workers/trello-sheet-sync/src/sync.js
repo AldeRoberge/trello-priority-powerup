@@ -355,6 +355,18 @@ async function readState(env) {
   return state;
 }
 
+/** card id -> values the Power-Up pushed (priority, progress...). Empty when the Sheet cannot be read. */
+export async function readPushed(env) {
+  try {
+    const state = await readState(env);
+    const out = {};
+    for (const [id, b] of Object.entries(state)) if (b && b.pushed) out[id] = b.pushed;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 async function writeState(env, state) {
   const rows = Object.entries(state).map(([id, b]) => [id, JSON.stringify(b)]);
   await sheets.clearRange(env, `${STATE}!A:B`);

@@ -113,6 +113,12 @@ plages protégées en mode avertissement (« vous êtes sur le point de modifier
 
 Après une mise à jour du Worker, redéployez : `cd workers/trello-sheet-sync && npx wrangler deploy`. Les nouveaux onglets sont créés au premier passage.
 
+## Liste de tâches en lecture seule (Centre de contrôle VVD)
+
+`GET /tasks?project=<nom>&limit=<n, 500 par défaut, 1000 max>&done=1` avec l’en-tête `x-sync-secret`. Réponse : `{generatedAt, board:{id,name}, counts:{open,overdue,blocked,done}, tasks:[{id,name,url,list,statut,priority,progress,due,start,blocked,done,labels,project,projectId}]}`. Les tâches ouvertes viennent d’abord (priorité décroissante, puis échéance croissante); les terminées seulement avec `done=1`. Pas de CORS : appel de serveur à serveur.
+
+`priority` et `progress` sont les dernières valeurs poussées par le Power-Up (`POST /push`), sinon `null`. `blocked` et `done` viennent de la liste Trello (Bloqué, Terminé/Annulé) ou de l’échéance terminée. Le projet du Power-Up n’existe pas côté serveur : `project` est la valeur de « Catégorie » et `projectId` reste vide. Formatage pur dans `src/tasks.js` (test : `test/worker-tasks.test.js`).
+
 ## Limites
 
 - Sheet → Trello : quelques secondes (surveillance de la version du fichier pendant chaque minute de cron ; Google Sheets n’offre pas de notification instantanée sans Apps Script). Sur le forfait gratuit de Cloudflare (50 sous-requêtes par exécution), préférez le forfait Workers Payant si vous avez beaucoup de cartes.

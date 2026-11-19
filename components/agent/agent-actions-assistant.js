@@ -59,6 +59,16 @@
     };
   });
 
+  // vvd_status (read-only: asks the local VVD Control Center, never starts or stops anything)
+  registerAction(['vvd_status'], async function (bridge, action, tool, args) {
+    var Link = typeof VvdLink !== 'undefined' ? VvdLink : global.VvdLink;
+    var down = 'Le Centre de contr\u00f4le VVD ne r\u00e9pond pas\u00a0: il doit tourner sur cet ordinateur.';
+    if (!Link || typeof Link.summary !== 'function') return { ok: false, tool: tool, error: down };
+    var sum = await Link.summary();
+    if (!sum) return { ok: false, tool: tool, error: down };
+    return { ok: true, tool: tool, args: args, summary: Link.describeSummary(sum) };
+  });
+
   // trigger_effect
   registerAction(['trigger_effect'], async function (bridge, action, tool, args) {
     var effectRaw = args.effect || args.name || args.id;
