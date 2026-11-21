@@ -388,6 +388,14 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .k-rich-view > :first-child { margin-top: 0; }
 .k-rich-view > :last-child, .k-rich > :last-child { margin-bottom: 0; }
 .k-rich-view .dc-todo > li { cursor: default; }
+/* Task / doc chips wrap with the text: a long name must never push past the card edge. */
+.k-rich .dc-mention, .k-rich-view .dc-mention {
+  display: inline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 .k-rich-wrap { display: flex; flex-direction: column; }
 .k-rtools { display: flex; flex-wrap: wrap; gap: 0; margin: 4px -8px 0; opacity: 0.55; transition: opacity 0.15s ease; }
 .k-rich-wrap:focus-within .k-rtools { opacity: 1; }
