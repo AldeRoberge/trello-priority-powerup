@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-21
+- Paramètres > Apparence : choisir Auto, Clair ou Sombre, et un style parmi Classique, Cristal, Fluide, Tonal et Sauge, sur toutes les vues.
 
 - Triage : glisser une tâche pour la réordonner fonctionne aussi sans projets, et l’en-tête affiche « Personnalisé » (cliquer pour retirer l’ordre manuel).
 - Keep : un œil sur chaque note la masque (Annuler la ramène), un bouton œil en haut affiche les notes masquées, et un menu Trier classe par date de création, de modification, titre ou ordre manuel.

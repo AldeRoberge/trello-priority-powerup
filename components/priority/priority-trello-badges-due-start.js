@@ -736,13 +736,18 @@
 
   function applyColorMode(theme) {
     if (typeof document === 'undefined' || !document.documentElement) return;
+    // A mode chosen in Paramètres > Apparence wins over the one Trello reports.
+    if (global.Theme && typeof global.Theme.resolveMode === 'function') theme = global.Theme.resolveMode(theme);
     if (theme !== 'light' && theme !== 'dark') return;
     var root = document.documentElement;
     root.setAttribute('data-color-mode', theme);
     try {
       if (root.style) {
         root.style.colorScheme = theme;
-        root.style.backgroundColor = theme === 'dark' ? '#1d2125' : '';
+        root.style.backgroundColor =
+          global.Theme && typeof global.Theme.rootBackground === 'function'
+            ? global.Theme.rootBackground(theme)
+            : theme === 'dark' ? '#1d2125' : '';
       }
     } catch (err) {
       /* style optional */

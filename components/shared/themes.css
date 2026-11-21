@@ -1,0 +1,311 @@
+/*
+ * Role: the visual styles (see theme.js). Each style redefines the --tp-* tokens for light and dark, plus the
+ * radii and the font. "Classique" is the default look in trello-theme.css and has no block here.
+ * :root[data-theme][data-color-mode] beats the hard-coded surface values of the view stylesheets whatever their order.
+ */
+
+/* Every themed page: the legacy --surface-* / --text-* names follow the tokens. */
+:root[data-theme][data-color-mode] {
+  --surface-0: var(--tp-bg);
+  --surface-1: var(--tp-surface-subtle);
+  --surface-2: var(--tp-surface);
+  --surface-hover: var(--tp-surface-hover);
+  --border: var(--tp-border);
+  --text-primary: var(--tp-text);
+  --text-secondary: var(--tp-text-subtle);
+  --text-muted: var(--tp-text-muted);
+  --font-sans: var(--tp-font);
+  --radius: var(--tp-r-panel);
+  background: var(--tp-bg);
+}
+
+:root[data-theme] body,
+:root[data-theme] button,
+:root[data-theme] input,
+:root[data-theme] select,
+:root[data-theme] textarea {
+  font-family: var(--tp-font);
+}
+
+/* ── Cristal: soft greys, hairlines, generous rounding ── */
+:root[data-theme='cristal'][data-color-mode] {
+  --tp-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --tp-r-ctl: 10px;
+  --tp-r-panel: 16px;
+}
+:root[data-theme='cristal'][data-color-mode='light'] {
+  --tp-bg: #f5f5f7;
+  --tp-surface: #ffffff;
+  --tp-surface-subtle: #ececf0;
+  --tp-surface-hover: rgba(0, 0, 0, 0.05);
+  --tp-surface-active: rgba(0, 0, 0, 0.09);
+  --tp-text: #1d1d1f;
+  --tp-text-subtle: #515154;
+  --tp-text-muted: #86868b;
+  --tp-border: rgba(60, 60, 67, 0.16);
+  --tp-border-strong: rgba(60, 60, 67, 0.34);
+  --tp-primary: #007aff;
+  --tp-primary-hover: #0062cc;
+  --tp-primary-text: #ffffff;
+  --tp-link: #007aff;
+  --tp-success: #1f8a3b;
+  --tp-success-bg: #e3f7e8;
+  --tp-danger-text: #d70015;
+  --tp-input-bg: #ffffff;
+  --tp-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+:root[data-theme='cristal'][data-color-mode='dark'] {
+  --tp-elev-0: #000000;
+  --tp-elev-1: #101012;
+  --tp-elev-2: #1c1c1e;
+  --tp-elev-3: #2c2c2e;
+  --tp-elev-4: #3a3a3c;
+  --tp-bg: var(--tp-elev-0);
+  --tp-surface-subtle: var(--tp-elev-1);
+  --tp-surface: var(--tp-elev-2);
+  --tp-surface-hover: rgba(255, 255, 255, 0.08);
+  --tp-surface-active: rgba(255, 255, 255, 0.14);
+  --tp-text: #f5f5f7;
+  --tp-text-subtle: #c7c7cc;
+  --tp-text-muted: #8e8e93;
+  --tp-border: rgba(84, 84, 88, 0.55);
+  --tp-border-strong: rgba(120, 120, 128, 0.7);
+  --tp-primary: #0a84ff;
+  --tp-primary-hover: #409cff;
+  --tp-primary-text: #ffffff;
+  --tp-link: #409cff;
+  --tp-success: #30d158;
+  --tp-success-bg: #12301b;
+  --tp-danger-text: #ff6961;
+  --tp-input-bg: var(--tp-elev-2);
+}
+
+/* ── Fluide: flat layers, tight corners, system blue ── */
+:root[data-theme='fluide'][data-color-mode] {
+  --tp-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --tp-r-ctl: 4px;
+  --tp-r-panel: 8px;
+}
+:root[data-theme='fluide'][data-color-mode='light'] {
+  --tp-bg: #f3f3f3;
+  --tp-surface: #ffffff;
+  --tp-surface-subtle: #eaeaea;
+  --tp-surface-hover: rgba(0, 0, 0, 0.045);
+  --tp-surface-active: rgba(0, 0, 0, 0.08);
+  --tp-text: #242424;
+  --tp-text-subtle: #424242;
+  --tp-text-muted: #616161;
+  --tp-border: #e0e0e0;
+  --tp-border-strong: #bdbdbd;
+  --tp-primary: #0f6cbd;
+  --tp-primary-hover: #115ea3;
+  --tp-primary-text: #ffffff;
+  --tp-link: #0f6cbd;
+  --tp-success: #107c10;
+  --tp-success-bg: #dff6dd;
+  --tp-danger-text: #b10e1c;
+  --tp-input-bg: #ffffff;
+  --tp-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+:root[data-theme='fluide'][data-color-mode='dark'] {
+  --tp-elev-0: #202020;
+  --tp-elev-1: #272727;
+  --tp-elev-2: #2d2d2d;
+  --tp-elev-3: #333333;
+  --tp-elev-4: #3d3d3d;
+  --tp-bg: var(--tp-elev-0);
+  --tp-surface-subtle: var(--tp-elev-1);
+  --tp-surface: var(--tp-elev-2);
+  --tp-surface-hover: rgba(255, 255, 255, 0.07);
+  --tp-surface-active: rgba(255, 255, 255, 0.12);
+  --tp-text: #ffffff;
+  --tp-text-subtle: #d6d6d6;
+  --tp-text-muted: #adadad;
+  --tp-border: rgba(255, 255, 255, 0.1);
+  --tp-border-strong: rgba(255, 255, 255, 0.24);
+  --tp-primary: #479ef5;
+  --tp-primary-hover: #62abf5;
+  --tp-primary-text: #0b0b0b;
+  --tp-link: #62abf5;
+  --tp-success: #54b054;
+  --tp-success-bg: #1b3a1b;
+  --tp-danger-text: #f1707b;
+  --tp-input-bg: var(--tp-elev-2);
+}
+
+/* ── Tonal: tinted surfaces, very round shapes, violet ── */
+:root[data-theme='tonal'][data-color-mode] {
+  --tp-font: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, sans-serif;
+  --tp-r-ctl: 14px;
+  --tp-r-panel: 24px;
+}
+:root[data-theme='tonal'][data-color-mode='light'] {
+  --tp-bg: #fef7ff;
+  --tp-surface: #f7f2fa;
+  --tp-surface-subtle: #ece6f0;
+  --tp-surface-hover: rgba(103, 80, 164, 0.08);
+  --tp-surface-active: rgba(103, 80, 164, 0.14);
+  --tp-text: #1d1b20;
+  --tp-text-subtle: #49454f;
+  --tp-text-muted: #79747e;
+  --tp-border: #cac4d0;
+  --tp-border-strong: #79747e;
+  --tp-primary: #6750a4;
+  --tp-primary-hover: #5a4491;
+  --tp-primary-text: #ffffff;
+  --tp-link: #6750a4;
+  --tp-success: #386a20;
+  --tp-success-bg: #d7f0c4;
+  --tp-danger-text: #b3261e;
+  --tp-input-bg: #ffffff;
+  --tp-shadow: none;
+}
+:root[data-theme='tonal'][data-color-mode='dark'] {
+  --tp-elev-0: #141218;
+  --tp-elev-1: #1d1b20;
+  --tp-elev-2: #211f26;
+  --tp-elev-3: #2b2930;
+  --tp-elev-4: #36343b;
+  --tp-bg: var(--tp-elev-0);
+  --tp-surface-subtle: var(--tp-elev-1);
+  --tp-surface: var(--tp-elev-2);
+  --tp-surface-hover: rgba(208, 188, 255, 0.1);
+  --tp-surface-active: rgba(208, 188, 255, 0.18);
+  --tp-text: #e6e0e9;
+  --tp-text-subtle: #cac4d0;
+  --tp-text-muted: #938f99;
+  --tp-border: #49454f;
+  --tp-border-strong: #938f99;
+  --tp-primary: #d0bcff;
+  --tp-primary-hover: #e8def8;
+  --tp-primary-text: #381e72;
+  --tp-link: #d0bcff;
+  --tp-success: #a8d98a;
+  --tp-success-bg: #1e3a14;
+  --tp-danger-text: #f2b8b5;
+  --tp-input-bg: var(--tp-elev-2);
+}
+
+/* ── Sauge: calm greens, paper-like ── */
+:root[data-theme='sauge'][data-color-mode] {
+  --tp-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --tp-r-ctl: 10px;
+  --tp-r-panel: 14px;
+}
+:root[data-theme='sauge'][data-color-mode='light'] {
+  --tp-bg: #f4f6f1;
+  --tp-surface: #ffffff;
+  --tp-surface-subtle: #e9ede4;
+  --tp-surface-hover: rgba(31, 42, 34, 0.05);
+  --tp-surface-active: rgba(31, 42, 34, 0.1);
+  --tp-text: #1f2a22;
+  --tp-text-subtle: #44524a;
+  --tp-text-muted: #66746b;
+  --tp-border: #d5dccf;
+  --tp-border-strong: #aab5a3;
+  --tp-primary: #3f6b4f;
+  --tp-primary-hover: #335842;
+  --tp-primary-text: #ffffff;
+  --tp-link: #3f6b4f;
+  --tp-success: #2e7d32;
+  --tp-success-bg: #e0f2e1;
+  --tp-danger-text: #b3261e;
+  --tp-input-bg: #ffffff;
+  --tp-shadow: 0 1px 2px rgba(31, 42, 34, 0.08);
+}
+:root[data-theme='sauge'][data-color-mode='dark'] {
+  --tp-elev-0: #171c18;
+  --tp-elev-1: #1d241f;
+  --tp-elev-2: #222922;
+  --tp-elev-3: #2a332b;
+  --tp-elev-4: #364038;
+  --tp-bg: var(--tp-elev-0);
+  --tp-surface-subtle: var(--tp-elev-1);
+  --tp-surface: var(--tp-elev-2);
+  --tp-surface-hover: rgba(236, 242, 236, 0.08);
+  --tp-surface-active: rgba(236, 242, 236, 0.14);
+  --tp-text: #ecf2ec;
+  --tp-text-subtle: #bccbbf;
+  --tp-text-muted: #8fa093;
+  --tp-border: rgba(236, 242, 236, 0.12);
+  --tp-border-strong: rgba(236, 242, 236, 0.24);
+  --tp-primary: #8fc7a0;
+  --tp-primary-hover: #a9d6b7;
+  --tp-primary-text: #0f2216;
+  --tp-link: #a9d6b7;
+  --tp-success: #7fd48f;
+  --tp-success-bg: #17301c;
+  --tp-danger-text: #ffb4ab;
+  --tp-input-bg: var(--tp-elev-2);
+}
+
+/* Appearance picker (Paramètres) */
+.tp-theme-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--tp-r-ctl, 8px);
+  background: var(--tp-surface-subtle);
+}
+.tp-theme-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: calc(var(--tp-r-ctl, 8px) - 2px);
+  background: transparent;
+  color: var(--tp-text-subtle);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tp-theme-mode:hover { background: var(--tp-surface-hover); }
+.tp-theme-mode.is-active { background: var(--tp-surface); color: var(--tp-text); box-shadow: 0 0 0 1px var(--tp-border); }
+
+.tp-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.tp-theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--tp-r-panel, 12px);
+  background: var(--tp-surface-subtle);
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--tp-border);
+}
+.tp-theme-card:hover { background: var(--tp-surface-hover); }
+.tp-theme-card.is-active { box-shadow: 0 0 0 2px var(--tp-primary); }
+.tp-theme-card:focus-visible { outline: 2px solid var(--tp-primary); outline-offset: 2px; }
+.tp-theme-preview {
+  position: relative;
+  height: 56px;
+  border-radius: calc(var(--tp-r-panel, 12px) - 4px);
+  overflow: hidden;
+}
+.tp-theme-preview-surface {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 10px;
+  height: 22px;
+  border-radius: 6px;
+}
+.tp-theme-preview-accent {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: 38px;
+  height: 10px;
+  border-radius: 999px;
+}
