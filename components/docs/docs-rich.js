@@ -11,6 +11,19 @@
       return api.getEditor();
     }
 
+    var tableUi = null;
+    /** The table editor (bar, ranges, formulas, sheet view); absent when its scripts are not on the page. */
+    function tui() {
+      if (!tableUi && global.DocsTableUI) {
+        tableUi = global.DocsTableUI.create(Object.assign({}, api, {
+          focusCell: focusCell,
+          leaveTable: leaveTable,
+          openChoiceMenu: openChoiceMenu,
+        }));
+      }
+      return tableUi;
+    }
+
     function unwrapEl(el) {
       var parent = el.parentNode;
       if (!parent) return;
@@ -149,6 +162,11 @@
         var p = api.doc.createElement('p');
         p.appendChild(api.doc.createElement('br'));
         ed.appendChild(p);
+      }
+      var ui = tui();
+      if (ui && ed.querySelector('table')) {
+        ui.attach();
+        ui.refreshAll();
       }
     }
 
@@ -481,6 +499,7 @@
         { icon: 'column-insert-right', label: 'Ajouter une colonne', run: function () { addTableCol(table); } },
         { icon: 'row-remove', label: 'Supprimer la ligne', run: function () { deleteTableRow(cell.parentNode); } },
         { icon: 'column-remove', label: 'Supprimer la colonne', run: function () { deleteTableCol(table, cell); } },
+        { icon: 'arrows-maximize', label: 'Feuille', run: function () { var ui = tui(); if (ui) ui.openSheetFor(cell); } },
       ]);
     }
 
@@ -530,6 +549,7 @@
 
     return {
       fixTables: fixTables,
+      tableUi: tui,
       focusCell: focusCell,
       moveTableCell: moveTableCell,
       cellBelow: cellBelow,

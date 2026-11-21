@@ -248,22 +248,92 @@
     return '';
   }
 
-  function tableHtml(header, aligns, body) {
+  /* Table extras (cell colors, formulas, widths, conditional formatting) live in one hidden line
+     under the table: <!--tbl:{...}-->. Everything read back is validated. */
+  var TBL_FORMATS = { num: 1, pct: 1, cur: 1 };
+  var TBL_OPS = { gt: 1, lt: 1, ge: 1, le: 1, eq: 1, ne: 1, has: 1, empty: 1, filled: 1 };
+
+  function cleanTblMeta(raw) {
+    var out = { w: [], cf: [], c: {} };
+    if (!raw || typeof raw !== 'object') return out;
+    if (Array.isArray(raw.w)) {
+      var w = raw.w.slice(0, 40).map(function (n) { return Math.round(Number(n)); });
+      if (w.every(function (n) { return n >= 3 && n <= 95; })) out.w = w;
+    }
+    if (Array.isArray(raw.cf)) {
+      raw.cf.slice(0, 30).forEach(function (r) {
+        if (!r || !TBL_OPS[r.op]) return;
+        var c = parseInt(r.c, 10);
+        out.cf.push({
+          c: isFinite(c) ? Math.max(-1, Math.min(40, c)) : -1,
+          op: r.op,
+          v: String(r.v == null ? '' : r.v).slice(0, 100),
+          bg: isInk(r.bg) ? r.bg : '',
+          fg: isInk(r.fg) ? r.fg : '',
+          row: !!r.row,
+        });
+      });
+    }
+    if (raw.c && typeof raw.c === 'object') {
+      Object.keys(raw.c).slice(0, 8000).forEach(function (key) {
+        if (!/^\d{1,4},\d{1,2}$/.test(key)) return;
+        var v = raw.c[key] || {};
+        var cell = {};
+        if (isInk(v.bg)) cell.bg = v.bg;
+        if (isInk(v.fg)) cell.fg = v.fg;
+        if (TBL_FORMATS[v.fmt]) cell.fmt = v.fmt;
+        if (typeof v.f === 'string' && /^=\s*\S/.test(v.f) && v.f.length <= 500) cell.f = v.f;
+        if (Object.keys(cell).length) out.c[key] = cell;
+      });
+    }
+    return out;
+  }
+
+  function parseTblMeta(line) {
+    var m = /^<!--tbl:(.*)-->$/.exec(String(line || '').trim());
+    if (!m) return null;
+    try {
+      return cleanTblMeta(JSON.parse(m[1]));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function tblMetaLine(meta) {
+    var clean = cleanTblMeta(meta);
+    if (!clean.w.length && !clean.cf.length && !Object.keys(clean.c).length) return '';
+    var json = JSON.stringify(clean).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+    return '<!--tbl:' + json + '-->';
+  }
+
+  function tableHtml(header, aligns, body, meta) {
     var width = header.length;
     body.forEach(function (row) { if (row.length > width) width = row.length; });
-    function cell(tag, text, align) {
+    meta = meta || { w: [], cf: [], c: {} };
+    function cell(tag, text, align, r, c) {
       var inner = inlineToHtml(text || '');
       if (!inner) inner = '<br>';
-      return '<' + tag + alignAttr(align) + '>' + inner + '</' + tag + '>';
+      var m = meta.c[r + ',' + c];
+      var extra = '';
+      if (m) {
+        if (m.bg) extra += ' data-bg="' + m.bg + '"';
+        if (m.fg) extra += ' data-fg="' + m.fg + '"';
+        if (m.fmt) extra += ' data-fmt="' + m.fmt + '"';
+        if (m.f) extra += ' data-f="' + esc(m.f) + '"';
+      }
+      return '<' + tag + alignAttr(align) + extra + '>' + inner + '</' + tag + '>';
     }
-    function rowHtml(tag, row) {
+    function rowHtml(tag, row, r) {
       var cells = '';
-      for (var i = 0; i < width; i++) cells += cell(tag, row[i] || '', aligns[i] || '');
+      for (var i = 0; i < width; i++) cells += cell(tag, row[i] || '', aligns[i] || '', r, i);
       return '<tr>' + cells + '</tr>';
     }
     var bodyRows = body.length ? body : [[]];
-    return '<table class="dc-table"><thead>' + rowHtml('th', header) + '</thead><tbody>' +
-      bodyRows.map(function (row) { return rowHtml('td', row); }).join('') + '</tbody></table>';
+    var tAttr = '';
+    if (meta.w.length === width) tAttr += ' data-w="' + meta.w.join(',') + '"';
+    if (meta.cf.length) tAttr += ' data-cf="' + esc(JSON.stringify(meta.cf)) + '"';
+    return '<table class="dc-table"' + tAttr + '><thead>' + rowHtml('th', header, 0) + '</thead><tbody>' +
+      bodyRows.map(function (row, i) { return rowHtml('td', row, i + 1); }).join('') + '</tbody></table>';
   }
 
   function startsBlock(line) {
@@ -364,7 +434,9 @@
         i += 2;
         var body = [];
         while (i < lines.length && isTableRow(lines[i]) && !isSepRow(lines[i])) body.push(splitCells(lines[i++]));
-        out += tableHtml(header, aligns, body);
+        var tblMeta = i < lines.length ? parseTblMeta(lines[i]) : null;
+        if (tblMeta) i++;
+        out += tableHtml(header, aligns, body, tblMeta);
         continue;
       }
       if (RE_QUOTE.test(line)) {
@@ -678,6 +750,7 @@
 
   function tableMd(node, out) {
     var rows = [];
+    var meta = { w: [], cf: [], c: {} };
     function walk(n) {
       kids(n).forEach(function (k) {
         var t = tagOf(k);
@@ -686,6 +759,14 @@
           var aligns = [];
           kids(k).forEach(function (c) {
             if (tagOf(c) !== 'TD' && tagOf(c) !== 'TH') return;
+            var cm = {};
+            ['bg', 'fg', 'fmt'].forEach(function (key) {
+              var v = attr(c, 'data-' + key);
+              if (v) cm[key] = v;
+            });
+            var fv = attr(c, 'data-f');
+            if (fv) cm.f = fv;
+            if (Object.keys(cm).length) meta.c[rows.length + ',' + cells.length] = cm;
             cells.push(cellText(c));
             var a = attr(c, 'data-align');
             aligns.push(a === 'center' || a === 'right' ? a : '');
@@ -710,6 +791,16 @@
     }
     var lines = [line(rows[0].cells), '| ' + parts.join(' | ') + ' |'];
     for (var r = 1; r < rows.length; r++) lines.push(line(rows[r].cells));
+    var dw = String(attr(node, 'data-w') || '').split(',').map(Number);
+    if (dw.length === width) meta.w = dw;
+    try {
+      var rules = JSON.parse(attr(node, 'data-cf') || '[]');
+      if (Array.isArray(rules)) meta.cf = rules;
+    } catch (err) {
+      meta.cf = [];
+    }
+    var metaLine = tblMetaLine(meta);
+    if (metaLine) lines.push(metaLine);
     out.push(lines.join('\n'));
   }
 
