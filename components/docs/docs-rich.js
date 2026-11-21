@@ -332,8 +332,22 @@
       return !!splitQuoteAt(hit.bq, hit.line);
     }
 
+    /** Swap a table for a callout in one undoable step (direct DOM edits are invisible to Ctrl+Z). */
     function setCallout(kind) {
-      leaveTable();
+      var tbl = api.closestIn(api.selNode(), 'TABLE');
+      if (tbl && tbl.parentNode) {
+        var text = (tbl.innerText || tbl.textContent || '').replace(/[ \t]+\n/g, '\n').trim();
+        var esc = function (s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+        var html = '<blockquote class="dc-callout" data-callout="' + kind + '"><p>' +
+          (text ? text.split('\n').map(esc).join('<br>') : '<br>') + '</p></blockquote>';
+        var range = api.doc.createRange();
+        range.selectNode(tbl);
+        var s = global.getSelection();
+        s.removeAllRanges();
+        s.addRange(range);
+        if (api.doc.execCommand('insertHTML', false, html)) return;
+        leaveTable();
+      }
       var bq = api.closestIn(api.selNode(), 'BLOCKQUOTE');
       if (bq && bq.getAttribute('data-callout') === kind) {
         bq.removeAttribute('data-callout');
