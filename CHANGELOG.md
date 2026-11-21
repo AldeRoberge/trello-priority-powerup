@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-21
+- Masquer les terminées marche pareil partout (Tableau, Kanban, Mindmap) : une carte cochée ou à 100 % est masquée, pas seulement celles d’une liste Terminé.
 - Paramètres > Statut : les listes Bloqué et Terminé se remplissent toutes seules avec la liste la plus probable (ex. « Completed / Cancelled »).
 - Documents : transformer un tableau en encadré (Conseil, Note, Attention) peut s’annuler avec Ctrl+Z, le tableau revient.
 - Paramètres > Apparence : choisir Auto, Clair ou Sombre, et un style parmi Classique, Cristal, Fluide, Tonal et Sauge, sur toutes les vues.

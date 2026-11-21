@@ -296,6 +296,7 @@ var EDGE_LABELS = {
   }
 
   function isClosed(rec) {
+    if (global.HideDone && global.HideDone.isDone) return global.HideDone.isDone(rec);
     return rec.category === 'completed' || rec.category === 'canceled';
   }
 

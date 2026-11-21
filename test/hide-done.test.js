@@ -47,3 +47,15 @@ describe('HideDone.decorate (same toggle in every view)', () => {
     assert.equal(HD.decorate(node('button'), true, 'x').children[1].textContent, '');
   });
 });
+
+describe('HideDone.isDone (one rule for every view)', () => {
+  it('counts list category, ticked, done and 100 % progress', () => {
+    const HD = load();
+    assert.equal(HD.isDone({ statutKey: 'completed' }), true);
+    assert.equal(HD.isDone({ category: 'canceled' }), true);
+    assert.equal(HD.isDone({ dueComplete: true }), true);
+    assert.equal(HD.isDone({ progress: 100 }), true);
+    assert.equal(HD.isDone({ progress: 55, statutKey: 'started' }), false);
+    assert.equal(HD.isDone(null), false);
+  });
+});

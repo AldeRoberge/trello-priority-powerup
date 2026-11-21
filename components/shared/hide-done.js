@@ -39,8 +39,21 @@
     });
   }
 
+  /**
+   * One definition of "completed" for every view: in a completed/canceled list, ticked complete,
+   * marked done, or at 100 % progress. Works on table rows (statutKey), records (category) and cards.
+   */
+  function isDone(item) {
+    if (!item) return false;
+    var cat = item.statutKey || item.category;
+    if (cat === 'completed' || cat === 'canceled') return true;
+    if (item.dueComplete || item.done) return true;
+    return typeof item.progress === 'number' && item.progress >= 100;
+  }
+
   global.HideDone = {
     KEY: KEY,
+    isDone: isDone,
     get: get,
     set: set,
     toggle: function () { return set(!get()); },

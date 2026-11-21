@@ -378,7 +378,7 @@
           return false;
         }
       }
-      if (options.hideCompleted && (row.done || row.category === 'completed')) {
+      if (options.hideCompleted && (row.done || row.category === 'completed' || (typeof window !== 'undefined' && window.HideDone && window.HideDone.isDone(row)))) {
         return false;
       }
       if (options.hideBlocked && (row.blocked || row.category === 'blocked')) {

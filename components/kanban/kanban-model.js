@@ -10,6 +10,12 @@
     return key === 'completed' || key === 'canceled';
   }
 
+  /** Shared "completed" rule (list, ticked, 100 %), see HideDone.isDone. */
+  function isDoneRow(row) {
+    if (global.HideDone && global.HideDone.isDone) return global.HideDone.isDone(row);
+    return !!row && (isClosedKey(row.statutKey) || (typeof row.progress === 'number' && row.progress >= 100));
+  }
+
   function isBlockedRow(row) {
     return !!(row && (row.blocked || row.statutKey === 'blocked'));
   }
@@ -35,7 +41,7 @@
       (lists || []).forEach(function (l) {
         if (isClosedKey(l.category)) closed[l.id] = true;
       });
-      visible = visible.filter(function (r) { return !closed[r.listId]; });
+      visible = visible.filter(function (r) { return !closed[r.listId] && !isDoneRow(r); });
     }
     return visible;
   }

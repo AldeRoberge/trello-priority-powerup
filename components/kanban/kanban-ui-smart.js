@@ -271,7 +271,7 @@
           M.paintCount();
         },
       });
-      var done = M.state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
+      var done = M.state.rows.filter(function (r) { return M.HD.isDone(r); }).length;
       var viewed = S.KM().rowsInView(M.state.rows, M.state.lists, { filter: M.state.filter, hideDone: M.state.hideDone });
       var counts = S.KM().facetCounts(viewed, S.todayIso());
       function facetButton(key, iconName, label, count) {

@@ -88,7 +88,7 @@
     };
     M.visibleRows = function visibleRows() {
       var rows = S.TM().filterRows(M.state.rows, M.state.filter);
-      if (M.state.hideDone) rows = rows.filter(function (r) { return r.statutKey !== 'completed' && r.statutKey !== 'canceled'; });
+      if (M.state.hideDone) rows = rows.filter(function (r) { return !M.HD.isDone(r); });
       if (M.state.sorts.length) rows = S.TM().sortRowsMulti(rows, M.state.sorts, { lists: M.state.lists });
       return rows;
     };
@@ -212,7 +212,7 @@
       kids.push(S.h('span', { class: 'tb-status' }));
       kids.push(S.h('span', { class: 'tb-spacer' }));
       kids.push(S.h('span', { class: 'tb-count', 'aria-live': 'polite' }));
-      var doneCount = M.state.rows.filter(function (r) { return r.statutKey === 'completed' || r.statutKey === 'canceled'; }).length;
+      var doneCount = M.state.rows.filter(function (r) { return M.HD.isDone(r); }).length;
       var hideBtn = S.btn(M.HD.icon(M.state.hideDone), null, {
         active: M.state.hideDone,
         onclick: function () { M.HD.set(!M.state.hideDone); },
