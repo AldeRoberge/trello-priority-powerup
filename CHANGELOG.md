@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-21
+- Keep : convertir du texte en liste à cocher retire les tirets, puces ou crochets du début de chaque ligne.
 - Keep : sélectionner du texte et relâcher la souris hors de la note ne ferme plus la fenêtre.
 - Nouvelle adresse alderoberge.com/life : les mêmes vues que /work, sur le tableau Trello Home.
 

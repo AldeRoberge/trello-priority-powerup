@@ -183,8 +183,19 @@
     function markTodo(ul) {
       ul.classList.add('dc-todo');
       Array.prototype.forEach.call(ul.children, function (li) {
-        if (li.tagName === 'LI' && !li.hasAttribute('data-checked')) li.setAttribute('data-checked', 'false');
+        if (li.tagName !== 'LI') return;
+        if (!li.hasAttribute('data-checked')) li.setAttribute('data-checked', 'false');
+        stripMarker(li);
       });
+    }
+    /* "- a", "* a", "• a", "[ ] a" typed before converting to checkboxes: the checkbox replaces the marker */
+    function stripMarker(li) {
+      var w = document.createTreeWalker(li, NodeFilter.SHOW_TEXT);
+      var t = w.nextNode();
+      while (t && !/\S/.test(t.nodeValue)) t = w.nextNode();
+      if (!t) return;
+      var s = t.nodeValue.replace(/^\s*(?:[-*+•·–—▪◦]|\[[ xX]?\])\s+/, '');
+      if (s !== t.nodeValue) t.nodeValue = s;
     }
     function unmarkTodo(ul) {
       ul.classList.remove('dc-todo');
