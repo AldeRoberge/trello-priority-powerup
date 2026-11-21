@@ -254,8 +254,13 @@
     }
 
     /* clicking outside an open composer saves it and folds it back, like Keep */
+    var pressedInComposer = false;
+    document.addEventListener('mousedown', function (e) {
+      pressedInComposer = !!(ui.composing && ui.composing.box && ui.composing.box.contains(e.target));
+    }, true);
     document.addEventListener('click', function (e) {
       var d = ui.composing;
+      if (pressedInComposer) { pressedInComposer = false; return; } // selection drag released outside the composer
       // A target already removed by the re-render (the click that opened the composer) is not an outside click.
       if (d && d.box && e.target.isConnected && !d.box.contains(e.target) && !ui.dialog) closeComposer(true);
     });
@@ -722,7 +727,10 @@
       box.appendChild(bar);
 
       shade.appendChild(box);
-      shade.addEventListener('click', function (e) { if (e.target === shade) closeDialog(true); });
+      // Close only when the press AND the release are on the backdrop (a text-selection drag ending there is not a click).
+      var pressedShade = false;
+      shade.addEventListener('mousedown', function (e) { pressedShade = e.target === shade; });
+      shade.addEventListener('click', function (e) { if (e.target === shade && pressedShade) closeDialog(true); pressedShade = false; });
       document.body.appendChild(shade);
       ui.dialog = { shade: shade, ed: ed, original: original };
     }
