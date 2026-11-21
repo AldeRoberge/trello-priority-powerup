@@ -94,6 +94,18 @@
     return out;
   }
 
+  /** Ids of the top-level tasks around `row` when the list has no project lines at all. */
+  function topTaskIds(row) {
+    var out = [];
+    var parent = row.parentNode;
+    var list = parent ? parent.children : [];
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      if (n.classList.contains('tt-task') && n.getAttribute('data-depth') === '0' && n.getAttribute('data-card')) out.push(n.getAttribute('data-card'));
+    }
+    return out;
+  }
+
   function projectOfTask(taskEl) {
     var n = taskEl.previousElementSibling;
     while (n && !n.classList.contains('tt-project')) n = n.previousElementSibling;
@@ -185,7 +197,7 @@
         return;
       }
       var proj = projectOfTask(row);
-      var mine = proj ? taskIds(proj) : [];
+      var mine = proj ? taskIds(proj) : topTaskIds(row);
       if (mine.indexOf(cur.id) < 0) {
         // From another project: join this one, next to the task it was dropped on.
         if (proj && typeof ctx.moveToProject === 'function') ctx.moveToProject(cur.id, proj.getAttribute('data-iso-project') || '', { near: id, after: zone === 'after' });

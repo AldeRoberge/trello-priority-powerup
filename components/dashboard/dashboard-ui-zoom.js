@@ -80,6 +80,8 @@
       return {
         columns: M.state.triageCols,
         sorts: M.state.triageSorts,
+        customOrder: M.hasCustomOrder(),
+        onResetOrder: M.resetCustomOrder,
         widths: M.state.triageWidths,
         onSorts: function (next) {
           M.state.triageSorts = next || [];

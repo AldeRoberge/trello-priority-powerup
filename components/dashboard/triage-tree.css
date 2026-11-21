@@ -179,6 +179,8 @@ button.tt-cell.is-empty:hover { opacity: 0.9; }
 .tt-th.is-collapsed .tt-th-icon { display: block; }
 .tt-th.is-collapsed .tt-th-text,
 .tt-th.is-collapsed .tt-th-sort { display: none; }
+.tt-custom { margin-right: auto; align-self: center; padding: 0 8px; border: 0; border-radius: 10px; background: var(--tp-hover, rgba(127,127,127,0.18)); color: inherit; font: inherit; font-size: 11px; line-height: 18px; opacity: 0.7; cursor: pointer; }
+.tt-custom:hover { opacity: 1; }
 .tt-th-sort { position: relative; flex: none; display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center; opacity: 0.4; }
 .tt-th.is-sorted .tt-th-sort { opacity: 1; }
 .tt-th-sort .ti { font-size: 14px; }

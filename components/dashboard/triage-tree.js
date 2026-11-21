@@ -170,7 +170,11 @@
     var tasks = [];
     if (!groups.length) {
       // No project in sight: the tree is the plain list, subtasks still hang under their task.
-      free.forEach(function (row) { taskNodes(row, 0, collapsed, nodes, tasks, adding); });
+      var plain = free;
+      if (global.TriageDnd && opts.order && opts.order.tasks && opts.order.tasks['']) {
+        plain = global.TriageDnd.applyOrder(free, opts.order.tasks[''], function (r) { return r.id; });
+      }
+      plain.forEach(function (row) { taskNodes(row, 0, collapsed, nodes, tasks, adding); });
       return { nodes: nodes, tasks: tasks };
     }
     groups.sort(function (a, b) { return a.first - b.first; });
@@ -182,6 +186,7 @@
         var mine = opts.order.tasks && opts.order.tasks[g.id];
         if (mine) g.rows = DND.applyOrder(g.rows, mine, function (r) { return r.id; });
       });
+      if (opts.order.tasks && opts.order.tasks['']) free = DND.applyOrder(free, opts.order.tasks[''], function (r) { return r.id; });
     }
     if (free.length) groups.push({ id: '', name: FREE_NAME, rows: free, first: Infinity, free: true });
     groups.forEach(function (g) {
@@ -824,6 +829,11 @@
     var keys = normalizeColumns(ctx.columns);
     var sorts = cleanSorts(ctx.sorts);
     var wrap = el('span', 'tt-cols');
+    if (ctx.customOrder && !sorts.length) {
+      var custom = el('button', 'tt-custom', { type: 'button', text: 'Personnalisé', title: 'Ordre choisi à la main · cliquer pour le retirer' });
+      custom.addEventListener('click', function () { if (typeof ctx.onResetOrder === 'function') ctx.onResetOrder(); });
+      head.appendChild(custom);
+    }
     keys.forEach(function (key, index) {
       var spec = COLUMNS[key];
       var w = widthOf(ctx.widths, key);

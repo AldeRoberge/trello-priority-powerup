@@ -135,6 +135,16 @@
         }
         M.render();
       };
+      M.hasCustomOrder = function hasCustomOrder() {
+        var DND = global.TriageDnd;
+        if (!DND) return false;
+        var o = DND.order();
+        return !!(o.projects.length || Object.keys(o.tasks).some(function (k) { return o.tasks[k] && o.tasks[k].length; }));
+      };
+      M.resetCustomOrder = function resetCustomOrder() {
+        if (global.TriageDnd) global.TriageDnd.setOrder({ projects: [], tasks: {} });
+        M.render();
+      };
       M.moveToProject = function moveToProject(taskId, projectId, opts) {
         var WO = S.WO();
         if (!WO || !WO.withTaskProject) return;
