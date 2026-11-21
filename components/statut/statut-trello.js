@@ -609,6 +609,26 @@
             newListCount += 1;
           }
         });
+        // Suggest sensible defaults for empty roles (never overrides a chosen list).
+        var SMd = matchApi();
+        if (SMd && typeof SMd.detectFromLists === 'function') {
+          var det = SMd.detectFromLists(lists);
+          ['blocked', 'completed'].forEach(function (role) {
+            var suggested = det.roleLists && det.roleLists[role];
+            var existing = current.roleLists && current.roleLists[role];
+            var existsOnBoard = lists.some(function (l) {
+              return String(l.id) === String(existing);
+            });
+            if (suggested && (!existing || !existsOnBoard)) {
+              current.roleLists = Object.assign({}, current.roleLists);
+              current.roleLists[role] = suggested;
+              if (!current.listCategories[suggested]) {
+                current.listCategories[suggested] = det.listCategories[suggested];
+              }
+              changed = true;
+            }
+          });
+        }
         if (changed) {
           current = await saveStatutSettings(t, current);
         }

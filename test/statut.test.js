@@ -246,4 +246,13 @@ describe('StatutMatch / StatutTrello', () => {
       ST.restorePreviousStatutFromIncomplete = prevRestore;
     }
   });
+
+  it('matches compound list names like "Completed / Cancelled"', () => {
+    const d = SM.detectFromLists([
+      { id: '1', name: 'Completed / Cancelled' },
+      { id: '2', name: 'Notes' },
+    ]);
+    assert.equal(d.roleLists.completed, '1');
+    assert.equal(d.listCategories['2'], null);
+  });
 });

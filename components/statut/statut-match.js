@@ -295,6 +295,19 @@
    * Returns { key, label, score, distance, alias } or null.
    */
   function matchListToCategory(name) {
+    var whole = matchSingleName(name);
+    if (whole) return whole;
+    // Compound names such as "Completed / Cancelled": first matching part wins.
+    var parts = String(name || '').split(/\s*(?:[\/,&|+]|\s-\s|\s(?:and|et)\s)\s*/i);
+    if (parts.length < 2) return null;
+    for (var i = 0; i < parts.length; i++) {
+      var m = matchSingleName(parts[i]);
+      if (m) return m;
+    }
+    return null;
+  }
+
+  function matchSingleName(name) {
     var nameNorm = normalizeName(name);
     if (!nameNorm) return null;
 
