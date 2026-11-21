@@ -8,7 +8,7 @@
   'use strict';
 
   var COLORS = ['yellow', 'green', 'blue', 'pink', 'purple', 'gray'];
-  var RE_ITEM = /^\s{0,3}[-*+]\s+\[( |x|X)\](?:[ \t]+(.*))?$/;
+  var RE_ITEM = /^([ \t]*)[-*+]\s+\[( |x|X)\](?:[ \t]+(.*))?$/;
 
   function fold(s) {
     return String(s == null ? '' : s)
@@ -25,7 +25,7 @@
     if (!raw) return [];
     return raw.split('\n').map(function (line) {
       var m = RE_ITEM.exec(line);
-      if (m) return { t: 'item', text: m[2] || '', checked: m[1] !== ' ' };
+      if (m) return { t: 'item', text: m[3] || '', checked: m[2] !== ' ', indent: m[1] };
       return { t: 'text', text: line };
     });
   }
@@ -33,7 +33,7 @@
   function serializeLines(lines) {
     return (lines || [])
       .map(function (l) {
-        return l.t === 'item' ? '- [' + (l.checked ? 'x' : ' ') + '] ' + l.text : l.text;
+        return l.t === 'item' ? (l.indent || '') + '- [' + (l.checked ? 'x' : ' ') + '] ' + l.text : l.text;
       })
       .join('\n')
       .replace(/\s+$/, '');

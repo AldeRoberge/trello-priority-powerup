@@ -203,6 +203,42 @@
         if (li.tagName === 'LI') li.removeAttribute('data-checked');
       });
     }
+    /* Tab nests an item under the one above it, Shift+Tab brings it back out (the items below follow it in). */
+    function indentItem(li) {
+      var prev = li.previousElementSibling;
+      while (prev && prev.tagName !== 'LI') prev = prev.previousElementSibling;
+      if (!prev) return false;
+      var parent = li.parentNode;
+      var nest = null;
+      Array.prototype.forEach.call(prev.children, function (k) { if (k.tagName === parent.tagName) nest = k; });
+      if (!nest) {
+        nest = document.createElement(parent.tagName);
+        if (parent.className) nest.className = parent.className;
+        prev.appendChild(nest);
+      }
+      nest.appendChild(li);
+      return true;
+    }
+    function outdentItem(li) {
+      var parent = li.parentNode;
+      var owner = parent && parent.parentNode;
+      if (!owner || owner.tagName !== 'LI' || !owner.parentNode) return false;
+      var follow = [];
+      for (var n = li.nextElementSibling; n; n = n.nextElementSibling) if (n.tagName === 'LI') follow.push(n);
+      owner.parentNode.insertBefore(li, owner.nextSibling);
+      if (follow.length) {
+        var nest = null;
+        Array.prototype.forEach.call(li.children, function (k) { if (k.tagName === parent.tagName) nest = k; });
+        if (!nest) {
+          nest = document.createElement(parent.tagName);
+          if (parent.className) nest.className = parent.className;
+          li.appendChild(nest);
+        }
+        follow.forEach(function (f) { nest.appendChild(f); });
+      }
+      if (!parent.querySelector('li')) parent.remove();
+      return true;
+    }
     function listOf() {
       var n = selNode();
       var li = n && closestIn(n, 'LI');
@@ -371,6 +407,12 @@
           e.preventDefault();
           r.moveTableCell(cell, e.shiftKey ? -1 : 1);
           changed();
+          return;
+        }
+        var item = closestIn(selNode(), 'LI');
+        if (item && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          keepCaret(function () { if (e.shiftKey ? outdentItem(item) : indentItem(item)) changed(); })();
         }
         return;
       }

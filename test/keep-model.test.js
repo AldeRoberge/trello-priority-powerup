@@ -21,6 +21,14 @@ describe('Notes model (Keep clone)', () => {
     assert.equal(KM.isFlatList('1. a\n   1. b'), false);
   });
 
+  it('keeps the indent of nested checklist items', () => {
+    const body = ['- [ ] a', '  - [x] b', '    - [ ] c'].join('\n');
+    const lines = KM.parseLines(body);
+    assert.deepEqual(lines.map((l) => l.t), ['item', 'item', 'item']);
+    assert.equal(lines[2].text, 'c');
+    assert.equal(KM.serializeLines(lines), body);
+  });
+
   it('parses checklist items and text lines and writes them back identically', () => {
     const body = 'eBay\n- [ ] Vendre consoles\n- [x] Vendre lentilles';
     const lines = KM.parseLines(body);
