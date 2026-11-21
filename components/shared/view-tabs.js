@@ -4,7 +4,7 @@
  * carry the Trello iframe context, so the handshake works on the new page.
  *
  *   ViewTabs.mount(el, { active: 'dashboard' | 'gantt' | 'table' | 'kanban' | 'mindmap' | 'journey' | 'docs' | 'entities' | 'assistant' | 'settings' | 'task' } — one list (VIEWS) for every page; add a view there only)
- *     UTILS[0] (Assistant) is a labelled tab after Dashboard; the rest are icon-only buttons pinned top right (settings). The task page (popup.html) passes
+ *     UTILS[0] (Assistant) is a labelled tab after Dashboard; Settings is a labelled tab after the views. The task page (popup.html) passes
  *     { active: 'task', task: true, fixed: true, resolveCardId }: a first "Tâche" tab, and the views open on (and highlight) that card.
  */
 (function (global) {
@@ -25,7 +25,7 @@
   /** Icon-only pages pinned to the right of the strip (not views): the full AI chat and the settings. */
   var UTILS = [
     { key: 'assistant', label: 'Assistant', icon: 'message-chatbot', page: './assistant.html' },
-    { key: 'settings', label: 'Paramètres du Cerveau', icon: 'settings', page: './settings.html' },
+    { key: 'settings', label: 'Paramètres', icon: 'settings', page: './settings.html' },
   ];
 
   /** The open task (card): the first tab on the task page only, not a view. */
@@ -127,8 +127,9 @@
     // Touch has no Ctrl+F: a search button (shown on phones by view-tabs.css) opens the same search. Pages
     // without a palette (Assistant, Réglages) have nothing to search, so they get no button.
     if (global.CommandPalette && typeof global.CommandPalette.open === 'function') utils.appendChild(searchButton());
+    // Settings is a labelled tab after the views, like Kanban and Documents.
     UTILS.slice(1).forEach(function (v) {
-      utils.appendChild(link(v, 'vt-util', false));
+      nav.appendChild(link(v, 'vt-tab', true));
     });
     if (global.Isolation && typeof global.Isolation.mountChip === 'function') global.Isolation.mountChip(utils);
     if (global.Isolation && typeof global.Isolation.observe === 'function' && global.document && global.document.body) {
