@@ -182,10 +182,10 @@
     }
 
     let notified = '';
-    function showNotice(remote) {
+    function showNotice(remote, info) {
       if (notified === remote || doc.getElementById('cerveau-update')) return;
       if (!doc.body) {
-        doc.addEventListener('DOMContentLoaded', () => showNotice(remote), { once: true });
+        doc.addEventListener('DOMContentLoaded', () => showNotice(remote, info), { once: true });
         return;
       }
       notified = remote;
@@ -193,10 +193,14 @@
         const style = doc.createElement('style');
         style.id = 'cerveau-update-css';
         style.textContent = '#cerveau-update{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;'
-          + 'align-items:center;gap:10px;max-width:min(380px,calc(100vw - 32px));padding:10px 12px;border-radius:12px;'
+          + 'flex-direction:column;gap:8px;max-width:min(380px,calc(100vw - 32px));padding:10px 12px;border-radius:12px;'
           + 'background:#1f2430;color:#f2f4f8;border:1px solid rgba(255,255,255,.14);box-shadow:0 8px 28px rgba(0,0,0,.35);'
           + 'font:13px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;animation:cerveau-up .25s ease-out}'
+          + '#cerveau-update .cu-row{display:flex;align-items:center;gap:10px}'
           + '#cerveau-update .cu-ic{flex:none;font-size:18px}'
+          + '#cerveau-update .cu-ver{display:block;margin-top:2px;color:#aab0bd;font:11px ui-monospace,Consolas,monospace}'
+          + '#cerveau-update .cu-new{margin:0;padding:8px 0 0 16px;border-top:1px solid rgba(255,255,255,.12);max-height:168px;overflow:auto;color:#d6dae3;font-size:12px}'
+          + '#cerveau-update .cu-new li{margin:0 0 4px}'
           + '#cerveau-update .cu-tx{flex:1;min-width:0}'
           + '#cerveau-update button{flex:none;font:inherit;border:0;border-radius:8px;padding:5px 10px;cursor:pointer}'
           + '#cerveau-update .cu-go{background:#6366f1;color:#fff}#cerveau-update .cu-go:hover{background:#7477f4}'
@@ -214,6 +218,10 @@
       const tx = doc.createElement('span');
       tx.className = 'cu-tx';
       tx.textContent = 'Une nouvelle version est disponible, veuillez actualiser.';
+      const ver = doc.createElement('span');
+      ver.className = 'cu-ver';
+      ver.textContent = 'Version ' + remote + (running ? ' (actuelle : ' + running + ')' : '');
+      tx.appendChild(ver);
       const go = doc.createElement('button');
       go.type = 'button';
       go.className = 'cu-go';
@@ -225,7 +233,21 @@
       x.setAttribute('aria-label', 'Plus tard');
       x.textContent = '✕';
       x.addEventListener('click', () => box.remove());
-      box.append(ic, tx, go, x);
+      const row = doc.createElement('div');
+      row.className = 'cu-row';
+      row.append(ic, tx, go, x);
+      box.appendChild(row);
+      const latest = info && Array.isArray(info.releases) && info.releases[0];
+      if (latest && Array.isArray(latest.items) && latest.items.length) {
+        const list = doc.createElement('ul');
+        list.className = 'cu-new';
+        latest.items.slice(0, 8).forEach((text) => {
+          const li = doc.createElement('li');
+          li.textContent = String(text).replace(/[`*_]/g, '');
+          list.appendChild(li);
+        });
+        box.appendChild(list);
+      }
       doc.body.appendChild(box);
     }
 
@@ -238,7 +260,7 @@
           const remote = (info && info.commit) || '';
           // A visible page asks; a hidden Trello iframe has nobody to ask and reloads itself.
           if (global.top === global.self) {
-            if (needsReload(running, remote, false, notified)) showNotice(remote);
+            if (needsReload(running, remote, false, notified)) showNotice(remote, info);
             return;
           }
           let tried = '';
