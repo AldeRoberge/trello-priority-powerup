@@ -4,6 +4,7 @@ Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une 
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
 ## 2026-11-21
+- Keep : un œil sur chaque note la masque (Annuler la ramène), un bouton œil en haut affiche les notes masquées, et un menu Trier classe par date de création, de modification, titre ou ordre manuel.
 - Keep : les puces de tâche dans une note passent à la ligne au lieu de déborder de la carte.
 - Paramètres est maintenant un onglet avec son nom, à côté de Documents et des autres vues, au lieu d'une icône seule en haut à droite.
 - La fenêtre « nouvelle version » montre le code de version et les nouveautés.

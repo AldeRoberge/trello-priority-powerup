@@ -1,6 +1,6 @@
 /*
  * Role: pure model of the Notes app (a Google Keep clone). A note is a Documents card (see DocsModel):
- * title, Markdown body, and flags stored in the hidden `keep:` meta line (pin, arch, color=name, pct=0..100 progress, ord=position among its group).
+ * title, Markdown body, and flags stored in the hidden `keep:` meta line (pin, arch, hide, color=name, pct=0..100 progress, ord=position among its group).
  * Body lines `- [ ] x` / `- [x] x` are checklist items, every other line is plain text.
  * No DOM, no Trello. Exposes window.KeepModel (no bundler).
  */
@@ -93,11 +93,12 @@
   /* ── flags (the `keep:` meta line) ───────────────────────────────── */
 
   function parseFlags(str) {
-    var out = { pin: false, arch: false, color: '', pct: 0, ord: null };
+    var out = { pin: false, arch: false, hide: false, color: '', pct: 0, ord: null };
     String(str || '').split(',').forEach(function (p) {
       p = p.trim().toLowerCase();
       if (p === 'pin') out.pin = true;
       else if (p === 'arch') out.arch = true;
+      else if (p === 'hide') out.hide = true;
       else if (p.indexOf('color=') === 0 && COLORS.indexOf(p.slice(6)) >= 0) out.color = p.slice(6);
       else if (/^pct=\d{1,3}$/.test(p)) out.pct = clampPct(p.slice(4));
       else if (/^ord=-?\d+(\.\d{1,4})?$/.test(p)) out.ord = Number(p.slice(4));
@@ -124,6 +125,7 @@
     var out = [];
     if (note.pin) out.push('pin');
     if (note.arch) out.push('arch');
+    if (note.hide) out.push('hide');
     if (note.color && COLORS.indexOf(note.color) >= 0) out.push('color=' + note.color);
     if (clampPct(note.pct) > 0) out.push('pct=' + clampPct(note.pct));
     var ord = cleanOrd(note.ord);
@@ -141,6 +143,7 @@
       body: String(doc.body || ''),
       pin: f.pin,
       arch: f.arch,
+      hide: f.hide,
       color: f.color,
       pct: f.pct,
       ord: f.ord,
@@ -161,7 +164,7 @@
   }
 
   function blank(id) {
-    return { id: id, title: '', body: '', pin: false, arch: false, color: '', pct: 0, ord: null, rev: 1, updatedAt: '', props: null };
+    return { id: id, title: '', body: '', pin: false, arch: false, hide: false, color: '', pct: 0, ord: null, rev: 1, updatedAt: '', props: null };
   }
 
   function isEmpty(note) {
@@ -169,9 +172,48 @@
   }
 
   /** Pinned first; then notes with no position yet (new ones, most recent first); then the dragged order (ord). */
-  function sortNotes(notes) {
+  /** When a note was created: a Trello id starts with its creation time (hex seconds), a local id carries it in base 36. */
+  function createdMs(note) {
+    var id = String((note && note.id) || '');
+    var m = /^[0-9a-f]{24}$/.test(id) ? parseInt(id.slice(0, 8), 16) * 1000 : /^local-([0-9a-z]{8})/.test(id) ? parseInt(id.slice(6, 14), 36) : 0;
+    if (m > 0) return m;
+    var u = Date.parse(note && note.updatedAt);
+    return isNaN(u) ? 0 : u;
+  }
+
+  function updatedMs(note) {
+    var u = Date.parse(note && note.updatedAt);
+    return isNaN(u) ? 0 : u;
+  }
+
+  var SORTS = [
+    { id: 'manual', label: 'Ordre manuel', icon: 'hand-move' },
+    { id: 'created-desc', label: 'Créées récemment', icon: 'calendar-plus' },
+    { id: 'created-asc', label: 'Créées en premier', icon: 'calendar-minus' },
+    { id: 'updated-desc', label: 'Modifiées récemment', icon: 'clock' },
+    { id: 'updated-asc', label: 'Modifiées il y a longtemps', icon: 'history' },
+    { id: 'title', label: 'Titre A à Z', icon: 'sort-ascending-letters' },
+  ];
+
+  /** Pinned notes first, then `mode` (see SORTS). The manual order is the drag-and-drop one. */
+  function sortNotes(notes, mode) {
+    var by = {
+      'created-desc': function (a, b) { return createdMs(b) - createdMs(a); },
+      'created-asc': function (a, b) { return createdMs(a) - createdMs(b); },
+      'updated-desc': function (a, b) { return updatedMs(b) - updatedMs(a); },
+      'updated-asc': function (a, b) { return updatedMs(a) - updatedMs(b); },
+      title: function (a, b) {
+        var ta = String(a.title || a.body || '').trim();
+        var tb = String(b.title || b.body || '').trim();
+        return ta.localeCompare(tb, 'fr', { sensitivity: 'base', numeric: true });
+      },
+    }[mode];
     return (notes || []).slice().sort(function (a, b) {
       if (!!a.pin !== !!b.pin) return a.pin ? -1 : 1;
+      if (by) {
+        var d = by(a, b);
+        if (d) return d;
+      }
       var ao = cleanOrd(a.ord);
       var bo = cleanOrd(b.ord);
       if (ao != null && bo != null && ao !== bo) return ao - bo;
@@ -252,6 +294,8 @@
     blank: blank,
     isEmpty: isEmpty,
     sortNotes: sortNotes,
+    SORTS: SORTS,
+    createdMs: createdMs,
     reorderPlan: reorderPlan,
     clampPct: clampPct,
     isDone: isDone,

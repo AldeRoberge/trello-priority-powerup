@@ -15,6 +15,26 @@ describe('Notes model (Keep clone)', () => {
     DM = global.DocsModel;
   });
 
+  it('hide flag round-trips and survives the docs props whitelist', () => {
+    assert.equal(KM.parseFlags('pin,hide').hide, true);
+    assert.equal(KM.flagString({ pin: true, hide: true }), 'pin,hide');
+    assert.equal(DM.normalizeProps({ keep: 'hide,color=blue' }).keep, 'hide,color=blue');
+    assert.equal(KM.fromDoc({ id: 'x', title: 't', body: '', props: { keep: 'hide' } }).hide, true);
+  });
+
+  it('sorts by creation date (from the id), keeps pinned first', () => {
+    const t = (sec) => Math.floor(sec).toString(16).padStart(8, '0') + '0'.repeat(16);
+    const a = { id: t(1000), title: 'b', updatedAt: '2026-01-03T00:00:00Z' };
+    const b = { id: t(3000), title: 'a', updatedAt: '2026-01-01T00:00:00Z' };
+    const c = { id: t(2000), title: 'c', pin: true, updatedAt: '2026-01-02T00:00:00Z' };
+    const ids = (m) => KM.sortNotes([a, b, c], m).map((n) => n.title).join('');
+    assert.equal(ids('created-desc'), 'cab');
+    assert.equal(ids('created-asc'), 'cba');
+    assert.equal(ids('updated-desc'), 'cba');
+    assert.equal(ids('title'), 'cab');
+    assert.equal(KM.createdMs({ id: 'local-' + Date.parse('2026-05-05').toString(36) + 'abcdef' }), Date.parse('2026-05-05'));
+  });
+
   it('only reorders done items in flat lists (nested lists keep their shape)', () => {
     assert.equal(KM.isFlatList('- [ ] a\n- [x] b'), true);
     assert.equal(KM.isFlatList('- [ ] a\n  - [x] b'), false);
@@ -62,7 +82,7 @@ describe('Notes model (Keep clone)', () => {
   });
 
   it('ignores unknown flags and treats the untitled placeholder as empty', () => {
-    assert.deepEqual(KM.parseFlags('pin,color=rouge,nope,arch'), { pin: true, arch: true, color: '', pct: 0, ord: null });
+    assert.deepEqual(KM.parseFlags('pin,color=rouge,nope,arch'), { pin: true, arch: true, hide: false, color: '', pct: 0, ord: null });
     assert.equal(KM.fromDoc({ id: 'x', title: 'Sans titre', body: '' }).title, '');
   });
 
@@ -89,10 +109,10 @@ describe('Notes model (Keep clone)', () => {
   });
 
   it('round-trips the progress and order flags through the keep: meta line', () => {
-    const n = { pin: true, arch: false, color: 'blue', pct: 40, ord: 1536.5 };
+    const n = { pin: true, arch: false, hide: false, color: 'blue', pct: 40, ord: 1536.5 };
     const str = KM.flagString(n);
     assert.equal(str, 'pin,color=blue,pct=40,ord=1536.5');
-    assert.deepEqual(KM.parseFlags(str), { pin: true, arch: false, color: 'blue', pct: 40, ord: 1536.5 });
+    assert.deepEqual(KM.parseFlags(str), { pin: true, arch: false, hide: false, color: 'blue', pct: 40, ord: 1536.5 });
     assert.equal(KM.flagString({ pct: 0, ord: null }), '');
     assert.equal(KM.parseFlags('pct=250,ord=abc').pct, 100);
     assert.equal(KM.parseFlags('pct=250,ord=abc').ord, null);

@@ -435,3 +435,14 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .k-toast { position: fixed; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 16px; padding: 0 8px 0 16px; min-height: 48px; border-radius: 6px; background: #323232; color: #fff; font-size: 14px; box-shadow: var(--k-shadow); }
 .k-toast-undo { height: 32px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: #fbbc04; font: inherit; font-weight: 500; cursor: pointer; }
 .k-toast-undo:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* toolbar above the grid: sort menu and show/hide hidden notes */
+.k-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 0 0 8px; }
+.k-tool { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 0; border-radius: 16px; background: transparent; color: var(--k-muted); font: inherit; font-size: 13px; cursor: pointer; }
+.k-tool .ti { font-size: 18px; }
+.k-tool:hover, .k-tool:focus-visible { background: var(--k-hover); color: var(--k-text); outline: 0; }
+.k-tool.is-on { background: var(--k-nav-on); color: var(--k-text); }
+.k-tool-eye.is-empty { opacity: 0.55; }
+.k-tool-eye.is-empty:hover { opacity: 1; }
+.k-card.is-hidden { opacity: 0.55; }
+.k-card.is-hidden:hover, .k-card.is-hidden:focus-within { opacity: 1; }

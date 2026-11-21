@@ -107,12 +107,21 @@
 
   /* ── App ──────────────────────────────────────────────────────────── */
 
+  var SORT_KEY = 'keep-sort';
+
+  function loadSort() {
+    try {
+      var v = global.localStorage.getItem(SORT_KEY);
+      return KM().SORTS.some(function (s) { return s.id === v; }) ? v : 'manual';
+    } catch (e) { return 'manual'; }
+  }
+
   function mount(root, deps) {
     var sync = deps.sync;
     var store = deps.store;
     var ui = {
       notes: [], query: '', archive: false, status: 'idle', composing: null, dialog: null,
-      ai: null, hidden: {}, dragId: null, undo: null,
+      ai: null, hidden: {}, dragId: null, undo: null, showHidden: false, sort: loadSort(),
       drawer: (global.innerWidth || 1200) >= DRAWER_WIDE,
     };
     var syncTimer = null;
@@ -182,9 +191,27 @@
     var composerSlot = el('div', 'k-composer-slot');
     var aiSlot = el('div', 'k-ai-slot');
     aiSlot.hidden = true;
+    var toolbar = el('div', 'k-toolbar');
+    var sortBtn = el('button', 'k-tool', { type: 'button' });
+    var eyeBtn = el('button', 'k-tool k-tool-eye', { type: 'button' });
+    toolbar.appendChild(sortBtn);
+    toolbar.appendChild(eyeBtn);
+    sortBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!global.ContextMenu || typeof global.ContextMenu.show !== 'function') return;
+      var r = sortBtn.getBoundingClientRect();
+      global.ContextMenu.show({ clientX: r.left, clientY: r.bottom + 4 }, KM().SORTS.map(function (s) {
+        return { id: 'sort-' + s.id, label: s.label, icon: s.icon, checked: ui.sort === s.id, action: function () { setSort(s.id); } };
+      }));
+    });
+    eyeBtn.addEventListener('click', function () {
+      ui.showHidden = !ui.showHidden;
+      drawGrid();
+    });
     var gridArea = el('div', 'k-grid-area');
     main.appendChild(composerSlot);
     main.appendChild(aiSlot);
+    main.appendChild(toolbar);
     main.appendChild(gridArea);
     content.appendChild(main);
     body.appendChild(drawer);
@@ -378,9 +405,34 @@
       return e;
     }
 
+    function setSort(id) {
+      ui.sort = id;
+      try { global.localStorage.setItem(SORT_KEY, id); } catch (e) { /* private mode: the choice lasts until reload */ }
+      drawGrid();
+    }
+
+    /** Sort and eye buttons: always there, the eye is quieter when no note is hidden. */
+    function drawToolbar() {
+      var cur = KM().SORTS.filter(function (s) { return s.id === ui.sort; })[0] || KM().SORTS[0];
+      sortBtn.textContent = '';
+      sortBtn.appendChild(icon(cur.icon));
+      sortBtn.appendChild(el('span', '', { text: cur.label }));
+      sortBtn.title = 'Trier les notes';
+      var count = ui.notes.filter(function (n) { return n.hide && !n.arch === !ui.archive; }).length;
+      eyeBtn.textContent = '';
+      eyeBtn.appendChild(icon(ui.showHidden ? 'eye' : 'eye-off'));
+      if (count) eyeBtn.appendChild(el('span', '', { text: String(count) }));
+      eyeBtn.title = ui.showHidden ? 'Masquer les notes masquées' : 'Afficher les notes masquées';
+      eyeBtn.setAttribute('aria-label', eyeBtn.title);
+      eyeBtn.setAttribute('aria-pressed', ui.showHidden ? 'true' : 'false');
+      eyeBtn.classList.toggle('is-on', ui.showHidden);
+      eyeBtn.classList.toggle('is-empty', !count);
+    }
+
     function drawGrid() {
       gridArea.textContent = '';
-      var visible = ui.notes.filter(function (n) { return !ui.hidden[n.id]; });
+      drawToolbar();
+      var visible = ui.notes.filter(function (n) { return !ui.hidden[n.id] && (ui.showHidden || !n.hide); });
       var ranked = ui.ai && ui.ai.status === 'done' && ui.ai.ids && ui.ai.ids.length;
       if (ranked) {
         // The assistant's answer: its notes in its order (archived ones too), no groups, no drag.
@@ -390,7 +442,7 @@
         section('', ui.ai.ids.map(function (id) { return byId[id]; }).filter(Boolean), true);
         return;
       }
-      var list = KM().sortNotes(visible.filter(function (n) { return !!n.arch === ui.archive && KM().matches(n, ui.query); }));
+      var list = KM().sortNotes(visible.filter(function (n) { return !!n.arch === ui.archive && KM().matches(n, ui.query); }), ui.sort);
       if (!list.length) {
         gridArea.appendChild(emptyState());
         return;
@@ -415,7 +467,7 @@
       }
       notes.forEach(function (n) {
         var at = load.indexOf(Math.min.apply(null, load));
-        cols[at].appendChild(card(n, !noDrag && !ui.query.trim()));
+        cols[at].appendChild(card(n, !noDrag && !ui.query.trim() && ui.sort === 'manual'));
         load[at] += 2 + (n.title ? 1 : 0) + String(n.body || '').split('\n').length;
       });
       gridArea.appendChild(grid);
@@ -432,7 +484,7 @@
 
     function card(n, canDrag) {
       var done = KM().isDone(n);
-      var c = el('article', 'k-card' + (done ? ' is-done' : ''), { 'data-color': n.color || '', tabindex: '0', 'data-id': n.id });
+      var c = el('article', 'k-card' + (done ? ' is-done' : '') + (n.hide ? ' is-hidden' : ''), { 'data-color': n.color || '', tabindex: '0', 'data-id': n.id });
       if (canDrag) bindReorder(c, n);
       c.appendChild(btn(n.pin ? 'pin-filled' : 'pin', n.pin ? 'Désépingler' : 'Épingler', function () {
         saveNote(Object.assign({}, n, { pin: !n.pin }));
@@ -605,6 +657,15 @@
       });
     }
 
+    /** Hides a note from the grid (or shows it again) at once; the toast takes it back. */
+    function hideNote(n) {
+      var was = !!n.hide;
+      saveNote(Object.assign({}, n, { hide: !was }));
+      showToast(was ? 'Note affichée' : 'Note masquée', function () {
+        store.get(n.id).then(function (rec) { return rec && saveNote(Object.assign({}, rec, { hide: was })); });
+      });
+    }
+
     function deleteNote(n) {
       store.get(n.id).then(function (rec) {
         if (!rec) return;
@@ -664,6 +725,7 @@
         },
         { id: 'duplicate', label: 'Dupliquer', icon: 'copy', action: function () { duplicateNote(n); } },
         { sep: true },
+        { id: 'hide', label: n.hide ? 'Afficher' : 'Masquer', icon: n.hide ? 'eye' : 'eye-off', action: function () { hideNote(n); } },
         { id: 'archive', label: n.arch ? 'Désarchiver' : 'Archiver', icon: n.arch ? 'archive-off' : 'archive', action: function () { archiveNote(Object.assign({}, n, { arch: !n.arch }), !!n.arch); } },
         { id: 'delete', label: 'Supprimer', icon: 'trash', danger: true, action: function () { deleteNote(n); } },
       ];
@@ -677,6 +739,7 @@
         togglePalette(host, n.color, function (c) { saveNote(Object.assign({}, n, { color: c })); });
       }));
       foot.appendChild(host);
+      foot.appendChild(btn(n.hide ? 'eye' : 'eye-off', n.hide ? 'Afficher' : 'Masquer', function () { hideNote(n); }));
       foot.appendChild(btn(n.arch ? 'archive-off' : 'archive', n.arch ? 'Désarchiver' : 'Archiver', function () {
         archiveNote(Object.assign({}, n, { arch: !n.arch }), !!n.arch);
       }));

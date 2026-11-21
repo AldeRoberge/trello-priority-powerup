@@ -16,7 +16,7 @@
   }
 
   function copyOf(note) {
-    return { title: note.title, body: note.body, pin: !!note.pin, arch: !!note.arch, color: note.color || '', pct: note.pct || 0, ord: note.ord == null ? null : note.ord };
+    return { title: note.title, body: note.body, pin: !!note.pin, arch: !!note.arch, hide: !!note.hide, color: note.color || '', pct: note.pct || 0, ord: note.ord == null ? null : note.ord };
   }
 
   function clean(note) {
