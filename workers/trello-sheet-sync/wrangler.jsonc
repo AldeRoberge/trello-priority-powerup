@@ -9,12 +9,16 @@
   "vars": {
     "TIMEZONE": "America/Toronto",
     // /work serves the Power-Up pages from GitHub Pages through this Worker
-    "WORK_ASSETS_ORIGIN": "https://alderoberge.github.io/trello-priority-powerup"
+    "WORK_ASSETS_ORIGIN": "https://alderoberge.github.io/trello-priority-powerup",
+    // /life: the home board (https://trello.com/b/oESYPwNf/home)
+    "LIFE_BOARD_ID": "oESYPwNf"
   },
   // /work (standalone app): only these paths of alderoberge.com; the rest stays where it is (like /storage)
   "routes": [
     { "pattern": "alderoberge.com/work", "zone_name": "alderoberge.com" },
-    { "pattern": "alderoberge.com/work/*", "zone_name": "alderoberge.com" }
+    { "pattern": "alderoberge.com/work/*", "zone_name": "alderoberge.com" },
+    { "pattern": "alderoberge.com/life", "zone_name": "alderoberge.com" },
+    { "pattern": "alderoberge.com/life/*", "zone_name": "alderoberge.com" }
   ],
   // /work keeps the Power-Up data here (SQLite, no setup)
   "durable_objects": { "bindings": [{ "name": "WORK_STORE", "class_name": "WorkStore" }] },

@@ -21,8 +21,9 @@ export function jsonResponse(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
 }
 
+/** /life keeps its own data (another instance of the same Durable Object); /work keeps 'main'. */
 export function storeOf(env) {
-  return env.WORK_STORE.get(env.WORK_STORE.idFromName('main'));
+  return env.WORK_STORE.get(env.WORK_STORE.idFromName(env.APP_NAME === 'life' ? 'life' : 'main'));
 }
 
 async function trello(env, path, init) {
@@ -86,7 +87,7 @@ export async function boot(env, user, origin) {
   const ctx = { board: env.TRELLO_BOARD_ID, member: me.id };
   let imported = 0;
   if (!(await store.getValue('meta', 'importedAt'))) imported = await importFromTrello(env, store, me);
-  await applySheetConnection(store, ctx, origin);
+  if (env.APP_NAME !== 'life') await applySheetConnection(store, ctx, origin);
   return { user, board: env.TRELLO_BOARD_ID, member: me.id, imported };
 }
 

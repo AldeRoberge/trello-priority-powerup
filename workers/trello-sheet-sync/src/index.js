@@ -106,7 +106,7 @@ async function handleWebhook(request, env, ctx) {
 const worker = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname === '/work' || url.pathname.startsWith('/work/')) return handleWork(request, env, ctx, worker);
+    if (['/work', '/life'].some((p) => url.pathname === p || url.pathname.startsWith(p + '/'))) return handleWork(request, env, ctx, worker);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(request, env) });
 
     if (url.pathname === '/health') return json(request, env, { ok: true });

@@ -42,3 +42,9 @@ Ouvre un faux Trello et `wrangler dev` sur http://localhost:8787/work/ ; la conn
 - Cookie de session `work_session` (HttpOnly, limité à `/work`), 60 jours. La liste `WORK_ALLOWED_EMAILS` est revérifiée à chaque requête.
 - Le navigateur ne voit jamais la clé ni le jeton Trello. Le relais refuse les chemins `tokens`, `webhooks` et `organizations`.
 - Toute écriture exige que l'en-tête `Origin` soit le site lui-même.
+
+## /life : même chose pour le tableau Home
+
+`https://alderoberge.com/life/` est le même Worker et les mêmes pages, branchés sur le tableau Trello Home (`LIFE_BOARD_ID` dans `wrangler.jsonc`, `oESYPwNf` par défaut). Il a ses propres données (une 2e instance du Durable Object), son propre cookie `life_session` (limité à `/life`) et la même liste `WORK_ALLOWED_EMAILS`. La synchro Google Sheet reste pour `/work` seulement.
+
+Après le déploiement du Worker, ajoutez l'URI de redirection `https://alderoberge.com/life/api/auth/google/callback` au client OAuth Google.

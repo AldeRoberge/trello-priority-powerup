@@ -16,7 +16,8 @@
   var CFG = window.__WORK__ || { board: '', member: '', user: null };
   var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
   var REST_BASE = 'https://api.trello.com/1/';
-  var API = '/work/api/';
+  var BASE = window.location.pathname.indexOf('/life') === 0 ? '/life/' : '/work/';
+  var API = BASE + 'api/';
   var COLOR_KEY = 'trello-priority-powerup/color-mode';
 
   function topWindow() {
@@ -77,7 +78,7 @@
   function signedOut() {
     if (TOP.__workSignedOut) return;
     TOP.__workSignedOut = true;
-    TOP.location.assign('/work/');
+    TOP.location.assign(BASE);
   }
 
   function api(path, init) {
@@ -124,7 +125,7 @@
 
   /** The Sheet sync is reached through this site (the session replaces the shared secret), whatever URL was saved. */
   function pointSheetAtThisSite() {
-    var url = location.origin + '/work/api/sheet';
+    var url = location.origin + API + 'sheet';
     var shared = STATE.data['board:' + CFG.board + '|shared'];
     var priv = STATE.data['board:' + CFG.board + '|private'] = STATE.data['board:' + CFG.board + '|private'] || {};
     if (shared && shared.googleSheetsSettings) shared.googleSheetsSettings.workerUrl = url;

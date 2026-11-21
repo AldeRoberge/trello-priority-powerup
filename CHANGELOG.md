@@ -3,6 +3,9 @@
 Les plus récentes en premier. Une section par jour : `## AAAA-MM-JJ`, puis une puce par nouveauté visible pour l'utilisateur.
 Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistant s'en sert pour répondre à « quelle version ? » et « quoi de neuf ? ».
 
+## 2026-11-21
+- Nouvelle adresse alderoberge.com/life : les mêmes vues que /work, sur le tableau Trello Home.
+
 ## 2026-11-19
 - Centre de contrôle VVD : l’assistant peut dire quelles applications tournent et quels déploiements échouent (« Le Centre de contrôle VVD ne répond pas » s’il est fermé) ; le Centre de contrôle liste de son côté les tâches Trello ouvertes par application.
 

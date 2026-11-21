@@ -6,6 +6,7 @@
 import { b64urlEncode, decodeJwtPayload, randomToken, readCookie, signJwt, verifyJwt } from './jwt.js';
 
 export const SESSION_COOKIE = 'work_session';
+export const WORK_APP = { name: 'work', prefix: '/work', cookie: SESSION_COOKIE };
 export const SESSION_DAYS = 60;
 const AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN = 'https://oauth2.googleapis.com/token';
@@ -23,9 +24,9 @@ export function isConfigured(env) {
   return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.SESSION_SECRET && allowedEmails(env).length);
 }
 
-export const redirectUri = (origin) => `${origin}/work/api/auth/google/callback`;
+export const redirectUri = (origin, app = WORK_APP) => `${origin}${app.prefix}/api/auth/google/callback`;
 
-export async function startGoogleSignIn(env, requestUrl) {
+export async function startGoogleSignIn(env, requestUrl, app = WORK_APP) {
   const { origin } = new URL(requestUrl);
   const verifier = randomToken();
   const nonce = randomToken();
@@ -33,7 +34,7 @@ export async function startGoogleSignIn(env, requestUrl) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri(origin),
+    redirect_uri: redirectUri(origin, app),
     response_type: 'code',
     scope: 'openid email profile',
     prompt: 'select_account',
@@ -57,7 +58,7 @@ export function sessionFromIdToken(env, idToken, nonce, now = Date.now()) {
   return { email: claims.email, name: typeof claims.name === 'string' ? claims.name : null, picture: typeof claims.picture === 'string' ? claims.picture : null };
 }
 
-export async function finishGoogleSignIn(env, requestUrl) {
+export async function finishGoogleSignIn(env, requestUrl, app = WORK_APP) {
   const url = new URL(requestUrl);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
@@ -72,7 +73,7 @@ export async function finishGoogleSignIn(env, requestUrl) {
       client_secret: env.GOOGLE_CLIENT_SECRET,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: redirectUri(url.origin),
+      redirect_uri: redirectUri(url.origin, app),
       code_verifier: payload.verifier,
     }),
   });
@@ -103,15 +104,15 @@ export function publicOrigin(request, env) {
 }
 
 /** The signed-in user, or null. The allowlist is re-checked on every request so removing an address takes effect at once. */
-export async function readSession(request, env) {
+export async function readSession(request, env, app = WORK_APP) {
   if (isDevMode(env)) return { email: env.WORK_DEV_USER, name: 'Dev', picture: null };
-  const payload = await verifyJwt(readCookie(request, SESSION_COOKIE), env.SESSION_SECRET);
+  const payload = await verifyJwt(readCookie(request, app.cookie), env.SESSION_SECRET);
   if (!payload || typeof payload.email !== 'string') return null;
   if (!allowedEmails(env).includes(payload.email.toLowerCase())) return null;
   return { email: payload.email, name: payload.name || null, picture: payload.picture || null };
 }
 
-export function sessionCookie(token, requestUrl, maxAge = SESSION_DAYS * 86400) {
+export function sessionCookie(token, requestUrl, maxAge = SESSION_DAYS * 86400, app = WORK_APP) {
   const secure = new URL(requestUrl).protocol === 'https:' ? '; Secure' : '';
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/work; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  return `${app.cookie}=${encodeURIComponent(token)}; Path=${app.prefix}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
