@@ -59,10 +59,8 @@ Le script `scripts/stamp-build.js` lit ce fichier au déploiement, et l'assistan
 - Tableau et Gantt : un long titre passe à la ligne au lieu d’être coupé par « … », et l’étape en cours s’aligne sous le titre.
 - Mindmap : une tâche due aujourd’hui n’est plus classée « En retard » dans la vue par échéance.
 - Documents : chaque tâche est un document. Sa description s’écrit avec le même éditeur, et la tâche apparaît dans la section Tâches.
-
-## 2026-11-03
-
 - Tâche : deux colonnes (description, progrès à gauche ; assignés, priorité, échéance à droite), priorité réduite à un badge avec crayon pour ajuster, titre en double retiré de Progrès.
+
 
 ## 2026-11-02
 
