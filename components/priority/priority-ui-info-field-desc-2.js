@@ -877,6 +877,11 @@
     [M.descRow, M.progressInline, M.moreRow].forEach(function (r) {
       if (r && r.row) M.mainColEl.appendChild(r.row);
     });
+    M.statutRow = M.makeRow('statut', 'Statut', { icon: 'ti-list', collapsible: false });
+    M.statutMount = document.createElement('div');
+    M.statutMount.className = 'info-statut-mount';
+    M.statutRow.value.appendChild(M.statutMount);
+    M.sideColEl.appendChild(M.statutRow.row);
     [M.membersRow, M.placesRow, M.priorityInline, M.dueInline, M.creatorRow].forEach(function (r) {
       if (r && r.row) M.sideColEl.appendChild(r.row);
     });
@@ -896,6 +901,9 @@
       },
       getPriorityMount: function () {
         return M.priorityInline.mount;
+      },
+      getStatutHost: function () {
+        return M.statutMount;
       },
       getProgressMount: function () {
         return M.progressInline.mount;

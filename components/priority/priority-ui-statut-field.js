@@ -804,8 +804,51 @@
       nameEl.className = 'statut-hero-name';
       nameEl.textContent = name;
 
+      if (embedded) {
+        // Dropdown trigger: current status + chevron; the options open in a popover.
+        var trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'statut-dd-trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute(
+          'aria-expanded',
+          body.classList.contains('is-dd-open') ? 'true' : 'false'
+        );
+        trigger.appendChild(createStatutIcon(style.icon || 'dot', 16));
+        nameEl.className = 'statut-dd-name';
+        trigger.appendChild(nameEl);
+        var chev = document.createElement('i');
+        chev.className = 'ti ti-chevron-down statut-dd-chevron';
+        chev.setAttribute('aria-hidden', 'true');
+        trigger.appendChild(chev);
+        trigger.addEventListener('click', function (e) {
+          e.stopPropagation();
+          setDropdownOpen(!body.classList.contains('is-dd-open'));
+        });
+        heroEl.appendChild(trigger);
+        return;
+      }
       heroEl.appendChild(iconWrap);
       heroEl.appendChild(nameEl);
+    }
+
+    function setDropdownOpen(on) {
+      body.classList.toggle('is-dd-open', !!on);
+      var t = heroEl && heroEl.querySelector('.statut-dd-trigger');
+      if (t) t.setAttribute('aria-expanded', on ? 'true' : 'false');
+    }
+    if (embedded) {
+      document.addEventListener('mousedown', function (e) {
+        if (body.classList.contains('is-dd-open') && !body.contains(e.target)) {
+          setDropdownOpen(false);
+        }
+      });
+      body.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && body.classList.contains('is-dd-open')) {
+          e.stopPropagation();
+          setDropdownOpen(false);
+        }
+      });
     }
 
     function renderOptions() {
@@ -865,6 +908,7 @@
           btn.appendChild(nameSpan);
 
           btn.addEventListener('click', function () {
+            if (embedded) setDropdownOpen(false);
             if (busy || String(list.id) === String(currentListId)) return;
             selectList(list.id);
           });

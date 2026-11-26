@@ -6596,7 +6596,9 @@
       // Statut chips / Bloqué nest above completion (filled by mountStatutSection).
       var statutMount = document.createElement('div');
       statutMount.className = 'statut-in-progress-mount';
-      progressBody.appendChild(statutMount);
+      // Task view: the status lives in the metadata sidebar, not inside Progrès.
+      var statutHost = infoUi && typeof infoUi.getStatutHost === 'function' ? infoUi.getStatutHost() : null;
+      (statutHost || progressBody).appendChild(statutMount);
 
       var completionMount = document.createElement('div');
       completionMount.id = 'completionMount';
@@ -7485,8 +7487,7 @@
       if (featureOn('statut')) {
         beginBootStep('statut');
         var statutMount =
-          (progressBody &&
-            progressBody.querySelector('.statut-in-progress-mount')) ||
+          document.querySelector('.statut-in-progress-mount') ||
           null;
         pParts.push(
           Promise.resolve(mountStatutSection(statutMount)).then(function () {

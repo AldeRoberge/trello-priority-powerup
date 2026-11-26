@@ -660,3 +660,80 @@ html[data-color-mode='dark'] .tp-page--priority .heat-panel {
     max-width: none;
   }
 }
+
+/* Status dropdown (Task view): trigger shows the current status, options open in a popover */
+.tp-page--priority .field--statut-embedded .statut-section-body--embedded {
+  position: relative;
+}
+
+.tp-page--priority .field--statut-embedded .statut-embedded-head,
+.tp-page--priority .field--statut-embedded .statut-embedded-bar {
+  display: none;
+}
+
+.tp-page--priority .field--statut-embedded .statut-hero {
+  display: block;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+.tp-page--priority .statut-dd-trigger {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--tp-border, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tp-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tp-page--priority .statut-dd-trigger:hover,
+.tp-page--priority .is-dd-open .statut-dd-trigger {
+  background: var(--tp-surface-hover, rgba(127, 127, 127, 0.14));
+}
+
+.tp-page--priority .statut-dd-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.tp-page--priority .statut-dd-chevron {
+  color: var(--tp-text-subtle);
+}
+
+.tp-page--priority .field--statut-embedded .statut-groups {
+  display: none;
+}
+
+.tp-page--priority .field--statut-embedded .is-dd-open .statut-groups,
+.tp-page--priority .field--statut-embedded .statut-section-body--embedded.is-dd-open .statut-groups {
+  display: block !important;
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border: 1px solid var(--tp-border, rgba(127, 127, 127, 0.25));
+  border-radius: 10px;
+  background: var(--surface-1, var(--surface-2, #fff));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.tp-page--priority .statut-section-body--embedded.is-dd-open .statut-chip-row {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+}
