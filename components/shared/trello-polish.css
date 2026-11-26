@@ -537,3 +537,126 @@ html[data-color-mode='dark'] .tp-page--priority .heat-panel {
 .tp-page--priority .statut-embedded-head {
   margin-bottom: 4px;
 }
+
+/* ── Task view: main column + metadata sidebar ───────────────────── */
+
+.tp-page--priority .info-section-body {
+  container-type: inline-size;
+}
+
+.tp-page--priority .info-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tp-section-gap, 16px);
+}
+
+.tp-page--priority .info-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tp-section-gap, 16px);
+  min-width: 0;
+}
+
+/* Narrow: metadata first (short pills), then the work. */
+.tp-page--priority .info-col--side {
+  order: -1;
+}
+
+@container (min-width: 620px) {
+  .tp-page--priority .info-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 17rem;
+    gap: 24px;
+    align-items: start;
+  }
+  .tp-page--priority .info-col--side {
+    order: 0;
+    gap: 12px;
+    padding-left: 16px;
+    border-left: 1px solid var(--tp-border, rgba(127, 127, 127, 0.18));
+  }
+  .tp-page--priority .info-col--side .info-row {
+    gap: 4px;
+  }
+  .tp-page--priority .info-col--side .info-row-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tp-text-subtle);
+  }
+}
+
+/* Priority: compact badge + pencil; sliders and matrix in a popover */
+.tp-page--priority .priority-section-body {
+  position: relative;
+}
+
+.tp-page--priority .priority-section-body .heat-head {
+  position: relative;
+  padding-right: 32px;
+}
+
+.tp-page--priority .priority-edit-btn {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-text-subtle);
+  cursor: pointer;
+}
+
+.tp-page--priority .priority-edit-btn:hover,
+.tp-page--priority .priority-section-body.is-editing .priority-edit-btn {
+  background: var(--tp-surface-hover, rgba(127, 127, 127, 0.16));
+  color: var(--tp-text);
+}
+
+.tp-page--priority .priority-section-body:not(.is-editing) .variant-fields-section {
+  display: none;
+}
+
+.tp-page--priority .priority-section-body.is-editing .variant-fields-section {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--tp-border, rgba(127, 127, 127, 0.25));
+  border-radius: 10px;
+  background: var(--surface-1, var(--surface-2, #fff));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+/* Sidebar: badge only (the tier text is in the ? help) */
+.tp-page--priority .info-col--side .heat-tier-desc,
+.tp-page--priority .info-col--side .heat-segs,
+.tp-page--priority .info-col--side .heat-seg-labels {
+  display: none;
+}
+
+/* The card title is already the page heading: no second copy in Progrès */
+.tp-page--priority .info-inline-mount--progress .tp-completion-master-title {
+  display: none !important;
+}
+
+/* Sidebar due date: pickers stack instead of squeezing side by side */
+@container (min-width: 620px) {
+  .tp-page--priority .info-col--side .due-date-pickers {
+    flex-direction: column;
+  }
+  .tp-page--priority .info-col--side .due-date-pickers > * {
+    width: 100%;
+    max-width: none;
+  }
+}
