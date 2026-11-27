@@ -11,6 +11,73 @@
   function TM() { return global.DocsTableModel; }
   function TA() { return global.DocsTableActions; }
 
+  function csvImport(h, toolbar, onResultChange) {
+    var input = h('input', { type: 'file', accept: '.csv,.tsv,.txt,text/csv,text/plain', hidden: true });
+    var message = h('span', { role: 'status' });
+    var retry = h('button', { type: 'button', class: 'dc-csv-retry', text: 'Réessayer', hidden: true });
+    var timer;
+    var attempt = 0;
+    toolbar.appendChild(input);
+    toolbar.appendChild(h('span', { class: 'dc-csv-result' }, [message, retry]));
+
+    function clear() {
+      global.clearTimeout(timer);
+      message.textContent = '';
+      retry.hidden = true;
+      if (onResultChange) onResultChange();
+    }
+
+    return function pick(apply, isCurrent) {
+      var id = ++attempt;
+      clear();
+      input.value = '';
+
+      function current() { return id === attempt && toolbar.isConnected && isCurrent(); }
+
+      function show(text, failed) {
+        if (!current()) return;
+        message.textContent = text;
+        retry.hidden = !failed;
+        if (onResultChange) onResultChange();
+        timer = global.setTimeout(clear, 10000);
+      }
+
+      retry.onclick = function () { if (current()) pick(apply, isCurrent); };
+      input.onchange = function () {
+        var file = input.files && input.files[0];
+        if (!file || !current()) return;
+        if (!/\.(csv|tsv|txt)$/i.test(file.name) && !/^text\/(csv|plain|tab-separated-values)$/i.test(file.type)) {
+          show('Format non pris en charge. Choisissez un fichier CSV, TSV ou TXT.', true);
+          return;
+        }
+        var reader = new global.FileReader();
+        reader.onerror = function () { show('Impossible de lire le fichier.', true); };
+        reader.onload = function () {
+          if (!current()) return;
+          var T = TM();
+          var grid;
+          var model;
+          try {
+            grid = T.parseDelimited(String(reader.result || ''));
+            if (grid.length) model = T.fromGrid(grid);
+          } catch (err) {
+            show('Erreur lors de l’analyse du fichier.', true);
+            return;
+          }
+          if (!model) {
+            show('Le fichier ne contient aucune ligne à importer.', true);
+            return;
+          }
+          apply(model);
+          var count = Math.min(grid.length, T.MAX_ROWS);
+          show(count + (count === 1 ? ' ligne importée.' : ' lignes importées.'), false);
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    };
+  }
+
   var CF_LABELS = {
     gt: 'supérieur à', lt: 'inférieur à', ge: 'au moins', le: 'au plus', eq: 'égal à',
     ne: 'différent de', has: 'contient', empty: 'est vide', filled: 'n’est pas vide',
@@ -633,30 +700,17 @@
     }
 
     function importCsv() {
-      var input = h('input', { type: 'file', accept: '.csv,.tsv,.txt,text/csv,text/plain', hidden: true });
-      input.addEventListener('change', function () {
-        var file = input.files && input.files[0];
-        if (!file) return;
-        var reader = new global.FileReader();
-        reader.onload = function () {
-          var grid = T.parseDelimited(String(reader.result || ''));
-          if (!grid.length) return;
-          var before = snap();
-          var n = T.fromGrid(grid);
-          m.rows = n.rows;
-          m.al = n.al;
-          m.w = [];
-          m.cf = [];
-          anchor = { r: 0, c: 0 };
-          focus = { r: 0, c: 0 };
-          initWidths();
-          changed(before);
-        };
-        reader.readAsText(file);
-      });
-      root.appendChild(input);
-      input.click();
-      global.setTimeout(function () { if (input.parentNode) input.parentNode.removeChild(input); }, 60000);
+      pickCsv(function (n) {
+        var before = snap();
+        m.rows = n.rows;
+        m.al = n.al;
+        m.w = [];
+        m.cf = [];
+        anchor = { r: 0, c: 0 };
+        focus = { r: 0, c: 0 };
+        initWidths();
+        changed(before);
+      }, function () { return !closed; });
     }
 
     function moreMenu(anchorEl) {
@@ -695,6 +749,7 @@
       sep(),
       tbtn('more', 'dots', 'Plus', moreMenu),
     ].forEach(function (el) { toolbar.appendChild(el); });
+    var pickCsv = csvImport(h, toolbar);
 
     /* ── Events and lifecycle ──────────────────────────────────────── */
 
@@ -743,5 +798,5 @@
     return { close: close, model: function () { return m; } };
   }
 
-  global.DocsTableSheet = { open: open, rulesPanel: rulesPanel };
+  global.DocsTableSheet = { open: open, rulesPanel: rulesPanel, csvImport: csvImport };
 })(typeof window !== 'undefined' ? window : this);

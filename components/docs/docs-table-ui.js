@@ -19,6 +19,7 @@
     var doc = api.doc;
     var ed = null;
     var bar = null;
+    var pickCsv;
     var sel = null; // { table, r1, c1, r2, c2 }
     var rangeMode = false;
     var undoStack = [];
@@ -403,26 +404,15 @@
     function importCsv() {
       if (!sel) return;
       var table = sel.table;
-      var input = h('input', { type: 'file', accept: '.csv,.tsv,.txt,text/csv,text/plain', hidden: true });
-      input.addEventListener('change', function () {
-        var file = input.files && input.files[0];
-        if (!file) return;
-        var reader = new global.FileReader();
-        reader.onload = function () {
-          var grid = TM().parseDelimited(String(reader.result || ''));
-          if (!grid.length) return;
-          sel = { table: table, r1: 0, c1: 0, r2: 0, c2: 0 };
-          mutate(function (m) {
-            var n = TM().fromGrid(grid);
-            m.rows = n.rows; m.al = n.al; m.w = []; m.cf = [];
-            return { sel: { r1: 0, c1: 0, r2: 0, c2: 0 } };
-          });
-        };
-        reader.readAsText(file);
+      pickCsv(function (n) {
+        sel = { table: table, r1: 0, c1: 0, r2: 0, c2: 0 };
+        mutate(function (m) {
+          m.rows = n.rows; m.al = n.al; m.w = []; m.cf = [];
+          return { sel: { r1: 0, c1: 0, r2: 0, c2: 0 } };
+        });
+      }, function () {
+        return table.isConnected && sel && sel.table === table;
       });
-      doc.body.appendChild(input);
-      input.click();
-      global.setTimeout(function () { if (input.parentNode) input.parentNode.removeChild(input); }, 60000);
     }
 
     function openSheetFor(cell) {
@@ -598,6 +588,9 @@
         barButton('sheet', 'arrows-maximize', 'Feuille', function () { openSheet(); }),
         barButton('more', 'dots', 'Plus', openMoreMenu),
       ]);
+      pickCsv = global.DocsTableSheet.csvImport(h, bar, function () {
+        if (bar && !bar.hidden) schedulePlace();
+      });
       bar.hidden = true;
       doc.body.appendChild(bar);
     }

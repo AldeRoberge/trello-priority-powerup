@@ -45,6 +45,23 @@ table.dc-table.dc-col-hover {
   box-shadow: 0 6px 18px rgba(9, 30, 66, 0.22);
 }
 .dc-tbar[hidden] { display: none; }
+.dc-csv-result {
+  min-width: 0;
+  color: var(--dct-text);
+  font-size: 12px;
+}
+.dc-csv-result [role="status"]:not(:empty) { margin-inline: 6px; }
+.dc-csv-retry {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.dc-tbar:has(.dc-csv-result [role="status"]:not(:empty)),
+.dcs-toolbar:has(.dc-csv-result [role="status"]:not(:empty)) { flex-wrap: wrap; }
 .dc-tb-btn,
 .dcs-btn {
   display: inline-flex;
