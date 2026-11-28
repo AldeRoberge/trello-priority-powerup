@@ -930,7 +930,7 @@
       var statusHost = S.el('div', 'agent-turn-status');
       row.appendChild(statusHost);
       var bubble = S.el('div', 'agent-msg-bubble agent-msg-bubble--pending');
-      bubble.hidden = true;
+      bubble.textContent = 'R\u00e9ponse en cours\u2026';
       row.appendChild(bubble);
       M.messagesEl.appendChild(row);
       M.startThinkingMotions(row);

@@ -654,6 +654,7 @@
       M.sendUserMessage(fu.label);
     };
     M.onSend = function onSend() {
+      if (M.pending) return;
       var typed = (M.input.value || '').trim();
       var selected = M.getSelectedSuggestionTexts();
       var msg = selected.length

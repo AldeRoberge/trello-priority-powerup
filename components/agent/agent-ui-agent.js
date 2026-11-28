@@ -1037,10 +1037,10 @@
     };
     M.updateComposerEnabled = function updateComposerEnabled() {
       var configured = M.Agent.isConfigured(M.provider);
-      // Keep composer typable during in-flight turns; extra sends go to messageQueue.
+      // Keep the draft editable while a reply is pending.
       M.composer.hidden = !configured;
       M.composerFoot.hidden = !configured;
-      M.sendBtn.disabled = !configured;
+      M.sendBtn.disabled = !configured || M.pending;
       M.modelModeSelect.disabled = !configured;
       M.input.disabled = !configured;
       if (!configured) {
